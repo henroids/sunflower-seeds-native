@@ -222,7 +222,6 @@ public final class Library {
         render();
         new Thread(() -> {
             List<LibraryScanner.Title> t = new LibraryScanner(a).scan();
-            List<CompanionPort.Item> c = catalogFetched ? catalog : CompanionPort.fetch();
             // a scanned game that is ready and not in upstream's list goes into it: its card is then Banana's own
             List<Upstream.Entry> list = Upstream.games(a);
             staleGames(list, a);
@@ -231,12 +230,23 @@ public final class Library {
                 if (!listed.add(x.launch.getPath())) continue;
                 Upstream.addToList(a, x.launch, x.packDir, x.titleId, x.name);
             }
+            // the games show as soon as the folders are read; the companion catalog (network: a slow or failing GitHub held the whole library empty for a minute)
+            // follows in its own post, and only its badges wait for it
             UI.post(() -> {
-                lastTitles = t; catalog = c; catalogFetched = true; everScanned = true;
+                lastTitles = t; everScanned = true;
                 if (current != this) return;
                 titles = t; scanning = false; companions.clear();
                 if (box != null && box.isAttachedToWindow()) refresh.run(); else render();   // upstream's list again too (Prepare and the add above put games into it)
             });
+            if (!catalogFetched) {
+                List<CompanionPort.Item> c = CompanionPort.fetch();
+                UI.post(() -> {
+                    catalog = c; catalogFetched = true;
+                    if (current != this) return;
+                    companions.clear();
+                    if (box != null && box.isAttachedToWindow()) refresh.run(); else render();
+                });
+            }
             for (LibraryScanner.Title x : t) {   // the fonts and build id every ready game's env needs (GameEnv), and the icons
                 if (x.status == LibraryScanner.Status.READY && x.launch != null) { GameEnv.ensureFonts(a, x.titleId); GameEnv.ensureBuildId(a, x.titleId, x.launch); }
                 if (icons.containsKey(x.titleId)) continue;
@@ -1095,7 +1105,7 @@ public final class Library {
                 : (updateDir != null ? "Update: " + updateDir : "Update: not set") + (dlcDir != null ? " · DLC: " + dlcDir : "");
         PUi.add(c, new PUi.Setting(a, "⬆️", "Updates & DLC", v -> LibrarySettings.extraFolders(a)).value(updDlcValue).chevron(a).view, 0);
         PUi.add(c, new PUi.Setting(a, "🔤", "Firmware fonts", v -> LibrarySettings.pickFolder(a, LibrarySettings.REQ_FIRMWARE, "Pick your firmware folder"))
-                .value(LibrarySettings.fontsValue(a, "Optional. Lets companions draw the system font.")).chevron(a).view, 0);
+                .value(LibrarySettings.fontsValue(a, "Used by games and companions. Missing characters in Android's fonts can prevent a game from starting.")).chevron(a).view, 0);
         PUi.Action show = PUi.action(a, R.drawable.ic_add, "Show my games", PUi.Kind.PRIMARY, v -> {
             if (PeanutsPrefs.gameDir(a) == null) { Toast.makeText(a, "Pick the game folder first", Toast.LENGTH_LONG).show(); return; }
             PeanutsPrefs.setupDone(a, true);
