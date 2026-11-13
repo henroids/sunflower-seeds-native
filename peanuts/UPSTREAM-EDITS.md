@@ -97,6 +97,7 @@ not edited (see table above).
 | `dm/host/loader.c` | **fixed this pass** (module arena, 1 header + 3 call sites) | **yes** — fixes a real OOB read on Android's top-down mmap layout (Link's Awakening), general to any Android host |
 | `dm/host/plat/plat_android.c` | **fixed this pass** | **yes** — excludes the guard page from the reported stack range, general Bionic-vs-glibc/Darwin correctness fix |
 | `docs/env_switches.tsv` | fixed (drift + new rows, see IMPL-C.md) | n/a (docs) |
+| `scripts/pack_android.py` | **fixed this pass (2026-11-13)** — `--modules`/`--mod-exefs`/`--mod-patches`, block-marked (Round 5) | no (Peanuts-specific: code mods, DESIGN-MODS.md) |
 
 ## Generic host runtime-profile sites (design/platform/IMPL-GENERIC.md, CRITIQUE-generic.md §4)
 
@@ -180,3 +181,26 @@ route to. Every other site that needed to find a pack in either location (`Folde
 root beside the pack) already takes `AppStorage.pack(...)`'s return value as its one source of truth, so
 none of them needed their own edit — verified by reading each call site, not by a second hook. Details
 and the device-verification checklist: `PEANUTS.md`'s 2026-11-13 "build folder" status entry.
+
+## Round 5 (2026-11-13) — code mods wired into the on-device build
+
+Five upstream hunks, all additive and all behind "nothing given, nothing changes" guards (a normal,
+unmodded build takes none of `--modules`/`--mod-exefs`/`--mod-patches`, never sets `mod_args`, never
+calls `reuseShaders`):
+
+| File | Hunk | Marker |
+|---|---|---|
+| `scripts/pack_android.py` | `--modules`/`--mod-exefs`/`--mod-patches` argparse flags, `merge_mod_modules()`, `apply_mod_patches()`, the variant `profile.bin` write in `main()` | `PEANUTS begin`/`PEANUTS end` blocks (too much logic for a one-line hook, per rule 2's own documented exception for a "genuinely can't be a hook" feature) |
+| `android/app/src/ondevice/java/dev/nxnative/android/Job.java` | `modArgs()`/`modArgs(String)`/`reuseShaders(File)` | `PEANUTS begin`/`PEANUTS end` block after `adopt()` |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | the "rewrite" case appends `Job.modArgs()`'s tokens to its argv when not empty | `PEANUTS begin`/`PEANUTS end` block |
+| `android/app/src/main/java/dev/nxnative/android/AppStorage.java` | the class and `pack()` made `public` | a `PEANUTS:` comment directly above the class declaration |
+| `android/app/src/ondevice/AndroidManifest.xml` | one new `<service>` line, `dev.peanuts.build.ModBuildService`, beside the existing `BuildService` line | trailing `<!-- PEANUTS: ... -->` comment |
+
+No upstream-candidate general fix: every one of these exists only to carry a Peanuts-owned feature
+(build-time code mods) through files the normal, unmodded build also uses — none of it is a correctness
+fix to the normal path. `dm/peanuts/profile/gen_runtime_profile.py`'s new `profile-modules` subcommand
+and all of `dev.peanuts.build.ModdedBuild`/`ModBuildService`/`ModBuildPipeline`/`ModBuildRequest` and the
+`dev.peanuts.ui.Upstream.game()` addition are Peanuts-owned new code, not upstream edits, so they are out
+of scope for this file. `dev.peanuts.mods.ModsSheet`'s and `dev.peanuts.ui.GameSheet`'s edits are
+Peanuts-owned files too. Full detail, the variant's on-disk layout and the device-test recipe: the mods
+build report (owner's session log) and `PEANUTS.md`'s 2026-11-13 "build-time half" status entry.

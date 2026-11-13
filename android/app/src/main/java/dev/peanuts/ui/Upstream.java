@@ -139,6 +139,18 @@ final class Upstream {
         return out;
     }
 
+    /** A Game instance for {@link #launch} (GameSheet's "Play with mods", DESIGN-MODS.md "Code injection"): same shape as dev.peanuts.build.Upstream's
+     *  own addGame() constructor call, but never Game.put() - this is a throwaway object just to launch once, never added to the library's own list,
+     *  so a modded variant never shows up as its own separate library entry. Null (and a logged warning) when upstream's Game has no such constructor. */
+    static Object game(String titleId, String name, File gameDir, File packDir) {
+        try {
+            Class<?> k = Class.forName(P + "Game");
+            java.lang.reflect.Constructor<?> ctor = k.getDeclaredConstructor(String.class, String.class, String.class, String.class);
+            ctor.setAccessible(true);
+            return ctor.newInstance(titleId, name, gameDir.getPath(), packDir.getPath());
+        } catch (Throwable t) { Log.w("peanuts", "game() " + titleId + ": " + cause(t)); return null; }
+    }
+
     /** Banana's Play for a listed game (MainActivity.launch(Game): the pack search, the save and shader checks, its dialogs); false when it could not be called */
     static boolean launch(android.app.Activity a, Object g) {
         try {

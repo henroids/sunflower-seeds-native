@@ -422,7 +422,24 @@ public final class GameSheet {
         for (dev.peanuts.mods.ModStore.Mod m : mods) if (m.enabled) on++;
         String value = mods.isEmpty() ? "None imported"
                 : on + " of " + mods.size() + " on" + (dev.peanuts.mods.ModStore.needsBuild(mods) ? " · needs a build with mods" : "");
-        PUi.add(box, new PUi.Setting(a, "🧩", "Mods", v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name, modsHome)).value(value).chevron(a).view, 0);
+        PUi.add(box, new PUi.Setting(a, "🧩", "Mods",
+                v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name, modsHome, title.packDir, title.launch)).value(value).chevron(a).view, 0);
+        // PEANUTS begin: "Play with mods" (DESIGN-MODS.md "Code injection"): shown once a modded variant pack exists for an enabled code mod set
+        // (dev.peanuts.mods.ModStore.variantId), beside the normal Play on Home - which this never changes. The variant's own pack (never the
+        // normal one) is what GameActivity actually plays; see dev.peanuts.ui.Upstream.game()/launch() for how that extra is carried.
+        java.util.List<dev.peanuts.mods.ModStore.Mod> codeMods = dev.peanuts.mods.ModStore.enabledCodeMods(mods);
+        String variantId = dev.peanuts.mods.ModStore.variantId(title.titleId, codeMods);
+        File variantPack = variantId == null ? null : dev.nxnative.android.AppStorage.pack(a, variantId);
+        if (variantPack != null && new File(variantPack, "pack.tsv").isFile() && title.launch != null) {
+            PUi.add(box, PUi.button(a, "Play with mods", PUi.Kind.TONAL, v -> playWithMods(variantPack)), 8, PUi.wrap());
+        }
+        // PEANUTS end
+    }
+
+    /** "Play with mods": the same launch as Home's own Play, but with the modded variant's pack instead of the normal one (never the normal pack) */
+    private void playWithMods(File variantPack) {
+        Object g = dev.peanuts.ui.Upstream.game(title.titleId, title.name, title.launch, variantPack);
+        if (g == null || !dev.peanuts.ui.Upstream.launch(a, g)) Toast.makeText(a, "Could not start " + title.name + " with mods.", Toast.LENGTH_LONG).show();
     }
 
     /** The keys landed (Add keys…): Build comes on if firmware fonts are there too. NOTE for the owner of LibrarySettings.java (not touched here): only

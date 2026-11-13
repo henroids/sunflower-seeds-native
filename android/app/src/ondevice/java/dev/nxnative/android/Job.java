@@ -91,6 +91,24 @@ final class Job {
         return j;
     }
 
+    // PEANUTS begin: a modded variant build (dev.peanuts.build.ModdedBuild/Prepare.runModded, DESIGN-MODS.md "Code injection"/"ExeFS binary patch"):
+    // its own job, created the normal way (create()) with its own work/pack folders, carrying the rewrite step's extra argv and reusing the normal
+    // build's own shaders - a normal (unmodded) job never has mod_args set and never calls reuseShaders, so this is additive only.
+    /** The rewrite step's extra argv for a modded build (pack_android.py --modules/--mod-exefs/--mod-patches), one token per line; "" for a normal job.
+     *  PackService's "rewrite" case appends this (split on "\n") to its own argv when non-empty. */
+    synchronized String modArgs() { return o.optString("mod_args", ""); }
+
+    synchronized void modArgs(String joinedArgv) throws JSONException { o.put("mod_args", joinedArgv); }
+
+    /** Skips split/shaders for this job (marks both done) and points its shader cache at the normal pack's own library, the same shape as adopt()'s
+     *  "shaders already current" case above - a code mod never changes shaders, so the variant build always reuses the normal pack's, never retranslates. */
+    synchronized void reuseShaders(File normalPackShaders) throws JSONException {
+        o.put("shader_cache", normalPackShaders.getPath());
+        stepState("split", "done");
+        stepState("shaders", "done");
+    }
+    // PEANUTS end
+
     static Job read(File f) throws IOException {
         try {
             JSONObject o = new JSONObject(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));

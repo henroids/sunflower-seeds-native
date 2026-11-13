@@ -241,6 +241,52 @@ def absent_optional(g, pkg):
     return keys if keys and keys <= optional_keys(g) else set()
 
 
+# PEANUTS begin: code mods (DESIGN-MODS.md "ExeFS binary patch (IPS/IPS32)"/"Code injection"), the modded variant build dev.peanuts.build.ModdedBuild
+# drives through --modules/--mod-exefs/--mod-patches below. A normal (unmodded) pack passes none of these three flags, so this block never runs for it.
+def merge_mod_modules(mods, srcs, modules_override, mod_exefs):
+    """mods/srcs (dump_modules()'s own list and the exefs-path dict) with a modded build's overrides folded in: modules_override (None, or the
+    variant's full module list, profile order first then any module a mod adds - dev.peanuts.build.ModBuild.Plan.modules) replaces mods when given;
+    mod_exefs ({module name: source path}, --mod-exefs NAME=PATH) replaces or adds that module's source file. Returns (mods, srcs); never mutates
+    its arguments. An added module not in mod_exefs is left for the caller's usual "missing" check to catch (a plan that adds a module always
+    supplies its source, dev.peanuts.build.ModBuild.compose only adds a name when some mod's exefs/ has that file)."""
+    out_mods = list(modules_override) if modules_override is not None else list(mods)
+    out_srcs = dict(srcs)
+    for name, path in mod_exefs.items():
+        if name not in out_mods: out_mods.append(name)
+        out_srcs[name] = Path(path)
+    return out_mods, out_srcs
+
+
+def apply_mod_patches(name, src, patch_dirs, out):
+    """src (a module's NSO path, stock or --mod-exefs-overridden) with name's exefs_patches applied (dm/tools/patch_ips.py's own IPS/IPS32 layer),
+    before the rewrite reads it - patch_nso.py's CUTS assert the module's original bytes and would otherwise abort on a mod's own edits. patch_dirs:
+    the directories to search for '<build id>.ips(32)' (patch_ips.find_patches's own case-insensitive stem match), already one per module (ModBuild's
+    first-wins rule keeps only one mod's exefs_patches/<name>/ per module). Returns src unchanged when none match (not an error: patch_ips.py's own
+    documented case, e.g. a mod shipping exefs_patches for a build the dump is not). Writes the patched module (when any patch applies) to
+    out/.mod-src/<name>/<name> and prints one line this module's rewrite_key then hashes by that file's bytes and name, so a different patch result
+    gets its own key and really is rewritten (dm/tools/pack_android.py rewrite_keys: part(h, p.name, p.read_bytes()))."""
+    sys.path.insert(0, str(REPO / 'dm/tools'))
+    import ips as ips_mod, patch_ips, nso
+    try: mod = nso.load(src.read_bytes(), str(src))   # read_bytes: a module inside a .nup is a path of its own kind (nso_build_id), not one open() takes
+    except nso.Error as e: raise Error(f'{src}: {e}') from None
+    build_id16 = patch_ips.build_id_hex16(mod.build_id)
+    paths = patch_ips.patches_for([str(d) for d in patch_dirs], build_id16)
+    if not paths:
+        print(f'mod: no exefs_patches for {name} build {build_id16} in {", ".join(str(d) for d in patch_dirs)}: unpatched', flush=True)
+        return src
+    try:
+        image = patch_ips.apply_patches(mod.image, paths)
+    except ips_mod.Error as e:
+        raise Error(f'{name}: {e}') from None
+    dest_dir = out / '.mod-src' / name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / name
+    patch_ips.write_nso(mod, image, str(dest))
+    print(f'mod: {len(paths)} exefs_patches applied to {name} (build {build_id16}): {", ".join(paths)}', flush=True)
+    return dest
+# PEANUTS end
+
+
 def nso_zbic(path):   # whether the module's segments are ZBIC (NSO flag bit 7, system 22.0.0 on), which nso.py needs a decoder for (nso.zbic_decoder)
     b = path.read_bytes()[:0x10]   # read_bytes: a module inside a .nup is a path of its own kind, as in nso_build_id
     return b[:4] == b'NSO0' and bool(int.from_bytes(b[0xc:0x10], 'little') & 0x80)
@@ -598,6 +644,15 @@ def main():
     ap.add_argument('--keep-code', action='store_true', help='do not rewrite: the pack\'s modules must be there with their key files (the phone\'s pack step)')
     ap.add_argument('--made-by', help='who makes this pack, written as its made_by row (the phone\'s pack step: "app <version>"; the launcher then updates the pack\'s code by itself when only the tools changed)')
     ap.add_argument('--in-process', action='store_true', help='run the rewriter in this process, no subprocesses (the phone\'s packer); the shader library must be current or left out')
+    # PEANUTS begin: code mods (DESIGN-MODS.md), a modded variant build (dev.peanuts.build.ModdedBuild composes these from ModBuild.Plan). None given: this
+    # function behaves exactly as before - no mod ever changes a normal pack's modules, sources or build.
+    ap.add_argument('--modules', help='the modded build\'s full module list, comma-separated, profile order first then any module a mod adds '
+                     '(dev.peanuts.build.ModBuild.Plan.modules); default: the dump\'s own modules, unchanged')
+    ap.add_argument('--mod-exefs', action='append', default=[], metavar='NAME=PATH',
+                     help='a mod\'s exefs/NAME as that module\'s source, replacing the dump\'s own file or adding a module the dump does not have; repeatable')
+    ap.add_argument('--mod-patches', action='append', default=[], metavar='NAME=DIR',
+                     help='a mod\'s exefs_patches/NAME directory, applied (dm/tools/patch_ips.py) to NAME\'s image before the rewrite; repeatable')
+    # PEANUTS end
     a = ap.parse_args()
     if WINDOWS:
         for s in (sys.stdout, sys.stderr): s.reconfigure(encoding='utf-8', errors='backslashreplace')   # as the tools' output (child_env): one encoding for the reader
@@ -619,17 +674,50 @@ def main():
         if (pid := pack_dump.program_id(exe / 'main.npdm')) != app: raise Error(f'{vdir}: program ID {pid:016X}, the base is {app:016X}')
         mods = dump_modules(g, exe)
         srcs = {m: exe / m for m in mods}
+        out = (a.out or folder.parent / f'{app:016X}-work' / 'android-pack').resolve()
+        try: out.relative_to(REPO); raise Error(f'{out} is inside the repository: packs never go there')
+        except ValueError: pass
+        out.mkdir(parents=True, exist_ok=True)
+        # PEANUTS begin: code mods (DESIGN-MODS.md) - a modded variant build's module overrides, applied before the usual missing/ZBIC checks so they see
+        # the mod's own files, not the stock dump's. Stock call sites (no --modules/--mod-exefs/--mod-patches) are unaffected: mod_exefs/mod_patches_by_name
+        # are then both empty and modules_override is None, so merge_mod_modules returns (mods, srcs) unchanged.
+        mod_exefs = {}
+        for kv in a.mod_exefs:
+            name, _, path = kv.partition('=')
+            if not path: raise Error(f'--mod-exefs {kv!r}: expected NAME=PATH')
+            mod_exefs[name] = path
+        mod_patches_by_name = {}
+        for kv in a.mod_patches:
+            name, _, d = kv.partition('=')
+            if not d: raise Error(f'--mod-patches {kv!r}: expected NAME=DIR')
+            mod_patches_by_name.setdefault(name, []).append(d)
+        modules_override = a.modules.split(',') if a.modules else None
+        mods, srcs = merge_mod_modules(mods, srcs, modules_override, mod_exefs)
+        for name, dirs in mod_patches_by_name.items():
+            if name not in mods: raise Error(f'--mod-patches {name}=...: {name} is not in the module list ({" ".join(mods)})')
+            srcs[name] = apply_mod_patches(name, srcs[name], dirs, out)
+        # PEANUTS end
         if missing := [m for m in mods if not srcs[m].is_file()]: raise Error(f'{exe}: no {", ".join(missing)} (the profile\'s modules are {" ".join(mods)})')
         if not a.keep_code and (zb := [m for m in mods if nso_zbic(srcs[m])]):
             sys.path.insert(0, str(REPO / 'dm/tools')); import nso   # its ZBIC decoder, checked here so a missing one fails before any work
             try: ok = nso.zbic_decoder()
             except nso.Error as e: raise Error(f'{" ".join(zb)}: ZBIC-compressed (system 22.0.0+): {e}') from None
             if not ok: raise Error(f'{" ".join(zb)}: ZBIC-compressed (system 22.0.0+), and {sys.executable} has no decoder: {nso.ZBIC_MISSING} (android/README.md)')
-        out = (a.out or folder.parent / f'{app:016X}-work' / 'android-pack').resolve()
-        try: out.relative_to(REPO); raise Error(f'{out} is inside the repository: packs never go there')
-        except ValueError: pass
-        out.mkdir(parents=True, exist_ok=True)
         ids = {m: nso_build_id(srcs[m]) for m in mods}
+        # PEANUTS begin: code mods (DESIGN-MODS.md) - a modded build adding a module past the profile's own game.tsv row gets its own profile.bin (the
+        # generic host's per-title data, dm/peanuts/profile/gen_runtime_profile.py) written beside the pack, read instead of the APK asset
+        # (dev.peanuts.build.GenericProfile.envLines(Context,String,File) when <packDir>/profile.bin exists). A plain replace-only mod (mods unchanged
+        # from the dump's own list) needs none of this: the shipped per-title asset already lists every module the mod replaces.
+        if modules_override is not None and modules_override != dump_modules(g, exe):
+            gen = REPO / 'dm/peanuts/profile/gen_runtime_profile.py'
+            profile_bin, gen_log = out / 'profile.bin', out / 'rewrite_profile.log'
+            gen_args = ['profile-modules', f'{app:016X}', str(profile_bin), ','.join(mods)]
+            if a.in_process: rc = run_in_process(gen, gen_args, {}, gen_log)
+            else:
+                with open(gen_log, 'w') as f: rc = subprocess.call([sys.executable, str(gen), *gen_args], stdout=f, stderr=subprocess.STDOUT)
+            if rc: raise Error(f'gen_runtime_profile.py profile-modules failed (exit {rc}); see {gen_log}')
+            print(f'mod: wrote {profile_bin} with modules {" ".join(mods)} (the generic host\'s profile for this variant)', flush=True)
+        # PEANUTS end
         print(f'{app:016X} {g.get("name", "?")} version {ver}: {vdir}', flush=True)
         for m, known in unregistered(g, ids).items(): print(f'[RED] {m} build {ids[m]} is none of the profile\'s builds ({", ".join(known)}): build-gated cuts do not apply')
         if a.keep_code:

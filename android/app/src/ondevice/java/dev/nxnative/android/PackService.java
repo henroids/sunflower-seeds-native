@@ -168,7 +168,9 @@ public final class PackService extends Service {
         stopReason = null;
         heatOverride = false;   // asked again for each run of the job
         if (intent != null) j.endedAll();   // the user's Start / Resume / Retry: earlier deaths in a step count no more (only sticky restarts add up)
-        Job.remember(this, j.file);
+        // PEANUTS: a build with code mods (Job.modArgs, dev.peanuts.build.Prepare.runModded) is not remembered: Home's panel follows the remembered job
+        // and puts a finished one's pack into the game list by title ID, which made the modded pack the game's own (its Play)
+        if (j.modArgs().isEmpty()) Job.remember(this, j.file);
         worker = new Thread(this::work, "nxpack-job");
         worker.start();
         return START_STICKY;
@@ -467,6 +469,16 @@ public final class PackService extends Service {
             case "rewrite":
                 tool = "scripts/pack_android.py";
                 argv = new String[] {dump.getPath(), "--version", v, "--out", pack.getPath(), "--code-only", "-j", "1", "--in-process"};
+                // PEANUTS begin: a modded variant build's extra argv (--modules/--mod-exefs/--mod-patches), carried on the job as mod_args
+                // (Job.modArgs, dev.peanuts.build.ModdedBuild/Prepare.runModded). Empty for a normal job, so this never changes an unmodded argv.
+                String modArgs = j.modArgs();
+                if (!modArgs.isEmpty()) {
+                    String[] extra = modArgs.split("\n");
+                    String[] withMods = java.util.Arrays.copyOf(argv, argv.length + extra.length);
+                    System.arraycopy(extra, 0, withMods, argv.length, extra.length);
+                    argv = withMods;
+                }
+                // PEANUTS end
                 break;
             case "split":
                 // only outputs a stopped run may have half written: the split writes them all at its end; what it kept is in Job.splitScan. The marker goes first

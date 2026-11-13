@@ -63,9 +63,16 @@ public final class PeanutsPrefs {
     /** {@code <build folder>/<title ID>/pack}: where a NEW build's pack goes when a build folder is set (AppStorage.pack still prefers an existing pack
      *  already in the app's own storage, so a build made before the folder was set keeps working from there). null without a build folder, or an invalid titleId. */
     public static File buildPackDir(Context c, String titleId) {
+        java.util.regex.Matcher m = VARIANT_ID.matcher(titleId == null ? "" : titleId);
+        if (m.matches()) {   // a build with code mods (ModStore.variantId) stays inside its game's folder: <title ID>/mod-<hash>/pack
+            File g = buildGameDir(c, m.group(1));
+            return g == null ? null : new File(g, "mod-" + m.group(2).toLowerCase(Locale.ROOT) + "/pack");
+        }
         File g = buildGameDir(c, titleId);
         return g == null ? null : new File(g, "pack");
     }
+
+    private static final java.util.regex.Pattern VARIANT_ID = java.util.regex.Pattern.compile("([0-9A-Fa-f]{16})-mod-([0-9A-Fa-f]+)");
 
     public static boolean setupDone(Context c) { return of(c).getBoolean("setup_done", false); }
     public static void setupDone(Context c, boolean on) { of(c).edit().putBoolean("setup_done", on).apply(); }

@@ -233,6 +233,108 @@ final class Prepare {
         throw new BuildListener.Failure("Build cancelled. The job is saved: resume from the game's card on the Home screen.", BuildListener.CANCELLED);
     }
 
+    /**
+     * A modded variant build (DESIGN-MODS.md "Code injection"/"ExeFS binary patch", ModdedBuild/ModBuild): the same dump/update as the normal
+     * build (no re-import), but its own work folder (workDir) and pack folder (packDir, never the normal build's own — AppStorage.pack(c,
+     * variantId) or a build-folder sibling), the rewrite step's extra argv (modArgs, {@code dev.peanuts.build.ModdedBuild.rewriteArgvJoined}),
+     * and the normal pack's shader library reused as-is (normalPackShaders, never re-translated — code mods never change shaders). Unlike
+     * {@link #run0}, this never adopts or resumes the *normal* job: workDir/packDir are the variant's own, so there is nothing of the normal
+     * build's to adopt, and a resume only ever means "this exact variant's own job is still going".
+     */
+    File runModded(File dump, String titleId, File workDir, File packDir, String modArgs, File normalPackShaders, Progress p) throws IOException {
+        try {
+            return runModded0(dump, titleId, workDir, packDir, modArgs, normalPackShaders, p);
+        } catch (ReflectiveOperationException e) {
+            Log.w(TAG, "modded prepare: upstream reflection", e);
+            throw new IOException("This build of the app has no on-device packer the build service knows (" + e.getMessage() + ").");
+        } finally {
+            unbind();
+        }
+    }
+
+    private File runModded0(File dump, String titleId, File workDir, File packDir, String modArgs, File normalPackShaders, Progress p)
+            throws IOException, ReflectiveOperationException {
+        p.on(0, "Checking " + dump.getName());
+        String id = titleId;
+        try { id = Upstream.titleIdOf(dump); } catch (ReflectiveOperationException | RuntimeException e) { /* DumpCheck says what is wrong */ }
+        if (id == null || id.isEmpty()) id = titleId;
+        Object r = Upstream.dumpCheck(dump, true, true);   // true/true: the normal build already checked the version; a modded rebuild of the same dump never asks again
+        String error = (String) Upstream.get(r, "error");
+        if (error != null) throw new BuildListener.Failure("Cannot prepare this dump for a modded build: " + error, BuildListener.INVALID_DUMP);
+        String rid = Upstream.str(Upstream.get(r, "titleId"));
+        if (!rid.isEmpty()) id = rid;
+        // The variant's own work folder, not DumpCheck's fixed <dump>/../<id>-work convention (Job.create reads r.work directly)
+        Upstream.set(r, "work", workDir);
+        File jf = Upstream.jobFileOf(workDir);
+        Object job = null;
+        if (jf.isFile()) {
+            try {
+                Object existing = Upstream.jobRead(jf);
+                String s = Upstream.jobState(existing);
+                if (!s.equals("done")) job = existing;   // resume this exact variant's own job where it stopped
+                else if (Upstream.jobPack(existing).isDirectory()) { p.on(100, "Already built with these mods"); return Upstream.jobPack(existing); }
+            } catch (ReflectiveOperationException | RuntimeException e) { /* damaged: a fresh job replaces it */ }
+        }
+        if (job == null) {
+            job = Upstream.jobCreate(r, packDir);
+            Upstream.jobModArgs(job, modArgs == null ? "" : modArgs);
+            Upstream.jobReuseShaders(job, normalPackShaders);
+            Upstream.jobSave(job);
+            // Not Job.remember: Home's on-device panel follows the remembered job and puts a finished one's pack into the game list by title ID
+            // (Ondevice.Panel.addGame), so a remembered variant took over the game's own card (Pokémon Brilliant Diamond's Play pointed at the modded
+            // pack, 2026-11-13). This loop polls the job file itself and PackService gets it in the intent
+        }
+        File file = Upstream.jobFile(job);
+        bind();
+        try {
+            c.startForegroundService(Upstream.packStart(c, file));
+        } catch (RuntimeException e) {
+            Log.w(TAG, "PackService start refused (modded): " + e);
+            throw new BuildListener.Failure("Android did not let the packer start in the background. The modded build is saved; try again from the game's Mods sheet.", BuildListener.CANCELLED);
+        }
+        p.on(1, STEP_TEXT[0]);
+        long startedAt = SystemClock.elapsedRealtime(), lastChange = startedAt;
+        String lastJson = null;
+        while (!cancelled) {
+            SystemClock.sleep(1000);
+            String json = read(file);
+            String fs = fromService;
+            if (fs != null && fromServiceAt > lastChange) json = fs;
+            if (json == null) {
+                if (SystemClock.elapsedRealtime() - startedAt > 30000) throw new BuildListener.Failure("The modded build's job file went missing: " + file, BuildListener.OTHER);
+                continue;
+            }
+            if (!json.equals(lastJson)) { lastJson = json; lastChange = SystemClock.elapsedRealtime(); }
+            JSONObject o;
+            try { o = new JSONObject(json); } catch (org.json.JSONException e) { continue; }
+            String state = o.optString("state"), reason = o.optString("reason"), step = o.optString("step");
+            int si = Math.max(0, java.util.Arrays.asList(STEPS).indexOf(step));
+            JSONObject st = o.optJSONObject("steps") != null ? o.optJSONObject("steps").optJSONObject(STEPS[si]) : null;
+            long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
+            String stage = st == null ? "" : st.optString("stage");
+            if (state.equals("done")) {
+                p.on(100, "Modded build finished");
+                return (File) Upstream.call(job.getClass(), job, "pack", new Class<?>[0]);
+            }
+            if (state.equals("failed")) {
+                throw new BuildListener.Failure("Building with mods failed at " + STEP_TEXT[si].toLowerCase(Locale.ROOT) + (o.optString("error").isEmpty() ? "." : ": " + o.optString("error"))
+                        + "\nRetry from the game's Mods sheet.", BuildListener.TOOL_STOPPED);
+            }
+            int pct = pct(si, done, total);
+            if (state.equals("paused")) {
+                if (reason.equals("user") || reason.equals("timeout") || reason.equals("refused") || reason.equals("apk"))
+                    throw new BuildListener.Failure("Building with mods paused (" + reasonText(reason) + "). Retry from the game's Mods sheet.", BuildListener.CANCELLED);
+                p.on(pct, "Paused: " + reasonText(reason) + ". " + stepText(si, done, total, stage));
+                lastChange = SystemClock.elapsedRealtime();
+                continue;
+            }
+            p.on(pct, stepText(si, done, total, stage));
+            if (SystemClock.elapsedRealtime() - lastChange > STALL_MS && !(link != null && link.alive))
+                throw new BuildListener.Failure("The packer stopped reporting progress. Retry from the game's Mods sheet.", BuildListener.STALLED);
+        }
+        throw new BuildListener.Failure("Build cancelled.", BuildListener.CANCELLED);
+    }
+
     private static int pct(int si, long done, long total) {
         return (int) Math.min(99, Math.round(si * 100.0 / STEPS.length + (total > 0 ? Math.min(1.0, done / (double) total) * 100.0 / STEPS.length : 0)));
     }

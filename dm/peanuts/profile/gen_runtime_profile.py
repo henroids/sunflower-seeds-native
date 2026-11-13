@@ -4,6 +4,11 @@
 # upstream added DM_GAME_* macros 56->62 across 73 commits). dm/games/game.py is upstream and must not be edited for this (PEANUTS.md rule 4).
 #
 # Usage: gen_runtime_profile.py profile <title id> <out.bin>   (one title's dm_game_profile_t, binary, packed - see profile_rt.h)
+#        gen_runtime_profile.py profile-modules <title id> <out.bin> <mod1,mod2,...>
+#                                                          (same, with the MODULES/NMOD macros replaced by the given list - a modded variant build
+#                                                          whose mods add a module past game.tsv's own row, dm/tools/pack_android.py --modules; the
+#                                                          generic host reads this file instead of the title's shipped asset when it sits beside the
+#                                                          pack as profile.bin, dev.peanuts.build.GenericProfile.envLines(Context,String,File))
 #        gen_runtime_profile.py seed <title id> <out.bin>      (the title's vk_prewarm.bin, copied verbatim; empty file when it has none)
 #        gen_runtime_profile.py schema-stamp <out.c>           (the schema version this script's field tables imply, as a small .c; compiled once into the generic host)
 #        gen_runtime_profile.py schema                          (prints the schema version, for scripts)
@@ -272,7 +277,9 @@ def pack_rows(rows, cap, zero_row):
     return p.finish()
 
 
-def build_profile_bytes(g):
+def build_profile_bytes(g, modules_override=None):
+    """modules_override: a modded variant build's own module list (dm/tools/pack_android.py --modules, dev.peanuts.build.ModBuild.Plan.modules),
+    replacing game.tsv's MODULES/NMOD for this one profile.bin; None (the normal path) uses header()'s own values, byte for byte as before."""
     d = parse_defines(gamepy.header(g))
     unknown = set(d) - KNOWN
     if unknown: sys.exit(f'gen_runtime_profile.py: {g.id}: game.py header() emits unknown macro(s) {sorted(unknown)} - add them to SCALAR/PRESENCE/ARRAY_NAMES '
@@ -282,7 +289,8 @@ def build_profile_bytes(g):
 
     def val(name): return d[name]
 
-    for cnt, cap, label in ((as_int(val('NMOD')), CAPS['modules'], 'modules'), (len(parse_display_versions(val('DISPLAY_VERSIONS'))), CAPS['display_versions'], 'display_versions'),
+    nmod_count = len(modules_override) if modules_override is not None else as_int(val('NMOD'))
+    for cnt, cap, label in ((nmod_count, CAPS['modules'], 'modules'), (len(parse_display_versions(val('DISPLAY_VERSIONS'))), CAPS['display_versions'], 'display_versions'),
                             (as_int(val('NWINDOW_FN')), CAPS['window_fn'], 'window_fn'), (as_int(val('NSUBGROUP_ONE_LANE')), CAPS['subgroup_one_lane'], 'subgroup_one_lane'),
                             (as_int(val('NMESH_VEGETATION_CUT')), CAPS['mesh_vegetation_cut'], 'mesh_vegetation_cut'),
                             (as_int(val('NMESH_PREPASS_CUT')), CAPS['mesh_prepass_cut'], 'mesh_prepass_cut'), (as_int(val('NFPS_STEPS')), CAPS['fps_steps'], 'fps_steps'),
@@ -306,7 +314,8 @@ def build_profile_bytes(g):
     has_api = 'NVN_API_MAJOR' in d
     p.u32(int(has_api)); p.u32(as_int(d.get('NVN_API_MAJOR', '0'))); p.u32(as_int(d.get('NVN_API_MINOR', '0')))
 
-    nmod = as_int(val('NMOD')); mods = parse_modules(val('MODULES'))
+    if modules_override is not None: nmod, mods = len(modules_override), list(modules_override)
+    else: nmod = as_int(val('NMOD')); mods = parse_modules(val('MODULES'))
     p.u32(nmod)
     rows = Packer()
     for i in range(CAPS['modules']): rows.raw(mods[i] if i < len(mods) else '', 32)
@@ -370,6 +379,9 @@ def main():
     a = sys.argv[1:]
     if len(a) == 3 and a[0] == 'profile':
         g = gamepy.load(a[1]); Path(a[2]).write_bytes(build_profile_bytes(g))
+    elif len(a) == 4 and a[0] == 'profile-modules':
+        g = gamepy.load(a[1]); modules = [m for m in a[3].split(',') if m]
+        Path(a[2]).write_bytes(build_profile_bytes(g, modules_override=modules))
     elif len(a) == 3 and a[0] == 'seed':
         g = gamepy.load(a[1]); p = g.dir / gamepy.SEED
         Path(a[2]).write_bytes(p.read_bytes() if p.is_file() else b'')
@@ -382,7 +394,8 @@ def main():
         for g in games: build_profile_bytes(g)   # raises/exits on any unknown macro or shape mismatch
         print(f'gen_runtime_profile.py check-all: {len(games)} profiles, all macros known, schema {schema_version():#010x}, layout {layout_size()} bytes')
     else:
-        sys.exit('usage: gen_runtime_profile.py profile <id> <out.bin> | seed <id> <out.bin> | schema-stamp <out.h> | schema | check-all')
+        sys.exit('usage: gen_runtime_profile.py profile <id> <out.bin> | profile-modules <id> <out.bin> <mod1,mod2,...> | seed <id> <out.bin> | '
+                 'schema-stamp <out.h> | schema | check-all')
 
 
 if __name__ == '__main__':

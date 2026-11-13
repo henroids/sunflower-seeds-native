@@ -47,15 +47,19 @@ public final class ModBuild {
         public final List<String> modules;
         /** module name → the mod supplying its exefs bytes, absent (not present as a key) for a module the normal pack supplies unchanged; null on refusal */
         public final Map<String, ModStore.Mod> source;
+        /** Every enabled code mod's exefs_patches/&lt;set&gt;/ folder, in priority order. Atmosphère names these folders after the patch set, not a module
+         *  (exefs_patches/&lt;set&gt;/&lt;build id&gt;.ips), and matches each file to a module by build ID: pack_android.py --mod-patches does the same, so every
+         *  set is offered to every module and only the files named for that module's build ID apply. Empty on refusal */
+        public final List<java.io.File> patchSets;
         /** Why nothing can be built; null on success */
         public final String refusal;
 
-        private Plan(List<String> modules, Map<String, ModStore.Mod> source, String refusal) {
-            this.modules = modules; this.source = source; this.refusal = refusal;
+        private Plan(List<String> modules, Map<String, ModStore.Mod> source, List<java.io.File> patchSets, String refusal) {
+            this.modules = modules; this.source = source; this.patchSets = patchSets; this.refusal = refusal;
         }
     }
 
-    private static Plan refuse(String why) { return new Plan(null, null, why); }
+    private static Plan refuse(String why) { return new Plan(null, null, new ArrayList<>(), why); }
 
     /**
      * profileModules: the title's normal module list, in its game.tsv/profile order (e.g. {@code [main, subsdk0, sdk]} for Pokémon Brilliant
@@ -70,7 +74,10 @@ public final class ModBuild {
     public static Plan compose(List<String> profileModules, List<ModStore.Mod> codeMods, boolean genericHost) {
         List<String> modules = new ArrayList<>(profileModules);
         Map<String, ModStore.Mod> source = new LinkedHashMap<>();
+        List<java.io.File> patchSets = new ArrayList<>();
         for (ModStore.Mod mod : codeMods) {
+            java.io.File[] sets = mod.exefsPatches().listFiles(java.io.File::isDirectory);
+            if (sets != null) { java.util.Arrays.sort(sets); java.util.Collections.addAll(patchSets, sets); }
             String[] names = mod.exefs().list();
             if (names == null) continue;   // no exefs/ (an exefs_patches-only mod never changes the module list, only a module's own bytes)
             for (String name : names) {
@@ -89,7 +96,7 @@ public final class ModBuild {
         if (modules.size() > MODULES_CAP)
             return refuse("the modded build would load " + modules.size() + " modules (" + String.join(" ", modules) + "), more than the generic host's "
                     + MODULES_CAP + "-slot limit (dm/peanuts/profile/profile_rt.h DM_PROFILE_MODULES_CAP): drop a mod, or ask a developer to raise the cap.");
-        return new Plan(modules, source, null);
+        return new Plan(modules, source, patchSets, null);
     }
 
     /**

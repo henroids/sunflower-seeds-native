@@ -34,11 +34,21 @@ public final class ModsSheet {
     private String busyText = "";
 
     private final File home;   // the game's folder its mods go in (ModRuntime.home)
-    private ModsSheet(Activity a, String titleId, String gameName, File home) { this.a = a; this.titleId = titleId; this.gameName = gameName; this.home = home; }
+    // PEANUTS begin: build-with-mods wiring (dev.peanuts.build.ModdedBuild/ModBuildPipeline, DESIGN-MODS.md "Code injection"). Both may be null (a
+    // game not built yet, or no .nup resolved): the row below then falls back to "Build the game normally first."
+    private final File normalPack, launch;
+    private ModsSheet(Activity a, String titleId, String gameName, File home, File normalPack, File launch) {
+        this.a = a; this.titleId = titleId; this.gameName = gameName; this.home = home; this.normalPack = normalPack; this.launch = launch;
+    }
+    // PEANUTS end
 
     /** GameSheet's "Mods" row */
-    public static void open(Activity a, String titleId, String gameName, File home) {
-        ModsSheet s = new ModsSheet(a, titleId, gameName, home);
+    public static void open(Activity a, String titleId, String gameName, File home) { open(a, titleId, gameName, home, null, null); }
+
+    /** Same, with the normal pack and the dump/.nup it was built from, so this sheet's "Build with mods" (and, once built, "Play with mods" on the
+     *  game's own sheet) have what they need - dev.peanuts.ui.GameSheet passes title.packDir/title.launch (PEANUTS: build-with-mods wiring) */
+    public static void open(Activity a, String titleId, String gameName, File home, File normalPack, File launch) {
+        ModsSheet s = new ModsSheet(a, titleId, gameName, home, normalPack, launch);
         current = s;
         s.show();
     }
@@ -67,15 +77,72 @@ public final class ModsSheet {
                 if (i > 0) card.addView(PUi.divider(a));
                 card.addView(row(mods.get(i), i == 0, i == mods.size() - 1));
             }
-            if (ModStore.needsBuild(mods)) {
-                PUi.add(box, PUi.warnChip(a, "Needs a build with mods", "Needs a build with mods",
-                        "One or more enabled mods carry exefs code (not just romfs/cheats). Their romfs and cheats apply right away; the code part "
-                                + "only runs after a build that includes mods, which is not available from this sheet yet."), 12);
-            }
+            if (ModStore.needsBuild(mods)) renderBuildWithMods(mods);
         }
         if (busy) PUi.add(box, PUi.small(a, busyText), 14);
         PUi.add(box, PUi.button(a, "Add mod…", PUi.Kind.PRIMARY, v -> addMod()), 16, PUi.wrap());
     }
+
+    // PEANUTS begin: build-with-mods (DESIGN-MODS.md "Code injection"/"ExeFS binary patch"): plans the variant build (dev.peanuts.build.ModBuild,
+    // dev.peanuts.build.ModdedBuild) and offers one button for it, replacing the old "not available from this sheet yet" dead-end chip.
+    private void renderBuildWithMods(List<ModStore.Mod> mods) {
+        if (normalPack == null || !new java.io.File(normalPack, "pack.tsv").isFile()) {
+            PUi.add(box, PUi.warnChip(a, "Needs a build with mods", "Needs a build with mods",
+                    "One or more enabled mods carry exefs code (not just romfs/cheats). Build the game normally first, then come back here to "
+                            + "build it with mods."), 12);
+            return;
+        }
+        java.util.List<String> profileModules = dev.peanuts.build.ModdedBuild.normalModules(normalPack);
+        if (profileModules == null) {
+            PUi.add(box, PUi.warnChip(a, "Needs a build with mods", "Needs a build with mods",
+                    "This game's pack has no readable module list (pack.tsv). Rebuild it normally, then try again."), 12);
+            return;
+        }
+        java.util.List<ModStore.Mod> codeMods = ModStore.enabledCodeMods(mods);
+        dev.peanuts.build.ModBuild.Plan plan = dev.peanuts.build.ModBuild.compose(profileModules, codeMods, dev.nxnative.android.BuildConfig.NX_GENERIC_HOST);
+        if (plan.refusal != null) {
+            PUi.add(box, PUi.warnChip(a, "Cannot build with these mods", "Cannot build with these mods", plan.refusal), 12);
+            return;
+        }
+        String exlWarn = dev.peanuts.build.ModdedBuild.exlaunchWarning(profileModules, plan);
+        if (exlWarn != null) PUi.add(box, PUi.warnChip(a, "A module's hooks will not run", "A module's hooks will not run", exlWarn), 12);
+        String variantId = ModStore.variantId(titleId, codeMods);
+        File variantPack = variantId == null ? null : dev.nxnative.android.AppStorage.pack(a, variantId);
+        boolean variantReady = variantPack != null && new java.io.File(variantPack, "pack.tsv").isFile();
+        if (modBuildRunning) {
+            PUi.add(box, PUi.small(a, modBuildText.isEmpty() ? "Building with mods…" : modBuildText), 12);
+        } else {
+            PUi.add(box, PUi.body(a, variantReady
+                    ? "A build with these mods is ready. Rebuild if you changed which mods are on since."
+                    : "Code mods need their own build, separate from the game's normal build (which is kept as it is)."), 12);
+            PUi.add(box, PUi.button(a, variantReady ? "Rebuild with mods" : "Build with mods", PUi.Kind.PRIMARY,
+                    v -> startModBuild(variantId, plan)), 10, PUi.wrap());
+        }
+    }
+
+    private boolean modBuildRunning;
+    private String modBuildText = "";
+
+    private void startModBuild(String variantId, dev.peanuts.build.ModBuild.Plan plan) {
+        if (normalPack == null || launch == null) { Toast.makeText(a, "Build the game normally first.", Toast.LENGTH_LONG).show(); return; }
+        dev.peanuts.build.ModBuildRequest r = new dev.peanuts.build.ModBuildRequest();
+        r.titleId = titleId; r.name = gameName; r.dump = launch; r.normalPack = normalPack; r.variantId = variantId;
+        r.workDir = dev.peanuts.build.ModdedBuild.workDir(home, variantId);
+        r.packDir = dev.nxnative.android.AppStorage.pack(a, variantId);
+        r.modArgs = dev.peanuts.build.ModdedBuild.rewriteArgvJoined(plan);
+        modBuildRunning = true; modBuildText = "Starting…";
+        int id = dev.peanuts.build.ModBuildPipeline.start(a, r, new dev.peanuts.build.BuildListener() {
+            @Override public void progress(String step, int percent, String detail) { modBuildText = detail + " (" + percent + " %)"; if (dialog != null && dialog.isShowing()) render(); }
+            @Override public void done(boolean ok, String message, String code) {
+                modBuildRunning = false; modBuildText = "";
+                Toast.makeText(a, message, Toast.LENGTH_LONG).show();
+                if (dialog != null && dialog.isShowing()) render();
+            }
+        });
+        if (id == 0) modBuildRunning = false;   // the listener's done() already fired with why; nothing else to do here
+        render();
+    }
+    // PEANUTS end
 
     private LinearLayout row(ModStore.Mod m, boolean first, boolean last) {
         LinearLayout r = PUi.row(a);

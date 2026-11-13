@@ -22,7 +22,20 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `android/app/src/main/AndroidManifest.xml` — new Peanuts-owned activities/services/aliases, each its own marked block (already used for
      `CatalogActivity` and `GameHold`; 2026-11-13 added the `dev.peanuts.launch.LaunchActivity` alias, `peanuts/docs/LAUNCHERS.md`).
    - `android/app/src/main/java/dev/nxnative/android/AppStorage.java` — (2026-11-13) `pack()` prefers an existing pack already in the app's own storage,
-     else a build folder's `<title ID>/pack` when the user set one (`PeanutsPrefs.buildPackDir`; Settings › Library › Build folder).
+     else a build folder's `<title ID>/pack` when the user set one (`PeanutsPrefs.buildPackDir`; Settings › Library › Build folder); (2026-11-13,
+     code mods) the class and `pack()` made `public` so `dev.peanuts.build.ModdedBuild`/`Prepare` can ask for a modded variant's own pack folder by
+     its variant id, same call as every other pack lookup.
+   - `android/app/src/ondevice/java/dev/nxnative/android/Job.java` — (2026-11-13, code mods) `modArgs()`/`modArgs(String)` (a modded variant job's
+     extra rewrite-step argv) and `reuseShaders(File)` (skip split/shaders, point the shader cache at the normal pack's own library) — block-marked,
+     additive only; a normal job never sets either. `design/platform/DESIGN-MODS.md`.
+   - `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` — (2026-11-13, code mods) the "rewrite" step appends `Job.modArgs()`
+     (split on `"\n"`) to `pack_android.py`'s argv when it is not empty — block-marked, a no-op for a normal job.
+   - `android/app/src/ondevice/AndroidManifest.xml` — (2026-11-13, code mods) one new `<service>` line, `dev.peanuts.build.ModBuildService`
+     (the modded-variant build, ModsSheet's "Build with mods"), beside the existing `BuildService` line.
+   - `scripts/pack_android.py` — (2026-11-13, code mods) `--modules`/`--mod-exefs`/`--mod-patches`, block-marked (too much logic for a one-line
+     hook per rule 2's own exception): a modded variant build's module-list override, per-module source override and exefs_patches application
+     before the rewrite, plus writing the variant's own `profile.bin` when its module list adds one past the shipped profile. None given (the
+     normal pack build): behaviour is byte-for-byte unchanged. `design/platform/DESIGN-MODS.md`, `peanuts/UPSTREAM-EDITS.md` Round 5.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).
@@ -85,3 +98,22 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   `ModStore` order/enable/remove covered by `peanuts/tests/test_mod_importer.py` and `test_mod_store.py` (javac/java, 18 cases, all passing). Not
   yet run on a real device (checklist: import a tiny romfs mod replacing one text/texture file, enable it, confirm the file changes in-game; a
   second mod with a conflicting file, confirming order wins; a cheat file applying from the staged folder).
+- 2026-11-13 (Mods, build-time half: wiring into the real on-device build): `scripts/pack_android.py`'s "rewrite" step now takes `--modules`
+  (a variant's full module list), `--mod-exefs NAME=PATH` (a mod's module as a replacement/added source) and `--mod-patches NAME=DIR` (IPS/IPS32
+  applied via `dm/tools/patch_ips.py` before the rewrite reads it), and writes a variant `profile.bin` (`dm/peanuts/profile/gen_runtime_profile.py
+  profile-modules`) when a mod adds a module past the shipped profile's own list. On the Java side: `dev.peanuts.build.ModdedBuild` turns a
+  `ModBuild.Plan` into that argv and the exlaunch-hook warning (point 4 below); `Job.modArgs()`/`reuseShaders()` (new, block-marked, `Job.java`)
+  carry it on a *separate* job keyed at `<game home>/<variantId>-work` and a *separate* pack (`AppStorage.pack(c, variantId)`, made `public` for
+  this) — `Prepare.runModded` (new method) never touches the normal job/pack, and reuses the normal pack's own shader library (code mods never
+  change shaders) instead of re-translating. `dev.peanuts.build.ModBuildService`/`ModBuildPipeline`/`ModBuildRequest` (new, own foreground service
+  and id space, `BuildService`/`BuildPipeline` untouched) run it from `ModsSheet`'s new "Build with mods"/"Rebuild with mods" button, which replaces
+  the old static "not available from this sheet yet" chip; `GameSheet` offers "Play with mods" once a variant pack exists (`dev.peanuts.ui.Upstream
+  .game()`, a throwaway `Game` pointed at the variant pack, never added to the library list). An added `subsdk9`-named module (or one whose bytes
+  contain an "exlaunch" marker) gets a plain-worded, non-blocking warning (`ModdedBuild.exlaunchWarning`) that its runtime hooks will not take
+  effect — the host's main is read-only once rewritten and `svcSetProcessMemoryPermission` is unimplemented; no static hook extraction attempted.
+  Tests: `peanuts/tests/test_modded_build.py` (javac/java, 10 cases), `peanuts/tests/test_gen_runtime_profile_mods.py` (5 cases, against the real
+  Pokémon Brilliant Diamond profile, 0100000011D90000), `dm/tools/tests/test_pack_android_mods.py` (7 cases) — all passing alongside the existing
+  mods/IPS suites (87 tests total). The whole `android/app/src/main` + `src/ondevice` + `src/peanuts` source set javac-compiles clean against
+  `android.jar` + `org.json` with stub `BuildConfig`/`R` classes (not a gradle build: no resource linking or manifest merge checked that way).
+  **Not yet run on a real device** — see the mods build report for the exact synthetic-mod recipe to test the wiring without Lumi's own files, and
+  what is still open for real Lumi (its exlaunch subsdk9 specifically).
