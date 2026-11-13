@@ -66,7 +66,8 @@ will ever ask you for money, keys or game files.
 ## Getting started
 
 1. Install the APK and allow All files access when asked.
-2. In Settings, choose your game folder, your update folder and your `prod.keys`.
+2. In Settings, choose your game folder, your update folder and your `prod.keys`. A build folder is optional: pick one, on the phone or the microSD
+   card, to keep every build there instead, organized by title ID.
 3. Open a game from the library and tap **Build**. The app imports the game, rewrites its code, translates its
    shaders and installs its companion. Most games take 5 to 40 minutes on the Thor.
 4. Tap the game to play. The companion starts on the bottom screen.

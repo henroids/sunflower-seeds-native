@@ -19,6 +19,8 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `android/app/build.gradle` — applicationId / label.
    - `android/app/src/main/AndroidManifest.xml` — new Peanuts-owned activities/services/aliases, each its own marked block (already used for
      `CatalogActivity` and `GameHold`; 2026-11-13 added the `dev.peanuts.launch.LaunchActivity` alias, `peanuts/docs/LAUNCHERS.md`).
+   - `android/app/src/main/java/dev/nxnative/android/AppStorage.java` — (2026-11-13) `pack()` prefers an existing pack already in the app's own storage,
+     else a build folder's `<title ID>/pack` when the user set one (`PeanutsPrefs.buildPackDir`; Settings › Library › Build folder).
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).
@@ -62,3 +64,11 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - Next: haptics → vibrator; guest calls; a play app id of its own; upstream the `vka_tex.c`, `vka_draw.c` and `hle_audren.c` changes; verify launcher
   support on the Thor and in an actual ES-DE/Daijisho install.
 - Parked: P3 — Pokopia's first real values (memory-diff hunt on the Thor), then the page as DSMod-style widgets; P4 — taps → `nxhost_input_*`.
+- 2026-11-13 (build folder): Settings › Library › Build folder (`PeanutsPrefs.buildDir`), a folder the owner picks (phone or microSD) to keep every
+  build organized by title ID instead of beside the game and in the app's own storage. A NEW build of title T writes its `.nup` and its pack to
+  `<build folder>/<T>/` (`BuildService.stepImport`; `AppStorage.pack` prefers an existing pack already in app storage first, else routes a new one into
+  the build folder — one hook, so every place that already reads `AppStorage.pack`/`Folders.packFor` picks it up: `Prepare`'s job creation, the Manage
+  sheet, the companion root beside the pack). The library scans the build folder too (`PeanutsPrefs.roots`, same two-level walk). An unmounted build
+  volume hides its games without removing them: `Library.staleGames`'s path-based `volumeMounted` check already covers any `gameDir`, build folder or
+  not — verified by reading, not changed. Not yet run on a real device (checklist: a fresh build into a microSD build folder, an existing internal
+  build still plays unmoved, companion install root under the build folder).

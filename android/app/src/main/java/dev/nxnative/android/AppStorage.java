@@ -30,9 +30,15 @@ final class AppStorage {
     /** The folder that holds the packs (packs/&lt;title ID&gt;) */
     static File packs(Context c) { return new File(root(c), "packs"); }
 
-    /** A game's pack folder in app storage; a swap that stopped part way (PackZip.swapIn) is put back first */
+    /** A game's pack folder: in app storage when it is there already, else the build folder's {@code <title ID>/pack} when the user set one (Settings ›
+     *  Library › Build folder) — a new build then lands there instead of the app's own storage, organized by title ID; an existing pack already in app
+     *  storage keeps using it, so setting the folder later never moves anything. A swap that stopped part way (PackZip.swapIn) is put back first. */
     static File pack(Context c, String titleId) {
         File p = new File(packs(c), titleId);
+        if (!new File(p, "pack.tsv").isFile()) {   // PEANUTS: no pack in app storage yet; a build folder, if set, is where a NEW one goes (PeanutsPrefs.buildPackDir)
+            File build = dev.peanuts.PeanutsPrefs.buildPackDir(c, titleId);
+            if (build != null) p = build;
+        }
         PackZip.recover(p);
         return p;
     }

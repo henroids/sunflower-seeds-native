@@ -52,7 +52,8 @@ public final class SpaceEstimate {
     /** A folder's free space (its own volume: an SD card's game folder and the app's external storage are usually different volumes, AUDIT F10) */
     public static long freeBytes(File dir) {
         if (dir == null) return Long.MAX_VALUE;   // unknown: never the reason to warn
-        File d = dir.isDirectory() ? dir : dir.getParentFile();
+        File d = dir;   // the nearest folder that exists: a build folder's <title ID>/pack is made by the build itself, and a missing path reads as 0 bytes free
+        while (d != null && !d.isDirectory()) d = d.getParentFile();
         return d == null ? Long.MAX_VALUE : d.getUsableSpace();
     }
 

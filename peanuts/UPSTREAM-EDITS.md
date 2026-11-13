@@ -70,6 +70,7 @@ not edited (see table above).
 | `android/app/build.gradle` | marked | no (Peanuts-specific: applicationId/targets/res overlay) |
 | `android/app/.gitignore` | marked | no |
 | `android/app/src/main/AndroidManifest.xml` | marked | no |
+| `android/app/src/main/java/dev/nxnative/android/AppStorage.java` | **fixed this pass (2026-11-13)** — `pack()` routes a new pack to a build folder's `<title ID>/pack` when one is set and the title has no pack in app storage yet | no (Peanuts-specific: `PeanutsPrefs.buildPackDir`, the owner's custom-build-folder feature) |
 | `android/app/src/main/cpp/CMakeLists.txt` | marked | no |
 | `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | marked | no |
 | `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | marked | no |
@@ -162,3 +163,20 @@ Both files were already "marked" in the table above for earlier Peanuts hunks; t
 hunk to each, still fully marked. No upstream-candidate general fix here: both lines only call out to
 Peanuts-owned code (`dev.peanuts.launch.*`) or declare a Peanuts-owned manifest component. Detail and the
 device-verification checklist: `peanuts/docs/LAUNCHERS.md`.
+
+## Round 4 (2026-11-13) — custom build folder
+
+One new upstream hunk, a minimal marked hook per PEANUTS.md rule 2 (the "Allowed hook sites" list was
+updated in the same change to name the new site):
+
+| File | Hunk | Marker |
+|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/AppStorage.java` | `pack()`: when app storage has no pack for the title yet, reads a build folder's `<title ID>/pack` (`dev.peanuts.PeanutsPrefs.buildPackDir`) instead of always returning `packs/<title ID>` | trailing/line-above `// PEANUTS: ...` on the new `if` block |
+
+No upstream-candidate general fix: the behaviour only exists because of the Peanuts-owned build-folder
+setting (Settings › Library › Build folder, `PeanutsPrefs.buildDir`); upstream has no such setting to
+route to. Every other site that needed to find a pack in either location (`Folders.packFor`,
+`PackFind.candidates`/`best`, `Prepare`'s job creation, `MainActivity`'s Manage sheet, the companion
+root beside the pack) already takes `AppStorage.pack(...)`'s return value as its one source of truth, so
+none of them needed their own edit — verified by reading each call site, not by a second hook. Details
+and the device-verification checklist: `PEANUTS.md`'s 2026-11-13 "build folder" status entry.

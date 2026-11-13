@@ -23,14 +23,15 @@ import java.io.OutputStream;
 /**
  * Settings › Library (SPEC.md), the first section of Banana's Settings: the game, update and DLC folders, the keys (prod.keys, copied into files/keys and checked by
  * the importer), the firmware fonts (the importer extracts them into files/firmware/fonts), Rescan, and the Companions catalog. The pickers are the system's;
- * their results come back through MainActivity.onActivityResult to {@link #result} (requests 60–67, also the game sheet's Choose/Add). The same pickers serve
+ * their results come back through MainActivity.onActivityResult to {@link #result} (requests 60–68, also the game sheet's Choose/Add). The same pickers serve
  * Home's first-run card and the sheet's Add keys….
  */
 public final class LibrarySettings {
-    static final int REQ_KEYS = 60, REQ_GAME = 61, REQ_UPDATE_DIR = 62, REQ_DLC_DIR = 63, REQ_FIRMWARE = 64, REQ_SHEET_UPDATE = 65, REQ_SHEET_DLC = 66, REQ_FIRMWARE_ZIP = 67;
+    static final int REQ_KEYS = 60, REQ_GAME = 61, REQ_UPDATE_DIR = 62, REQ_DLC_DIR = 63, REQ_FIRMWARE = 64, REQ_SHEET_UPDATE = 65, REQ_SHEET_DLC = 66, REQ_FIRMWARE_ZIP = 67,
+            REQ_BUILD_DIR = 68;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Extracting the fonts…" and what came of it, while the rows show
-    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, companionsRow;
+    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow;
     private static Activity rowsOf;
 
     private LibrarySettings() {}
@@ -42,6 +43,9 @@ public final class LibrarySettings {
         LinearLayout card = PUi.add(content, PUi.listCard(a), 8);
         gameRow = new PUi.Setting(a, "📁", "Game folder", v -> pickFolder(a, REQ_GAME, "Pick your game folder")).chevron(a);
         card.addView(gameRow.view);
+        buildRow = new PUi.Setting(a, "🗂️", "Build folder", v -> pickFolder(a, REQ_BUILD_DIR, "Pick your build folder")).chevron(a);
+        card.addView(buildRow.view);
+        buildRow.view.setOnLongClickListener(v -> { PeanutsPrefs.buildDir(a, null); refreshRows(); Library.rescan(a); return true; });
         updateRow = new PUi.Setting(a, "⬆️", "Update folder", v -> pickFolder(a, REQ_UPDATE_DIR, "Pick your update folder")).chevron(a);
         card.addView(updateRow.view);
         updateRow.view.setOnLongClickListener(v -> { PeanutsPrefs.updateDir(a, null); refreshRows(); Library.rescan(a); return true; });
@@ -149,7 +153,7 @@ public final class LibrarySettings {
 
     /** MainActivity.onActivityResult's first line: true when the request was one of this package's (handled, whatever the result) */
     public static boolean result(Activity a, int request, int result, Intent data) {
-        if (request < REQ_KEYS || request > REQ_FIRMWARE_ZIP) return false;
+        if (request < REQ_KEYS || request > REQ_BUILD_DIR) return false;
         if (result != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri u = data.getData();
         if (request == REQ_KEYS) { copyKeys(a, u); return true; }
@@ -165,6 +169,7 @@ public final class LibrarySettings {
         switch (request) {
             case REQ_FIRMWARE: PeanutsPrefs.firmwareDir(a, p); extractFonts(a, p, null); break;
             case REQ_GAME: PeanutsPrefs.gameDir(a, p); break;
+            case REQ_BUILD_DIR: PeanutsPrefs.buildDir(a, p); break;
             case REQ_UPDATE_DIR: PeanutsPrefs.updateDir(a, p); break;
             case REQ_DLC_DIR: PeanutsPrefs.dlcDir(a, p); break;
             default: return true;

@@ -297,8 +297,13 @@ public final class GameSheet {
             return;
         }
         long packBasis = needsImport ? importBytes : (cachedBasis != null ? cachedBasis : 0L);
+        // A build folder (Settings - Library - Build folder), when set, is where this title's .nup and pack both go instead: measure its volume, not the
+        // game folder's / the app's own storage
+        File buildGameDir = PeanutsPrefs.buildGameDir(a, title.titleId);
         String gameDir = PeanutsPrefs.gameDir(a);
-        String warn = SpaceEstimate.warning(importBytes, packBasis, needsImport, gameDir == null ? null : new File(gameDir), a.getExternalFilesDir(null));
+        File importDest = buildGameDir != null ? buildGameDir : (gameDir == null ? null : new File(gameDir));
+        File packVolume = buildGameDir != null ? new File(buildGameDir, "pack") : a.getExternalFilesDir(null);
+        String warn = SpaceEstimate.warning(importBytes, packBasis, needsImport, importDest, packVolume);
         if (warn != null) PUi.add(box, PUi.warnChip(a, "Low disk space", "Low disk space", warn + " Build still works; it may just run out partway through."), 14);
         else {
             long need = SpaceEstimate.totalNeeded(importBytes, packBasis, needsImport);

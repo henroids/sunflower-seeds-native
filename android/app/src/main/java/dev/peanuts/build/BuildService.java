@@ -185,15 +185,21 @@ public final class BuildService extends Service {
         if (r.base == null || !r.base.exists()) throw new BuildListener.Failure("The game's base file is missing" + (r.base == null ? "." : ": " + r.base), BuildListener.FILE_MISSING);
         if (r.update != null && !r.update.exists()) throw new BuildListener.Failure("The update file is missing: " + r.update, BuildListener.FILE_MISSING);
         if (!r.needsImport()) { progress("import", IMPORT_END, "Game file: " + r.base.getName()); return r.base; }
-        if (r.gameDir == null) throw new IOException("No game folder to write the .nup into (Setup).");
+        // PEANUTS: a build folder (Settings - Library - Build folder), when set, is where this title's .nup and pack both go (<build folder>/<title ID>/),
+        // instead of beside the game and in the app's own storage; PeanutsPrefs.buildGameDir validates the title ID and returns null without one set
+        File buildGameDir = dev.peanuts.PeanutsPrefs.buildGameDir(this, r.titleId);
+        if (buildGameDir == null && r.gameDir == null) throw new IOException("No game folder to write the .nup into (Setup).");
         // SpaceEstimate's pre-flight (P4/AUDIT §3.2): warn-only (critique-phase1 must-fix 7 — the multiplier is uncalibrated, so it never blocks Build; a real
         // ENOSPC further down still fails with OUT_OF_SPACE through category()). getExternalFilesDir(null), not getFilesDir(): AppStorage puts the pack there
         // (critique-phase2a §A-3b). Importing: the pack's basis is the merged .nup's own size (importBytes again), same as the game-folder check
         List<File> inputs = r.inputs();
         long importNeed = SpaceEstimate.inputBytes(inputs);
-        String spaceWarn = SpaceEstimate.warning(importNeed, importNeed, true, r.gameDir, getExternalFilesDir(null));
+        // PEANUTS: both volumes move to the build folder when it is set (the .nup and the pack land under the same <title ID> folder there)
+        File importDest = buildGameDir != null ? buildGameDir : r.gameDir;
+        File packVolume = buildGameDir != null ? new File(buildGameDir, "pack") : getExternalFilesDir(null);
+        String spaceWarn = SpaceEstimate.warning(importNeed, importNeed, true, importDest, packVolume);
         if (spaceWarn != null) Log.w(TAG, "space: " + name + ": " + spaceWarn);
-        File dir = new File(r.gameDir, r.fileName()), out = new File(dir, r.fileName() + ".nup");
+        File dir = buildGameDir != null ? buildGameDir : new File(r.gameDir, r.fileName()), out = new File(dir, r.fileName() + ".nup");
         long newest = 0;
         for (File f : inputs) newest = Math.max(newest, f.lastModified());
         if (out.isFile() && out.length() > 0 && out.lastModified() >= newest) { progress("import", IMPORT_END, "Imported already: " + out.getName()); return out; }
