@@ -267,6 +267,7 @@ typedef struct vka_img {
     int refs, inited, gpu_owned, cpu_dirty;
     int is_video;
     uint64_t last_frame;
+    uint64_t linger;         // PEANUTS: the frame a GPU-drawn image's last texture object was finalized in, kept for one of the same storage and shape (vka_tex.c linger_*); 0 = not lingering
     uint64_t pool_frame;     // the last prune that found a live texture pool slot naming it (vka_tex_prune_locked): shaders may read it through the pool, so it is in use
     uint64_t last_fence;
     int no_storage;          // remaking it with storage use was refused (img_storage_upgrade): not tried again
