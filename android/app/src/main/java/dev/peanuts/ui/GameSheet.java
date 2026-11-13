@@ -2,6 +2,8 @@ package dev.peanuts.ui;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -21,8 +23,9 @@ import java.util.Map;
  * A game's sheet (SPEC.md): a Banana dialog (PUi.sheet, Close as the negative button) of Setting rows: its base, the update that goes in (the newest found;
  * Choose another… picks a file), its DLC (the ones matched by title ID; Add… picks more), its companion from the catalog ("Install after the build" toggle), then
  * Build (Rebuild for a ready game), which hands the sheet's {@link State} to the build pipeline through {@link Library#startBuild} and closes: progress lives on the
- * game's card. Without prod.keys an NSP/XCI's Build is off, with "Add keys…" beside it (the keys picker; the sheet re-renders when they land). A game this app has
- * no profile for gets Profile.missing's sentence only.
+ * game's card. Keys and firmware fonts are a one-time setup requirement (owner, 2026-11-13): without either, Build is off here, with "Add keys…"/"Choose
+ * firmware…" beside it (the sheet re-renders once they land); {@link Library#startBuild} checks the same two file-presence flags again as a last line of
+ * defense, so nothing but a cheap check runs on every build once setup is done. A game this app has no profile for gets Profile.missing's sentence only.
  */
 public final class GameSheet {
     static final int REQ_UPDATE = LibrarySettings.REQ_SHEET_UPDATE, REQ_DLC = LibrarySettings.REQ_SHEET_DLC;
@@ -137,13 +140,26 @@ public final class GameSheet {
         // all. onClose: installedVersion (above) is read live from disk on every render, not cached in a field here, so re-rendering after a rollback/switch
         // is the whole refresh — critique-phase2a §B's "cached state goes stale" note, satisfied without a separate cache to invalidate
         if (companion != null) PUi.add(box, PUi.button(a, "Versions…", PUi.Kind.QUIET, v -> dev.peanuts.ui.CompanionVersions.open(a, title.titleId, this::render)), 2, PUi.wrap());
+        // Launcher support (owner request, LAUNCHERS.md): a pinned shortcut that starts this title through dev.nxnative.android.FrontendLaunch's own
+        // title_id path (FRONTENDS.md) — a ready game starts at once, a game not yet built opens Home with it instead. Shown whenever the launcher
+        // supports pinning (dev.peanuts.launch.GameShortcuts.supported), not only for a READY title, matching how Home's own Add-to-home-screen entry
+        // (upstream, FRONTENDS.md) is not restricted to ready games either
+        if (dev.peanuts.launch.GameShortcuts.supported(a))
+            PUi.add(box, PUi.button(a, "Add to home screen", PUi.Kind.QUIET, v -> addToHomeScreen()), 2, PUi.wrap());
         PUi.add(box, PUi.divider(a), 12, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, PUi.dp(a, 1)));
-        // Build
-        boolean needKeys = title.base != null && title.base.needsImport() && !PeanutsPrefs.hasKeys(a);
-        if (needKeys) {
+        // Build prerequisites (owner, 2026-11-13): keys and firmware fonts are a one-time setup requirement, checked cheaply (file presence only, never
+        // re-validated against the importer here) before any build starts — not just an NSP/XCI import. A missing firmware font can crash some games at
+        // boot (dm/games/01008CF01BAAC000/README.md). This chip and the two buttons below stop appearing anywhere once both are in the app.
+        boolean needKeys = !PeanutsPrefs.hasKeys(a);
+        boolean needFonts = !PeanutsPrefs.hasFonts(a);
+        boolean missingSetup = needKeys || needFonts;
+        if (missingSetup) {
+            String what = needKeys && needFonts ? "Keys and firmware fonts are needed before building."
+                    : needKeys ? "Keys are needed before building."
+                    : "Firmware fonts are needed before building.";
             LinearLayout r = PUi.row(a);
-            r.addView(PUi.warnChip(a, "Keys needed", "Keys needed", "Importing an NSP or XCI decrypts it with your own prod.keys. Add them, then Build."));
-            TextView t = PUi.small(a, "Importing an NSP needs your prod.keys.");
+            r.addView(PUi.warnChip(a, "Setup needed", "Setup needed", what));
+            TextView t = PUi.small(a, what);
             t.setPadding(PUi.dp(a, 10), 0, 0, 0);
             r.addView(t, PUi.weight());
             PUi.add(box, r, 14);
@@ -156,12 +172,17 @@ public final class GameSheet {
         boolean unsupported = chosenVersionState() == LibraryScanner.VersionState.UNSUPPORTED;
         LinearLayout actions = PUi.row(a);
         PUi.Action build = PUi.action(a, R.drawable.ic_build, ready ? "Rebuild" : unsupported ? "Build anyway" : "Build", PUi.Kind.PRIMARY, v -> startBuild());
-        build.setEnabled(!building && title.base != null && !needKeys && title.home != null && !fileGone);
+        build.setEnabled(!building && title.base != null && !missingSetup && title.home != null && !fileGone);
         actions.addView(build, PUi.weight());
         if (needKeys) {
             LinearLayout.LayoutParams lp = PUi.wrap();
             lp.leftMargin = PUi.dp(a, 10);
             actions.addView(PUi.button(a, "Add keys…", PUi.Kind.SOFT, v -> LibrarySettings.pickKeys(a)), lp);
+        }
+        if (needFonts) {
+            LinearLayout.LayoutParams lp = PUi.wrap();
+            lp.leftMargin = PUi.dp(a, 10);
+            actions.addView(PUi.button(a, "Choose firmware…", PUi.Kind.SOFT, v -> LibrarySettings.pickFirmwareSource(a)), lp);
         }
         PUi.add(box, actions, 14);
     }
@@ -369,7 +390,24 @@ public final class GameSheet {
         render();
     }
 
-    /** The keys landed (Add keys…): Build comes on */
+    /**
+     * Add to home screen (owner request, LAUNCHERS.md): pins a shortcut for this exact title ID, with the library's own cover art as its icon. The
+     * icon file is read off the UI thread (it can be a disk read the same as {@link #renderSpaceLine}'s walk, and on a game whose cover has not been
+     * fetched yet {@link LibraryScanner#icon} itself may call out to the importer); {@link dev.peanuts.launch.GameShortcuts#pin} only ever receives
+     * this title's own titleId and name, never a path, so the shortcut it builds can only ever point back at a title the library itself scanned
+     */
+    private void addToHomeScreen() {
+        String titleId = title.titleId, name = title.name;
+        new Thread(() -> {
+            File f = LibraryScanner.icon(a, title);
+            Bitmap cover = f == null ? null : BitmapFactory.decodeFile(f.getPath());
+            a.runOnUiThread(() -> dev.peanuts.launch.GameShortcuts.pin(a, titleId, name, cover));
+        }, "peanuts-shortcut").start();
+    }
+
+    /** The keys landed (Add keys…): Build comes on if firmware fonts are there too. NOTE for the owner of LibrarySettings.java (not touched here): only
+     *  copyKeys calls this today; extractFonts does not call it after "Choose firmware…" lands fonts, so a sheet already open needs closing and reopening
+     *  to notice new fonts. Calling this from extractFonts's UI.post the same way keysLanded does would close that gap. */
     void keysChanged() { render(); }
 
     private void saveDlc() {

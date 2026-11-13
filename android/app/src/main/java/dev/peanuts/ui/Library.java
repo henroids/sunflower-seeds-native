@@ -1034,6 +1034,11 @@ public final class Library {
     /** The sheet's Build: the state to the pipeline; the card shows the rest. Returns why it could not start, or null */
     String startBuild(GameSheet.State s) {
         if (BuildPipeline.running() != 0) return "A build is running now. Wait for it to finish.";
+        // Keys and firmware fonts are a one-time setup requirement (owner, 2026-11-13), checked here as a cheap file-presence gate for every entry point
+        // that can start a build (the sheet's Build/Build anyway/Rebuild, and Resume below): GameSheet already disables its Build button for the same
+        // reason, so this is only a last line of defense, never a per-build re-validation against the importer.
+        if (!PeanutsPrefs.hasKeys(a)) return "Add your keys first (Settings › Library), then build.";
+        if (!PeanutsPrefs.hasFonts(a)) return "Add your firmware fonts first (Settings › Library), then build.";
         BuildRequest r = new BuildRequest();
         r.titleId = s.titleId; r.name = s.name; r.base = s.base; r.update = s.update;
         r.dlcs = new ArrayList<>(s.dlcs);
@@ -1097,8 +1102,10 @@ public final class Library {
         PUi.add(c, steps, 16, PUi.wrap());
         boolean keys = PeanutsPrefs.hasKeys(a);
         String game = PeanutsPrefs.gameDir(a);
+        // Keys and firmware fonts are a one-time setup requirement before Build, not per-build (owner, 2026-11-13): no longer worded "Optional" here, since
+        // Build itself is gated on both (GameSheet, Library.startBuild). Browsing this screen (Show my games, below) still needs only the game folder.
         PUi.add(c, new PUi.Setting(a, "🔑", "Keys", v -> LibrarySettings.pickKeys(a))
-                .value(keys ? "Added: prod.keys is in the app." : "Optional. Needed for NSP and XCI files; a .nup or a dump folder plays without them.").chevron(a).view, 16);
+                .value(keys ? "Added: prod.keys is in the app." : "Needed before building. Importing an NSP or XCI needs it; browsing your folders here does not.").chevron(a).view, 16);
         PUi.add(c, new PUi.Setting(a, "📁", "Game folder", v -> LibrarySettings.pickFolder(a, LibrarySettings.REQ_GAME, "Pick your game folder"))
                 .value(game != null ? game : "Required. Every NSP, XCI, .nup and dump folder inside is shown on this screen.").chevron(a).view, 0);
         // P5 (UX-SPEC §2.4): folded in as its own numbered step, same Setting-row shape as the other three, instead of a quiet text button below the action row
@@ -1106,8 +1113,8 @@ public final class Library {
         String updDlcValue = updateDir == null && dlcDir == null ? "Point at your update and DLC files if they're not inside the game folder already. Skip if everything's together."
                 : (updateDir != null ? "Update: " + updateDir : "Update: not set") + (dlcDir != null ? " · DLC: " + dlcDir : "");
         PUi.add(c, new PUi.Setting(a, "⬆️", "Updates & DLC", v -> LibrarySettings.extraFolders(a)).value(updDlcValue).chevron(a).view, 0);
-        PUi.add(c, new PUi.Setting(a, "🔤", "Firmware fonts", v -> LibrarySettings.pickFolder(a, LibrarySettings.REQ_FIRMWARE, "Pick your firmware folder"))
-                .value(LibrarySettings.fontsValue(a, "Used by games and companions. Missing characters in Android's fonts can prevent a game from starting.")).chevron(a).view, 0);
+        PUi.add(c, new PUi.Setting(a, "🔤", "Firmware fonts", v -> LibrarySettings.pickFirmwareSource(a))
+                .value(LibrarySettings.fontsValue(a, "Needed before building. A missing font can crash some games at boot.")).chevron(a).view, 0);
         PUi.Action show = PUi.action(a, R.drawable.ic_add, "Show my games", PUi.Kind.PRIMARY, v -> {
             if (PeanutsPrefs.gameDir(a) == null) { Toast.makeText(a, "Pick the game folder first", Toast.LENGTH_LONG).show(); return; }
             PeanutsPrefs.setupDone(a, true);

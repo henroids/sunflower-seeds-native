@@ -147,3 +147,18 @@ Also gated, but not `#ifdef`-paired with upstream code (new Peanuts-owned files/
 per-game rows (Link's Awakening, Echoes of Wisdom) should instead move to a Peanuts-owned
 `dm/games/<id>/peanuts.tsv` overlay once that mechanism lands, so upstream's own `k_locks[]` table
 stops needing a local edit at all.
+
+## Round 3 (2026-11-13) — launcher support
+
+Two new upstream hunks, both one-liner hooks per PEANUTS.md rule 2 (its "Allowed hook sites" list was
+updated in the same change to name both sites explicitly):
+
+| File | Hunk | Marker |
+|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | one new line in `onCreate`, right after the existing `dev.peanuts.Companion.start` hook: `dev.peanuts.launch.RecentGames.touch(...)` | trailing `// PEANUTS: last-3-played dynamic shortcuts (LAUNCHERS.md)` |
+| `android/app/src/main/AndroidManifest.xml` | one new `<activity-alias>` block, `dev.peanuts.launch.LaunchActivity`, beside the existing `${applicationId}.Launch` alias | a `<!-- PEANUTS: ... -->` comment directly above the block |
+
+Both files were already "marked" in the table above for earlier Peanuts hunks; this round adds one more
+hunk to each, still fully marked. No upstream-candidate general fix here: both lines only call out to
+Peanuts-owned code (`dev.peanuts.launch.*`) or declare a Peanuts-owned manifest component. Detail and the
+device-verification checklist: `peanuts/docs/LAUNCHERS.md`.

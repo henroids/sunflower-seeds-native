@@ -11,11 +11,14 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `peanuts/` — companion packages, docs, tests, `scripts/`.
 2. **Hooks into upstream files are one-liners, each tagged `PEANUTS`.** A hook is a call-out to Peanuts code, never logic.
    Allowed hook sites (keep this list current):
-   - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` — create/destroy the companion `Presentation`.
+   - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` — create/destroy the companion `Presentation`; and (2026-11-13) one line in
+     `onCreate` that touches the last-3-played list for dynamic shortcuts (`dev.peanuts.launch.RecentGames`, `peanuts/docs/LAUNCHERS.md`).
    - `android/app/src/main/cpp/nxlaunch.c` — JNI entry points forwarded to `dm/peanuts`.
    - `android/host/CMakeLists.txt`, `android/app/src/main/cpp/CMakeLists.txt` — add the `dm/peanuts` sources.
    - `dm/gfx/vk_android/vka_present.c` — one call per presented frame (`peanuts_tick()`), beside `ovl_draw`.
    - `android/app/build.gradle` — applicationId / label.
+   - `android/app/src/main/AndroidManifest.xml` — new Peanuts-owned activities/services/aliases, each its own marked block (already used for
+     `CatalogActivity` and `GameHold`; 2026-11-13 added the `dev.peanuts.launch.LaunchActivity` alias, `peanuts/docs/LAUNCHERS.md`).
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).
@@ -50,5 +53,12 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - 2026-11-12: Echoes of Wisdom's frame governor (rewritten since Link's Awakening: one frame at or over 1/60 s holds present interval 2 for 12 frames, which renews forever at interval 2) is held off through its enable byte each present (`hle_fpslock.c`, `fps_target 60` in the profile): the dungeon runs at 60 fps on the Thor where it was stuck at 30.
 - 2026-11-12 (one UI): the library lives in Banana Native's Home (`dev.peanuts.ui.Library`, five one-line hooks in `MainActivity` and two manifest lines; `PUi` is a copy of the toolkit on the same resources): filter row, sections, Banana's cards with the games' icons, the game sheet and Settings › Library as Banana dialogs and rows, first-run setup as one card. The separate library and setup activities are gone. Design records: the owner's NVMe `peanuts-native/design/`.
 - 2026-11-12 (Home, revision 3): a cover grid (four per row, the state on the cover, the companion badge), a Building filter while something runs, Add game gone, the two-kernel peanut icon. Link's Awakening plays in handheld mode by a Peanuts per-title default (`GameEnv`): its 1080p frame was GPU-bound at 50 fps on the Thor; 720p holds 60.
-- Next: haptics → vibrator; guest calls; a play app id of its own; upstream the `vka_tex.c`, `vka_draw.c` and `hle_audren.c` changes.
+- 2026-11-13 (launcher support, `peanuts/docs/LAUNCHERS.md`): home screen shortcuts (GameSheet's new "Add to home screen", the game's own cover art as
+  the icon, `dev.peanuts.launch.GameShortcuts`), dynamic "last 3 played" shortcuts (`dev.peanuts.launch.RecentGames`, one marked line in
+  `GameActivity.onCreate`), and a second, build-stable alias for emulator frontends (`dev.peanuts.launch.LaunchActivity`, one marked manifest block)
+  alongside upstream's own `<applicationId>.Launch` (`android/FRONTENDS.md`, `FrontendLaunch`). All three only ever carry a title ID through an
+  explicit intent at `FrontendLaunch`, never a path; `FrontendLaunch` itself re-validates the title ID against the library. Not yet run on a real
+  device or a real frontend (checklist in `peanuts/docs/LAUNCHERS.md`).
+- Next: haptics → vibrator; guest calls; a play app id of its own; upstream the `vka_tex.c`, `vka_draw.c` and `hle_audren.c` changes; verify launcher
+  support on the Thor and in an actual ES-DE/Daijisho install.
 - Parked: P3 — Pokopia's first real values (memory-diff hunt on the Thor), then the page as DSMod-style widgets; P4 — taps → `nxhost_input_*`.
