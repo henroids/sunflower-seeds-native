@@ -3464,7 +3464,12 @@ def profile_differs(t, pairsout, psopairsout):
         p = GAME.table(name)
         if text is None or not os.path.isfile(p): continue
         with open(p, encoding='utf-8', newline='') as f: want = absent_tables(name, f.read(), absent)
-        if table_rows(want.encode()) != table_rows(text.encode()): return f'made a {name} that differs from the profile\'s'   # PEANUTS: by rows, not comment lines (table_rows)
+        if table_rows(want.encode()) != table_rows(text.encode()):   # PEANUTS: by rows, not comment lines (table_rows)
+            if d := os.environ.get('DM_SPLIT_DIFF_DIR'):   # PEANUTS: the targeted table and the profile's as compared, to see why a title falls back to the full scan
+                os.makedirs(d, exist_ok=True)
+                with open(os.path.join(d, 'targeted.' + name), 'w', encoding='utf-8', newline='') as f: f.write(text)
+                with open(os.path.join(d, 'profile.' + name), 'w', encoding='utf-8', newline='') as f: f.write(want)
+            return f'made a {name} that differs from the profile\'s'
     if absent: print(f'targeted split: compared with the profile\'s tables less the {len(absent)} shader(s) of shader_optional.tsv this dump does not have ({", ".join(sorted(absent)[:3])})', flush=True)
     return None
 
@@ -3533,7 +3538,8 @@ def split_tables(results, big, files, dumps, J, common, zdicts, cache, targeted=
     for rel, uniq, pr, extra in results:
         if extra == 'defer': defer.append(rel)
         elif isinstance(extra, dict): trees.update(extra)
-    if defer and targeted: raise Fallback(f'found Unity serialized files without type trees ({defer[0]}), whose trees may come from files it left out')
+    # PEANUTS: targeted, the second pass is tried too (Fire Emblem Engage's unity default resources borrow a tree the targeted bundles or KNOWN_TREES hold: the targeted scan was
+    # abandoned for all 206,874 files); only a file still without a tree falls back, and the tables are compared with the profile's afterwards as always (profile_differs)
     if defer:
         # a hash no bundle supplied takes the layout unityfs.py has for it (KNOWN_TREES); only here, so files a bundle lends a tree to keep their place in the tables (Ace Attorney's built-ins)
         import unityfs
@@ -3541,6 +3547,7 @@ def split_tables(results, big, files, dumps, J, common, zdicts, cache, targeted=
         byrel = {r: p for p, r in files}
         with pool(J, common, trees, zdicts) as ex: again = list(ex.map(scan_file, [(byrel[r], r) for r in defer]))
         for rel, uniq, pr, extra in again:
+            if extra == 'defer' and targeted: raise Fallback(f'found Unity serialized files without type trees ({rel}), whose trees may come from files it left out')   # PEANUTS: targeted (above)
             if extra == 'defer': red(f'{rel}: Unity serialized file without type trees, and no bundle has a Shader type tree of the same hash to borrow')
         results = [r for r in results if r[3] != 'defer'] + again
     if dumps:
