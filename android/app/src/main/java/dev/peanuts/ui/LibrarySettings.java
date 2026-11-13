@@ -23,11 +23,11 @@ import java.io.OutputStream;
 /**
  * Settings › Library (SPEC.md), the first section of Banana's Settings: the game, update and DLC folders, the keys (prod.keys, copied into files/keys and checked by
  * the importer), the firmware fonts (the importer extracts them into files/firmware/fonts), Rescan, and the Companions catalog. The pickers are the system's;
- * their results come back through MainActivity.onActivityResult to {@link #result} (requests 60–66, also the game sheet's Choose/Add). The same pickers serve
+ * their results come back through MainActivity.onActivityResult to {@link #result} (requests 60–67, also the game sheet's Choose/Add). The same pickers serve
  * Home's first-run card and the sheet's Add keys….
  */
 public final class LibrarySettings {
-    static final int REQ_KEYS = 60, REQ_GAME = 61, REQ_UPDATE_DIR = 62, REQ_DLC_DIR = 63, REQ_FIRMWARE = 64, REQ_SHEET_UPDATE = 65, REQ_SHEET_DLC = 66;
+    static final int REQ_KEYS = 60, REQ_GAME = 61, REQ_UPDATE_DIR = 62, REQ_DLC_DIR = 63, REQ_FIRMWARE = 64, REQ_SHEET_UPDATE = 65, REQ_SHEET_DLC = 66, REQ_FIRMWARE_ZIP = 67;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Extracting the fonts…" and what came of it, while the rows show
     private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, companionsRow;
@@ -50,7 +50,7 @@ public final class LibrarySettings {
         dlcRow.view.setOnLongClickListener(v -> { PeanutsPrefs.dlcDir(a, null); refreshRows(); Library.rescan(a); return true; });
         keysRow = new PUi.Setting(a, "🔑", "Keys", v -> pickKeys(a)).chevron(a);
         card.addView(keysRow.view);
-        fontsRow = new PUi.Setting(a, "🔤", "Firmware fonts", v -> pickFolder(a, REQ_FIRMWARE, "Pick your firmware folder")).chevron(a);
+        fontsRow = new PUi.Setting(a, "🔤", "Firmware fonts", v -> pickFirmwareSource(a)).chevron(a);
         card.addView(fontsRow.view);
         card.addView(new PUi.Setting(a, "🔄", "Rescan", v -> { Library.rescan(a); Toast.makeText(a, "Looking in the folders again", Toast.LENGTH_SHORT).show(); })
                 .value("Reads the folders again").chevron(a).view);
@@ -118,11 +118,25 @@ public final class LibrarySettings {
     /** The keys picker (Settings › Library › Keys, the first-run card, the sheet's Add keys…) */
     public static void pickKeys(Activity a) { pickFile(a, REQ_KEYS, "Pick your prod.keys"); }
 
-    static void pickFile(Activity a, int request, String title) {
+    static void pickFile(Activity a, int request, String title) { pickFile(a, request, title, "*/*"); }
+
+    static void pickFile(Activity a, int request, String title, String mime) {
         Toast.makeText(a, title, Toast.LENGTH_LONG).show();
-        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(mime).addCategory(Intent.CATEGORY_OPENABLE);
         i.putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse("content://com.android.externalstorage.documents/document/primary%3A"));
         a.startActivityForResult(i, request);
+    }
+
+    /** Settings › Library › Firmware fonts: a folder of extracted NCAs (the old way), or a firmware .zip with the same NCAs flat inside it (stored
+     * or deflated — users usually have firmware as a zip, not pre-extracted) */
+    static void pickFirmwareSource(Activity a) {   // also the game sheet's and the first-run card's firmware buttons
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        AlertDialog[] d = new AlertDialog[1];
+        PUi.add(box, PUi.body(a, "Pick the folder your firmware is extracted into, or a firmware .zip (its NCA files flat inside, stored or deflated)."), 0);
+        PUi.add(box, new PUi.Setting(a, "📁", "Folder", v -> { d[0].dismiss(); pickFolder(a, REQ_FIRMWARE, "Pick your firmware folder"); }).chevron(a).view, 12);
+        PUi.add(box, new PUi.Setting(a, "🗜️", "Zip file", v -> { d[0].dismiss(); pickFile(a, REQ_FIRMWARE_ZIP, "Pick your firmware zip", "application/zip"); }).chevron(a).view, 0);
+        d[0] = PUi.sheet(a, "Firmware fonts", box).setPositiveButton("Cancel", null).show();
     }
 
     /** As upstream's MainActivity.pickFolder: the system folder picker opened at the shared storage's root */
@@ -135,10 +149,11 @@ public final class LibrarySettings {
 
     /** MainActivity.onActivityResult's first line: true when the request was one of this package's (handled, whatever the result) */
     public static boolean result(Activity a, int request, int result, Intent data) {
-        if (request < REQ_KEYS || request > REQ_SHEET_DLC) return false;
+        if (request < REQ_KEYS || request > REQ_FIRMWARE_ZIP) return false;
         if (result != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri u = data.getData();
         if (request == REQ_KEYS) { copyKeys(a, u); return true; }
+        if (request == REQ_FIRMWARE_ZIP) { pickedFirmwareZip(a, u); return true; }
         if (request == REQ_SHEET_UPDATE || request == REQ_SHEET_DLC) {
             String p = Upstream.documentToPath(u);
             if (p == null || !new File(p).isFile()) { error(a, "Pick the file from the phone's storage (not Recent or a cloud provider), so the app can open it by its path."); return true; }
@@ -148,7 +163,7 @@ public final class LibrarySettings {
         String p = Upstream.treeToPath(u);
         if (p == null) { error(a, "That folder is not on the phone's storage (a cloud provider, say). Pick one on the phone or its SD card."); return true; }
         switch (request) {
-            case REQ_FIRMWARE: PeanutsPrefs.firmwareDir(a, p); extractFonts(a, p); break;
+            case REQ_FIRMWARE: PeanutsPrefs.firmwareDir(a, p); extractFonts(a, p, null); break;
             case REQ_GAME: PeanutsPrefs.gameDir(a, p); break;
             case REQ_UPDATE_DIR: PeanutsPrefs.updateDir(a, p); break;
             case REQ_DLC_DIR: PeanutsPrefs.dlcDir(a, p); break;
@@ -204,19 +219,71 @@ public final class LibrarySettings {
         Library.changed(a);
     }
 
-    /** The firmware's shared fonts → files/firmware/fonts (the importer; a note when it is not in the build) */
-    private static void extractFonts(Activity a, String dir) {
+    /** The firmware's shared fonts → files/firmware/fonts (the importer; a note when it is not in the build). source is a folder or a firmware .zip
+     * path (nximport_firmware_fonts takes either); deleteAfter is a temp copy (pickedFirmwareZip, when the picked zip was not on local storage) to
+     * remove once the importer is done with it, whichever way the extraction went, or null when source is a real picked path that stays as it is. */
+    private static void extractFonts(Activity a, String source, File deleteAfter) {
         ImporterPort imp = ImporterPort.get();
-        if (!imp.available()) { fontsState = "The importer is not in this build: the fonts are extracted when it is."; refreshRows(); return; }
+        if (!imp.available()) {
+            fontsState = "The importer is not in this build: the fonts are extracted when it is.";
+            refreshRows();
+            if (deleteAfter != null) deleteAfter.delete();
+            return;
+        }
         fontsState = "Extracting the fonts…";
         refreshRows();
         File out = PeanutsPrefs.fontsDir(a);
         out.mkdirs();
         new Thread(() -> {
-            int r = imp.firmwareFonts(dir, out.getPath());
+            int r = imp.firmwareFonts(source, out.getPath());
             String err = imp.lastError();
-            UI.post(() -> { fontsState = r == 0 ? null : "Fonts not extracted: " + err; refreshRows(); Library.changed(a); });
+            if (deleteAfter != null) deleteAfter.delete();
+            UI.post(() -> { fontsState = r == 0 ? null : "Fonts not extracted: " + err; fontsLanded(a); });
         }, "peanuts-fonts").start();
+    }
+
+    private static void fontsLanded(Activity a) {
+        refreshRows();
+        if (GameSheet.current != null) GameSheet.current.keysChanged();
+        Library.changed(a);
+    }
+
+    /** The firmware .zip picker's result: a path on the phone's own storage needs no copy (the importer, native code, reads the zip straight from
+     * disk by that path, same as the folder path); anything else (a cloud provider, an archive app's content provider) is copied into the app's
+     * cache first — about 300 MB for a full firmware zip, so this runs off the UI thread — and deleted again once the importer is done with it. */
+    private static void pickedFirmwareZip(Activity a, Uri u) {
+        String local = Upstream.documentToPath(u);
+        if (local != null && new File(local).isFile()) {
+            PeanutsPrefs.firmwareDir(a, local);
+            extractFonts(a, local, null);
+            return;
+        }
+        fontsState = "Copying the firmware zip…";
+        refreshRows();
+        new Thread(() -> {
+            File tmp = new File(a.getCacheDir(), "firmware_import.zip");
+            try (InputStream in = a.getContentResolver().openInputStream(u); OutputStream o = new FileOutputStream(tmp)) {
+                if (in == null) throw new IOException("the picker gave no file");
+                byte[] buf = new byte[1 << 20]; int n; long total = 0;
+                while ((n = in.read(buf)) > 0) { o.write(buf, 0, n); total += n; if (total > 8L << 30) throw new IOException("that file is too large for a firmware zip"); }
+            } catch (IOException e) {
+                tmp.delete();
+                UI.post(() -> { fontsState = "Fonts not extracted: could not copy the zip (" + e.getMessage() + ")"; refreshRows(); });
+                return;
+            }
+            String name = displayName(a, u);
+            UI.post(() -> { PeanutsPrefs.firmwareDir(a, name != null ? name : "a firmware zip"); extractFonts(a, tmp.getPath(), tmp); });
+        }, "peanuts-firmware-copy").start();
+    }
+
+    private static String displayName(Activity a, Uri u) {
+        try (android.database.Cursor c = a.getContentResolver().query(u, null, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                int i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (i >= 0) return c.getString(i);
+            }
+        } catch (Exception ignored) { /* no name: the generic label is fine */ }
+        return null;
     }
 
     /**

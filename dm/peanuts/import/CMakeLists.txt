@@ -11,23 +11,29 @@ set(NXIMPORT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/nx_lz4.c
     ${CMAKE_CURRENT_SOURCE_DIR}/nx_nca.c
     ${CMAKE_CURRENT_SOURCE_DIR}/nx_icon.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/nx_zip.c
     ${CMAKE_CURRENT_SOURCE_DIR}/nximport.c)
 if(ANDROID)
   add_library(nximport SHARED ${NXIMPORT_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/nximport_jni.c)
   target_link_options(nximport PRIVATE -Wl,--no-undefined -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384)
-  target_link_libraries(nximport PRIVATE log)
+  target_link_libraries(nximport PRIVATE log z)   # z: zlib, for a deflated member of a firmware .zip (nx_zip.c / nximport.c font_try_zip_deflate); the NDK ships it
 else()
   find_package(Threads REQUIRED)   # the writer's pipeline (pthreads; bionic has them in libc)
+  find_package(ZLIB REQUIRED)      # a deflated member of a firmware .zip (nximport.c font_try_zip_deflate)
   add_library(nximport SHARED ${NXIMPORT_SOURCES})
-  target_link_libraries(nximport PRIVATE Threads::Threads)
+  target_link_libraries(nximport PRIVATE Threads::Threads ZLIB::ZLIB)
   add_executable(nximport_cli ${CMAKE_CURRENT_SOURCE_DIR}/nximport_cli.c ${NXIMPORT_SOURCES})   # the sources themselves: its ncainfo command uses the internals
   target_include_directories(nximport_cli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(nximport_cli PRIVATE Threads::Threads)
+  target_link_libraries(nximport_cli PRIVATE Threads::Threads ZLIB::ZLIB)
   target_compile_options(nximport_cli PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation)
   add_executable(comp_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/comp_test.c ${NXIMPORT_SOURCES})   # the compression layer against the reference LZ4 (tests/comp_check.py)
   target_include_directories(comp_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(comp_test PRIVATE Threads::Threads)
+  target_link_libraries(comp_test PRIVATE Threads::Threads ZLIB::ZLIB)
   target_compile_options(comp_test PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation)
+  add_executable(zip_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/zip_test.c ${CMAKE_CURRENT_SOURCE_DIR}/nx_zip.c ${CMAKE_CURRENT_SOURCE_DIR}/nx_crypto.c ${CMAKE_CURRENT_SOURCE_DIR}/nx_nca.c ${CMAKE_CURRENT_SOURCE_DIR}/nx_lz4.c)   # nx_zip.c against a synthetic fixture (tests/make_zip_fixture.py); the rest only for nx_err/nx_pread_all (nx_nca.c references nx_lz4_decompress even unused here), no keys needed
+  target_include_directories(zip_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(zip_test PRIVATE ZLIB::ZLIB)
+  target_compile_options(zip_test PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation)
 endif()
 target_include_directories(nximport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(nximport PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation -fvisibility=hidden)
