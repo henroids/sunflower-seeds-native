@@ -70,8 +70,8 @@ public final class ModStore {
         return total;
     }
 
-    /** {@code <modsRoot>/<titleId>/} */
-    public static File gameDir(File modsRoot, String titleId) { return new File(modsRoot, titleId.toUpperCase(Locale.ROOT)); }
+    /** The game's own mods folder: modsRoot is already per game (<game home>/mods, ModRuntime.modsRoot), so no title-ID level below it */
+    public static File gameDir(File modsRoot, String titleId) { return modsRoot; }
 
     /** Every mod under this title, sorted by {@code order} (ties broken by folder name, so the list order is always stable and deterministic) */
     public static List<Mod> list(File modsRoot, String titleId) {

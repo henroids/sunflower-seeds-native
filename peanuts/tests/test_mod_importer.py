@@ -58,7 +58,7 @@ public final class ModImporterTest {
         p.write_bytes(content)
 
     def mod_dir(self, name):
-        return self.mods_root / self.title / name
+        return self.mods_root / name   # the mods root is per game now (<game home>/mods, no title-ID level)
 
     # ---- bare layout ----
     def test_bare_romfs_only_is_a_files_mod(self):

@@ -28,10 +28,20 @@ import java.util.List;
 public final class ModRuntime {
     private ModRuntime() {}
 
-    public static File modsRoot(Context c) { return new File(c.getFilesDir(), "mods"); }
+    /** A game's mods folder: <game home>/mods, beside its .nup (owner, 2026-11-13: mods next to the game's build): <build folder>/<title ID>/mods for a
+     *  game in a build folder, <game folder>/<Name>/mods beside the .nup and <title ID>-work otherwise */
+    public static File modsRoot(File gameHome) { return new File(gameHome, "mods"); }
+
+    /** The game home its mods go in: the built game's folder (the .nup's, or a dump folder itself); before the first build, where the build will put
+     *  it: the build folder's <title ID> when one is set, else the planned folder beside the dump (LibraryScanner.Title.home) */
+    public static File home(Context c, String titleId, File builtGame, File plannedHome) {
+        if (builtGame != null && builtGame.exists()) return builtGame.isDirectory() ? builtGame : builtGame.getParentFile();
+        File b = dev.peanuts.PeanutsPrefs.buildGameDir(c, titleId);
+        return b != null ? b : plannedHome;
+    }
 
     /** The mods currently installed for this title, highest priority (wins first) first */
-    public static List<ModStore.Mod> mods(Context c, String titleId) { return ModStore.list(modsRoot(c), titleId); }
+    public static List<ModStore.Mod> mods(File gameHome, String titleId) { return gameHome == null ? new java.util.ArrayList<>() : ModStore.list(modsRoot(gameHome), titleId); }
 
     /**
      * The {@code DM_ROMFS_OVERLAY} line to add to the launch env, or null when there is nothing for this method to add (no enabled mod ships a romfs
@@ -43,8 +53,8 @@ public final class ModRuntime {
      * {@code DM_ROMFS_OVERLAY} line, so it wins (the host's env is built with {@code setenv(..., overwrite=1)}; the last line for a given key wins —
      * see the scene code's own comment, "a DM_ROMFS_OVERLAY line of the user's comes later and wins").
      */
-    public static String romfsOverlayEnv(Context c, String titleId, File sceneOverlayDirOrNull) {
-        List<ModStore.Mod> mods = mods(c, titleId);
+    public static String romfsOverlayEnv(Context c, File gameHome, String titleId, File sceneOverlayDirOrNull) {
+        List<ModStore.Mod> mods = mods(gameHome, titleId);
         List<File> dirs = ModStore.enabledRomfsDirs(mods);
         if (dirs.isEmpty() && sceneOverlayDirOrNull == null) return null;
         StringBuilder b = new StringBuilder();
@@ -58,8 +68,8 @@ public final class ModRuntime {
      * mod wins a same-named file); null when no enabled mod ships any cheats, leaving the host's own default ({@code <DM_ROOT>/cheats}) in force.
      * The staging folder is small (plain text cheat files), so this runs synchronously on the launch path, same as the DLC-link setup beside it.
      */
-    public static String cheatsEnv(Context c, String titleId) {
-        List<ModStore.Mod> mods = mods(c, titleId);
+    public static String cheatsEnv(Context c, File gameHome, String titleId) {
+        List<ModStore.Mod> mods = mods(gameHome, titleId);
         List<File> dirs = ModStore.enabledCheatsDirs(mods);
         if (dirs.isEmpty()) return null;
         File stage = new File(new File(c.getFilesDir(), "mods_stage"), titleId.toUpperCase(java.util.Locale.ROOT) + "/cheats");
@@ -91,5 +101,5 @@ public final class ModRuntime {
 
     /** For the Mods sheet's "Needs a build with mods" line: true when an enabled mod carries exefs/exefs_patches, which the normal build never
      *  applies (only this title's play-time romfs/cheats do, from the same mod) */
-    public static boolean needsBuild(Context c, String titleId) { return ModStore.needsBuild(mods(c, titleId)); }
+    public static boolean needsBuild(File gameHome, String titleId) { return ModStore.needsBuild(mods(gameHome, titleId)); }
 }

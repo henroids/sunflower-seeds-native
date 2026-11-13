@@ -416,12 +416,13 @@ public final class GameSheet {
     /** The Mods row: how many mods are on, and whether any enabled one needs a build (its exefs part), read fresh from disk every render — a mod
      *  toggled or reordered in {@code dev.peanuts.mods.ModsSheet} needs no cache invalidation here, same shape as the Companion row's installedVersion */
     private void renderModsRow() {
-        java.util.List<dev.peanuts.mods.ModStore.Mod> mods = dev.peanuts.mods.ModRuntime.mods(a, title.titleId);
+        java.io.File modsHome = dev.peanuts.mods.ModRuntime.home(a, title.titleId, title.launch, title.home);
+        java.util.List<dev.peanuts.mods.ModStore.Mod> mods = dev.peanuts.mods.ModRuntime.mods(modsHome, title.titleId);
         int on = 0;
         for (dev.peanuts.mods.ModStore.Mod m : mods) if (m.enabled) on++;
         String value = mods.isEmpty() ? "None imported"
                 : on + " of " + mods.size() + " on" + (dev.peanuts.mods.ModStore.needsBuild(mods) ? " · needs a build with mods" : "");
-        PUi.add(box, new PUi.Setting(a, "🧩", "Mods", v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name)).value(value).chevron(a).view, 0);
+        PUi.add(box, new PUi.Setting(a, "🧩", "Mods", v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name, modsHome)).value(value).chevron(a).view, 0);
     }
 
     /** The keys landed (Add keys…): Build comes on if firmware fonts are there too. NOTE for the owner of LibrarySettings.java (not touched here): only

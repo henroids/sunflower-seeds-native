@@ -33,11 +33,12 @@ public final class ModsSheet {
     private boolean busy;
     private String busyText = "";
 
-    private ModsSheet(Activity a, String titleId, String gameName) { this.a = a; this.titleId = titleId; this.gameName = gameName; }
+    private final File home;   // the game's folder its mods go in (ModRuntime.home)
+    private ModsSheet(Activity a, String titleId, String gameName, File home) { this.a = a; this.titleId = titleId; this.gameName = gameName; this.home = home; }
 
     /** GameSheet's "Mods" row */
-    public static void open(Activity a, String titleId, String gameName) {
-        ModsSheet s = new ModsSheet(a, titleId, gameName);
+    public static void open(Activity a, String titleId, String gameName, File home) {
+        ModsSheet s = new ModsSheet(a, titleId, gameName, home);
         current = s;
         s.show();
     }
@@ -51,11 +52,11 @@ public final class ModsSheet {
         dialog.show();
     }
 
-    private File modsRoot() { return ModRuntime.modsRoot(a); }
+    private File modsRoot() { return ModRuntime.modsRoot(home); }
 
     private void render() {
         box.removeAllViews();
-        List<ModStore.Mod> mods = ModRuntime.mods(a, titleId);
+        List<ModStore.Mod> mods = ModRuntime.mods(home, titleId);
         PUi.add(box, PUi.body(a, "Local romfs/cheat edits only, never downloaded or cataloged by this app. Order is priority: the first enabled mod "
                 + "to have a file wins when two mods both touch it."), 0);
         if (mods.isEmpty()) {
