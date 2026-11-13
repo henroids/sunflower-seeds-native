@@ -31,6 +31,7 @@ import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import dev.peanuts.build.BuildMemory;   // PEANUTS
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -63,7 +64,7 @@ public final class PackService extends Service {
     private static final String TAG = "nxpack", CHANNEL = "pack";
     private static final int NOTE = 1;
     /** Starts of one step the process may not live through before the job fails (Job.start) */
-    private static final int MAX_STARTS = 2;
+    private static final int MAX_STARTS = 3;   // PEANUTS: was 2; the later starts run with fewer workers (Job.memLevel, BuildMemory)
     private static final Pattern PROGRESS = Pattern.compile("^progress:? (\\d+)(?: |/)(\\d+)(?: (\\S+))?");
     /** A tool's "stage: <what it is doing now>" line (Job.stepNote) */
     private static final Pattern STAGE = Pattern.compile("^stage: (.+)$");
@@ -165,6 +166,10 @@ public final class PackService extends Service {
             stopSelf(startId);
             return START_NOT_STICKY;
         }
+        if ("running".equals(j.state())) {   // PEANUTS: still "running" at a start: the process before this one was ended (Android's low-memory killer, most likely): fewer workers from now on
+            j.memLevelUp();
+            stepLog(j, "the phone ran out of memory (Android ended the build's process); retrying with fewer workers (level " + j.memLevel() + "; " + memLine() + ")");
+        }
         stopReason = null;
         heatOverride = false;   // asked again for each run of the job
         if (intent != null) j.endedAll();   // the user's Start / Resume / Retry: earlier deaths in a step count no more (only sticky restarts add up)
@@ -262,6 +267,22 @@ public final class PackService extends Service {
         } catch (RuntimeException e) {
             return Float.NaN;
         }
+    }
+
+    /** PEANUTS: an env.txt value for a worker count, kept to the memory plan's counts */
+    private String capped(String key, String value, BuildMemory.Plan mem) {
+        if (key.equals("DMSH_VK_XLATE_J")) return BuildMemory.cap(value, mem.xlate);
+        if (key.equals("J") || key.equals("DMSH_VK_WORKERS") || key.equals("DMSH_VK_PROCS")) return BuildMemory.cap(value, mem.workers);
+        return value;
+    }
+
+    /** PEANUTS: the memory now, for the step log */
+    private String memLine() { String m = BuildMemory.readMeminfo(); return "memory " + BuildMemory.meminfoMb(m, "MemAvailable") + " of " + BuildMemory.meminfoMb(m, "MemTotal") + " MB free"; }
+
+    /** PEANUTS: only logged (a running step cannot change its workers); RUNNING_LOW and up is what comes before a kill */
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_RUNNING_LOW && worker != null && worker.isAlive()) stepLog(job, "Android reports low memory (trim level " + level + "; " + memLine() + ")");
     }
 
     private String readings() { return PackPolicy.readings(batteryPct, charging, thermal, headroom()); }
@@ -559,6 +580,17 @@ public final class PackService extends Service {
             if (b.length() > 0) Files.write(log.toPath(), b.toString().getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND);
         }
         int workers = Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
+        // PEANUTS: worker counts for this phone's memory (BuildMemory): 16 GB keeps CpuCores' count and 4 translator calls, an 8 GB phone 2 and 2, each earlier kill of this
+        // job's process halves them. ondevice/env.txt BUILD_RAM_MB=<mb> stands in for the phone's total memory (a test of the 8 GB plan on a larger phone)
+        String meminfo = BuildMemory.readMeminfo();
+        long ramMb = BuildMemory.meminfoMb(meminfo, "MemTotal"), availMb = BuildMemory.meminfoMb(meminfo, "MemAvailable");
+        File envRam = new File(od, "env.txt");
+        if (envRam.isFile()) for (String l : Files.readAllLines(envRam.toPath(), StandardCharsets.UTF_8)) if (l.startsWith("BUILD_RAM_MB=")) { try { ramMb = Long.parseLong(l.substring(13).trim()); } catch (NumberFormatException e) { /* ignored */ } }
+        final BuildMemory.Plan mem = BuildMemory.plan(ramMb, availMb, j.memLevel(), engine.simulated() ? 4 : CpuCores.shaderWorkers());
+        final int shaderWorkers = mem.workers;
+        workers = Math.min(workers, Math.max(1, mem.workers * 2));
+        stepLog(j, s + ": " + mem.why);
+        if (j.memLevel() > 0 && (s.equals("split") || s.equals("shaders"))) j.stepNote(s, "The phone ran out of memory before; using " + mem.workers + " worker" + (mem.workers == 1 ? "" : "s") + " now");
         PackEngine.setenv("DM_GAME", j.titleId());
         PackEngine.setenv("DM_REWRITE_J", "1");
         PackEngine.setenv("NX_PACK_JOBS", String.valueOf(workers));
@@ -566,8 +598,8 @@ public final class PackService extends Service {
         // through the linker (an app may not execute a file of its own storage) with the APK's libpython3.14.so on their library path: shader_split.py DM_SPLIT_WORKER, split_pool.py.
         // J=1 in env.txt puts the scan back in this process
         String pyLib = engine.simulated() ? null : ((dalvik.system.BaseDexClassLoader) getClassLoader()).findLibrary("python3.14");   // PEANUTS: …/base.apk!/lib/arm64-v8a/libpython3.14.so
-        PackEngine.setenv("J", s.equals("split") ? String.valueOf(pyLib == null ? 1 : CpuCores.shaderWorkers()) : String.valueOf(workers));   // PEANUTS
-        if (s.equals("split")) Log.i(TAG, "split workers: libpython " + pyLib + ", J " + (pyLib == null ? 1 : CpuCores.shaderWorkers()));   // PEANUTS
+        PackEngine.setenv("J", s.equals("split") ? String.valueOf(pyLib == null ? 1 : shaderWorkers) : String.valueOf(workers));   // PEANUTS
+        if (s.equals("split")) Log.i(TAG, "split workers: libpython " + pyLib + ", J " + (pyLib == null ? 1 : shaderWorkers));   // PEANUTS
         PackEngine.setenv("DM_SPLIT_WORKER", pyLib == null ? "" : "/system/bin/linker64 " + new File(PackNative.repo().getParentFile(), "python/bin/nxpack_worker").getPath());   // PEANUTS
         PackEngine.setenv("LD_LIBRARY_PATH", pyLib == null ? "" : new File(pyLib).getParent());   // PEANUTS: read by the workers' linker only (this process's read it at its start)
         PackEngine.setenv("DM_SPLIT_RESUME", splitScan.getPath());   // the split's kept scan results (only shader_split.py reads it)
@@ -615,19 +647,20 @@ public final class PackService extends Service {
         // a library without every shader is a failed step, never a finished one; with Try anyway (the player's choice, warned that parts may not show) it is written
         PackEngine.setenv("DMSH_VK_REQUIRE_ALL", j.tryAnyway() ? "0" : "1");
         PackEngine.setenv("DMSH_VK_ZSTD_LEVEL", "6");   // PEANUTS: the library's modules at zstd 6, not 19: 23x faster for a library 19 % larger (vk_android_build.py ZSTD_LEVEL); level 19 was half of the shaders step
-        PackEngine.setenv("DMSH_VK_XLATE_J", "2");       // two translator calls at once: more threads of one process add little on the phone (android/ONDEVICE.md, The translator on the phone); the env file below can change it
+        PackEngine.setenv("DMSH_VK_XLATE_J", String.valueOf(Math.min(mem.xlate, 4)));   // PEANUTS: BuildMemory (was 2, then Prepare's env.txt line 4)
+        //       // two translator calls at once: more threads of one process add little on the phone (android/ONDEVICE.md, The translator on the phone); the env file below can change it
         // worker interpreters (sub-interpreters of this process, each with its own GIL: the Python half no longer runs on one core), one a big or mid core, at most 4
         // (CpuCores; android/SHADERS.md#build); the library is the same for any count. J above is then the threads of all the workers together
-        PackEngine.setenv("DMSH_VK_PROCS", String.valueOf(CpuCores.shaderWorkers()));
+        PackEngine.setenv("DMSH_VK_PROCS", String.valueOf(shaderWorkers));   // PEANUTS
         // PEANUTS: worker processes instead (the split's nxpack_worker through the linker, LD_LIBRARY_PATH above; each loads libdmsh_xlate.so and SPIRV-Tools itself):
         // the Python half around the translator ran under one GIL, ~0.4 core (vk_android_build.py DMSH_VK_WORKER, split_pool.py). DMSH_VK_WORKERS=1 in env.txt turns them off
         PackEngine.setenv("DMSH_VK_WORKER", pyLib == null ? "" : "/system/bin/linker64 " + new File(PackNative.repo().getParentFile(), "python/bin/nxpack_worker").getPath());   // PEANUTS
-        PackEngine.setenv("DMSH_VK_WORKERS", String.valueOf(pyLib == null ? 1 : CpuCores.shaderWorkers()));   // PEANUTS
+        PackEngine.setenv("DMSH_VK_WORKERS", String.valueOf(pyLib == null ? 1 : shaderWorkers));   // PEANUTS
         // Tests: ondevice/env.txt, KEY=VALUE lines, overrides any of the above for the tools (e.g. DMSH_VK_XLATE_J=6 to compare the translator's threads)
         File envFile = new File(od, "env.txt");
         if (envFile.isFile()) for (String l : Files.readAllLines(envFile.toPath(), StandardCharsets.UTF_8)) {
             int eq = l.indexOf('=');
-            if (eq > 0 && !l.startsWith("#")) { PackEngine.setenv(l.substring(0, eq).trim(), l.substring(eq + 1).trim()); Files.write(log.toPath(), ("[env.txt] " + l.trim() + "\n").getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND); }
+            if (eq > 0 && !l.startsWith("#")) { PackEngine.setenv(l.substring(0, eq).trim(), capped(l.substring(0, eq).trim(), l.substring(eq + 1).trim(), mem));  /* PEANUTS: an env.txt count never goes over the memory plan */ Files.write(log.toPath(), ("[env.txt] " + l.trim() + "\n").getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND); }
         }
         if (s.equals("shaders")) j.shadersMissing(0, 0);   // the step's own count (Tail), not an earlier run's
         Tail tail = new Tail(j, s, log);

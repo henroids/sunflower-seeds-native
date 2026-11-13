@@ -159,13 +159,8 @@ final class Prepare {
         if (anyBuild && !Upstream.jobTryAnyway(job)) { Upstream.jobTryAnyway(job, true); Upstream.jobSave(job); }
         File file = Upstream.jobFile(job);
         boolean relaxed = false;   // one restart with the checks relaxed when the job fails for something Try anyway skips
-        // The packer's tools read <work>/ondevice/env.txt: four translator calls at once instead of upstream's two (on the Thor's eight cores the four workers sit on the
-        // fast cores at ~57 % each and the shader rate doubles, 8.5 → 18 a second; the split's Python feeder is then the limit). A line the file already has stays
-        try {
-            File env = new File(file.getParentFile(), "env.txt");
-            String text = env.isFile() ? new String(Files.readAllBytes(env.toPath()), StandardCharsets.UTF_8) : "";
-            if (!text.contains("DMSH_VK_XLATE_J=")) Files.write(env.toPath(), RuntimeShaders.withLine(text, "DMSH_VK_XLATE_J=4").getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) { Log.w(TAG, "prepare: env.txt " + e); }
+        // The translator calls at once (4 on a phone with 14 GB or more, 2 on an 8 GB one) are set by PackService from the phone's memory (BuildMemory), not by a line here:
+        // a fixed 4 in env.txt ran an 8 GB phone out of memory (Fire Emblem Engage on a Thor Base, issue #10). A line env.txt has still applies, up to that count
         // 4. the service, as the panel starts it
         bind();
         try {

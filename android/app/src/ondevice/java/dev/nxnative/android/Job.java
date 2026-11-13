@@ -349,6 +349,12 @@ final class Job {
     /** The step ended in this process (done, failed, paused): its unfinished starts are forgotten. All steps' when the user starts the job again (Retry, Resume) */
     synchronized void ended(String s) { try { step0(s).put("starts", 0); } catch (JSONException e) { throw new IllegalStateException(e); } }
 
+    /** PEANUTS: how many times Android ended this job's process (the job was still "running" when the service started: a sticky restart, or Resume after a kill). Kept
+     *  across the user's Retry, unlike a step's "starts": BuildMemory halves the build's workers for each */
+    synchronized int memLevel() { return o.optInt("mem_level", 0); }
+
+    synchronized void memLevelUp() { try { o.put("mem_level", memLevel() + 1); } catch (JSONException e) { throw new IllegalStateException(e); } }
+
     synchronized void endedAll() { for (String s : STEPS) ended(s); }
 
     /** A step's count from the tool's progress lines */
