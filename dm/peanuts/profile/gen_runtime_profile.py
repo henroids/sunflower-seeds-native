@@ -42,13 +42,17 @@ SCALAR = {
     'ROMFS_SUBST': ('romfs_subst', 'str'), 'NWINDOW_FN': ('nwindow_fn', 'int'), 'NSUBGROUP_ONE_LANE': ('nsubgroup_one_lane', 'int'),
     'NMESH_VEGETATION_CUT': ('nmesh_vegetation_cut', 'int'), 'NMESH_PREPASS_CUT': ('nmesh_prepass_cut', 'int'), 'NFPS_STEPS': ('nfps_steps', 'int'),
     'NDRS_CTL': ('ndrs_ctl', 'int'), 'NRES_LEVELS': ('nres_levels', 'int'),
+    'EVENT_WAIT': ('event_wait', 'int'), 'OCCLUSION_SPLIT_PASS': ('occlusion_split_pass', 'int'), 'LOW_RAM_PLACE_PART_MB': ('low_ram_place_part_mb', 'int'),
+    'LOW_RAM_IMG_CACHE_MAX_MB': ('low_ram_img_cache_max_mb', 'int'), 'LOW_RAM_APP_POOL_MB': ('low_ram_app_pool_mb', 'int'),
+    'RENDER_DEFAULT_OUT': ('render_default_out', 'str'), 'NRENDER_CFG': ('nrender_cfg', 'int'), 'NRT_POOL': ('nrt_pool', 'int'),
 }
 # PRESENCE: macros header() emits only when the game.tsv key is set (optional; absent means "the host decides some other way", e.g. by SDK version).
 PRESENCE = {'SHARED_FONT_TTF': 'shared_font_ttf', 'NVN_API_MAJOR': 'nvn_api_major', 'NVN_API_MINOR': 'nvn_api_minor'}
 # ARRAY: macros used upstream only as a `static const T x[] = DM_GAME_FOO;` initializer - the nine sites game_profile_generic.h leaves undefined
 # on purpose (see its header comment). Each needs its own literal parser (the C-literal shapes are fixed by game.py, checked against game.py's own
 # tests by check-all below) and a fixed-capacity encoder matching profile_rt.h.
-ARRAY_NAMES = {'MODULES', 'DISPLAY_VERSIONS', 'WINDOW_FN', 'SUBGROUP_ONE_LANE', 'MESH_VEGETATION_CUT', 'MESH_PREPASS_CUT', 'FPS_STEPS', 'DRS_CTL', 'RES_LEVELS'}
+ARRAY_NAMES = {'MODULES', 'DISPLAY_VERSIONS', 'WINDOW_FN', 'SUBGROUP_ONE_LANE', 'MESH_VEGETATION_CUT', 'MESH_PREPASS_CUT', 'FPS_STEPS', 'DRS_CTL', 'RES_LEVELS',
+               'RENDER_CFG', 'RENDER_QUALITY', 'RT_POOL'}
 
 KNOWN = set(SCALAR) | set(PRESENCE) | ARRAY_NAMES
 
@@ -71,6 +75,10 @@ LAYOUT = [
     ('nmesh_vegetation_cut', 'u32'), ('mesh_vegetation_cut', 'u64[128]'), ('nmesh_prepass_cut', 'u32'), ('mesh_prepass_cut', 'row[64]:u64x4'),
     ('nfps_steps', 'u32'), ('fps_steps', 'row[8]:char[48]+u64+u32+u32+u32+u64[3]'), ('ndrs_ctl', 'u32'), ('drs_ctl', 'row[8]:char[48]+u64x4'),
     ('nres_levels', 'u32'), ('res_levels', 'row[8]:char[48]+u64+u32+u32+row[12]:u64+u32'),
+    ('event_wait', 'u32'), ('occlusion_split_pass', 'u32'), ('low_ram_place_part_mb', 'u32'), ('low_ram_img_cache_max_mb', 'u32'), ('low_ram_app_pool_mb', 'u32'),
+    ('render_default_out', 'char[16]'), ('render_quality', 'u32[4]'),
+    ('nrender_cfg', 'u32'), ('render_cfg', 'row[4]:char[48]+u64+u32x4+u32[8][4]+u32x5'),
+    ('nrt_pool', 'u32'), ('rt_pool', 'row[4]:char[48]+char[16]+u64+u32x3+u32[4]x3+u32'),
 ]
 
 
@@ -200,7 +208,7 @@ def parse_res_levels(rhs, n):
 # unaligned uint64_t field, UB even though AArch64 tolerates the actual load). Packer mirrors the C compiler's own layout rules (each field aligned to its
 # own size, a struct's size rounded up to its own largest member alignment, so an array of structs has uniform stride) - the one thing that must stay in
 # step with profile_rt.h's field order by hand; DM_PROFILE_LAYOUT_SIZE (schema_stamp) and the _Static_assert in profile_rt.c catch the two drifting apart.
-CAPS = dict(modules=8, display_versions=16, window_fn=8, subgroup_one_lane=16, mesh_vegetation_cut=128, mesh_prepass_cut=64, fps_steps=8, drs_ctl=8, res_levels=8)
+CAPS = dict(modules=8, display_versions=16, window_fn=8, subgroup_one_lane=16, mesh_vegetation_cut=128, mesh_prepass_cut=64, fps_steps=8, drs_ctl=8, res_levels=8, render_cfg=4, rt_pool=4)
 
 
 def pad(s, n):
@@ -267,6 +275,48 @@ def row_res_levels(build, table, n, nl, lists12):
     return p.finish()
 
 
+RCFG_SLOTS = 8   # rcfg_row_t's RCFG_MAX (dm/host/render_cfg.h)
+RTP_TIERS = 4    # rtpool_row_t's RTP_TIERS (dm/host/rt_pool.h)
+
+
+def parse_render_cfg(rhs, n):
+    if n == 0: return []
+    out = []
+    for row in split_top(unbrace(rhs))[:n]:
+        p = split_top(unbrace(row))
+        sz = [tuple(as_int(x) for x in split_top(unbrace(e))) for e in split_top(unbrace(p[6]))]
+        out.append((unq(p[0]), as_int(p[1]), as_int(p[2]), as_int(p[3]), as_int(p[4]), as_int(p[5]), sz, [as_int(x) for x in p[7:12]]))
+    return out
+
+
+def parse_rt_pool(rhs, n):
+    if n == 0: return []
+    out = []
+    for row in split_top(unbrace(rhs))[:n]:
+        p = split_top(unbrace(row))
+        out.append((unq(p[0]), unq(p[1]), as_int(p[2]), as_int(p[3]), as_int(p[4]), as_int(p[5]),
+                    [as_int(x) for x in split_top(unbrace(p[6]))], [as_int(x) for x in split_top(unbrace(p[7]))], [as_int(x) for x in split_top(unbrace(p[8]))], as_int(p[9])))
+    return out
+
+
+def row_render_cfg(build, table, n, stride, out_off, ren_off, sz, tail):
+    p = Packer(); p.raw(build, 48); p.u64(table)
+    for v in (n, stride, out_off, ren_off): p.u32(v)
+    for i in range(RCFG_SLOTS):
+        for v in (list(sz[i]) if i < len(sz) else [0, 0, 0, 0]): p.u32(v)
+    for v in tail: p.u32(v)
+    return p.finish()
+
+
+def row_rt_pool(build, module, off, word, base, nt, mb, w, h, out_h):
+    p = Packer(); p.raw(build, 48); p.raw(module, 16); p.u64(off)
+    for v in (word, base, nt): p.u32(v)
+    for a in (mb, w, h):
+        for i in range(RTP_TIERS): p.u32(a[i] if i < len(a) else 0)
+    p.u32(out_h)
+    return p.finish()
+
+
 def pack_rows(rows, cap, zero_row):
     """cap already-built (bytes, alignment) rows into one (bytes, alignment); slots past len(rows) get zero_row (a (bytes, alignment) of the same row
     type with every field 0/"", built even when there are zero real rows - a title's count alone must not change this table's per-row size/alignment)."""
@@ -294,7 +344,8 @@ def build_profile_bytes(g, modules_override=None):
                             (as_int(val('NWINDOW_FN')), CAPS['window_fn'], 'window_fn'), (as_int(val('NSUBGROUP_ONE_LANE')), CAPS['subgroup_one_lane'], 'subgroup_one_lane'),
                             (as_int(val('NMESH_VEGETATION_CUT')), CAPS['mesh_vegetation_cut'], 'mesh_vegetation_cut'),
                             (as_int(val('NMESH_PREPASS_CUT')), CAPS['mesh_prepass_cut'], 'mesh_prepass_cut'), (as_int(val('NFPS_STEPS')), CAPS['fps_steps'], 'fps_steps'),
-                            (as_int(val('NDRS_CTL')), CAPS['drs_ctl'], 'drs_ctl'), (as_int(val('NRES_LEVELS')), CAPS['res_levels'], 'res_levels')):
+                            (as_int(val('NDRS_CTL')), CAPS['drs_ctl'], 'drs_ctl'), (as_int(val('NRES_LEVELS')), CAPS['res_levels'], 'res_levels'),
+                            (as_int(val('NRENDER_CFG')), CAPS['render_cfg'], 'render_cfg'), (as_int(val('NRT_POOL')), CAPS['rt_pool'], 'rt_pool')):
         if cnt > cap: sys.exit(f"gen_runtime_profile.py: {g.id}: {label} has {cnt} rows, past this script's fixed capacity {cap} (raise CAPS['{label}'] and the matching cap in profile_rt.h)")
 
     p = Packer()
@@ -363,6 +414,22 @@ def build_profile_bytes(g, modules_override=None):
     zrl = row_res_levels('', 0, 0, 0, [(0, 0)] * 12)
     rl_rows = [row_res_levels(b_, table, lvln, nl, (lists + [(0, 0)] * 12)[:12]) for b_, table, lvln, nl, lists in rl]
     b, a = pack_rows(rl_rows, CAPS['res_levels'], zrl); p.sub(b, a)
+
+    for n in ('EVENT_WAIT', 'OCCLUSION_SPLIT_PASS', 'LOW_RAM_PLACE_PART_MB', 'LOW_RAM_IMG_CACHE_MAX_MB', 'LOW_RAM_APP_POOL_MB'): p.u32(as_int(val(n)))
+    p.raw(unq(val('RENDER_DEFAULT_OUT')), 16)
+    rq = [as_int(x) for x in split_top(unbrace(val('RENDER_QUALITY')))]
+    assert len(rq) == 4, rq
+    for v in rq: p.u32(v)
+
+    nrc = as_int(val('NRENDER_CFG')); rc = parse_render_cfg(val('RENDER_CFG'), nrc)
+    p.u32(nrc)
+    zrc = row_render_cfg('', 0, 0, 0, 0, 0, [], [0] * 5)
+    b, a = pack_rows([row_render_cfg(*r) for r in rc], CAPS['render_cfg'], zrc); p.sub(b, a)
+
+    nrt = as_int(val('NRT_POOL')); rt = parse_rt_pool(val('RT_POOL'), nrt)
+    p.u32(nrt)
+    zrt = row_rt_pool('', '', 0, 0, 0, 0, [], [], [], 0)
+    b, a = pack_rows([row_rt_pool(*r) for r in rt], CAPS['rt_pool'], zrt); p.sub(b, a)
 
     out, _ = p.finish()
     return out

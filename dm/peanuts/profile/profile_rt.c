@@ -29,7 +29,7 @@ static int has_nul(const char *s, size_t n) { for (size_t i = 0; i < n; i++) if 
 static const char *check_strings(const dm_game_profile_t *p) {
     if (!has_nul(p->id, sizeof p->id) || !has_nul(p->name, sizeof p->name) || !has_nul(p->romfs_marker, sizeof p->romfs_marker) || !has_nul(p->args, sizeof p->args) ||
         !has_nul(p->env, sizeof p->env) || !has_nul(p->fastboot_env, sizeof p->fastboot_env) || !has_nul(p->devtools, sizeof p->devtools) ||
-        !has_nul(p->romfs_subst, sizeof p->romfs_subst) || !has_nul(p->ue_fps_cvar, sizeof p->ue_fps_cvar))
+        !has_nul(p->romfs_subst, sizeof p->romfs_subst) || !has_nul(p->render_default_out, sizeof p->render_default_out) || !has_nul(p->ue_fps_cvar, sizeof p->ue_fps_cvar))
         return "profile: a scalar string field has no NUL terminator (corrupt profile.bin)";
     for (unsigned i = 0; i < DM_PROFILE_MODULES_CAP; i++) if (!has_nul(p->modules[i], sizeof p->modules[i])) return "profile: a modules[] entry has no NUL terminator";
     for (unsigned i = 0; i < DM_PROFILE_DISPLAY_VERSIONS_CAP; i++)
@@ -39,6 +39,9 @@ static const char *check_strings(const dm_game_profile_t *p) {
     for (unsigned i = 0; i < DM_PROFILE_FPS_STEPS_CAP; i++) if (!has_nul(p->fps_steps[i].build, sizeof p->fps_steps[i].build)) return "profile: a fps_steps[] entry has no NUL terminator";
     for (unsigned i = 0; i < DM_PROFILE_DRS_CTL_CAP; i++) if (!has_nul(p->drs_ctl[i].build, sizeof p->drs_ctl[i].build)) return "profile: a drs_ctl[] entry has no NUL terminator";
     for (unsigned i = 0; i < DM_PROFILE_RES_LEVELS_CAP; i++) if (!has_nul(p->res_levels[i].build, sizeof p->res_levels[i].build)) return "profile: a res_levels[] entry has no NUL terminator";
+    for (unsigned i = 0; i < DM_PROFILE_RENDER_CFG_CAP; i++) if (!has_nul(p->render_cfg[i].build, sizeof p->render_cfg[i].build)) return "profile: a render_cfg[] entry has no NUL terminator";
+    for (unsigned i = 0; i < DM_PROFILE_RT_POOL_CAP; i++)
+        if (!has_nul(p->rt_pool[i].build, sizeof p->rt_pool[i].build) || !has_nul(p->rt_pool[i].module, sizeof p->rt_pool[i].module)) return "profile: a rt_pool[] entry has no NUL terminator";
     return NULL;
 }
 
@@ -60,7 +63,8 @@ const char *profile_rt_load(const char *path) {
     if (g_profile.nmod > DM_PROFILE_MODULES_CAP || g_profile.ndisplay_versions > DM_PROFILE_DISPLAY_VERSIONS_CAP ||
         g_profile.nwindow_fn > DM_PROFILE_WINDOW_FN_CAP || g_profile.nsubgroup_one_lane > DM_PROFILE_SUBGROUP_ONE_LANE_CAP ||
         g_profile.nmesh_vegetation_cut > DM_PROFILE_MESH_VEGETATION_CUT_CAP || g_profile.nmesh_prepass_cut > DM_PROFILE_MESH_PREPASS_CUT_CAP ||
-        g_profile.nfps_steps > DM_PROFILE_FPS_STEPS_CAP || g_profile.ndrs_ctl > DM_PROFILE_DRS_CTL_CAP || g_profile.nres_levels > DM_PROFILE_RES_LEVELS_CAP)
+        g_profile.nfps_steps > DM_PROFILE_FPS_STEPS_CAP || g_profile.ndrs_ctl > DM_PROFILE_DRS_CTL_CAP || g_profile.nres_levels > DM_PROFILE_RES_LEVELS_CAP ||
+        g_profile.nrender_cfg > DM_PROFILE_RENDER_CFG_CAP || g_profile.nrt_pool > DM_PROFILE_RT_POOL_CAP)
         return "profile: a table row count is past this host's fixed capacity (corrupt or hostile profile.bin)";
     // Inside the rows: the list and dereference counts index fixed arrays, and offsets/sizes stay far below 2^63 so loader.c's and hle_fpslock.c's
     // "offset + size > module size" checks cannot wrap (a module is well under 4 GiB)
@@ -72,6 +76,14 @@ const char *profile_rt_load(const char *path) {
     for (unsigned i = 0; i < g_profile.nfps_steps; i++) {
         const dm_pf_fps_steps_t *f = &g_profile.fps_steps[i];
         if (f->nderef > sizeof f->deref / sizeof f->deref[0] || f->ptr_off > (1ull << 32)) return "profile: a fps_steps row is out of range (corrupt or hostile profile.bin)";
+    }
+    for (unsigned i = 0; i < g_profile.nrender_cfg; i++) {   // the slot count indexes sz[]; the table offset stays far below 2^63 like the other rows'
+        const dm_pf_render_cfg_t *r = &g_profile.render_cfg[i];
+        if (r->n > DM_PROFILE_RENDER_CFG_SLOTS || r->table > (1ull << 32)) return "profile: a render_cfg row is out of range (corrupt or hostile profile.bin)";
+    }
+    for (unsigned i = 0; i < g_profile.nrt_pool; i++) {
+        const dm_pf_rt_pool_t *r = &g_profile.rt_pool[i];
+        if (r->nt > DM_PROFILE_RT_POOL_TIERS || r->off > (1ull << 32)) return "profile: a rt_pool row is out of range (corrupt or hostile profile.bin)";
     }
     { const char *se = check_strings(&g_profile); if (se) return se; }
     return NULL;

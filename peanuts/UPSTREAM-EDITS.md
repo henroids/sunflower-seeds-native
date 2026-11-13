@@ -122,6 +122,11 @@ next sync (CRITIQUE-phase1.md F11: upstream added 6 macros in the 73 commits sin
 | `dm/host/loader.c` `levels_apply()` | `RES_LEVELS` | reads `g_profile.res_levels[]` |
 | `dm/host/probe.c` `drs_install()` | `DRS_CTL` | reads `g_profile.drs_ctl[]` |
 | `dm/host/hle_fpslock.c` `k_steps`/`NSTEPS` | `FPS_STEPS`/`NFPS_STEPS` | `NSTEPS` becomes the profile's fixed row capacity (it also sizes other file-scope arrays); `k_steps` is a lazily-filled, `pthread_once`-guarded copy of `g_profile.fps_steps[]` |
+| `dm/host/hle_render.c` `k_rcfg`/`k_rq` | `RENDER_CFG`/`NRENDER_CFG`, `RENDER_QUALITY`, `RENDER_DEFAULT_OUT` | `k_rcfg` is `dm_pf_rcfg_rows()` (loader.c), `k_rq` is `g_profile.render_quality`; the count and default output are plain scalars |
+| `dm/host/loader.c` `dm_pf_rcfg_rows()` (new) | `RENDER_CFG` | builds `rcfg_row_t` rows (pointers into `g_profile.render_cfg[].build`) once, `pthread_once`; used by `render_cfg_row()`, `rt_pool_apply()` and hle_render.c |
+| `dm/host/loader.c` `render_cfg_row()`, `rt_pool_apply()` | `RENDER_CFG`/`NRENDER_CFG` | read `dm_pf_rcfg_rows()` instead of a `static const` array |
+| `dm/host/loader.c` `dm_pf_rtpool_rows()` (new), `rt_pool_apply()` | `RT_POOL`/`NRT_POOL` | builds `rtpool_row_t` rows over `g_profile.rt_pool[]` once, `pthread_once` |
+| (no site edit) | `EVENT_WAIT`, `OCCLUSION_SPLIT_PASS`, `LOW_RAM_PLACE_PART_MB`, `LOW_RAM_IMG_CACHE_MAX_MB`, `LOW_RAM_APP_POOL_MB` | scalars read at run time (vka_worker.c, vka_exec.c, vka_tex.c, hle_svc.c); `game_profile_generic.h` maps each to its `g_profile` field |
 | `dm/gfx/vk_android/vka_pso.c` | seed (`vk_prewarm_seed.h`) | not edited: `dm/peanuts/profile/vk_prewarm_seed_generic.h` defines the same `dm_vk_prewarm_seed`/`_len` symbols, set by `profile_rt_load_seed()` |
 | `dm/gfx/vk_android/vka_replay.c` `nxhost_replay()` top | - | calls `profile_rt_load()`/`profile_rt_load_seed()` too (nxreplay needs a profile for its `DM_GAME_ID` capture check) |
 
