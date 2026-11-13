@@ -169,12 +169,12 @@ final class RuntimeShaders {
         List<String> out = new ArrayList<>();
         for (String l : (text == null ? "" : text).split("\n")) if (!l.trim().isEmpty() && !l.trim().startsWith(key)) out.add(l);
         out.add(line);
-        return String.join("\n", out);
+        return String.join("\n", out) + "\n";   // every line ended: an append to the file (another tool's line) never runs into the last one (Engage's env.txt read "DMSH_VK_XLATE_J=4DMSH_VK_XLATE_J=4")
     }
 
     static String withoutLine(String text, String key) {
         List<String> out = new ArrayList<>();
         for (String l : (text == null ? "" : text).split("\n")) if (!l.trim().isEmpty() && !l.trim().startsWith(key + "=")) out.add(l);
-        return String.join("\n", out);
+        return out.isEmpty() ? "" : String.join("\n", out) + "\n";   // as withLine
     }
 }
