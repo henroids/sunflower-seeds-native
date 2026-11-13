@@ -54,6 +54,8 @@ public final class LibrarySettings {
         card.addView(fontsRow.view);
         card.addView(new PUi.Setting(a, "🔄", "Rescan", v -> { Library.rescan(a); Toast.makeText(a, "Looking in the folders again", Toast.LENGTH_SHORT).show(); })
                 .value("Reads the folders again").chevron(a).view);
+        card.addView(new PUi.Setting(a, "🧹", "Free up space", v -> freeUpSpace(a))
+                .value("Delete original dumps of games already built").chevron(a).view);
         companionsRow = new PUi.Setting(a, "🖥️", "Companions", v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity")))
                 .chevron(a);
         card.addView(companionsRow.view);
@@ -215,6 +217,45 @@ public final class LibrarySettings {
             String err = imp.lastError();
             UI.post(() -> { fontsState = r == 0 ? null : "Fonts not extracted: " + err; refreshRows(); Library.changed(a); });
         }, "peanuts-fonts").start();
+    }
+
+    /**
+     * Settings › Library › Free up space: the original NSP/XCI of every game already built into a .nup (LibraryScanner.Title.originals), which the game no
+     * longer needs to play or to rebuild. Deleted one by one after a confirmation that says what is lost: a later game update needs the original again (its
+     * patch reads the base NCA's raw bytes, which the .nup does not keep). Only a READY title whose .nup is there and not empty, and only plain files.
+     */
+    static void freeUpSpace(Activity a) {
+        java.util.List<LibraryScanner.Title> ready = new java.util.ArrayList<>();
+        for (LibraryScanner.Title t : Library.titlesNow()) {
+            if (t.status != LibraryScanner.Status.READY || t.base == null || !t.base.isNup() || !t.base.file.isFile() || t.base.file.length() == 0) continue;
+            for (LibraryScanner.Source s : t.originals) if (s.file.isFile()) { ready.add(t); break; }
+        }
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(PUi.dp(a, 20), PUi.dp(a, 4), PUi.dp(a, 20), 0);
+        AlertDialog[] d = new AlertDialog[1];
+        if (ready.isEmpty()) PUi.add(box, PUi.small(a, "Nothing to free: no built game still has its original NSP or XCI in your folders (or the library is still scanning)."), 0);
+        else PUi.add(box, PUi.small(a, "These games are built, so they play and rebuild without their original dump. Keep the original if you will add a later game update: an update can only be applied to the original."), 8);
+        for (LibraryScanner.Title t : ready) {
+            for (LibraryScanner.Source s : t.originals) {
+                if (!s.file.isFile()) continue;
+                File f = s.file;
+                String size = String.format(java.util.Locale.ROOT, "%.1f GB", f.length() / 1e9);
+                box.addView(new PUi.Setting(a, "🗑️", t.name.isEmpty() ? t.titleId : t.name, v -> PUi.confirmDanger(a, "Delete the original dump?",
+                        f.getName() + " (" + size + ") is deleted. " + (t.name.isEmpty() ? "The game" : t.name) + " keeps playing from its built copy, with its saves. "
+                                + "To add a later game update you will need this file again.", "Delete", () -> new Thread(() -> {
+                            boolean ok = f.isFile() && t.base.file.isFile() && t.base.file.length() > 0 && f.delete();   // the built copy checked again just before
+                            UI.post(() -> {
+                                if (a.isFinishing() || a.isDestroyed()) return;
+                                Toast.makeText(a, ok ? "Deleted " + f.getName() + ", " + size + " freed" : "Could not delete " + f.getName(), Toast.LENGTH_LONG).show();
+                                if (d[0] != null) d[0].dismiss();
+                                Library.rescan(a);
+                            });
+                        }, "peanuts-free-space").start()))
+                        .value("Original " + size + " · " + f.getName()).view);
+            }
+        }
+        d[0] = PUi.sheet(a, "Free up space", box).setPositiveButton("Done", null).show();
     }
 
     private static void error(Activity a, String msg) { if (a.isFinishing() || a.isDestroyed()) return; new AlertDialog.Builder(a).setTitle("Library").setMessage(msg).setPositiveButton("OK", null).show(); }

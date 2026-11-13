@@ -77,6 +77,9 @@ final class LibraryScanner {
         String name = "";
         Source base;
         final List<Source> updates = new ArrayList<>(), dlcs = new ArrayList<>();
+        /** The original base dumps (NSP/XCI) of a game whose base is a .nup made from them: the game no longer needs them to play or rebuild, only to take a
+         *  later update (an update's patch reads the base NCA's raw bytes, which the .nup does not keep). Settings › Library › Free up space offers them */
+        final List<Source> originals = new ArrayList<>();
         Status status = Status.BUILD;
         VersionState versionState = VersionState.UNKNOWN;
         /** The profile's builds (game.tsv build rows, via Profile.buildMap/display): version → display ("1.0.1"), null when game.tsv names none. Empty: no
@@ -165,6 +168,11 @@ final class LibraryScanner {
             if (s.kind != BASE) continue;
             Title t = titles.computeIfAbsent(s.appId, Title::new);
             if (t.base == null || (s.isNup() || s.isDump()) && t.base.needsImport()) t.base = s;
+        }
+        for (Source s : sources) {   // a .nup base: the NSPs/XCIs of the same title it was made from (see Title.originals)
+            if (s.kind != BASE || !s.needsImport() || !s.file.isFile()) continue;
+            Title t = titles.get(s.appId);
+            if (t != null && t.base != null && t.base.isNup() && t.base.titleId.equals(s.titleId)) t.originals.add(s);
         }
         for (Source s : sources) {
             if (s.kind == BASE) continue;

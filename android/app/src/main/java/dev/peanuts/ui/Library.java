@@ -79,6 +79,8 @@ public final class Library {
     /** The library of the activity that is showing (one MainActivity at a time; a recreated one gets a new instance that keeps the scan) */
     private static Library current;
     private static List<LibraryScanner.Title> lastTitles = new ArrayList<>();
+    /** The newest scan's titles (Settings › Library › Free up space reads them) */
+    static List<LibraryScanner.Title> titlesNow() { return lastTitles; }
     private static List<CompanionPort.Item> catalog = new ArrayList<>();
     private static boolean catalogFetched, everScanned;
     private static final Map<String, Bitmap> icons = new HashMap<>();
