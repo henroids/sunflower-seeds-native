@@ -3412,6 +3412,11 @@ def main():
         out = split_tables(list(results), big, todo, dumps, J, common, zdicts, ScanCache(cd, scan_digest(inputs, big + todo + mains)) if cd else None)
     stage('writing the shaders found')
     write_outputs(out, pkg, mapout, factsout, pairsout, psopairsout)
+    if d := os.environ.get('DM_SPLIT_DIFF_DIR'):   # PEANUTS: the tables written, kept as final.<name> (a profile regenerated from a device's full scan: the build deletes its own copies)
+        import shutil
+        os.makedirs(d, exist_ok=True)
+        for p in (mapout, factsout, pairsout, psopairsout):
+            if p and os.path.isfile(p): shutil.copyfile(p, os.path.join(d, 'final.' + os.path.basename(p)))
 
 class Fallback(Exception): pass   # the targeted scan cannot give the full scan's outputs (split_tables)
 
