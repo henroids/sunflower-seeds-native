@@ -880,16 +880,29 @@ def pkz_shaders(path, rel, ents, out):
             scan_blob(d, f'/{rel}/{name}', out)
 
 CPK = b'CPK '
-def cpk_jobs(files, parts=64):
+def cpk_jobs(files, parts=64, names=None):   # PEANUTS: names= (the targeted scan's entries, see below)
     """Every entry of every CRI CPK archive in ranges of about equal length (Bayonetta 2: six in the RomFS root, 9.5 GB, 6,091 files, 12 GB of them CRILAYLA-compressed; its shaders are BNSH
-    files in shader.dat, shader2.dat and shadereff.dat, but no file name is relied on). → ([(path, rel, entries), …], the CPK paths)"""
+    files in shader.dat, shader2.dat and shadereff.dat, but no file name is relied on). → ([(path, rel, entries), …], the CPK paths)
+    PEANUTS: names ({rel: entry names}, the targeted scan's, cpk_map_entries): only those entries of that CPK, when it has every one of them (Persona 5 Royal: its 30,646 shaders are in 10
+    GSC files of ALL_USEU.CPK, which the scan otherwise reads whole in 63 ranges, ~30 min of the phone's build); else every entry, as before. The targeted scan's tables are compared with
+    the profile's afterwards (profile_differs), and a difference falls back to the full scan, so a shader outside these entries is never lost"""
     import cpk
     with_head = []
     for p, r in files:
         if p.lower().endswith('.cpk'):
             with open(p, 'rb') as f: h = f.read(4)
             if h != CPK: continue
-            try: with_head.append((p, r, cpk.files(p)))
+            try:
+                es = cpk.files(p)
+                if names and names.get(r):   # PEANUTS: the map's entries only (see the doc above)
+                    # a name is an entry, or a member path inside one ('<entry>/<member>': an archive in the CPK)
+                    ent = {e[0] for e in es}
+                    hit = {n: next((n[:i] for i in [len(n)] + [i for i in range(len(n) - 1, 0, -1) if n[i] == '/'] if n[:i] in ent), None) for n in names[r]}
+                    if all(hit.values()):
+                        want_e = set(hit.values()); keep = [e for e in es if e[0] in want_e]
+                        print(f'targeted CPK: /{r}: {len(keep):,} of {len(es):,} entries hold the shaders of the profile\'s shader_map.tsv; only these are read', flush=True); es = keep
+                    else: print(f'[RED] /{r}: {sum(1 for v in hit.values() if not v):,} of the map\'s entries are not in the CPK; every entry is read', flush=True)
+                with_head.append((p, r, es))
             except (ValueError, struct.error, KeyError, UnicodeDecodeError) as e:   # a layout cpk.py does not read: scanned as a loose file, as before CPKs were read (13 Sentinels and Catherine: Full Body were not checked)
                 print(f'[RED] /{r}: the CPK cannot be read ({e}); scanned as one file', flush=True)
     jobs, step = [], sum(e[3] for _, _, es in with_head for e in es) / parts
@@ -900,6 +913,17 @@ def cpk_jobs(files, parts=64):
             if size >= step: jobs.append((p, r, tuple(cur))); cur, size = [], 0
         if cur: jobs.append((p, r, tuple(cur)))
     return jobs, {p for p, _, _ in with_head}
+
+# PEANUTS: the targeted scan's CPK entries (cpk_jobs' names=): {rel of a .cpk of files: {entry names}} from the map's sources, '/<cpk>/<entry>#…' (cpk_shaders labels each
+# shader '/<rel>/<entry name>' + its container), the entry being the source between the CPK's path and its first '#'
+def cpk_map_entries(files):
+    cpks = {r for _, r in files if r.lower().endswith('.cpk')}
+    if not cpks: return {}
+    out = {}
+    for s in map_sources():
+        r = source_file(s, cpks)
+        if r and len(s) > len(r) + 1 and s[len(r)] == '/': out.setdefault(r, set()).add(s[len(r) + 1:].split('#', 1)[0])
+    return out
 
 def cpk_shaders(path, rel, ents, out):
     """A range of CPK entries (cpk_jobs), each decoded (CRILAYLA or stored) and scanned like a loose file"""
@@ -3485,7 +3509,7 @@ def scan_jobs(files, want=None):
     bd_jobs, bdts = bdt_jobs(files)   # Dark Souls Remastered's dvdbnd archives: the entries of each .bdt by its .bhd5 index, in ranges
     arc_jobs, arcs = smash_arc_jobs(files)   # Super Smash Bros. Ultimate's data.arc: its current files, in ranges
     pz_jobs, pkzs = pkz_jobs(files)   # Bayonetta 3's PKZ archives, Oodle Kraken decoded by the game's own decoder in the Mac host
-    ck_jobs, cpks = cpk_jobs(files)   # Bayonetta 2's CRI CPK archives (CRILAYLA entries)
+    ck_jobs, cpks = cpk_jobs(files, names=cpk_map_entries(files) if want is not None else None)   # Bayonetta 2's CRI CPK archives (CRILAYLA entries); PEANUTS: targeted, the map's entries only
     # Portal's game.zip (Deflate members). A zip is found by its first bytes, so this opens each file it is given: only the wanted ones, since a zip needs no other file
     # (Mario Kart World's 206,326 RomFS files took 29 s here on a Mac and minutes on a Windows PC before the targeted scan had printed anything)
     zp_jobs, zips = zip_jobs(files if want is None else [f for f in files if f[1] in want])
