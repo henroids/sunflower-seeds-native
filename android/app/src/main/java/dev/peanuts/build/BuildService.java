@@ -256,8 +256,12 @@ public final class BuildService extends Service {
         }
         int need = RuntimeShaders.missing(jobFile);
         if (need <= 0 || !jobFile.isFile()) return pack;
-        if (!RuntimeShaders.compilesAtRunTime(this, r.titleId)) { Log.i(TAG, "runtime shaders: " + need + " missing from the pack of " + name + ", but the title compiles none at run time: nothing to capture"); return pack; }
+        boolean runtime;
+        try { runtime = RuntimeShaders.compilesAtRunTime(this, r.titleId); }
+        catch (IOException e) { Log.w(TAG, "runtime shaders: cannot tell whether " + name + " compiles shaders at run time (" + e.getMessage() + "); no capture"); return pack; }   // an APK without this title's profile: as before the detector, the build goes on
+        if (!runtime) { Log.i(TAG, "runtime shaders: " + need + " missing from the pack of " + name + ", but the title compiles none at run time: nothing to capture"); return pack; }
         Log.i(TAG, "runtime shaders: " + need + " missing from the pack of " + name + ": capturing");
+        int before = RuntimeShaders.captured(RuntimeShaders.captureDir(work));   // captures an earlier build already made
         boolean enough = new RuntimeShaders(this).capture(r.titleId, work, dump, pack, need, (pct, detail) -> progress("prepare", PREPARE_END - 5 + pct * 5 / 100, detail), () -> cancelled);
         if (cancelled) throw new IOException("Build cancelled.");
         if (!enough) {
@@ -267,7 +271,14 @@ public final class BuildService extends Service {
         }
         RuntimeShaders.rerun(work, jobFile);
         progress("prepare", IMPORT_END, "Making the pack again with the captured shaders");
-        return stepPrepare(r, dump);
+        File rebuilt = stepPrepare(r, dump);
+        int left = RuntimeShaders.missing(jobFile);
+        // Shaders still missing after the capture: when the capture made a difference (fewer missing), or its captures were already there from an earlier
+        // build, the rest are not run-time shaders (no game run makes them, as Mario Kart 8 Deluxe's 135 of another version): the pack is kept, with a log
+        // line, instead of asking for a Build again that could never get further. Only a capture that changed nothing on its first try is an error.
+        if (left > 0 && (left < need || before >= need)) { Log.w(TAG, "runtime shaders: " + left + " of " + name + "'s shaders are still missing after the capture; they are not made at run time, the pack is kept"); return rebuilt; }
+        if (left > 0) throw new IOException(name + " still lacks " + left + " shaders after the run-time capture. Some text or graphics may be missing. Tap Build again.");
+        return rebuilt;
     }
 
     /** (c) the companion beside the pack: <title ID>-work/peanuts/<Name>/ */
