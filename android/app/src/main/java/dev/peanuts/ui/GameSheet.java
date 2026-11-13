@@ -438,8 +438,10 @@ public final class GameSheet {
 
     /** "Play with mods": the same launch as Home's own Play, but with the modded variant's pack instead of the normal one (never the normal pack) */
     private void playWithMods(File variantPack) {
-        Object g = dev.peanuts.ui.Upstream.game(title.titleId, title.name, title.launch, variantPack);
-        if (g == null || !dev.peanuts.ui.Upstream.launch(a, g)) Toast.makeText(a, "Could not start " + title.name + " with mods.", Toast.LENGTH_LONG).show();
+        FontGate.check(a, title.titleId, title.name, () -> {
+            Object g = dev.peanuts.ui.Upstream.game(title.titleId, title.name, title.launch, variantPack);
+            if (g == null || !dev.peanuts.ui.Upstream.launch(a, g)) Toast.makeText(a, "Could not start " + title.name + " with mods.", Toast.LENGTH_LONG).show();
+        });
     }
 
     /** The keys landed (Add keys…): Build comes on if firmware fonts are there too. NOTE for the owner of LibrarySettings.java (not touched here): only

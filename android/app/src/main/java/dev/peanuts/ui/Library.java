@@ -222,7 +222,7 @@ public final class Library {
         if (scanning) return;
         scanning = true;
         render();
-        new Thread(() -> {
+        new Thread(() -> { try {
             List<LibraryScanner.Title> t = new LibraryScanner(a).scan();
             // a scanned game that is ready and not in upstream's list goes into it: its card is then Banana's own
             List<Upstream.Entry> list = Upstream.games(a);
@@ -257,7 +257,9 @@ public final class Library {
                 if (b == null) continue;
                 UI.post(() -> { icons.put(x.titleId, b); TextView tile = tiles.get(x.titleId); if (tile != null) PUi.tileIcon(tile, b); });
             }
-        }, "peanuts-scan").start();
+        } catch (RuntimeException e) {   // a failed scan must not leave the library "scanning" for good
+            UI.post(() -> { scanning = false; if (current == this) render(); });
+        } }, "peanuts-scan").start();
     }
 
     /**
@@ -270,8 +272,10 @@ public final class Library {
         if (scanning || staleChecking) return;
         staleChecking = true;
         new Thread(() -> {
-            List<Upstream.Entry> list = Upstream.games(a);
-            staleGames(list, a);
+            try {
+                List<Upstream.Entry> list = Upstream.games(a);
+                staleGames(list, a);
+            } catch (RuntimeException e) { /* the flag below is reset either way */ }
             UI.post(() -> {
                 staleChecking = false;
                 if (current == this && box != null && box.isAttachedToWindow()) render();
@@ -830,7 +834,7 @@ public final class Library {
     }
 
     /** Play for a listed, ready game: Banana's own launch (the pack search, the checks, its dialogs); its Manage sheet if that cannot be reached */
-    private void play(Row r) { if (!Upstream.launch(a, r.game)) manage.accept(r.game); }
+    private void play(Row r) { FontGate.check(a, r.id(), r.name(), () -> { if (!Upstream.launch(a, r.game)) manage.accept(r.game); }); }
 
     /** A pill on the cover, 8 dp in from its corner: 12 sp 700, a 1 dp shadow so it reads on any art */
     private TextView mark(String s, int fill, int textRes, boolean stroke, int gravity) {
