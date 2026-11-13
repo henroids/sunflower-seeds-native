@@ -8,6 +8,7 @@
 #include <vulkan/vulkan_android.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdlib.h>   // PEANUTS: getenv/atoi (vka_red_repeat)
 #include "../nvn/nvn_obj.h"
 #include "../../host/dm.h"
 #include "vka_fmtlist.h"
@@ -15,7 +16,10 @@
 
 #define VLOG(...) LOG("[vk] " __VA_ARGS__)
 #define VRED(...) LOG("[RED] vk: " __VA_ARGS__)
-#define VRED_ONCE(...) do { static _Atomic int once_; if (!atomic_exchange(&once_, 1)) VRED(__VA_ARGS__); } while (0)
+// PEANUTS: DM_VK_RED_REPEAT=<n> prints each VRED_ONCE site up to n times (default 1, as before): a failure that recurs later in a run, after its first
+// print, was silent (Mario Kart 8 Deluxe's black attract race, issue #6, printed nothing while it was black)
+static inline int vka_red_repeat(void) { static int n = -1; if (n < 0) { const char *e = getenv("DM_VK_RED_REPEAT"); n = e && atoi(e) > 0 ? atoi(e) : 1; } return n; }
+#define VRED_ONCE(...) do { static _Atomic int once_; if (atomic_fetch_add(&once_, 1) < vka_red_repeat()) VRED(__VA_ARGS__); } while (0)   // PEANUTS: repeat (above)
 
 #define VKA_GLOBAL_FNS(X) X(vkCreateInstance) X(vkEnumerateInstanceExtensionProperties) X(vkEnumerateInstanceLayerProperties) X(vkEnumerateInstanceVersion)
 #define VKA_INSTANCE_FNS(X) \
