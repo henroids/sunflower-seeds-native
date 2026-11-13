@@ -140,6 +140,9 @@ public final class GameSheet {
         // all. onClose: installedVersion (above) is read live from disk on every render, not cached in a field here, so re-rendering after a rollback/switch
         // is the whole refresh — critique-phase2a §B's "cached state goes stale" note, satisfied without a separate cache to invalidate
         if (companion != null) PUi.add(box, PUi.button(a, "Versions…", PUi.Kind.QUIET, v -> dev.peanuts.ui.CompanionVersions.open(a, title.titleId, this::render)), 2, PUi.wrap());
+        // Mods (DESIGN-MODS.md "a Mods section per game"): local romfs/cheat/exefs imports, never a catalog. The row's value names how many are on
+        // and whether any needs a build (dev.peanuts.mods.ModRuntime.needsBuild) — read live on every render, same as the Companion row above
+        renderModsRow();
         // Launcher support (owner request, LAUNCHERS.md): a pinned shortcut that starts this title through dev.nxnative.android.FrontendLaunch's own
         // title_id path (FRONTENDS.md) — a ready game starts at once, a game not yet built opens Home with it instead. Shown whenever the launcher
         // supports pinning (dev.peanuts.launch.GameShortcuts.supported), not only for a READY title, matching how Home's own Add-to-home-screen entry
@@ -408,6 +411,17 @@ public final class GameSheet {
             Bitmap cover = f == null ? null : BitmapFactory.decodeFile(f.getPath());
             a.runOnUiThread(() -> dev.peanuts.launch.GameShortcuts.pin(a, titleId, name, cover));
         }, "peanuts-shortcut").start();
+    }
+
+    /** The Mods row: how many mods are on, and whether any enabled one needs a build (its exefs part), read fresh from disk every render — a mod
+     *  toggled or reordered in {@code dev.peanuts.mods.ModsSheet} needs no cache invalidation here, same shape as the Companion row's installedVersion */
+    private void renderModsRow() {
+        java.util.List<dev.peanuts.mods.ModStore.Mod> mods = dev.peanuts.mods.ModRuntime.mods(a, title.titleId);
+        int on = 0;
+        for (dev.peanuts.mods.ModStore.Mod m : mods) if (m.enabled) on++;
+        String value = mods.isEmpty() ? "None imported"
+                : on + " of " + mods.size() + " on" + (dev.peanuts.mods.ModStore.needsBuild(mods) ? " · needs a build with mods" : "");
+        PUi.add(box, new PUi.Setting(a, "🧩", "Mods", v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name)).value(value).chevron(a).view, 0);
     }
 
     /** The keys landed (Add keys…): Build comes on if firmware fonts are there too. NOTE for the owner of LibrarySettings.java (not touched here): only

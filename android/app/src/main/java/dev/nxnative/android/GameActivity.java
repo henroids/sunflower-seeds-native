@@ -650,7 +650,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
                     "DM_ROMFS=" + romfs, "DM_SAVE=" + save, "DM_TEMP=" + temp, "DM_ROOT=" + root, "DM_AOC_DIR=" + aoc,
                     "HOME=" + files, "TMPDIR=" + getCacheDir(), "DM_BUILD_COMMIT=" + BuildConfig.NX_COMMIT,
                     "DM_CTL=" + new File(files, "ctl.txt"), "NX_EXIT_RECORD=" + ExitWatch.record(this)));   // live control lines (android/TESTING.md "Live control", android/tools/nxctl.sh); DM_CTL= in env.txt turns it off
-            env.addAll(dev.peanuts.build.GenericProfile.envLines(this, id));   // PEANUTS: -PnxGenericHost=true DM_PROFILE_PATH/DM_PROFILE_SEED; empty list otherwise
+            env.addAll(dev.peanuts.build.GenericProfile.envLines(this, id, packDir));   // PEANUTS: packDir: a modded variant's own profile.bin (GenericProfile)   // PEANUTS: -PnxGenericHost=true DM_PROFILE_PATH/DM_PROFILE_SEED; empty list otherwise
             env.add(0, "NX_BUILD_TAG=" + Prefs.buildTag(this) + " \u00b7 signer " + Prefs.signerId(this));   // nxlaunch.c writes it as the log's first line; the signer says which key signed the APK (Signer)
             String gpuNote = settingsEnv(id, env);
             // The 3D scene (Game settings › Resolution, ResPresets; Advanced › 3D scene, SceneRes): the chosen RomFS overlay in the pack, made by the pack step from the player's files;
@@ -661,15 +661,27 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             String sceneNote = null;
             String sceneName = Prefs.startScene(this, id);
             ResPresets.Preset rp = ResPresets.of(resPresets, sceneName);
+            File sceneOverlay = null;
             if (rp != null) {   // a preset with a scene of its own: its overlay is named by its id
                 File ov = SceneRes.overlay(pack.scenes, packDir, rp.id);
                 if (ov != null) env.add(SceneRes.envLine(ov));
                 sceneNote = SceneRes.note(rp.id, rp.label + " \u00b7 " + rp.detail(), ov);
+                sceneOverlay = ov;
             } else if (!scenes.isEmpty()) {
                 File ov = SceneRes.overlay(scenes, pack.scenes, packDir, sceneName);
                 if (ov != null) env.add(SceneRes.envLine(ov));
                 sceneNote = SceneRes.note(scenes, sceneName, ov);
+                sceneOverlay = ov;
             }
+            // PEANUTS: Mods (DESIGN-MODS.md) \u2014 the enabled mods' romfs, highest-priority first, ahead of the scene overlay above (hle_fs.c:222-223
+            // DM_ROMFS_OVERLAY is ':'-separated, first root to have the file wins, hle_fs.c:375-388/1289-1326); replaces the scene's own line above
+            // only when a mod actually has a romfs (env is applied setenv-overwrite style, so the last DM_ROMFS_OVERLAY line here wins \u2014 same rule
+            // the scene comment above already relies on for the user's own env.txt). DM_CHEATS stages the enabled mods' cheats into one folder
+            // (hle_cheats.c reads a single flat folder by build ID); a "code" mod's exefs/exefs_patches never reach this process at all.
+            String modOverlay = dev.peanuts.mods.ModRuntime.romfsOverlayEnv(this, id, sceneOverlay);
+            if (modOverlay != null) env.add(modOverlay);
+            String modCheats = dev.peanuts.mods.ModRuntime.cheatsEnv(this, id);
+            if (modCheats != null) env.add(modCheats);
             String resNote = resPresets.isEmpty() ? null   // the choice in force, for the log: which preset (or Advanced), and the window and scene it gave
                     : "[nxlaunch] resolution " + Prefs.resolutionChoice(this, id) + (Prefs.resPreset(this, id).isEmpty() ? " (nothing chosen: the earlier settings' match or the default)" : "")
                     + ": window " + Prefs.startWindow(this, id) + ", scene " + (sceneName.isEmpty() ? "the game's own palette" : sceneName);

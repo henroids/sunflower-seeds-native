@@ -11,8 +11,10 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `peanuts/` — companion packages, docs, tests, `scripts/`.
 2. **Hooks into upstream files are one-liners, each tagged `PEANUTS`.** A hook is a call-out to Peanuts code, never logic.
    Allowed hook sites (keep this list current):
-   - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` — create/destroy the companion `Presentation`; and (2026-11-13) one line in
-     `onCreate` that touches the last-3-played list for dynamic shortcuts (`dev.peanuts.launch.RecentGames`, `peanuts/docs/LAUNCHERS.md`).
+   - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` — create/destroy the companion `Presentation`; (2026-11-13) one line in
+     `onCreate` that touches the last-3-played list for dynamic shortcuts (`dev.peanuts.launch.RecentGames`, `peanuts/docs/LAUNCHERS.md`); and
+     (2026-11-13) in `start()`'s env assembly, two lines adding `DM_ROMFS_OVERLAY`/`DM_CHEATS` for the enabled Mods (`dev.peanuts.mods.ModRuntime`,
+     `design/platform/DESIGN-MODS.md`).
    - `android/app/src/main/cpp/nxlaunch.c` — JNI entry points forwarded to `dm/peanuts`.
    - `android/host/CMakeLists.txt`, `android/app/src/main/cpp/CMakeLists.txt` — add the `dm/peanuts` sources.
    - `dm/gfx/vk_android/vka_present.c` — one call per presented frame (`peanuts_tick()`), beside `ovl_draw`.
@@ -72,3 +74,14 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   volume hides its games without removing them: `Library.staleGames`'s path-based `volumeMounted` check already covers any `gameDir`, build folder or
   not — verified by reading, not changed. Not yet run on a real device (checklist: a fresh build into a microSD build folder, an existing internal
   build still plays unmoved, companion install root under the build folder).
+- 2026-11-13 (Mods, play-time half, `design/platform/DESIGN-MODS.md`): a per-game Mods section (`dev.peanuts.mods`, new package) — local-import only
+  (a picked folder or zip, never a catalog), normalizing Atmosphère (`atmosphere/contents/<tid>/{romfs,exefs}` + `exefs_patches`), Yuzu/Eden "load"
+  (`<mod>/romfs`, `<mod>/exefs`) and bare (`romfs`/`exefs` at the root) layouts into `<app files>/mods/<TITLEID>/<modName>/` with a `mod.json`
+  (`ModStore`, the shared contract with the build-time code-mod agent). `GameSheet`'s new "Mods" row opens `ModsSheet` (list, enable, move up/down
+  = priority, remove). At launch, `GameActivity.start()` adds `DM_ROMFS_OVERLAY` (enabled mods' romfs dirs, highest priority first, the scene
+  overlay falling back last — hle_fs.c:222-223/375-388/1289-1326, first root to have the file wins, directories union) and `DM_CHEATS` (enabled
+  mods' cheat files staged into one folder — hle_cheats.c's flat-folder scan, hle_cheats.c:1316-1322). A "code" mod's romfs/cheats apply the same
+  way; its exefs/exefs_patches never reach the normal build (`ModStore.needsBuild`, shown as "Needs a build with mods"). Layout normalizer and
+  `ModStore` order/enable/remove covered by `peanuts/tests/test_mod_importer.py` and `test_mod_store.py` (javac/java, 18 cases, all passing). Not
+  yet run on a real device (checklist: import a tiny romfs mod replacing one text/texture file, enable it, confirm the file changes in-game; a
+  second mod with a conflicting file, confirming order wins; a cheat file applying from the staged folder).

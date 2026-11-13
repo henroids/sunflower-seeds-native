@@ -29,6 +29,9 @@ import java.io.OutputStream;
 public final class LibrarySettings {
     static final int REQ_KEYS = 60, REQ_GAME = 61, REQ_UPDATE_DIR = 62, REQ_DLC_DIR = 63, REQ_FIRMWARE = 64, REQ_SHEET_UPDATE = 65, REQ_SHEET_DLC = 66, REQ_FIRMWARE_ZIP = 67,
             REQ_BUILD_DIR = 68;
+    /** dev.peanuts.mods.ModsSheet's "Add mod…" (ACTION_OPEN_DOCUMENT_TREE / ACTION_OPEN_DOCUMENT), public: ModImportUi/ModsSheet live in another
+     *  package and only need these two request codes, not any other picker here */
+    public static final int REQ_MOD_FOLDER = 69, REQ_MOD_ZIP = 70;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Extracting the fonts…" and what came of it, while the rows show
     private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow;
@@ -156,11 +159,13 @@ public final class LibrarySettings {
 
     /** MainActivity.onActivityResult's first line: true when the request was one of this package's (handled, whatever the result) */
     public static boolean result(Activity a, int request, int result, Intent data) {
-        if (request < REQ_KEYS || request > REQ_BUILD_DIR) return false;
+        if (request < REQ_KEYS || request > REQ_MOD_ZIP) return false;
         if (result != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         Uri u = data.getData();
         if (request == REQ_KEYS) { copyKeys(a, u); return true; }
         if (request == REQ_FIRMWARE_ZIP) { pickedFirmwareZip(a, u); return true; }
+        if (request == REQ_MOD_FOLDER) { if (dev.peanuts.mods.ModsSheet.current != null) dev.peanuts.mods.ModsSheet.current.pickedFolder(u); return true; }
+        if (request == REQ_MOD_ZIP) { if (dev.peanuts.mods.ModsSheet.current != null) dev.peanuts.mods.ModsSheet.current.pickedZip(u, displayName(a, u)); return true; }
         if (request == REQ_SHEET_UPDATE || request == REQ_SHEET_DLC) {
             String p = Upstream.documentToPath(u);
             if (p == null || !new File(p).isFile()) { error(a, "Pick the file from the phone's storage (not Recent or a cloud provider), so the app can open it by its path."); return true; }
