@@ -243,9 +243,11 @@ static inline void im_unhold_locked(vka_img *im) {
 // The recording thread's memo of texture ID -> view (vka_tex_id_view_rec) and sampler ID -> sampler (vka_samp_id_rec): an entry holds while the ID was not registered
 // again (g_tver / g_sver, per ID) and no texture mapping was dropped or image let go since (g_tgen). It saves the table lock and the lookups 3-4 times a texture binding
 static vka_img *g_big[64]; static int g_nbig;   // large images (DM_VK_BIGIMG_MB), for the storage overlap check (big_note)
+static vka_img *g_lrz_prev;   // PEANUTS: the depth image of the last pass that had one (vka_lrz_touch), under g_tmu
 static void unref_locked(vka_img *im) {
     atomic_fetch_add_explicit(&g_tgen, 1, memory_order_release);
     if (--im->refs) return;
+    if (g_lrz_prev == im) g_lrz_prev = NULL;   // PEANUTS: (vka_lrz_touch)
     map_del_im(im);
     live_del(im);
     for (int i = 0; i < g_nbig; i++) if (g_big[i] == im) { g_big[i] = g_big[--g_nbig]; break; }
@@ -1466,6 +1468,29 @@ void vka_tex_own(vka_img *im, VkCommandBuffer cb) {
     if (!vka_up_on() && cb && cb == vka_rp_cb() && vka_rp_is_open()) vka_rp_end();   // (no upload batch: the clear goes into cb, outside a pass)
     pthread_mutex_lock(&g_tmu); img_own(im, cb); pthread_mutex_unlock(&g_tmu);
 }
+
+// PEANUTS begin: Adreno's low-resolution depth (LRZ) across depth buffers, after nx2android's Vulkan backend (gfx_vk_exec.c lrz_touch / pass_commit, commits
+// d8c685a and 79e7074): the driver applied the LRZ of the depth buffer used before in the binning of later passes on other depth images and culled whole triangles
+// (Xenoblade Chronicles 3's cloud dome, 13 Sentinels' checkerboard of stale bins). A transfer write into the image a pass switches away from drops it; a one-texel read
+// before a pass that loads its depth drops a stale one of its own. vka_draw.c rp_begin calls this before a pass with a depth image when DM_VK_LRZ_TOUCH=1 (live,
+// default 0 until a game here is shown to need it). The image switched away from is kept to this submission (its last fence) so the copy never meets a freed image
+static void lrz_copy(VkCommandBuffer cb, vka_img *im, int write) {
+    if (!im || !im->img || !(im->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) || im->samples > 1) return;   // (a multisampled image cannot be copied to a buffer)
+    vka_span s; if (!vka_scratch(16, 16, &s)) return;
+    VkBufferImageCopy c = {s.off, 0, 0, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1}, {0, 0, 0}, {1, 1, 1}};
+    vka_barrier(cb); vk.vkCmdCopyImageToBuffer(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, s.buf, 1, &c); vka_barrier(cb);
+    if (write) { vk.vkCmdCopyBufferToImage(cb, s.buf, im->img, VK_IMAGE_LAYOUT_GENERAL, 1, &c); vka_barrier(cb); }   // the same texel back: unchanged
+}
+void vka_lrz_touch(VkCommandBuffer cb, vka_img *cur, int loads) {
+    vka_img *prev = NULL;
+    pthread_mutex_lock(&g_tmu);
+    if (g_lrz_prev && g_lrz_prev != cur) { prev = g_lrz_prev; uint64_t f = vka_fence_last() + 1; if (prev->last_fence < f) prev->last_fence = f; }
+    g_lrz_prev = cur;
+    pthread_mutex_unlock(&g_tmu);
+    if (prev) lrz_copy(cb, prev, 1);
+    if (loads) lrz_copy(cb, cur, 0);
+}
+// PEANUTS end
 
 // ---------- Soft textures (vka_soft.h; profile tex_soft) ----------
 // How many of the finest levels a soft texture leaves out: DM_VK_TEX_SOFT_LEVELS (live, 1 by default, 1 to 3), leaving at least two levels. Each level out quarters what
