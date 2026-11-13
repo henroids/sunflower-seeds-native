@@ -471,8 +471,13 @@ static VkImageView bcrt_attach(const p_set_rt *rt, int i, vka_img *im, const vka
     uint32_t lv, l0, nl; rt_range(im, &rt->cview[i], rt->has_cview[i], &lv, &l0, &nl);
     if (lv >= im->levels || !nl || R.nbc == 8) return VK_NULL_HANDLE;
     uint32_t mw = im->w >> lv ? im->w >> lv : 1, mh = im->h >> lv ? im->h >> lv : 1;
-    if (mw % im->f.bw || mh % im->f.bh) { VRED_ONCE("block-compressed render target %ux%u (level %u) is not a whole number of blocks: not drawn into", mw, mh, lv); return VK_NULL_HANDLE; }
-    uint32_t bw = mw / im->f.bw, bh = mh / im->f.bh;
+    // PEANUTS(upstream-candidate): a tail mip smaller than one block (2x2, 1x1, ...) still occupies exactly one whole
+    // block in a BC texture's real storage, on the Switch as on desktop GPUs -- a compressed mip chain is always padded
+    // up to block granularity, never truncated. Rounding up here (instead of refusing the level outright) lets the
+    // BC render-target shadow path cover a game's full mip chain, down to 1x1, matching that padding; general fix, not
+    // Peanuts-specific (MK8D's attract-mode race replay regenerates such a chain and went almost entirely black for
+    // ~20s with the old all-or-nothing check: issue #6).
+    uint32_t bw = (mw + im->f.bw - 1) / im->f.bw, bh = (mh + im->f.bh - 1) / im->f.bh;
     vka_img *sh = bcrt_shadow(rt->cview[i].format, bw, bh, nl);
     if (!sh || !(sh->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) { VRED_ONCE("block-compressed render target: no shadow image of NVN format %#x: not drawn into", rt->cview[i].format); return VK_NULL_HANDLE; }
     vka_tex_own(im, g_cb); vka_tex_own(sh, g_cb);
