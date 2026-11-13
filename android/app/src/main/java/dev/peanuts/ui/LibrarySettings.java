@@ -86,10 +86,13 @@ public final class LibrarySettings {
         if (a == null || gameRow == null) return;
         String g = PeanutsPrefs.gameDir(a), u = PeanutsPrefs.updateDir(a), d = PeanutsPrefs.dlcDir(a);
         gameRow.value(g != null ? g : "Not set. Every NSP, XCI, .nup and dump folder inside is shown on Home.");
+        String bd = PeanutsPrefs.buildDir(a);
+        buildRow.value(bd != null ? bd + " · hold to forget"
+                : "Beside the game (default). Pick a folder, on the phone or the microSD card, to keep every build there, one folder per game.");
         updateRow.value(u != null ? u + " · hold to forget" : "Optional. Another folder with update NSPs, matched to their games by title ID.");
         dlcRow.value(d != null ? d + " · hold to forget" : "Optional. Another folder with DLC NSPs, matched to their games by title ID.");
         keysRow.value(keysValue(a));
-        fontsRow.value(fontsValue(a, "Optional. Lets companions draw the system font."));
+        fontsRow.value(fontsValue(a, "Used by games and companions. Missing characters in Android's fonts can prevent a game from starting."));
         if (companionsRow != null) companionsRow.value(companionsValue(a));
     }
 
