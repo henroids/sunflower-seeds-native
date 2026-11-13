@@ -661,17 +661,17 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             String sceneNote = null;
             String sceneName = Prefs.startScene(this, id);
             ResPresets.Preset rp = ResPresets.of(resPresets, sceneName);
-            File sceneOverlay = null;
+            File sceneOverlay = null;   // PEANUTS: mods (the scene overlay, kept for the mods' line below)
             if (rp != null) {   // a preset with a scene of its own: its overlay is named by its id
                 File ov = SceneRes.overlay(pack.scenes, packDir, rp.id);
                 if (ov != null) env.add(SceneRes.envLine(ov));
                 sceneNote = SceneRes.note(rp.id, rp.label + " \u00b7 " + rp.detail(), ov);
-                sceneOverlay = ov;
+                sceneOverlay = ov;   // PEANUTS: mods (see below)
             } else if (!scenes.isEmpty()) {
                 File ov = SceneRes.overlay(scenes, pack.scenes, packDir, sceneName);
                 if (ov != null) env.add(SceneRes.envLine(ov));
                 sceneNote = SceneRes.note(scenes, sceneName, ov);
-                sceneOverlay = ov;
+                sceneOverlay = ov;   // PEANUTS: mods (see below)
             }
             // PEANUTS: Mods (DESIGN-MODS.md) \u2014 the enabled mods' romfs, highest-priority first, ahead of the scene overlay above (hle_fs.c:222-223
             // DM_ROMFS_OVERLAY is ':'-separated, first root to have the file wins, hle_fs.c:375-388/1289-1326); replaces the scene's own line above

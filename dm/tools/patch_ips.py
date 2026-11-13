@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# PEANUTS: new file (code mods: IPS/IPS32 before the rewrite, DESIGN-MODS.md)
 """Applies a code mod's exefs_patches (ips.py: IPS/IPS32, Atmosphère's own format and offset convention) to one
 NSO module, *before* dm/tools/patch_nso.py's ARM64 rewrite — the rewrite's own registered CUTS and MATCH_CUTS
 assert the module's original bytes one at a time and would otherwise abort on a mod's own edits, or silently

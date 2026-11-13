@@ -1,3 +1,4 @@
+# PEANUTS: new file (code mods: IPS/IPS32 before the rewrite, DESIGN-MODS.md)
 """IPS and IPS32 patch application, Atmosphère's exefs_patches semantics: a patch's offset 0 is the first byte of a
 module's *decompressed* memory image, counting from the start of .text (that is, after the NSO's own 0x100 file
 header and after LZ4/ZBIC decompression) — exactly dm/tools/nso.py's Module.image. Atmosphère applies these patches
