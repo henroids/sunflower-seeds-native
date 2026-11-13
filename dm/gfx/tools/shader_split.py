@@ -3029,8 +3029,8 @@ DIRECT = None   # {relative path: ([(member path, kind, offset)], (the map's key
 DIRECT_FORMS = re.compile(r'#BNSH@(0x[0-9a-f]+)#var[0-9]+$|#BAHS@(0x[0-9a-f]+)$|#IDRK@(0x[0-9a-f]+)#GLSLC@0x[0-9a-f]+(#var)?$')
 
 def source_file(s, rels):
-    """The RomFS file of a map source (without its leading '/'): the shortest prefix ending at a '/' or '#' or the end that is a file of the dump (rels), or None"""
-    return next((s[:i] for i in [i for i, ch in enumerate(s) if ch in '/#'] + [len(s)] if s[:i] in rels), None)
+    """The RomFS file of a map source (without its leading '/'): the shortest prefix ending at a '/', '#' or ':' or the end that is a file of the dump (rels), or None"""
+    return next((s[:i] for i in [i for i, ch in enumerate(s) if ch in '/#:'] + [len(s)] if s[:i] in rels), None)   # ':' a Unity bundle's member (profile_files)
 
 # PEANUTS: on-device split support (see file header)
 def map_sources(keys=False):
@@ -3441,7 +3441,7 @@ def profile_files(files, main_v):
             if len(c) > 4 and c[0].endswith('.bin') and c[4].startswith('/') and not c[4].startswith(NOT_ROMFS): srcs.add(c[4][1:])
     rels, want = {r for _, r in files}, set()
     for s in srcs:
-        r = next((s[:i] for i in [i for i, ch in enumerate(s) if ch in '/#'] + [len(s)] if s[:i] in rels), None)
+        r = next((s[:i] for i in [i for i, ch in enumerate(s) if ch in '/#:'] + [len(s)] if s[:i] in rels), None)   # PEANUTS: ':' too, a Unity bundle's member (/Data/data.unity3d:Resources/...: Engage, Castlevania, Brilliant Diamond fell back to the full scan)
         if r is None: return None, f'the profile\'s shader_map.tsv names /{s}, and the dump has no such file'
         want.add(r)
     # the files that hold only copies of shaders found earlier name no row's source, but their variations can pair them anew (Donkey Kong Bananza: 42 of its 15,576
