@@ -124,7 +124,7 @@ final class Prepare {
             boolean same = Upstream.jobDump(existing).getPath().equals(dumpR.getPath()) && Upstream.jobVersion(existing) == version;
             if (same && (s.equals("running") || s.equals("paused") || s.equals("failed") || s.equals("pending"))) job = existing;   // resumed where it stopped
             else if (same && s.equals("done") && Upstream.jobPack(existing).isDirectory() && Upstream.packRead(Upstream.jobPack(existing)) != null
-                    && current(Upstream.jobPack(existing), dumpR, id)) {   // (a pack an app update left behind is redone below: step 3)
+                    && current(Upstream.jobPack(existing), dumpR, id) && !noOrig(Upstream.jobPack(existing))) {   // (a pack an app update left behind is redone below: step 3; so is one without main.orig.bin)
                 // already prepared by an earlier run: the game only needs listing
                 p.on(100, "Already prepared");
                 Upstream.addGame(c, existing);
@@ -145,8 +145,7 @@ final class Prepare {
                 // ...and when main was rewritten before the rewriter kept the file's own bytes of what it changed (main.orig.bin, which a companion package's
                 // module reads: dm/peanuts/peanuts.c rt_orig). Such a pack still counts as up to date, so nothing rebuilds on its own; a build the user starts
                 // gives it the file (Octopath Traveler 0, 2026-11-14: Build again left its code as it was)
-                boolean noOrig = new File(packDir, "main.changed.tsv").isFile() && !new File(packDir, "main.orig.bin").isFile();
-                boolean code = blocking != null || noOrig || Boolean.FALSE.equals(Upstream.packCode(c, pack, dumpR)), sh = shaders != null;
+                boolean code = blocking != null || noOrig(packDir) || Boolean.FALSE.equals(Upstream.packCode(c, pack, dumpR)), sh = shaders != null;
                 job = Upstream.jobAdopt(r, packDir, code, sh);
                 Upstream.jobSave(job);
                 Upstream.jobRemember(c, Upstream.jobFile(job));
@@ -255,6 +254,9 @@ final class Prepare {
     }
 
     /** Whether the pack fits this APK as it is: startable code of this rewriter (PackCheck.blocking / code) and this APK's shader library (PackCheck.shaders) */
+    /** A pack whose main was rewritten before the rewriter kept the file's own bytes of what it changed (main.orig.bin) */
+    private static boolean noOrig(File packDir) { return new File(packDir, "main.changed.tsv").isFile() && !new File(packDir, "main.orig.bin").isFile(); }
+
     private boolean current(File packDir, File dump, String id) {
         try {
             Object pack = Upstream.packRead(packDir);
