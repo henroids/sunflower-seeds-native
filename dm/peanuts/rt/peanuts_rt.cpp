@@ -19,6 +19,7 @@
 #include "core/core.h"
 #include "core/mods/mod_module.h"
 #include "core/mods/mod_runtime.h"
+#include "peanuts_helper.h"
 #include "peanuts_rt.h"
 
 namespace Core::Mods {
@@ -216,6 +217,14 @@ PnRt* pn_rt_create(const PnRtConfig* config) {
         LOG_ERROR(Core, "peanuts_rt: no usable dual-screen package in '{}' for title {:016X}",
                   config->package_dir, config->title_id);
         return nullptr;
+    }
+    // The package's load plan (its mailbox and guest helper), before the runtime loads the package's module: the module
+    // takes the mailbox from the system when it is configured (mod_module_services.cpp)
+    if (config->helper.code_rewritten != nullptr) {
+        const auto helper = PeanutsHelper::Install(sys, *config, build_id);
+        if (!helper.installed && !helper.error.empty()) {
+            LOG_WARNING(Core, "peanuts_rt: the package's load plan is not installed (no guest helper, no mailbox): {}", helper.error);
+        }
     }
     rt->runtime.emplace(sys, std::move(*manifest));
     rt->runtime->SetMainMemoryParameters(config->main_base, config->main_size);

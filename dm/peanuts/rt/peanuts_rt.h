@@ -86,6 +86,18 @@ typedef struct PnRtRomfs {
                 void* cb_user);
 } PnRtRomfs;
 
+/// The host's part in applying a package's load plan to the running game (peanuts_helper.cpp). All zero = no load plans.
+typedef struct PnRtCode {
+    void* user;
+    /// 1 when [addr, addr + len) of main holds an instruction the host's rewriter changed or moved, or when the host cannot tell.
+    int (*code_rewritten)(void* user, uint64_t addr, size_t len);
+    /// The offset of the guest's x18 slot in the block Bionic's TLS_SLOT_APP holds for each guest thread ([tpidr_el0 + 0x10]).
+    uint32_t slot18_offset;
+    /// `size` bytes (a multiple of 16 KiB) of zeroed, writable memory within a branch's reach of all of main's code, which the
+    /// caller may make executable and keeps for the life of the process. 0 when the host has none.
+    uint64_t (*code_block)(void* user, size_t size);
+} PnRtCode;
+
 typedef struct PnRtConfig {
     /// The package directory (contains package.json and dualscreen/). Required.
     const char* package_dir;
@@ -128,6 +140,8 @@ typedef struct PnRtConfig {
     /// R6, optional: the game's RomFS through callbacks when `romfs_dir` is NULL (see PnRtRomfs).
     /// All fields NULL = none.
     PnRtRomfs romfs;
+    /// Optional: what the host gives for a package's load plan (guest helper); see PnRtCode. All zero = a plan is not applied.
+    PnRtCode helper;
 } PnRtConfig;
 
 /// Creates a runtime for `config`. NULL when the package has no usable manifest for the title

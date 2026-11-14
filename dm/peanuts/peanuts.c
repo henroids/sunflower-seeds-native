@@ -305,6 +305,7 @@ void peanuts_tick(void) {
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include "peanuts_nup.h"
 
@@ -364,6 +365,34 @@ static void rt_orig_apply(uint64_t addr, uint8_t *buf, size_t len) {
         uint64_t a = g_or[i].a > addr ? g_or[i].a : addr, b = g_or[i].a + g_or[i].len < addr + len ? g_or[i].a + g_or[i].len : addr + len;
         memcpy(buf + (a - addr), g_orig + g_or[i].pos + (a - g_or[i].a), (size_t)(b - a));
     }
+}
+// For a package's load plan (rt/peanuts_helper.cpp): 1 when [addr, addr + len) holds a run of main the rewriter changed or moved, or when its list is not there
+static int rt_code_rewritten(void *u, uint64_t addr, size_t len) {
+    (void)u;
+    if (!g_nor) return 1;
+    if (addr >= g_or_hi || addr + len <= g_or_lo) return 0;
+    int lo = 0, hi = g_nor;
+    while (lo < hi) { int mid = (lo + hi) / 2; if (g_or[mid].a + g_or[mid].len <= addr) lo = mid + 1; else hi = mid; }
+    return lo < g_nor && g_or[lo].a < addr + len;
+}
+// Room for a package's guest helper (rt/peanuts_helper.cpp): the end of the gap the loader leaves inaccessible between main's patch area and its base (a main with the patch
+// area before the base, loader.c map_image: 16 or 32 MB, of which the patches take a few), else free pages just past main. A branch in main reaches either
+static uint64_t rt_code_block(void *u, size_t size) {
+    (void)u;
+    module_t *m = module_named("main");
+    if (!m || !size || (size & 0x3FFF)) return 0;
+    if (m->patch_off < 0 && (uint64_t)-m->patch_off >= m->patch_len + size) {
+        uint8_t *a = (uint8_t *)m->base - size;
+        if (mprotect(a, size, PROT_READ | PROT_WRITE)) return 0;
+        memset(a, 0, size);
+        return (uint64_t)(uintptr_t)a;
+    }
+    for (uint64_t at = ((uint64_t)(uintptr_t)m->base + m->size + 0xFFFF) & ~0xFFFFull, end = at + (8u << 20); at < end; at += 0x10000) {
+        void *p = mmap((void *)(uintptr_t)at, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        if (p == (void *)(uintptr_t)at) return at;
+        if (p != MAP_FAILED) munmap(p, size);
+    }
+    return 0;
 }
 static int rt_range_has(uint64_t addr, size_t len) {   // [addr, addr+len) inside one cached readable range
     pthread_mutex_lock(&g_rd_mu);
@@ -604,6 +633,7 @@ static void rt_start(void) {
     c.pad.set_button = rt_pad_button; c.pad.set_stick = rt_pad_stick;
     c.ui.publish_ui = rt_ui_publish; c.ui.publish_ui_partial = rt_ui_publish_partial;
     c.haptics.pulse = rt_haptic;
+    c.helper.code_rewritten = rt_code_rewritten; c.helper.slot18_offset = (uint32_t)plat_slot_key_entry(PLAT_SLOT_K18); c.helper.code_block = rt_code_block;   // a package's load plan: rt/peanuts_helper.cpp
     c.log = rt_log; c.log_level = 2;
     g_rt = pn_rt_create(&c);
     atomic_store(&g_rt_state, g_rt ? 1 : 3);
