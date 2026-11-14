@@ -97,6 +97,8 @@ from a game, and point other players to their own dump instead.
 **Does the companion slow the game down?** Very little. The games above hold their frame rate with the companion
 running.
 
+More questions and troubleshooting: [FAQ.md](FAQ.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for adding a game, fixing a bug and testing on a device. Run

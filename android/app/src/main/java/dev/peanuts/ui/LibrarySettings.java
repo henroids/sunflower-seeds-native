@@ -121,7 +121,7 @@ public final class LibrarySettings {
     }
 
     static String keysValue(Activity a) {
-        if (!PeanutsPrefs.hasKeys(a)) return "Optional. Needed for NSP and XCI files; a .nup or a dump folder plays without them.";
+        if (!PeanutsPrefs.hasKeys(a)) return "Needed to build a game (Build asks for them). Tap to pick the prod.keys from your own console.";
         return "prod.keys is in the app (" + PeanutsPrefs.keysFile(a).length() + " bytes)" + (ImporterPort.get().available() ? "" : " · the importer is not in this build");
     }
 
