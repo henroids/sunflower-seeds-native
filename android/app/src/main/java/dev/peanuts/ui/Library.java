@@ -192,6 +192,7 @@ public final class Library {
             else if (!build.failed) build = null;   // the service ended while no listener heard it
         }
         l.render();
+        preloadIcons(a);
         if (!everScanned && !l.scanning && PeanutsPrefs.gameDir(a) != null) l.scan();
         if (!staleTimerStarted) { staleTimerStarted = true; UI.postDelayed(staleTick, STALE_TICK_MS); }
     }
@@ -214,6 +215,37 @@ public final class Library {
     static void openSheet(Activity a, String titleId) {
         if (current == null || current.a != a) return;
         current.sheet(current.titleFor(titleId));
+    }
+
+    // ---- The covers kept from earlier runs ----
+
+    private static boolean iconsPreloaded;
+    /**
+     * Once a process: every cover already extracted (files/icons/&lt;title ID&gt;.png) is decoded on a thread of its own and put on its tile, before and beside the scan.
+     * The covers used to be read only at the end of the scan thread, behind the folder walk, the companion catalog's network fetch and each game's build id check,
+     * so a cold start showed the letter tiles for as long as all of that took.
+     */
+    private static void preloadIcons(Activity a) {
+        if (iconsPreloaded) return;
+        iconsPreloaded = true;
+        File dir = PeanutsPrefs.iconsDir(a);
+        new Thread(() -> {
+            File[] fs = dir == null ? null : dir.listFiles();
+            if (fs == null) return;
+            for (File f : fs) {
+                String n = f.getName();
+                if (!n.endsWith(".png") || f.length() == 0) continue;
+                String id = n.substring(0, n.length() - 4);
+                Bitmap b = BitmapFactory.decodeFile(f.getPath());
+                if (b == null) continue;
+                UI.post(() -> {
+                    if (icons.containsKey(id)) return;
+                    icons.put(id, b);
+                    Library l = current; TextView tile = l == null ? null : l.tiles.get(id);
+                    if (tile != null) PUi.tileIcon(tile, b);
+                });
+            }
+        }, "peanuts-icons").start();
     }
 
     // ---- The scan ----
@@ -240,6 +272,13 @@ public final class Library {
                 titles = t; scanning = false; companions.clear();
                 if (box != null && box.isAttachedToWindow()) refresh.run(); else render();   // upstream's list again too (Prepare and the add above put games into it)
             });
+            for (LibraryScanner.Title x : t) {   // the icons not kept yet (preloadIcons has the others), before anything slow: the catalog and the build ids below
+                if (icons.containsKey(x.titleId)) continue;
+                File f = LibraryScanner.icon(a, x);
+                Bitmap b = f == null ? null : BitmapFactory.decodeFile(f.getPath());
+                if (b == null) continue;
+                UI.post(() -> { icons.put(x.titleId, b); TextView tile = tiles.get(x.titleId); if (tile != null) PUi.tileIcon(tile, b); });
+            }
             if (!catalogFetched) {
                 List<CompanionPort.Item> c = CompanionPort.fetch();
                 UI.post(() -> {
@@ -249,14 +288,8 @@ public final class Library {
                     if (box != null && box.isAttachedToWindow()) refresh.run(); else render();
                 });
             }
-            for (LibraryScanner.Title x : t) {   // the fonts and build id every ready game's env needs (GameEnv), and the icons
+            for (LibraryScanner.Title x : t)   // the fonts and build id every ready game's env needs (GameEnv)
                 if (x.status == LibraryScanner.Status.READY && x.launch != null) { GameEnv.ensureFonts(a, x.titleId); GameEnv.ensureBuildId(a, x.titleId, x.launch); }
-                if (icons.containsKey(x.titleId)) continue;
-                File f = LibraryScanner.icon(a, x);
-                Bitmap b = f == null ? null : BitmapFactory.decodeFile(f.getPath());
-                if (b == null) continue;
-                UI.post(() -> { icons.put(x.titleId, b); TextView tile = tiles.get(x.titleId); if (tile != null) PUi.tileIcon(tile, b); });
-            }
         } catch (RuntimeException e) {   // a failed scan must not leave the library "scanning" for good
             UI.post(() -> { scanning = false; if (current == this) render(); });
         } }, "peanuts-scan").start();
