@@ -16,7 +16,7 @@
 // takes the untouched `#else` branch with today's compiled-in macro. If this header is in use and one of those nine macros is still referenced
 // unconverted somewhere, the build fails with "undeclared" at that line - that failure is intentional: it is the build guard for a missed site.
 //
-// This file is hand-written, not generated (CRITIQUE-generic.md §3: an earlier draft of this comment claimed otherwise). What gen_runtime_profile.py
+// This file is hand-written, not generated (found in review: an earlier draft of this comment claimed otherwise). What gen_runtime_profile.py
 // generates is the per-title profile.bin, from dm/games/game.py's own header() output; it checks that header() never emits a macro name outside its
 // own SCALAR/PRESENCE/ARRAY_NAMES tables (peanuts/scripts/check-runtime-profile.sh runs that, as check-all, over every profile under dm/games and fails
 // the same way) - but a new SCALAR macro needing a `#define` here, and a new ARRAY_NAMES macro needing a converted call site, are both edits a person

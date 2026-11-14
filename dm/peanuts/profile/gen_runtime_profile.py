@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # PEANUTS: generates the generic host's runtime profile data from dm/games/game.py's own header() output - never from game.tsv directly, so this stays
-# coupled only to header()'s public text contract, not to game.py's internal variable names (which churn: F11 in design/platform/CRITIQUE-phase1.md,
+# coupled only to header()'s public text contract, not to game.py's internal variable names (which churn, found in review:
 # upstream added DM_GAME_* macros 56->62 across 73 commits). dm/games/game.py is upstream and must not be edited for this (PEANUTS.md rule 4).
 #
 # Usage: gen_runtime_profile.py profile <title id> <out.bin>   (one title's dm_game_profile_t, binary, packed - see profile_rt.h)
@@ -56,7 +56,7 @@ ARRAY_NAMES = {'MODULES', 'DISPLAY_VERSIONS', 'WINDOW_FN', 'SUBGROUP_ONE_LANE', 
 
 KNOWN = set(SCALAR) | set(PRESENCE) | ARRAY_NAMES
 
-# CRITIQUE-generic.md G-2: the schema must cover the *layout* (field order, sizes, capacities), not only the known-macro-name set - a same-size field
+# Found in review: the schema must cover the *layout* (field order, sizes, capacities), not only the known-macro-name set - a same-size field
 # reorder or type-width change keeps every macro name the same and would otherwise pass unnoticed. LAYOUT is profile_rt.h's dm_game_profile_t field list,
 # by hand, in its exact declared order, as (field name, C type) pairs: both this hash and DM_PROFILE_LAYOUT_SIZE (schema_stamp, from the real encoder
 # output) feed into the schema, and profile_rt.c's _Static_assert(sizeof(dm_game_profile_t) == DM_PROFILE_LAYOUT_SIZE, ...) catches the struct drifting
@@ -204,7 +204,7 @@ def parse_res_levels(rhs, n):
     return out
 
 
-# --- binary encoding: natural C struct alignment, not packed (CRITIQUE-generic.md should-fix: #pragma pack(1) let call sites take a typed pointer into an
+# --- binary encoding: natural C struct alignment, not packed (found in review: #pragma pack(1) let call sites take a typed pointer into an
 # unaligned uint64_t field, UB even though AArch64 tolerates the actual load). Packer mirrors the C compiler's own layout rules (each field aligned to its
 # own size, a struct's size rounded up to its own largest member alignment, so an array of structs has uniform stride) - the one thing that must stay in
 # step with profile_rt.h's field order by hand; DM_PROFILE_LAYOUT_SIZE (schema_stamp) and the _Static_assert in profile_rt.c catch the two drifting apart.

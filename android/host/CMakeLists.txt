@@ -136,7 +136,7 @@ function(nxhost_add tgt game)
   target_link_libraries(${tgt} PRIVATE vpx dav1d zstddec aaudio mediandk android log m dl z)   # libvulkan.so is opened at run time (vka_dev.c)
 endfunction()
 
-# PEANUTS: one libnxhost.so for every title (-PnxGenericHost=true, design/platform/IMPL-GENERIC.md), no per-title game_profile.h/vk_prewarm_seed.h custom
+# PEANUTS: one libnxhost.so for every title (-PnxGenericHost=true), no per-title game_profile.h/vk_prewarm_seed.h custom
 # command: the include path points at dm/peanuts/profile's fixed stand-ins instead (game_profile_generic.h, vk_prewarm_seed_generic.h, both named
 # game_profile.h / vk_prewarm_seed.h on that path so dm.h's #include "game_profile.h" and vka_pso.c's #include "vk_prewarm_seed.h" need no edit), and
 # dm/peanuts/profile/profile_rt.c (the runtime loader) plus a schema stamp (one per build, not per title) are compiled in.
@@ -144,7 +144,7 @@ function(nxhost_add_generic tgt)
   set(PROFILE_DIR ${ROOT}/dm/peanuts/profile)
   set(GEN_INC ${GEN}/generic)
   # configure_file (not file(COPY)) re-runs whenever the source changes, even on an incremental build with no reconfigure, so editing
-  # game_profile_generic.h/vk_prewarm_seed_generic.h cannot silently leave a stale copy on the include path (CRITIQUE-generic.md should-fix).
+  # game_profile_generic.h/vk_prewarm_seed_generic.h cannot silently leave a stale copy on the include path (found in review).
   configure_file(${PROFILE_DIR}/game_profile_generic.h ${GEN_INC}/game_profile.h COPYONLY)
   configure_file(${PROFILE_DIR}/vk_prewarm_seed_generic.h ${GEN_INC}/vk_prewarm_seed.h COPYONLY)
   set(SCHEMA_H ${GEN}/schema_stamp.h)

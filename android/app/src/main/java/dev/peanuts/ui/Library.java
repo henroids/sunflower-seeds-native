@@ -87,7 +87,7 @@ public final class Library {
     private static final Map<String, Bitmap> icons = new HashMap<>();
     private static final Set<String> listed = new HashSet<>();   // launch paths handed to upstream's list already (Upstream.addToList), so a failing add is not retried every refresh
     /**
-     * Owner request round 3, hide-only since critique-phase2c round 4: upstream's Game list entries this build leaves out of {@link #rows()} — never
+     * Owner request round 3, hide-only since round 4: upstream's Game list entries this build leaves out of {@link #rows()} — never
      * deleted, never any permission revoked — either because their volume is not mounted right now (removable storage unplugged: hidden at once), or
      * because {@link #staleGames} got positive, repeated proof the file itself is gone (hidden only after two scans at least 60 s apart agree, and
      * never for a SAF-picked .nup or without All files access/an app-storage path — see {@link #staleGames}'s doc). Recomputed from scratch every
@@ -96,7 +96,7 @@ public final class Library {
      * them, by their own choice, instead of this code ever deleting anything on its own
      */
     private static final Set<String> hiddenUnmounted = Collections.synchronizedSet(new HashSet<>());
-    /** gameDir → the wall-clock time {@link #staleGames} first got positive proof it was gone (critique-phase2c §A-1's "two scans at least 60 s apart"
+    /** gameDir → the wall-clock time {@link #staleGames} first got positive proof it was gone (the review's "two scans at least 60 s apart"
      *  gate); removed the moment any check stops confirming "gone", or the entry leaves upstream's list some other way */
     private static final Map<String, Long> missingSince = new java.util.concurrent.ConcurrentHashMap<>();
     private static Build build;   // the running (or stopped) build, kept across activity recreation (the service runs on)
@@ -140,7 +140,7 @@ public final class Library {
     private boolean staleChecking;   // one in flight at a time; staleTick skips a tick rather than piling up background threads
     private int filter = ALL;
     private String find = "";
-    private boolean showHidden;   // the "Hidden: N missing games · Show/Hide" toggle (critique-phase2c §A-3): off by default, so a hidden card needs an explicit tap to reveal
+    private boolean showHidden;   // the "Hidden: N missing games · Show/Hide" toggle (found in review): off by default, so a hidden card needs an explicit tap to reveal
     private final Map<String, TextView> tiles = new HashMap<>();   // the tiles of the covers showing, by title ID (icons land while they show)
     private final Map<String, Boolean> companions = new HashMap<>();   // title ID → a companion is installed (read once per pass; cleared by a scan and a build's end)
     // the build card's live parts (null when it is not on screen)
@@ -402,7 +402,7 @@ public final class Library {
 
     /**
      * Now (owner's choice, 2026-11-13): an entry confirmed gone is removed (removeEntry), behind the gates below; an unmounted volume's entries are only hidden.
-     * History, round 4 (critique-phase2c §A-1, a blocker on round 3's version): HIDE-ONLY, never remove. Round 3 deleted the upstream list entry itself
+     * History, round 4 (a blocker found in review of round 3's version): HIDE-ONLY, never remove. Round 3 deleted the upstream list entry itself
      * whenever {@code !File.exists()} on a mounted volume — but {@code File.exists()} is not a reliable "the file is gone" test in this app:
      * <ul>
      * <li>every SAF-picked .nup's {@code gameDir} is a stand-in path whose file is never created ({@code PickedNup}/{@code PickedPath}: only the
@@ -428,7 +428,7 @@ public final class Library {
      * games" toggle (the filter row) lets the player show it again and use upstream's own "Game file gone → Remove" dialog themselves, on their own
      * say — satisfying the original owner ask ("let the user see and remove them") without this code ever guessing on their behalf.
      * <p>
-     * The unmounted-volume branch is unchanged from round 3 (already correct per critique-phase2c), aside from fixing a path-prefix bug in
+     * The unmounted-volume branch is unchanged from round 3 (already correct per review), aside from fixing a path-prefix bug in
      * {@link #volumeMounted}: it hides immediately (no 60-second gate — a volume being absent is itself the positive proof) and never removes.
      */
     private static void staleGames(List<Upstream.Entry> list, Activity act) {
@@ -487,7 +487,7 @@ public final class Library {
 
     /** Whether path is on a volume Android currently lists (internal storage, or a mounted SD/USB); null when this cannot be told (no StorageManager, or
      *  an exception reading it) — never a guess in either direction: null leaves the record exactly as it is (neither removed nor hidden) until a later
-     *  scan can tell for sure. Matches the volume's root exactly or with a path separator after it (critique-phase2c §A-1 prefix-bug fix: without the
+     *  scan can tell for sure. Matches the volume's root exactly or with a path separator after it (a prefix-bug fix from review: without the
      *  separator, "/storage/emulated/0" would also match "/storage/emulated/01…") */
     private static Boolean volumeMounted(Context ctx, String path) {
         try {
@@ -517,7 +517,7 @@ public final class Library {
         } catch (Throwable t) { return true; }
     }
 
-    /** Mirrors upstream's own `readable` gate in {@code MainActivity.gone} (critique-phase2c §A-1): All files access, or the path is inside this
+    /** Mirrors upstream's own `readable` gate in {@code MainActivity.gone} (found in review): All files access, or the path is inside this
      *  app's own storage ({@code CopyPlan.inApp}, reflection). Without either, upstream itself treats "cannot tell" as "not gone" — never as "gone" —
      *  and so does this: an exception here also defaults to false, the same "not gone" reading */
     private static boolean readableOutsideApp(Context ctx, String gameDir) {
@@ -649,7 +649,7 @@ public final class Library {
             Upstream.Entry e = Upstream.entryOf(g);
             if (e == null) continue;
             if (!showHidden && hiddenUnmounted.contains(e.gameDir)) continue;   // hidden (never removed): either its volume is not mounted right now, or
-            // it is confirmed missing but kept for the player to see and Remove themselves (critique-phase2c §A); the "Hidden: N · Show" toggle reveals it
+            // it is confirmed missing but kept for the player to see and Remove themselves (found in review); the "Hidden: N · Show" toggle reveals it
             LibraryScanner.Title hit = null;
             for (LibraryScanner.Title t : titles) if (t.launch != null && samePath(e.gameDir, t.launch.getPath())) { hit = t; break; }
             if (hit != null) taken.add(hit);
@@ -751,7 +751,7 @@ public final class Library {
         chip(chipRow, "Build needed " + toBuild, BUILD);
         chip(chipRow, "Not in this app version " + noProfile, NO_PROFILE);
         if (hidden > 0) {
-            // critique-phase2c §A-3: lets the player see and remove a confirmed-missing (or currently unreachable) game themselves, through upstream's
+            // Found in review: lets the player see and remove a confirmed-missing (or currently unreachable) game themselves, through upstream's
             // own "Game file gone → Remove" dialog, instead of this code ever deleting the record on its own
             Button hideB = PUi.button(a, hidden + " hidden · " + (showHidden ? "Hide" : "Show"),
                     PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.CLICK); showHidden = !showHidden; render(); });
@@ -1206,7 +1206,7 @@ public final class Library {
         View right;
         View left;
         if (b.failed) {
-            // Every button here must do what its label says (critique-phase2a §A must-fix 2 — before this, "Build anyway"/"Pick the recommended
+            // Every button here must do what its label says (found in review — before this, "Build anyway"/"Pick the recommended
             // update"/"Pick the file again"/"Resume" all just reopened the sheet, same as plain "Retry"). Only two actions are actually honest to offer from
             // the card without a file picker of its own: open the sheet (unchanged — it already has the Version row, the re-pick chevrons and the relabeled
             // Build/"Build anyway" button, so "open the sheet" is never a dead end), or really resume the job (now implemented, below)
@@ -1319,7 +1319,7 @@ public final class Library {
     }
 
     /**
-     * The failed card's "Resume" (STALLED/CANCELLED only): actually resumes the job instead of just reopening the sheet (critique-phase2a §A must-fix 2).
+     * The failed card's "Resume" (STALLED/CANCELLED only): actually resumes the job instead of just reopening the sheet (found in review).
      * Rebuilds the same {@link GameSheet.State} the last build used, from the title and its persisted sheet choices (no open sheet needed — the job itself
      * was already saved by Prepare and picks up where it stopped, Prepare.java's job.json resume path), and hands it straight to {@link #startBuild}
      */
@@ -1333,7 +1333,7 @@ public final class Library {
 
     // ---- First run ----
 
-    /** emptyCard's shape: the badge, a heading, the four steps (P5, UX-SPEC §2.4: Updates & DLC folded in as its own numbered row, no longer a quiet
+    /** emptyCard's shape: the badge, a heading, the four steps (P5: Updates & DLC folded in as its own numbered row, no longer a quiet
      *  footnote button), the four Setting rows, then the single "Show my games" action */
     private View setupCard() {
         LinearLayout c = PUi.card(a);
@@ -1368,7 +1368,7 @@ public final class Library {
                 .value(keys ? "Added: prod.keys is in the app." : "Needed before building. Importing an NSP or XCI needs it; browsing your folders here does not.").chevron(a).view, 16);
         PUi.add(c, new PUi.Setting(a, "📁", "Game folder", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickFolder(a, LibrarySettings.REQ_GAME, "Pick your game folder")))
                 .value(game != null ? game : "Required. Every NSP, XCI, .nup and dump folder inside is shown on this screen.").chevron(a).view, 0);
-        // P5 (UX-SPEC §2.4): folded in as its own numbered step, same Setting-row shape as the other three, instead of a quiet text button below the action row
+        // P5: folded in as its own numbered step, same Setting-row shape as the other three, instead of a quiet text button below the action row
         String updateDir = PeanutsPrefs.updateDir(a), dlcDir = PeanutsPrefs.dlcDir(a);
         String updDlcValue = updateDir == null && dlcDir == null ? "Point at your update and DLC files if they're not inside the game folder already. Skip if everything's together."
                 : (updateDir != null ? "Update: " + updateDir : "Update: not set") + (dlcDir != null ? " · DLC: " + dlcDir : "");

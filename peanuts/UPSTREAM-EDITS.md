@@ -9,7 +9,7 @@ confirmed with `git log --diff-filter=A` + `git cat-file -e upstream/android:<pa
 
 ## Round 2 (2026-11-12) — hunk-level re-check
 
-The critic (`CRITIQUE-phase2a.md` §C) simulated `upstream-update.sh`'s coming `--check` mode: every
+A review simulated `upstream-update.sh`'s coming `--check` mode: every
 added/changed line block vs `git merge-base HEAD upstream/android` must carry a `PEANUTS` marker
 within the hunk or on the line directly above it — a header comment several lines above a later
 hunk in the same file does **not** satisfy a later hunk. Round 1's file-header-only markers on
@@ -51,7 +51,7 @@ brief, these are listed here rather than marked:
 
 | File | Hunk summary (from `git log --author=igawa6 -p`) | Why unmarked | Upstream candidate |
 |---|---|---|---|
-| `dm/gfx/tools/vk_android_build.py` | `vk_android_build.py` changes referenced across several Peanuts commits (worker pool, zstd level plumbing read by `PackService`/`ue_ondevice.py`'s callers) | feeds `DMSH_VK_CHAIN` | Yes — the worker-pool and zstd-level changes are general perf wins (per CRITIQUE-phase1.md §2 must-fix 4), not Peanuts-specific; should go upstream as a PR so this cost stops recurring on every sync |
+| `dm/gfx/tools/vk_android_build.py` | `vk_android_build.py` changes referenced across several Peanuts commits (worker pool, zstd level plumbing read by `PackService`/`ue_ondevice.py`'s callers) | feeds `DMSH_VK_CHAIN` | Yes — the worker-pool and zstd-level changes are general perf wins (per review), not Peanuts-specific; should go upstream as a PR so this cost stops recurring on every sync |
 | `dm/gfx/tools/vk_android_same.tsv` | two added rows mapping our tool digests onto the current chain version | feeds `DMSH_VK_CHAIN` (comparison table, byte-sensitive) | No — these rows are proof-of-no-change evidence for *our* specific chain state; they need to be re-proven against each new upstream chain version, not sent upstream as-is |
 | `dm/gfx/tools/vk_android_spv.py` | `_remap_operands`: OpImageWrite and OpAtomicStore (instructions with no result id) get their own branches, so a promoted local's load is replaced in the image write's coordinate too (2026-11-14, OCTOPATH TRAVELER 0, issue #9: 2,142 of its 2,521 compute shaders failed spirv-val with "ID has not been defined"); `OP_ATOMIC_STORE` constant | feeds `DMSH_VK_CHAIN`; the change moves the chain version (`dmsh_chain_vk.h` 4b1886941d10 → 4ccbdc391b15) | Yes — a plain correctness fix in a translator post-pass; it changes the output only of modules that failed validation before |
 
@@ -86,7 +86,7 @@ not edited (see table above).
 | `android/app/src/ondevice/AndroidManifest.xml` | marked | no |
 | `android/app/src/ondevice/java/dev/nxnative/android/Job.java` | marked | no |
 | `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | marked | no (Peanuts-specific worker/env wiring) |
-| `android/host/CMakeLists.txt` | marked (as last checked; may have further changes from a concurrent agent) | no |
+| `android/host/CMakeLists.txt` | marked (as last checked; may have further changes since) | no |
 | `dm/games/01006BB00C6F0000/game.tsv` | **fixed this pass** | no (per-game data row) |
 | `dm/games/01008CF01BAAC000/game.tsv` + `README.md` | **fixed this pass** | no (per-game data row) |
 | `dm/games/0100BA4026E94000/game.tsv` | marked (pre-existing, Castlevania `mem_map_limit off`) | no |
@@ -98,21 +98,21 @@ not edited (see table above).
 | `dm/gfx/vk_android/vka_tex.c` | **fixed this pass** (3 features: buffer textures, NULL-texture clear, sampler table size) | **yes**, all three — MK8D NULL-registration fix, Three Houses sampler-table and buffer-texture fixes are general correctness fixes |
 | `dm/host/crash.c` | **fixed this pass** | **yes** — stripped-library lib+offset printing is a general diagnostics improvement |
 | `dm/host/hle_audren.c` | **fixed this pass** | **yes** — clock-paced render thread fixes AAudio's bursty release cadence generally, not just for Android/Peanuts |
-| `dm/host/hle_fpslock.c` | **fixed this pass** (5 hunks: new lock kind + 2 per-game rows + 2 code paths) | partial — `EXTRA_VSYNCS_U8` kind and its read/write paths are general infra (**yes**); the two per-game rows (Link's Awakening, Echoes of Wisdom) are game tweaks, **candidates to move into a `peanuts.tsv` overlay** once that mechanism exists (CRITIQUE-phase1.md §2 "nice to have"), not upstream PRs |
+| `dm/host/hle_fpslock.c` | **fixed this pass** (5 hunks: new lock kind + 2 per-game rows + 2 code paths) | partial — `EXTRA_VSYNCS_U8` kind and its read/write paths are general infra (**yes**); the two per-game rows (Link's Awakening, Echoes of Wisdom) are game tweaks, **candidates to move into a `peanuts.tsv` overlay** once that mechanism exists ("nice to have"), not upstream PRs |
 | `dm/host/loader.c` | **fixed this pass** (module arena, 1 header + 3 call sites) | **yes** — fixes a real OOB read on Android's top-down mmap layout (Link's Awakening), general to any Android host |
 | `dm/host/plat/plat_android.c` | **fixed this pass** | **yes** — excludes the guard page from the reported stack range, general Bionic-vs-glibc/Darwin correctness fix |
-| `docs/env_switches.tsv` | fixed (drift + new rows, see IMPL-C.md) | n/a (docs) |
+| `docs/env_switches.tsv` | fixed (drift + new rows) | n/a (docs) |
 | `scripts/pack_android.py` | **fixed this pass (2026-11-13)** — `--modules`/`--mod-exefs`/`--mod-patches`, block-marked (Round 5) | no (Peanuts-specific: code mods, DESIGN-MODS.md) |
 | `scripts/pack_android.py` | marked (2026-11-14, PR #13): the AppleDouble skip in `split_shaders`/`swap_in`, `peanuts_env` | partly: the AppleDouble skip yes (summary 11); `peanuts_env` no |
 | `docs/guides/pc-mac-packing.md` | marked (`<!-- PEANUTS begin/end -->` section: send the pack to the phone) | no (Peanuts-specific) |
 
-## Generic host runtime-profile sites (design/platform/IMPL-GENERIC.md, CRITIQUE-generic.md §4)
+## Generic host runtime-profile sites
 
 Behind `-PnxGenericHost=true` only (`DM_RUNTIME_PROFILE`, defined by `dm/peanuts/profile/game_profile_generic.h`); the default per-title build and the
 Mac/iOS Makefile build take the unchanged `#else` branch at every one of these, byte for byte. Listed here so a person rebasing a conflict at one of
 these lines knows the `#ifdef DM_RUNTIME_PROFILE` branch needs the same fix, not just the `#else` one, and so a *new* `DM_GAME_*` macro's two other
 required edits (a `gen_runtime_profile.py` table entry, and - only for a brace-initializer macro - a converted call site here) are not missed on the
-next sync (CRITIQUE-phase1.md F11: upstream added 6 macros in the 73 commits since the fork point).
+next sync (found in review: upstream added 6 macros in the 73 commits since the fork point).
 
 | File : site | Macro(s) | What the runtime branch does |
 |---|---|---|
@@ -155,7 +155,7 @@ Also gated, but not `#ifdef`-paired with upstream code (new Peanuts-owned files/
 8. `dm/gfx/tools/shader_split.py` — on-device worker-pool split + comment-insensitive table compare
 9. `dm/gfx/tools/uepak.py` — off-Mac AES path (`_nxaes`) for the packer
 10. `dm/gfx/tools/vk_android_build.py` (exception, not edited directly, but referenced wiring in
-    `PackService.java`) — worker-pool/zstd-level changes, per CRITIQUE-phase1.md
+    `PackService.java`) — worker-pool/zstd-level changes, per review
 11. `scripts/pack_android.py`: `split_shaders` and `swap_in` move a listing's files by rename; on an exFAT/FAT drive
     macOS moves each file's AppleDouble `._<name>` with it, so the listing's `._` entry is gone by its turn and the pack
     stops with FileNotFoundError (found packing Link's Awakening from a .nup on an exFAT drive). Both skip an entry that is

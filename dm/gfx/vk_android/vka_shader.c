@@ -333,7 +333,7 @@ static void one_lane_env(void) {
     else if (g_one_nenv) VLOG("subgroup_one_lane: %d shader key%s from DM_VK_ONE_LANE", g_one_nenv, g_one_nenv == 1 ? "" : "s");
 }
 static int one_lane_forced(uint64_t key) {
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own key list instead of a static const initialized from the macro (design/platform/IMPL-GENERIC.md)
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own key list instead of a static const initialized from the macro
     const uint64_t *prof = g_profile.subgroup_one_lane;
 #else
     static const uint64_t prof[] = DM_GAME_SUBGROUP_ONE_LANE;

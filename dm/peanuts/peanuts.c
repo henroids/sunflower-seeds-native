@@ -537,7 +537,7 @@ static uint64_t rt_running_title(void) {
 // same title exist in one root and which one readdir() returns first is filesystem order, i.e. random. Skip both known transient suffixes explicitly so a stray never
 // competes with the real active folder.
 //
-// PEANUTS (round 3, CRITIQUE-phase2b.md §B "early recovery"): Installer.repair() only runs when the app itself next touches the package (opening a settings
+// PEANUTS (round 3, "early recovery"): Installer.repair() only runs when the app itself next touches the package (opening a settings
 // screen, starting another install) - a player who launches the game straight after a kill that landed between the two renames of a swap gets no companion at
 // all, because the active folder is genuinely missing and ".old"/".new" are both skipped. Rather than wait for the app side, a second pass here falls back to
 // a parked "<pkg>.old" (never ".new" - an extraction in progress has no business being loaded) when no root has an active folder for the title, logging that

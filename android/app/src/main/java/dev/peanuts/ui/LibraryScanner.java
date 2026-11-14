@@ -40,17 +40,17 @@ import java.util.regex.Pattern;
  * (Game.ready) or a pack.tsv lies in &lt;home&gt;/&lt;title ID&gt;-work/&lt;any&gt;/ (home: the dump folder or the .nup's folder, or that folder's parent); else BUILD.
  * Names: the probe's NACP name, else the catalog's catalog.json name, else the profile's, else the title ID.
  * <p>
- * P1 (version truth, UX-SPEC §2.1/§3.1): a BUILD title also gets a {@link Title#versionState}, read through upstream's {@code Profile} (reflection, same pattern
+ * P1 (version truth): a BUILD title also gets a {@link Title#versionState}, read through upstream's {@code Profile} (reflection, same pattern
  * as {@link Upstream}) rather than a new game.tsv parser. One gap: game.tsv's own "package" line (the version the shipped shader tables were built for) is not
  * exposed by {@code Profile} today, so {@link Title#recommendedVersion} is an approximation — the highest version in the profile's build list — not the real
- * package line. Verified true for all 131 profiles as of the phase-2 review. A round-2 runtime guard for this was removed (critique-phase2b §A-2: it never
+ * package line. Verified true for all 131 profiles as of the phase-2 review. A round-2 runtime guard for this was removed (found in review: it never
  * actually ran, and even fixed would have decompressed assets/pack/tools.zip once per title on the phone for a check that only needs to run once); the
- * check now lives in {@code peanuts/scripts/check-profiles.sh}, a build-time script, zero runtime cost. See IMPL-A.md.
+ * check now lives in {@code peanuts/scripts/check-profiles.sh}, a build-time script, zero runtime cost.
  */
 final class LibraryScanner {
     static final int BASE = 0, UPDATE = 1, DLC = 2;
     enum Status { READY, BUILD, NO_PROFILE }
-    /** The sub-states a BUILD title can be in (UX-SPEC §2.1, corrected by critique-phase1 §1 must-fix 1/8): NOT_IN_APP mirrors NO_PROFILE (kept distinct so a
+    /** The sub-states a BUILD title can be in (corrected in review): NOT_IN_APP mirrors NO_PROFILE (kept distinct so a
      *  caller that only has a Title, not the Status too, can still tell); FILE_GONE: the base or newest update file the scanner once found no longer resolves;
      *  UNSUPPORTED: the chosen version is not one of the profile's builds at all (today's silent "otherBuild"); SUPPORTED_OTHER: it is a listed build, just not
      *  the one the shipped shader tables were made for (expect a slower first build: a full shader scan); RECOMMENDED: the version Build is tuned for;
@@ -209,7 +209,7 @@ final class LibraryScanner {
     /** A BUILD title's version state (class doc): FILE_GONE first (nothing else matters once the file is not where it was found), then whether the newest
      *  version found on disk is in the profile's builds at all, and if so whether it is the one the shipped shader tables were made for. This is the
      *  library-grid pill's state only — it is about the newest version this title has anywhere, not about any one file a sheet's "Choose another…" picked
-     *  (critique-phase2a §A must-fix 1: the sheet computes its own, from {@code chosenUpdate}, in {@code GameSheet.chosenVersionState}; this one must not be
+     *  (found in review: the sheet computes its own, from {@code chosenUpdate}, in {@code GameSheet.chosenVersionState}; this one must not be
      *  read as "the version Build will actually use") */
     private static VersionState versionState(Title t) {
         if (fileGone(t.base) || fileGone(t.updates.isEmpty() ? null : t.updates.get(0))) return VersionState.FILE_GONE;

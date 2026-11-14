@@ -16,7 +16,7 @@ import java.util.List;
 import dev.nxnative.android.BuildConfig;
 
 /**
- * The generic host's per-title data (-PnxGenericHost=true, design/platform/IMPL-GENERIC.md): one libnxhost.so loads a title's profile and prewarm seed at
+ * The generic host's per-title data (-PnxGenericHost=true): one libnxhost.so loads a title's profile and prewarm seed at
  * start instead of having them compiled in. android/app/build.gradle's nxGenericProfiles task runs dm/peanuts/profile/gen_runtime_profile.py at build time
  * for every nxGames title, into assets/profiles/&lt;title ID&gt;.profile.bin and .seed (never into libnxhost.so itself: the whole point is one host, no
  * per-title code or data compiled in). This class copies a title's two files out of the APK's assets into app-private storage once per installed APK

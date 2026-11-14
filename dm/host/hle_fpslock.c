@@ -90,7 +90,7 @@ static const lock_t k_locks[] = {
     // it corroborates that this SDK build has its own present-interval choice to make, independent of main's chain. No side effects
     // (dialogue/animation speed, physics) are documented for either community fix: multiple reports describe "no game-breaking bugs",
     // "performance... mostly the same", consistent with Persona 5 Royal's engine stepping by real time rather than by the frame, unlike
-    // Animal Crossing: New Horizons (see dm/games/01006F8002326000/README.md and IMPL-FPS60.md, which found the opposite for that game).
+    // Animal Crossing: New Horizons (see dm/games/01006F8002326000/README.md, which found the opposite for that game).
     { "d4b150b29a931cd381e2a30318fc299f", "Persona 5 Royal present interval", 0x2327b90, 0xf14, VSYNCS_I32, 1, 0, 3, {0x10, 0x60, 0x8} },
     // PEANUTS: per-game lock rows (Pokemon Sword / Shield 1.3.2, TICKS_U32)
     // Game Freak's engine keeps a table of frame times in ns by present interval at main+0x203eeb0 (u64: 16666667, 33333334, 50000000, 66666667,
@@ -137,7 +137,7 @@ static const lock_t k_locks[] = {
 // 0..2 (STEPS_HOLD), which keeps it; 60 and 0 leave the game's own mode (it runs 2 steps on a frame that overran: full speed at 60 or below). Each step stays 1/60 s, so the race,
 // ghosts, time trials and online races step as at 60. DM_FPS_STEPS_ROWS: the unit tests' own rows
 typedef struct { const char *build; uint64_t ptr_off; uint32_t mode, count; uint8_t nderef; uint16_t deref[3]; } steps_row_t;
-#if defined(DM_RUNTIME_PROFILE) && !defined(DM_FPS_STEPS_ROWS)   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro (design/platform/IMPL-GENERIC.md)
+#if defined(DM_RUNTIME_PROFILE) && !defined(DM_FPS_STEPS_ROWS)   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro
 // NSTEPS also sizes other file-scope static arrays below (NROWS, steps[], g_st[], nlog/over/orig/have_orig[]), which need a compile-time bound: use the
 // profile's fixed row capacity, not the runtime row count. Every slot past the real count has an empty build string (profile_rt.h/gen_runtime_profile.py
 // zero-pad unused rows), and every k_steps[] reader below already checks build[0] first, so the extra always-empty slots are inert, not a behavior change.
@@ -147,7 +147,7 @@ static void k_steps_fill(void) {   // dm_pf_fps_steps_t has the same field names
     for (int i = 0; i < NSTEPS; i++) { dm_pf_fps_steps_t *s = &g_profile.fps_steps[i];
         k_steps_buf[i] = (steps_row_t){ s->build, s->ptr_off, s->mode, s->count, (uint8_t)s->nderef, {(uint16_t)s->deref[0], (uint16_t)s->deref[1], (uint16_t)s->deref[2]} }; }
 }
-static const steps_row_t *k_steps_get(void) { pthread_once(&k_steps_once, k_steps_fill); return k_steps_buf; }   // CRITIQUE-generic.md hygiene: was an unguarded flag (a benign race in practice)
+static const steps_row_t *k_steps_get(void) { pthread_once(&k_steps_once, k_steps_fill); return k_steps_buf; }   // Found in review: was an unguarded flag (a benign race in practice)
 #define k_steps k_steps_get()
 #else
 #ifndef DM_FPS_STEPS_ROWS

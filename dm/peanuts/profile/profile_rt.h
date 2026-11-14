@@ -1,4 +1,4 @@
-// PEANUTS: the generic host's runtime game profile (one libnxhost.so for every title, -PnxGenericHost=true; design/platform/IMPL-GENERIC.md).
+// PEANUTS: the generic host's runtime game profile (one libnxhost.so for every title, -PnxGenericHost=true).
 // This struct is the binary layout `gen_runtime_profile.py` writes into each title's <id>.profile.bin (packed, no padding: every field below is read back
 // by profile_rt_load() with the same offsets, in the same order). Do not reorder or resize a field without bumping DM_PROFILE_SCHEMA_VERSION in
 // gen_runtime_profile.py and rebuilding every title's .profile.bin; a mismatched schema hash is refused at load (profile_rt_load returns an error string).
@@ -22,7 +22,7 @@
 #define DM_PROFILE_RT_POOL_CAP 4
 #define DM_PROFILE_RT_POOL_TIERS 4   // dm/host/rt_pool.h RTP_TIERS
 
-// Natural C alignment, not packed (CRITIQUE-generic.md should-fix: #pragma pack(1) let call sites take a typed pointer into an unaligned uint64_t field -
+// Natural C alignment, not packed (found in review: #pragma pack(1) let call sites take a typed pointer into an unaligned uint64_t field -
 // UB even though AArch64 tolerates the actual load). gen_runtime_profile.py's Packer mirrors these same alignment rules field by field when it writes a
 // title's profile.bin, so the two stay in step; DM_PROFILE_LAYOUT_SIZE (schema_stamp.h, generated) plus the _Static_assert in profile_rt.c is the backstop
 // if they ever drift (a same-size reorder would otherwise pass the plain sizeof check).
@@ -83,7 +83,7 @@ typedef struct {
     uint32_t nrt_pool; dm_pf_rt_pool_t rt_pool[DM_PROFILE_RT_POOL_CAP];
 } dm_game_profile_t;
 
-// A few checkpoints along the layout (CRITIQUE-generic.md should-fix), so a field inserted or resized in the wrong place fails the build here, at the
+// A few checkpoints along the layout (found in review), so a field inserted or resized in the wrong place fails the build here, at the
 // exact field, rather than only showing up as a total-size mismatch (profile_rt.c's _Static_assert against DM_PROFILE_LAYOUT_SIZE) that still has to be
 // tracked down by hand.
 _Static_assert(offsetof(dm_game_profile_t, id) == 8, "magic+schema must be exactly 8 bytes before id");

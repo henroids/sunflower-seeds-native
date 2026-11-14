@@ -668,7 +668,7 @@ static void map_image(module_t *m, const char *dir) {
 // maximum instead broke the terrain: something else assumes the game's own maximum). Rows are checked: the table must grow, every list byte must be a level; read-only data
 // is still writable here (map_image seals the text and the patch area only)
 static int levels_apply(module_t *m, unsigned cw, unsigned ch) {
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro (design/platform/IMPL-GENERIC.md)
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro
     dm_pf_res_levels_t *rows = g_profile.res_levels;
 #else
     static const struct { const char *build; uint64_t table; unsigned n, nl; struct { uint64_t off; unsigned len; } l[12]; } rows[] = DM_GAME_RES_LEVELS;
@@ -703,7 +703,7 @@ static int levels_apply(module_t *m, unsigned cw, unsigned ch) {
 
 // A main build with a render_cfg row takes DM_WINDOW_SIZE as the output of its render configurations instead (hle_render.c), at run time
 #include "render_cfg.h"
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host builds the host row types over the profile's own rows once, at first use (design/platform/IMPL-GENERIC.md)
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host builds the host row types over the profile's own rows once, at first use
 static rcfg_row_t g_pf_rcfg[DM_PROFILE_RENDER_CFG_CAP]; static pthread_once_t g_pf_rcfg_once = PTHREAD_ONCE_INIT;
 static void pf_rcfg_build(void) {
     rcfg_row_t *rows = g_pf_rcfg;
@@ -731,7 +731,7 @@ static int render_cfg_row(const char *build) {
 static void window_apply(module_t *m) {
     if (strcmp(m->name, "main") || m->nro || render_cfg_row(m->build_id)) return;
     const char *e = getenv("DM_WINDOW_SIZE");
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro (design/platform/IMPL-GENERIC.md)
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro
     dm_pf_window_fn_t *rows = g_profile.window_fn;
 #else
     static const struct { const char *build; uint64_t wfn, hfn; unsigned w, h; } rows[] = DM_GAME_WINDOW_FN;
@@ -773,7 +773,7 @@ static void window_apply(module_t *m) {
 // size. render_cfg's max_render takes the written size's only when it was written (dm_rt_pool_max_render). Not on iOS (the text is signed code there)
 #include "rt_pool.h"
 __attribute__((weak)) int vka_low_ram(void);
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host builds rtpool_row_t rows over the profile's rt_pool rows once, at first use (design/platform/IMPL-GENERIC.md)
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host builds rtpool_row_t rows over the profile's rt_pool rows once, at first use
 static rtpool_row_t g_pf_rtp[DM_PROFILE_RT_POOL_CAP]; static pthread_once_t g_pf_rtp_once = PTHREAD_ONCE_INIT;
 static void pf_rtp_build(void) {
     rtpool_row_t *rows = g_pf_rtp;

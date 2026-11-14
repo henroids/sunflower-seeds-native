@@ -50,7 +50,7 @@ final class ReleasePage {
         LinearLayout content = Ui.page(a, pageFrame, 640, true);
         Runnable close = () -> host.removeView(overlay);
 
-        content.addView(Ui.header(a, Ui.back(a, v -> close.run()), "Update available", "Banana Native " + UpdateCheck.text(u.version), null));
+        content.addView(Ui.header(a, Ui.back(a, v -> close.run()), "Update available", a.getString(R.string.app_name) + " " + UpdateCheck.text(u.version), null));   // PEANUTS: the app's own name on its update page
         LinearLayout head = Ui.add(content, Ui.card(a), 8);
         head.addView(Ui.heading(a, "Version " + UpdateCheck.text(u.version) + " is available"));
         Ui.add(head, Ui.body(a, "You have " + have + ". Install over it: saves, packs and settings are kept."), 4);

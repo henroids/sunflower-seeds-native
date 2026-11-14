@@ -51,7 +51,7 @@ public final class BuildPipeline {
     public static int start(Context ctx, BuildRequest req, BuildListener l) { return start(ctx, req, false, l); }
 
     /**
-     * Same, with buildAnyway: the player's explicit "Build anyway" on the sheet's Version row (P1, critique-phase1 must-fix 2) for a dump whose version is not
+     * Same, with buildAnyway: the player's explicit "Build anyway" on the sheet's Version row (P1) for a dump whose version is not
      * one of the profile's builds. Without it, a job that turns out to need that relaxation stops and asks instead of trying it on its own (Prepare.run)
      */
     public static int start(Context ctx, BuildRequest req, boolean buildAnyway, BuildListener l) {

@@ -24,14 +24,11 @@ companion for that game: a map, your party, items or quests, read live from the 
 use the same package format as [Eden Duo](https://github.com/igawa6/eden-duo), so every Eden Duo companion works here
 too.
 
-## Screenshots
-
-*(to come: the top screen and the companion on the bottom screen for each supported game)*
-
 ## Supported games
 
-These Switch 1 games build and play on an AYN Thor with their companion. Use the game update listed. The app shows
-which update you have and which one a game supports, and asks before building any other.
+These are the Switch 1 games this app version includes. All but the last two build and play on an AYN Thor with
+their companion. Use the game update listed. The app shows which update you have and which one a game supports, and
+asks before building any other.
 
 | Game | Title ID | Game update | Companion | Runs at |
 |---|---|---|---|---|
@@ -47,6 +44,10 @@ which update you have and which one a game supports, and asks before building an
 | Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes | 60 fps |
 | OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes | 60 fps |
 | Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes | 60 fps |
+| Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes | 60 fps (30 on Switch) |
+| The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.9.0 | Yes | 60 fps (30 on Switch); new, little tested |
+| Super Mario Bros. Wonder | `010015100B514000` | 1.0.0, 1.0.1, 1.2.1 | Not checked | Not tested on a device yet |
+| DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Not tested on a device yet |
 
 ## What you need
 
@@ -82,13 +83,15 @@ After an app update, rebuilding every game is strongly recommended: hold the cov
 
 - **Console mode**: Docked or Handheld, for all games in Settings and per game on its page. It can also be changed
   while the game runs, from the in-game panel.
-- **Resolution scale**: 0.5x to 2x of the size the game draws at. A first version: not every effect follows it.
-- **Mods**: hold the cover, **Game** tab, **Mods**. Install a mod from a folder or a zip, turn it on or off, delete
-  it. Mods that change the game's code need **Build with mods** once; after that the game starts with the mods that
-  are on.
+- **Resolution scale** (first version): 0.5x to 2x of the size the game draws at. Not every effect follows it.
+- **Mods** (first version): hold the cover, **Game** tab, **Mods**. Install a mod from a folder or a zip. It is on
+  from the game's next start, and each mod has a switch and a delete button. A mod that changes the game's code gets
+  a build with mods, which starts by itself (it waits while another build runs). Until that build is ready, the game
+  starts without that mod. After a failed build, tap **Build with mods** to try again.
 - **Saves**: back up, restore, import and **Delete save data** on the game's **Saves** tab.
 
-A game can also be built on a PC or a Mac and pushed to the device: see [BUILDER.md](BUILDER.md).
+A game can also be built on a computer and pushed to the device: see [BUILDER.md](BUILDER.md). The builder is tested
+on macOS and Linux. Windows is written but not tested yet.
 
 ## Companions
 

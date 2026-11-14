@@ -20,8 +20,8 @@ static char *slurp(const char *path, size_t *n) {
     return buf;
 }
 
-// G-1 (CRITIQUE-generic.md): every char array in dm_game_profile_t must hold a NUL within its bounds before any `strcmp`/`%s`/getenv-style parsing touches
-// it (id, name, every build[], modules[][32], ...). A corrupt file, or - once profiles can be downloaded (CRITIQUE-phase1.md APK-SIZE §3 must-fix 5,
+// G-1 (found in review): every char array in dm_game_profile_t must hold a NUL within its bounds before any `strcmp`/`%s`/getenv-style parsing touches
+// it (id, name, every build[], modules[][32], ...). A corrupt file, or - once profiles can be downloaded (found in review:
 // untrusted input) - a hostile one, without a NUL would read past the field. Reject rather than force-terminate: forcing a truncation could silently turn
 // one real string into a different, wrong one (e.g. a build ID one byte short that no longer matches), which is worse than refusing to start.
 static int has_nul(const char *s, size_t n) { for (size_t i = 0; i < n; i++) if (!s[i]) return 1; return 0; }
@@ -53,13 +53,13 @@ const char *profile_rt_load(const char *path) {
     memcpy(&g_profile, buf, n);
     free(buf);
     if (g_profile.magic != DM_PROFILE_MAGIC) return "profile: bad magic (not a profile.bin, or truncated)";
-    // G-2 (CRITIQUE-generic.md): the schema covers the layout (field names, sizes and capacities - DM_PROFILE_LAYOUT_SIZE below, generated into
+    // G-2 (found in review): the schema covers the layout (field names, sizes and capacities - DM_PROFILE_LAYOUT_SIZE below, generated into
     // schema_stamp.h alongside DM_PROFILE_SCHEMA_VERSION), not only the set of known DM_GAME_* macro names, so a same-size field reorder or a type
     // width change (which keeps every macro name the same) is caught here too, not just by size happening to differ.
     _Static_assert(sizeof(dm_game_profile_t) == DM_PROFILE_LAYOUT_SIZE, "dm_game_profile_t no longer matches gen_runtime_profile.py's LAYOUT: regenerate schema_stamp.h and every title's profile.bin");
     if (g_profile.schema != DM_PROFILE_SCHEMA_VERSION) return "profile: schema version does not match this host's (rebuild the pack with the matching gen_runtime_profile.py)";
-    // Bounds: a downloaded/repacked profile is untrusted input that steers loader.c's window_fn/res_levels/drs_ctl patches and offsets (CRITIQUE-phase1.md
-    // APK-SIZE §3 must-fix 5) - refuse anything past the fixed capacities rather than let a corrupt or hostile file overrun a static array.
+    // Bounds: a downloaded/repacked profile is untrusted input that steers loader.c's window_fn/res_levels/drs_ctl patches and offsets (found in
+    // review) - refuse anything past the fixed capacities rather than let a corrupt or hostile file overrun a static array.
     if (g_profile.nmod > DM_PROFILE_MODULES_CAP || g_profile.ndisplay_versions > DM_PROFILE_DISPLAY_VERSIONS_CAP ||
         g_profile.nwindow_fn > DM_PROFILE_WINDOW_FN_CAP || g_profile.nsubgroup_one_lane > DM_PROFILE_SUBGROUP_ONE_LANE_CAP ||
         g_profile.nmesh_vegetation_cut > DM_PROFILE_MESH_VEGETATION_CUT_CAP || g_profile.nmesh_prepass_cut > DM_PROFILE_MESH_PREPASS_CUT_CAP ||
@@ -92,7 +92,7 @@ const char *profile_rt_load(const char *path) {
 const unsigned char *dm_vk_prewarm_seed; size_t dm_vk_prewarm_seed_len;
 static unsigned char *g_seed;
 
-// Should-fix (CRITIQUE-generic.md): a seed that cannot be read is first-run stutter nobody would know why they had, so this is not silent. It returns a
+// Should-fix (found in review): a seed that cannot be read is first-run stutter nobody would know why they had, so this is not silent. It returns a
 // message (never fatal: a missing/unreadable seed is the same as a title with no vk_prewarm.bin, just slower on its first warm-up) instead of calling
 // LOG() itself, since this file stays dependency-free from dm/host (its doc comment, top of file) for the PC-side equivalence test; the caller
 // (dm/host/main.c host_preload, dm/gfx/vk_android/vka_replay.c nxhost_replay) logs it with a [RED] line. NULL path/"" means "this title has no seed" -

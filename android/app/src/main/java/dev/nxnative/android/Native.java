@@ -20,7 +20,7 @@ final class Native {
         String why = Profile.missing(titleId, null);
         if (why != null) throw new IllegalStateException(why);
         try {
-            // PEANUTS: -PnxGenericHost=true (design/platform/IMPL-GENERIC.md) builds one libnxhost.so/libnxlaunch.so for every title instead of a pair per title;
+            // PEANUTS: -PnxGenericHost=true builds one libnxhost.so/libnxlaunch.so for every title instead of a pair per title;
             // the title's own data comes from its profile.bin at start (DM_PROFILE_PATH, dm/host/main.c host_preload), not from which library got loaded.
             if (BuildConfig.NX_GENERIC_HOST) { System.loadLibrary("nxhost"); System.loadLibrary("nxlaunch"); }
             else { System.loadLibrary("nxhost_" + titleId); System.loadLibrary("nxlaunch_" + titleId); }

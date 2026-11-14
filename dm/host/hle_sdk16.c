@@ -14,7 +14,7 @@ HLE_FORCE("_ZN2nn2oe15SetCpuBoostModeENS0_12CpuBoostModeE", "CPU boost mode; the
 // DisplayVersion = char[16] (the application's display version): the value from that version's control data (NACP), chosen by main's build ID (the game profile's build rows); unknown builds get 1.0.0
 HLE_FORCE("_ZN2nn2oe17GetDisplayVersionEPNS0_14DisplayVersionE", "display version (by the main build ID)", void, h_oe_DispVer, char *v) {
     const char *ver = "1.0.0";
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro (design/platform/IMPL-GENERIC.md)
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host reads the profile's own table instead of a static const initialized from the macro
     for (int i = 0; i < g_nmod; i++) if (!strcmp(g_mod[i].name, "main"))
         for (unsigned j = 0; j < g_profile.ndisplay_versions; j++) if (!strcmp(g_mod[i].build_id, g_profile.display_versions[j].build)) ver = g_profile.display_versions[j].ver;
 #else
@@ -204,7 +204,7 @@ HLE_FORCE("_ZN2nn6fontll18ScalableFontEngine8LoadFontEPcPKvjj", "shared font BFT
 static size_t font_skip(void) {
     static int skip = -1;
     if (skip < 0) {
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: shared_font is a profile.bin presence flag at run time, same semantics as the #else's #ifdef (design/platform/IMPL-GENERIC.md)
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: shared_font is a profile.bin presence flag at run time, same semantics as the #else's #ifdef
         if (g_profile.has_shared_font_ttf) {
             skip = DM_GAME_SHARED_FONT_TTF ? 8 : 0; LOG("shared font: %s (game profile shared_font)", skip ? "the TTF itself" : "BFTTF header + TTF");
             return (size_t)skip;

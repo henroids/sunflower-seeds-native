@@ -58,7 +58,7 @@ final class Prepare {
 
     /**
      * Runs the whole step; returns the pack folder of the ready game. Throws with a user-readable message when it cannot. consent: the player's explicit
-     * "Build anyway" on the sheet's Version row for THIS build (P1, critique-phase1 must-fix 2) — without it, a dump whose version is not one of the profile's
+     * "Build anyway" on the sheet's Version row for THIS build (P1) — without it, a dump whose version is not one of the profile's
      * builds stops and asks instead of being retried untested on its own (the old behaviour: see the otherBuild branch in run0)
      */
     File run(File dump, String titleId, boolean consent, Progress p) throws IOException {
@@ -90,7 +90,7 @@ final class Prepare {
             }
         }
         // 2. the dump. A version this app's profile does not list (otherBuild) used to be retried silently here ("Try anyway" done for the player without asking:
-        // critique-phase1 must-fix 2, the DQ3 HD-2D case — ~10 minutes lost on a build the sheet never warned about). Now it only goes on when the sheet's own
+        // found in review, the DQ3 HD-2D case — ~10 minutes lost on a build the sheet never warned about). Now it only goes on when the sheet's own
         // Version row got the player's explicit "Build anyway" for this request (consent); a resumed job that was already marked tryAnyway (anyBuild from the
         // existing job.json) still resumes as it was, since that choice was already made once
         Object r = Upstream.dumpCheck(dump, existing == null, anyBuild);
@@ -108,7 +108,7 @@ final class Prepare {
         }
         if (error != null) {
             // not a version mismatch (that already returned above): an incomplete/corrupt dump, no RomFS, the wrong title ID, a bad file name, … — a bad dump,
-            // not a missing one (critique-phase2a §A must-fix 4; this used to say FILE_MISSING and offer "pick the file again", which does not fix a bad dump)
+            // not a missing one (found in review; this used to say FILE_MISSING and offer "pick the file again", which does not fix a bad dump)
             boolean other = Boolean.TRUE.equals(Upstream.get(r, "otherBuild"));
             String detail = Upstream.str(Upstream.get(r, "detail"));
             throw new BuildListener.Failure((other ? "Untested game version: " : "Cannot prepare this dump: ") + error + (detail.isEmpty() ? "" : "\n" + detail),

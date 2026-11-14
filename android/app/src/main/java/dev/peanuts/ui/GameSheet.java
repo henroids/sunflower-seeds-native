@@ -46,7 +46,7 @@ public final class GameSheet {
         public String companionPackage, companionVersion; public boolean installCompanion; public File companionRoot;
         /** The catalog item (CompanionPort.Item), for the installer */
         public Object companionItem;
-        /** The player's explicit "Build anyway" for a version not in the profile's build list (P1, critique-phase1 must-fix 2): never set on its own */
+        /** The player's explicit "Build anyway" for a version not in the profile's build list (P1): never set on its own */
         public boolean buildAnyway;
     }
 
@@ -134,7 +134,7 @@ public final class GameSheet {
                 : chosenUpdate == null ? (title.updates.isEmpty() ? "None found · Choose…" : "None · Choose…")
                 : chosenUpdate.file.getName() + " · " + versionText(chosenUpdate.version) + (chosenUpdate == newest ? ", the newest found" : "") + " · Choose another…";
         PUi.add(box, new PUi.Setting(a, "⬆️", "Update", v -> { if (!building) { Haptics.play(v, Haptics.Word.TICK); LibrarySettings.pickFile(a, REQ_UPDATE, "Pick the update (.nsp / .xci)"); } }).value(up).chevron(a).view, 0);
-        // Version (P1, UX-SPEC §2.2): the version the player has vs. what this build's profile supports, read before Build rather than discovered deep into a run
+        // Version (P1): the version the player has vs. what this build's profile supports, read before Build rather than discovered deep into a run
         boolean fileGone = baseGone || updateGone;
         if (!fileGone) renderVersionRow();
         // DLC
@@ -158,9 +158,9 @@ public final class GameSheet {
             if (companionRow == comp) comp.value(companionLine());
         });
         PUi.add(box, comp.view, 0);
-        // P2.5: "Versions…" opens the Companion Versions sheet (dev.peanuts.ui.CompanionVersions, another agent's package) when the catalog has this title at
+        // P2.5: "Versions…" opens the Companion Versions sheet (dev.peanuts.ui.CompanionVersions) when the catalog has this title at
         // all. onClose: installedVersion (above) is read live from disk on every render, not cached in a field here, so re-rendering after a rollback/switch
-        // is the whole refresh — critique-phase2a §B's "cached state goes stale" note, satisfied without a separate cache to invalidate
+        // is the whole refresh — the review's "cached state goes stale" note, satisfied without a separate cache to invalidate
         if (companion != null) PUi.add(box, PUi.button(a, "Versions…", PUi.Kind.QUIET, Haptics.on(Haptics.Word.TICK, v -> dev.peanuts.ui.CompanionVersions.open(a, title.titleId, this::render))), 2, PUi.wrap());
         // Launcher support (owner request, LAUNCHERS.md): a pinned shortcut that starts this title through dev.nxnative.android.FrontendLaunch's own
         // title_id path (FRONTENDS.md) — a ready game starts at once, a game not yet built opens Home with it instead. Shown whenever the launcher
@@ -189,7 +189,7 @@ public final class GameSheet {
         if (title.base == null) PUi.add(box, PUi.body(a, "No base game found. Only an update or DLC is in the folder."), 14);
         if (fileGone) PUi.add(box, PUi.body(a, "Pick the file again above before building."), 14);
         if (building) PUi.add(box, PUi.small(a, "Building now: the progress is on the game's card."), 14);
-        // Space needed (P4/SpaceEstimate, warn-only: critique-phase1 must-fix 7 — never disables Build, the multiplier is uncalibrated)
+        // Space needed (P4/SpaceEstimate, warn-only — never disables Build, the multiplier is uncalibrated)
         renderSpaceLine();
         boolean unsupported = chosenVersionState() == LibraryScanner.VersionState.UNSUPPORTED;
         LinearLayout actions = PUi.row(a);
@@ -212,7 +212,7 @@ public final class GameSheet {
     private static String size(long bytes) { return bytes >= 1 << 20 ? String.format(Locale.US, "%.1f MB", bytes / 1048576.0) : String.format(Locale.US, "%.0f KB", bytes / 1024.0); }
 
     /**
-     * The version state of whichever file is actually chosen right now (critique-phase2a §A must-fix 1): {@code title.versionState} (LibraryScanner) is
+     * The version state of whichever file is actually chosen right now (found in review): {@code title.versionState} (LibraryScanner) is
      * computed from {@code title.version()}, the newest update found on disk — not the file the player picked with "Choose another…", which can be an
      * older, or an unlisted, file. Recomputing this live on every render (instead of caching it) means {@link #picked} needs no extra step to stay current:
      * calling {@code render()} after a pick is already enough. Returns UNKNOWN when there is no profile build data to compare against (never blocks or warns)
@@ -225,7 +225,7 @@ public final class GameSheet {
     }
 
     /**
-     * The Version row (P1, UX-SPEC §2.2): "You have" is the chosen update's version (else the base's), "This build supports" lists the profile's builds with
+     * The Version row (P1): "You have" is the chosen update's version (else the base's), "This build supports" lists the profile's builds with
      * the recommended one marked. Nothing is shown for UNKNOWN (no profile builds data: never a reason to block or warn)
      */
     private void renderVersionRow() {
@@ -278,7 +278,7 @@ public final class GameSheet {
     }
 
     /**
-     * A dump-folder or .nup base's size on disk, cached across sheet opens by title ID (critique-phase2b §A-1: Engage's dump folder alone is 206,874
+     * A dump-folder or .nup base's size on disk, cached across sheet opens by title ID (found in review: Engage's dump folder alone is 206,874
      * files — one base, the game's exefs plus romfs, so the recursive {@code SpaceEstimate.onDiskBytes} walk is real filesystem I/O, not a quick stat, and
      * must never run on the UI thread). A title's base rarely changes between sheet opens, and this is only ever a cosmetic estimate, so a process-lifetime
      * cache (never invalidated by a rescan) is an acceptable trade for not re-walking a 200K-file dump every time its sheet opens
@@ -287,7 +287,7 @@ public final class GameSheet {
     private boolean computingSpace;   // this sheet instance already started the background walk for its base — render() runs again once, not on every pass
 
     /**
-     * The "Needs about X GB" line (P4/SpaceEstimate §3.2, critique-phase2a §A must-fix 3, critique-phase2b §A-1): warn-only, never disables Build. Compares
+     * The "Needs about X GB" line (P4/SpaceEstimate §3.2): warn-only, never disables Build. Compares
      * the game folder's volume against only the import size, and the app's external storage volume (not internal — {@code getExternalFilesDir(null)},
      * where AppStorage actually puts the pack) against only the pack size, whose basis is the merged .nup's size when importing, else the existing base's
      * real size on disk. For a dump-folder/.nup base not yet in {@link #ON_DISK_CACHE}, this renders "Checking space…" and kicks off exactly one background
@@ -350,7 +350,7 @@ public final class GameSheet {
 
     /**
      * The same {@link State} {@link #state()} would build, rebuilt from a title and its persisted sheet choices (PeanutsPrefs) with no sheet open — for the
-     * build card's "Resume" (critique-phase2a §A must-fix 2): it must actually resume the job, not just reopen the sheet. The job itself resumes on its own
+     * build card's "Resume" (found in review): it must actually resume the job, not just reopen the sheet. The job itself resumes on its own
      * (Prepare.java's existing job.json path); this only has to reconstruct the same request the sheet would have sent
      */
     static State resumeState(Activity a, LibraryScanner.Title t, CompanionPort.Item companion) {
@@ -375,7 +375,7 @@ public final class GameSheet {
     }
 
     /**
-     * Build, or Build anyway: for an UNSUPPORTED version (P1, critique-phase1 must-fix 2) this always asks first — Prepare.java never relaxes the check on its
+     * Build, or Build anyway: for an UNSUPPORTED version (P1) this always asks first — Prepare.java never relaxes the check on its
      * own any more, so without this confirm the build would just stop and ask again from the failed card instead of going on
      */
     private void startBuild() {

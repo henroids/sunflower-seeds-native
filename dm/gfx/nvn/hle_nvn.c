@@ -190,7 +190,7 @@ __attribute__((weak)) int dm_glslc_gpu_code(int *major, int *minor) { *major = *
 __attribute__((weak)) void dm_gfx_pool_fileback(const void *mem, uint64_t size, int kind) { (void)mem; (void)size; (void)kind; }   // vka_mem.c (DM_MEM_FILEBACK); none on Metal
 __attribute__((weak)) int dm_gfx_fileback_line(char *b, size_t n) { (void)b; (void)n; return 0; }   // vka_mem.c: the file-backed pools' totals (0: none moved)
 static void nvn_api(int api[2]) {
-#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host (-PnxGenericHost=true, design/platform/IMPL-GENERIC.md): device_api is a profile.bin presence flag, not a #define
+#ifdef DM_RUNTIME_PROFILE   // PEANUTS: the generic host (-PnxGenericHost=true): device_api is a profile.bin presence flag, not a #define
     if (g_profile.has_nvn_api) { api[0] = DM_GAME_NVN_API_MAJOR; api[1] = DM_GAME_NVN_API_MINOR; LOG("[nvn] device API %d.%d (game profile device_api)", api[0], api[1]); return; }
 #else
 #ifdef DM_GAME_NVN_API_MAJOR
