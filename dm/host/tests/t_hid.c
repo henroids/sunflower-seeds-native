@@ -91,6 +91,14 @@ static void t_slots(void) {
 static void t_npads(void) {
     // One player (the keyboard, or one controller): as before, everything is player 1 on No1 docked
     g_mode = 1; dm_pad_players(0);
+    // PEANUTS: no style before the game has set its supported styles; the style event bound before is signalled when it does
+    static char ev0[1];
+    g_signals = 0; h_hid_BindStyleEv(&(uint32_t){0}, ev0, 0);
+    CHECK(h_hid_GetStyle(&(uint32_t){0}) == 0 && g_signals == 0, "no controller style before SetSupportedNpadStyleSet");
+    h_hid_SetStyles(7);
+    CHECK(h_hid_GetStyle(&(uint32_t){0}) == STYLE_FULLKEY && g_signals == 1 && g_signalled == ev0, "the style and its event once the styles are set");
+    g_signals = 0;
+    // PEANUTS end
     CHECK(h_hid_GetStyle(&(uint32_t){0}) == STYLE_FULLKEY && h_hid_GetStyle(&(uint32_t){1}) == 0 && h_hid_GetStyle(&(uint32_t){NPAD_HANDHELD}) == 0, "one player: No1 only");
     CHECK(dm_player_npad(0) == 0 && dm_player_npad(1) == 1 && dm_player_npad(7) == 7, "player n on No n docked");
     dm_input_set(DM_BTN_X, 100, 0, 0, 0); dm_pad_set(DM_BTN_A, -200, 0, 0, 0);
