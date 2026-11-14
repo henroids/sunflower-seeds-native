@@ -196,6 +196,7 @@ int vka_fg_frame(uint64_t serial, const int *crop, double period, uint64_t fence
     if (!im) return 0;
     int cx = 0, cy = 0, cw = (int)im->w, ch = (int)im->h;
     if (crop && crop[2] > 0 && crop[3] > 0) { cx = crop[0]; cy = crop[1]; cw = crop[2]; ch = crop[3]; }
+    if (im->rsc && crop && crop[2] > 0 && crop[3] > 0 && !vka_rs_rect(im, &cx, &cy, &cw, &ch)) { cx = cy = 0; cw = (int)im->w; ch = (int)im->h; }   // PEANUTS: DM_RES_SCALE: the crop in a scaled window texture's pixels (the chain is then made at that size, as the present reads it)
     VkFormatProperties fp = {0}; vk.vkGetPhysicalDeviceFormatProperties(V.pd, im->f.vk, &fp);
     if (!im->inited || im->aspect != VK_IMAGE_ASPECT_COLOR_BIT || im->f.kind || im->samples != 1 || !(fp.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) || cw <= 0 || ch <= 0) {
         VRED_ONCE("frame generation: window texture serial %llu (format %#x) cannot be copied into the chain: not generating", (unsigned long long)im->serial, im->d.format);

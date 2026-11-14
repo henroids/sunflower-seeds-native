@@ -342,6 +342,12 @@ Some of these rows show only with Settings › **Tester settings** on.
 
 Yes. **Console mode** is in Settings › Game defaults and in each game's settings (hold the cover › **Performance** › Picture). **Docked** makes the game draw as it does on a TV, up to 1080p. **Handheld** makes it draw as on the Switch's own screen, up to 720p: that is lighter, so it can hold a higher frame rate, and the app's upscaler fills the screen. Handheld also turns on the game's touch screen. The choice applies from the next start. A few games are fixed to Handheld because they need the touch screen there.
 
+### Can I make a game sharper, or lighter, than its own resolution?
+
+Yes. **Resolution scale** is in Settings › Game defaults and in each game's settings (hold the cover › **Performance** › Picture). It draws the game's picture at a multiple of the size the game itself asks for: **1.25x**, **1.5x** or **2x** is sharper and asks more of the GPU, **0.75x** or **0.5x** is lighter and the app's upscaler fills the screen. **1x** is the game's own size. A game in Handheld mode draws at 720p, so 1.5x gives it exactly a 1080p screen. The choice applies from the next start.
+
+It works on the app's side, so it is there for every game, but not every part of a picture follows it. Some effects (a blur, an outline, anti-aliasing) are made for the game's own size and can look a little different, and a game that reads its picture back, or passes it through its own upscaler, keeps that part at 1x. If a game looks wrong with it, set it back to 1x for that game and tell us which game and which scale. Games that have their own **Resolution** and **Upscaling quality** rows do not show this one.
+
 ### What is Tester settings?
 
 A switch in Settings › Help. Off, a game that has **Resolution** choices shows just those. On, it also shows the rows made for testing: advanced resolution, **Upscaler** and **Dynamic resolution**. Leave it off unless you are trying things out or were asked to change one of those rows.

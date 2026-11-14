@@ -127,6 +127,7 @@ void mtl_set_frame(uint64_t f) {
           vka_rp_bar_stats(pb, sizeof pb, n); if (pb[0]) VLOG("%s", pb);
           vka_gbar_stats(pb, sizeof pb, n); if (pb[0]) VLOG("%s", pb);
           oq_stats(pb, sizeof pb, n); if (pb[0]) VLOG("%s", pb);
+          { char rb[1400]; vka_rs_stats(rb, sizeof rb, n); if (rb[0]) VLOG("%s", rb); }   // PEANUTS: DM_RES_SCALE (vka_resscale.inc)
           { void vka_drv_memo_stats(char *b, size_t n); vka_drv_memo_stats(pb, sizeof pb); if (pb[0]) VLOG("%s", pb); }
           vka_memu_stats(pb, sizeof pb); if (pb[0]) VLOG("%s", pb);
           { void vka_draw_unplaced(char *b, size_t n); vka_draw_unplaced(pb, sizeof pb); if (pb[0]) VRED("%s", pb); } }   // PEANUTS: draws and buffers lost to memory that is not placed, while the counts move (vka_draw.c)
@@ -837,6 +838,7 @@ static int scissored(const vka_img *im, uint32_t lv, VkRect2D *rc) {   // 1 = th
     *rc = (VkRect2D){{0, 0}, {w, h}};
     if (!S.has_sc) return 0;
     int64_t x0 = S.sc.x > 0 ? S.sc.x : 0, y0 = S.sc.y > 0 ? S.sc.y : 0, x1 = (int64_t)S.sc.x + S.sc.w, y1 = (int64_t)S.sc.y + S.sc.h;
+    if (im->rsc) { vkrs_span(&x0, &x1, vka_rs_q); vkrs_span(&y0, &y1, vka_rs_q); }   // PEANUTS: the scissor in a scaled target's pixels (DM_RES_SCALE), as the draws' is (vka_draw.c rs_sc)
     if (x1 > w) x1 = w; if (y1 > h) y1 = h;
     if (x1 <= x0 || y1 <= y0) { rc->extent = (VkExtent2D){0, 0}; return 1; }
     *rc = (VkRect2D){{(int32_t)x0, (int32_t)y0}, {(uint32_t)(x1 - x0), (uint32_t)(y1 - y0)}};
@@ -869,6 +871,7 @@ static void clear_color(const p_clear_color *c) {
     if (S.rc_skip) return;
     if (!S.has_rt || c->index < 0 || c->index >= S.rt.n || c->index >= 8 || !S.rt.color[c->index]) { VRED_ONCE("color clear of target %d, which is not bound", c->index); return; }
     if (!c->mask) return;
+    if (vka_rs_on() && vka_rp_rs(&S.rt, S.has_rt) < 0) { vka_rs_st.skip++; return; }   // PEANUTS: DM_RES_SCALE: the bound targets at one scale before the clear measures its rectangle (as a pass does)
     const tex_t *t = S.rt.color[c->index]; const view_t *v = &S.rt.cview[c->index]; int hv = S.rt.has_cview[c->index];
     vka_img *im = vka_tex_get(t, g_cb); vka_fmt f;
     if (!im || !vka_fmt_of(hv && v->set_format ? v->format : t->d.format, &f)) return;
@@ -944,6 +947,7 @@ static void stencil_masked(vka_img *im, uint32_t lv, uint32_t l0, uint32_t nl, V
 static void clear_ds(const p_clear_ds *c) {
     vka_rp_prep_clear(&S.rt, S.has_rt);
     if (S.rc_skip || !S.has_rt || !S.rt.depth) return;
+    if (vka_rs_on() && vka_rp_rs(&S.rt, S.has_rt) < 0) { vka_rs_st.skip++; return; }   // PEANUTS: DM_RES_SCALE: as clear_color
     vka_img *im = vka_tex_get(S.rt.depth, g_cb);
     if (!im || im->f.kind < 3) return;
     vka_tex_own(im, g_cb);
@@ -976,6 +980,8 @@ static void clear_tex(const p_clear_tex *c) {
     uint32_t all = vka_img_slices(im, lv); int is3d = im->d.target == NVN_TEXTURE_TARGET_3D;
     if (l0 >= all) return; if (l0 + nl > all) nl = all - l0;
     uint32_t w, h; level_size(im, lv, &w, &h);
+    // PEANUTS: DM_RES_SCALE: the region in a scaled image's pixels (vka_resscale.inc); c is the record itself for any other image
+    p_clear_tex c_rs; if (im->rsc) { c_rs = *c; if (!vka_rs_rect(im, &c_rs.r.xoffset, &c_rs.r.yoffset, &c_rs.r.width, &c_rs.r.height)) return; c = &c_rs; }
     VkClearValue val;
     if (c->is_uint) for (int i = 0; i < 4; i++) val.color.uint32[i] = c->c.u[i]; else val.color = color_value(&f, c->c.f);
     if (c->r.xoffset == 0 && c->r.yoffset == 0 && (uint32_t)c->r.width >= w && (uint32_t)c->r.height >= h && f.vk == im->f.vk && (!is3d || (!l0 && nl == all))) {
@@ -1001,6 +1007,8 @@ static void copy_bt(const p_copy_b2t *c, int to_tex) {
     vka_img *im = vka_tex_get(c->tex, g_cb);
     if (!im) return;
     if (to_tex) vka_tex_own(im, g_cb);
+    // PEANUTS: DM_RES_SCALE: the buffer's texels are the texture's size, so a scaled image is made 1x first (and its shape stays 1x: vka_resscale.inc)
+    if (im->rsc && !vka_tex_rs_down(im, g_cb, to_tex ? RS_WHY_B2T : RS_WHY_T2B)) { vka_rs_st.skip++; VRED_ONCE("res scale: a buffer copy with scaled texture serial %llu was left out (it could not be made 1x then)", (unsigned long long)im->serial); return; }
     VkImageAspectFlags asp = copy_aspect(im, to_tex ? "buffer → texture copy" : "texture → buffer copy"); if (!asp) return;
     if (im->samples > 1) { VRED_ONCE("buffer copy of a multisampled texture"); return; }
     const vka_fmt *f = &im->f;
@@ -1074,6 +1082,29 @@ static void copy_t2t(const p_copy_t2t *c) {
     unsigned sz0 = c->has_sv && c->sv.set_layers ? c->sv.min_layer : 0, dz0 = c->has_dv && c->dv.set_layers ? c->dv.min_layer : 0;
     vka_tex_soft_copy(s, -1, g_cb); vka_tex_soft_copy(d, (int)dl, g_cb);   // (a soft texture copied from, or into at level 0: made whole first)
     if (!vka_img_lv(s, &sl) || !vka_img_lv(d, &dl)) return;
+    // PEANUTS begin: resolution scale (vka_resscale.inc). With a scaled image in the copy, c becomes a copy of the record whose rectangles are in the images' pixels
+    // (for any other copy it stays the record itself). same: the game named two rectangles of one size, which stays a plain copy between two scaled images (their
+    // rectangles round to within a pixel of each other: the smaller extent is taken). Between a scaled and an unscaled image the unscaled one is scaled when it can be (a render target copied before its first pass, the window
+    // texture a frame is copied into), else the copy converts: the blit below for float colour, and for depth, integer and resolves the scaled image goes back to 1x
+    p_copy_t2t c_rs;
+    if (vka_rs_on() && (s->rsc || d->rsc)) {
+        NVNcopyRegion sr = c->sr, dr = c->dr; int same = sr.width == dr.width && sr.height == dr.height, lin = 0;
+        int resolve = (c->flags & DM_COPY_RESOLVE) && s->samples > 1 && d->samples == 1;
+        if (s->rsc != d->rsc) {
+            vka_img *lo = s->rsc ? d : s, *hi = s->rsc ? s : d;
+            if (resolve || vka_tex_rs_up(lo, g_cb) <= 0) {
+                int conv = !resolve && s->aspect == VK_IMAGE_ASPECT_COLOR_BIT && d->aspect == VK_IMAGE_ASPECT_COLOR_BIT && !s->f.kind && !d->f.kind && s->f.bw == 1 && d->f.bw == 1 && s->samples == 1 && d->samples == 1
+                           && !(s->depth > 1) && !(d->depth > 1);
+                if (conv) { same = 0; lin = 1; vka_rs_st.conv++; }
+                else if (!vka_tex_rs_down(hi, g_cb, resolve ? RS_WHY_RESOLVE : RS_WHY_COPY_KIND)) {
+                    vka_rs_st.skip++; VRED_ONCE("res scale: a texture copy between scaled serial %llu and an unscaled texture was left out (it could not be made 1x then)", (unsigned long long)hi->serial); return; }
+            }
+        }
+        if (!vka_rs_rect(s, &sr.xoffset, &sr.yoffset, &sr.width, &sr.height) || !vka_rs_rect(d, &dr.xoffset, &dr.yoffset, &dr.width, &dr.height)) return;
+        if (same) { if (dr.width < sr.width) sr.width = dr.width; else dr.width = sr.width; if (dr.height < sr.height) sr.height = dr.height; else dr.height = sr.height; }
+        c_rs = *c; c_rs.sr = sr; c_rs.dr = dr; if (lin) c_rs.flags |= NVN_COPY_FLAGS_LINEAR_FILTER_BIT; c = &c_rs;   // (a change of scale is filtered, whatever the game asked of its same-size copy)
+    }
+    // PEANUTS end
     VkImageAspectFlags sa = s->aspect & (s->f.kind >= 3 ? VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_COLOR_BIT), da = d->aspect;
     if ((sa == VK_IMAGE_ASPECT_COLOR_BIT) != (da == VK_IMAGE_ASPECT_COLOR_BIT)) { VRED_ONCE("texture copy between a color and a depth texture (formats %#x → %#x)", c->src->d.format, c->dst->d.format); return; }
     sa &= da;
@@ -1154,6 +1185,8 @@ static void dlss_eval(const p_dlss *o) {
     if (!ct || !ot) { VRED_ONCE("DLSS evaluation without an input colour or an output texture: skipped"); return; }
     vka_img *s = vka_tex_get(ct, g_cb), *d = vka_tex_get(ot, g_cb);
     if (!s || !d) return;
+    // PEANUTS: DM_RES_SCALE: an upscaler stand-in works in the texels the game sized its input and output for: both at 1x (vka_resscale.inc)
+    if (vka_rs_on() && ((s->rsc && !vka_tex_rs_down(s, g_cb, RS_WHY_STANDIN)) || (d->rsc && !vka_tex_rs_down(d, g_cb, RS_WHY_STANDIN)))) { vka_rs_st.skip++; return; }
     if ((s->aspect & VK_IMAGE_ASPECT_COLOR_BIT) == 0 || (d->aspect & VK_IMAGE_ASPECT_COLOR_BIT) == 0 || d->f.bw > 1 || d->samples > 1) {
         VRED_ONCE("DLSS stand-in: formats %#x → %#x: no colour input or an output a blit cannot write (compressed, depth or multisampled): the output stays unwritten", ct->d.format, ot->d.format); return; }
     vka_tex_own(d, g_cb);
@@ -1189,6 +1222,7 @@ static void dlss_eval(const p_dlss *o) {
         f.c.src = ct; f.c.dst = ot; f.c.sr = (NVNcopyRegion){sx, sy, 0, iw, ih, 1}; f.c.dr = (NVNcopyRegion){dx, dy, 0, ow, oh, 1};
         f.depth = o->tex[DLSS_DEPTH]; f.motion = o->tex[DLSS_MOTION]; memcpy(f.jitter, o->jitter, sizeof f.jitter); memcpy(f.mv, o->mv, sizeof f.mv); f.reset = o->reset;
         vka_img *z = f.depth ? vka_tex_get(f.depth, g_cb) : NULL, *m = f.motion ? vka_tex_get(f.motion, g_cb) : NULL;
+        if (vka_rs_on()) { if (z && z->rsc && !vka_tex_rs_down(z, g_cb, RS_WHY_STANDIN)) z = NULL; if (m && m->rsc && !vka_tex_rs_down(m, g_cb, RS_WHY_STANDIN)) m = NULL; }   // PEANUTS: DM_RES_SCALE: its depth and motion at 1x too, or left out
         if (!o->base[DLSS_DEPTH][0] && !o->base[DLSS_DEPTH][1] && !o->base[DLSS_MOTION][0] && !o->base[DLSS_MOTION][1] && vka_dlss_fsr3(g_cb, s, sfmt, d, enc, z, m, &f)) { vka_img_written(d); g_stat_ops++; return; }
         mode = 2;
     }

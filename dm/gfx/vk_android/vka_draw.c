@@ -198,6 +198,7 @@ static struct {
     int bar_pending;                                     // a game barrier came inside the pass and was taken there (vka_rp_game_barrier): the draws after it are checked (bar_hazard)
     int rt_cont, dread;                                  // SET_RT continued the pass; a draw of the pass sampled its depth attachment
     struct { vka_img *im, *sh; uint32_t lv, l0, nl, bw, bh; } bc[8]; int nbc;   // block-compressed targets drawn through their shadows (bcrt_attach), copied back at the pass end
+    int rsc; float rsf;                                  // PEANUTS: its targets are scaled images (DM_RES_SCALE, vka_rp_rs), and the factor (1.0 when not): viewports and scissors are scaled by it
 } R;
 // Inline uniform updates (OP_UPDATE_UB) that came with a render pass open (DM_VK_UB_DEFER, default 1): Vulkan forbids vkCmdCopyBuffer inside a rendering pass, and ending the
 // pass for each update split Splatoon Raiders' 6400x6400 ink-map occlusion-query pass 150-1,550 times a frame (7 inline updates per query). While R.on is open, the updates are
@@ -522,24 +523,61 @@ static void rt_range(const vka_img *im, const view_t *v, int has_v, uint32_t *lv
 // Whether a draw's scissor fits inside a narrowed renderArea (R.area_cut): a draw outside it ends the pass so the next one opens over its own area
 static p_set_rt g_miss_rt; static int g_miss_n;   // draws that did not fit a narrowed area, over the same targets: from the 2nd, those targets keep the full area for the rest of the submission (each of the ink map's ~600 occlusion queries has its own scissor, so narrowing again would end the pass for every one); a miss on another 16M-pixel target replaces the record
 static void rp_miss_reset(void) { g_miss_n = 0; }   // a new submission starts the count again (a later pass on those targets may narrow once more)
+static inline void rs_sc(const p_scissor *sc, int rsc, int64_t *x0, int64_t *y0, int64_t *x1, int64_t *y1);   // PEANUTS: (below)
 static int rp_area_fits(const p_scissor *sc, int has_sc, const vka_dstate *d, const p_set_rt *rt, int has_rt) {
     if (!R.area_cut || d->rast_discard) return 1;
     if (!has_sc) return 0;
-    int64_t x1 = (int64_t)sc->x + sc->w, y1 = (int64_t)sc->y + sc->h;
+    int64_t x0_, y0_, x1, y1; rs_sc(sc, R.rsc, &x0_, &y0_, &x1, &y1);   // PEANUTS: in the pass's pixels (DM_RES_SCALE; the game's own at 1x, as before)
     if (x1 > R.full_w) x1 = R.full_w; if (y1 > R.full_h) y1 = R.full_h;
     if (x1 <= (int64_t)R.area.extent.width && y1 <= (int64_t)R.area.extent.height) return 1;
     if (rt && has_rt) { if (g_miss_n && rt_same(rt, 1, &g_miss_rt, 1)) g_miss_n++; else { g_miss_rt = *rt; g_miss_n = 1; } }
     return 0;
 }
+// PEANUTS begin: resolution scale (vka_tex.c vka_resscale.inc). The targets of a pass are all scaled or all at 1x: all scaled when each is scaled already or can be
+// (then those that are not yet are scaled here, their first use as a target), else every scaled one goes back to 1x for good (RS_WHY_PASS_MIX; a pass whose targets
+// differ in size would draw into a corner of the larger). Asked before a pass opens and before a clear of the bound targets measures its rectangle; an open pass
+// answers what it was opened with. -1: a change could not be made now (a holder reads the image): the caller leaves its draw or clear out this once
+static int g_rs_forced;   // the last answer was 1x although a target is or could be scaled (the statistics' "forced to 1x")
+int vka_rp_rs(const p_set_rt *rt, int has_rt) {
+    g_rs_forced = 0;
+    if (!vka_rs_on() || !has_rt || !rt || !g_cb) return 0;
+    if (R.on) return R.rsc;   // (the callers end a pass over other targets first)
+    vka_img *im[9]; int n = 0, all = 1, any = 0, could = 0, nc = rt->n < 8 ? rt->n : 8;
+    for (int i = 0; i <= nc; i++) {
+        const tex_t *t = i < nc ? rt->color[i] : rt->depth; vka_img *x = t ? vka_tex_get(t, g_cb) : NULL;
+        if (!x) continue;
+        im[n++] = x;
+        if (x->rsc) any = 1; else if (vka_tex_rs_can(x)) could = 1; else all = 0;
+    }
+    if (!n || (!any && !could)) return 0;      // nothing here is or can be scaled
+    if (all && !could) return 1;               // all scaled already
+    if (!all && !any) { g_rs_forced = 1; return 0; }
+    if (PC.n) pc_flush();                      // clears waiting for these targets measured their rectangles at the scale the targets had
+    if (all) for (int i = 0; i < n; i++) if (!im[i]->rsc) { int r = vka_tex_rs_up(im[i], g_cb); if (r < 0) return -1; if (!r) { all = 0; break; } }
+    if (!all) { g_rs_forced = 1; for (int i = 0; i < n; i++) if (im[i]->rsc && !vka_tex_rs_down(im[i], g_cb, RS_WHY_PASS_MIX)) return -1; }
+    return all;
+}
+// A scissor's edges in a pass's pixels (rsc: the pass is over scaled targets): the game's own, clamped at 0 on the low side as before, or scaled with both edges rounded down
+static inline void rs_sc(const p_scissor *sc, int rsc, int64_t *x0, int64_t *y0, int64_t *x1, int64_t *y1) {
+    *x0 = sc->x < 0 ? 0 : sc->x; *y0 = sc->y < 0 ? 0 : sc->y; *x1 = (int64_t)sc->x + sc->w; *y1 = (int64_t)sc->y + sc->h;
+    if (rsc) { vkrs_span(x0, x1, vka_rs_q); vkrs_span(y0, y1, vka_rs_q); }
+}
+// PEANUTS end
 // Opens the pass over the bound targets: 0 = it cannot (no target can be an attachment), logged
 static int rp_begin(const p_set_rt *rt, int has_rt, const p_scissor *sc, int has_sc, const vka_dstate *d) {
     if (R.on) { if (!g_pass_keep || (rt_same(rt, has_rt, &R.rt, R.has_rt) && rp_area_fits(sc, has_sc, d, rt, has_rt))) return 1; vka_rp_end(); }   // a new SET_RT of other targets ends the pass at its first draw (exec does not)   // a new SET_RT of other targets ends the pass at its first draw (exec does not)
     if (PC.n && !rt_same(rt, has_rt, &PC.rt, 1)) pc_flush();                             // clears of other targets: done before
+    // PEANUTS begin: the targets at one scale before the pass is laid out over them (DM_RES_SCALE)
+    int rs = vka_rs_on() ? vka_rp_rs(rt, has_rt) : 0;
+    if (rs < 0) { vka_rs_st.skip++; return 0; }
+    if (vka_rs_on()) { if (rs) vka_rs_st.pass_s++; else vka_rs_st.pass_1++; if (g_rs_forced) vka_rs_st.pass_forced++; }
+    // PEANUTS end
     VkRenderingAttachmentInfo ca[8], da = {0}, sa; uint32_t w = UINT32_MAX, h = UINT32_MAX, layers = UINT32_MAX, samples = 0;
     vka_img *fb_im[9]; uint32_t fb_lv[9]; int nfb = 0;   // the attachments' images and levels (vka_tex_feedback)
     vka_img *s_im[9] = {0}; uint32_t s_lv[9] = {0}, s_nl[9] = {0};   // per colour slot and the depth / stencil target (8): for a classic pass's framebuffer
     memset(&R, 0, sizeof R);
     if (has_rt) R.rt = *rt; R.has_rt = has_rt;
+    R.rsc = rs; R.rsf = rs ? vka_rs_q / 4.0f : 1.0f;   // PEANUTS: (DM_RES_SCALE)
     int n = has_rt ? (rt->n < 8 ? rt->n : 8) : 0;
     for (int i = 0; i < n; i++) {
         ca[i] = (VkRenderingAttachmentInfo){VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD, .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
@@ -602,7 +640,7 @@ static int rp_begin(const p_set_rt *rt, int has_rt, const p_scissor *sc, int has
     // Passes on very large targets (>= 16M pixels: Splatoon Raiders' 6400x6400 ink map) that load the attachments (no pending clears) and draw inside a scissor covering at most
     // half the target area bound their renderArea to the scissor's far corner (DM_VK_RP_AREA, default 1); a later draw or clear outside that area ends the pass
     if (VKA_ENV("DM_VK_RP_AREA", 1) && (uint64_t)w * h >= (16ull << 20) && !(g_miss_n >= 2 && has_rt && rt_same(rt, 1, &g_miss_rt, 1)) && !PC.n && has_sc && !d->rast_discard) {
-        int64_t x0 = sc->x < 0 ? 0 : sc->x, y0 = sc->y < 0 ? 0 : sc->y, x1 = (int64_t)sc->x + sc->w, y1 = (int64_t)sc->y + sc->h;
+        int64_t x0, y0, x1, y1; rs_sc(sc, R.rsc, &x0, &y0, &x1, &y1);   // PEANUTS: in the pass's pixels (DM_RES_SCALE)
         if (x1 > w) x1 = w; if (y1 > h) y1 = h;
         if (x1 > x0 && y1 > y0 && (uint64_t)x1 * y1 * 2 <= (uint64_t)w * h && ((uint32_t)x1 < w || (uint32_t)y1 < h)) {
             aw = (uint32_t)x1; ah = (uint32_t)y1; R.area_cut = 1;
@@ -1223,8 +1261,9 @@ typedef struct { VkBuffer buf; VkDeviceSize off; } c0_at;
 static struct { int valid; vka_span s; uint64_t k[3]; uint8_t b[DMSH_DRV_SIZE]; } g_dm[VKA_NSTAGE][3];   // k: what the bytes were filled from (drv_key)
 static struct { int valid; uint64_t gen; vka_span s; } g_gm;
 static struct { int valid; uint32_t ref; vka_span s; } g_sm_ref;   // the support buffer with the alpha test's reference (stage_writes)
+static struct { int valid, alpha; uint32_t ref; float rs0, v; vka_span s; } g_sm_rs;   // PEANUTS: the support buffer with the resolution scale in it (rs_support), kept as g_sm_ref is
 static int g_drv_memo = 1, g_drv_stamp = 1; static uint64_t g_dm_hit, g_dm_miss, g_dm_stamp;
-static void drv_memo_reset(void) { for (int st = 0; st < VKA_NSTAGE; st++) for (int b = 0; b < 3; b++) g_dm[st][b].valid = 0; g_gm.valid = 0; g_sm_ref.valid = 0; g_drv_memo = VKA_ENV("DM_VK_DRV_MEMO", 1); g_drv_stamp = VKA_ENV("DM_VK_DRV_STAMP", 1); }
+static void drv_memo_reset(void) { for (int st = 0; st < VKA_NSTAGE; st++) for (int b = 0; b < 3; b++) g_dm[st][b].valid = 0; g_gm.valid = 0; g_sm_ref.valid = 0; g_sm_rs.valid = 0; /* PEANUTS: g_sm_rs */ g_drv_memo = VKA_ENV("DM_VK_DRV_MEMO", 1); g_drv_stamp = VKA_ENV("DM_VK_DRV_STAMP", 1); }
 // What a graphics stage's segment is filled from (vka_bind.c vka_drv_fill), as stamps and values: c0 from the stage's storage buffers, the base instance and the sample
 // count; c2 from the stage's texture, sampler and image handles (and the pools' bases when the shader reads the pools); the push bank from the pushed constants. The same
 // key as the memo's: the same bytes, so the draw binds the memo's span without filling the segment and comparing it (DM_VK_DRV_STAMP, live from the next submission,
@@ -1419,6 +1458,28 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
     VRED_ONCE("more than 512 texel buffer views at once"); return VK_NULL_HANDLE;
 }
 // One stage's results as descriptor writes. 0 = the draw cannot run (logged)
+// PEANUTS begin: resolution scale: the translated shaders' own scale code (Ryujinx's, vka_resscale.inc) reads the support buffer. render_scale[0] divides gl_FragCoord.xy
+// in a pixel shader: the factor in a pass over scaled targets, so the shader goes on seeing the game's pixels. render_scale[1 + i] scales the integer coordinates of a
+// fetch from the stage's i-th plain 2D texture (and unscales its size query): the library does not say which binding i is, so every entry gets the factor when all the
+// stage's plain 2D textures are scaled images and stays 1 when none is (rs_fetch_fix makes it one or the other); negative in a pixel shader whose pass and textures are
+// one size, which makes the helper fetch the pixel's own texel instead of every other one. Only shaders that read those entries are looked at (vka_shader.rs_fetch)
+static struct { uint8_t tx; uint32_t w, h; } g_rsx[VKA_NSTAGE];   // per stage, from rs_fetch_fix: its fetched 2D textures are scaled images, and their size when they have one size
+static int rs_support(const vka_dstate *d, int st, const vka_shader *sh, VkDescriptorBufferInfo *bi) {   // 1 = *bi is a support buffer with the scale in it
+    float f = vka_rs_q / 4.0f, rs0 = st == 1 && R.on && R.rsc ? f : 1.0f, v = 0;
+    if (g_rsx[st].tx) v = st == 1 && rs0 != 1.0f && g_rsx[st].w == R.full_w && g_rsx[st].h == R.full_h ? -f : f;
+    if (rs0 == 1.0f && !v) return 0;
+    int alpha = st == 1 && (sh->e->flags & DMSH_VK_F_ALPHA_TEST) && d->color.alpha_func && d->color.alpha_func != NVN_ALPHA_FUNC_ALWAYS; uint32_t ref = 0;
+    if (alpha) memcpy(&ref, &d->alpha_ref, 4);   // word 0: the alpha test's reference, as below
+    if (g_drv_memo && g_sm_rs.valid && g_sm_rs.alpha == alpha && g_sm_rs.ref == ref && g_sm_rs.rs0 == rs0 && g_sm_rs.v == v) { *bi = (VkDescriptorBufferInfo){g_sm_rs.s.buf, g_sm_rs.s.off, VKA_SUPPORT_SIZE}; return 1; }
+    vka_span s; if (!vka_scratch(VKA_SUPPORT_SIZE, V.ub_align, &s)) return 0;
+    memcpy(s.ptr, g_support.ptr, VKA_SUPPORT_SIZE); if (alpha) memcpy(s.ptr, &ref, 4);
+    memcpy(s.ptr + 192, &rs0, 4);
+    if (v != 0) for (int i = 1; i < 73; i++) memcpy(s.ptr + 192 + 16 * i, &v, 4);
+    g_sm_rs.valid = 1; g_sm_rs.alpha = alpha; g_sm_rs.ref = ref; g_sm_rs.rs0 = rs0; g_sm_rs.v = v; g_sm_rs.s = s;
+    *bi = (VkDescriptorBufferInfo){s.buf, s.off, VKA_SUPPORT_SIZE};
+    return 1;
+}
+// PEANUTS end
 static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const vka_res *r, int n, int pool, c0_at *c0) {
     for (int i = 0; i < n; i++) {
         if (g_w.n == 512) { VRED_ONCE("more than 512 descriptors in one draw"); return 0; }
@@ -1439,6 +1500,7 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
                 break;
             case VKA_R_C1: if (sh->c1_len) *bi = (VkDescriptorBufferInfo){sh->c1.buf, sh->c1.off, (sh->c1_len + 15) & ~(VkDeviceSize)15}; else ok = 0; break;
             case VKA_R_SUPPORT:
+                if (vka_rs_on() && rs_support(d, st, sh, bi)) break;   // PEANUTS: with the resolution scale in it (above)
                 if (st == 1 && (sh->e->flags & DMSH_VK_F_ALPHA_TEST) && d->color.alpha_func && d->color.alpha_func != NVN_ALPHA_FUNC_ALWAYS) {   // word 0: the alpha test's reference
                     vka_span s;
                     if (g_drv_memo && g_sm_ref.valid && !memcmp(&g_sm_ref.ref, &d->alpha_ref, 4)) s = g_sm_ref.s;   // the same reference as the last alpha-tested draw: its copy (DM_VK_DRV_MEMO)
@@ -1508,6 +1570,7 @@ static struct { int n[VKA_NSTAGE], pool[VKA_NSTAGE]; char why[VKA_NSTAGE][200]; 
 static void walk_all(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE]) {
     uint64_t t0_ = g_prof ? cntvct() : 0;
     vka_texu_elem = VKA_ENV("DM_VK_TEXU_ELEM", 1);   // see vka_bind.h (live, A/B)
+    if (vka_rs_on()) memset(g_rsx, 0, sizeof g_rsx);   // PEANUTS: (rs_fetch_fix sets it for the walk's draw or dispatch)
     for (int st = 0; st < VKA_NSTAGE; st++) {
         vka_shader *s = sh[st]; g_wk.n[st] = 0; g_wk.pool[st] = 0; if (!s) continue;
         g_wk.n[st] = vka_walk(&d->b, st, s->e, s->b, s->lib->h->ssbo_align, V.sb_align, rd_cb, NULL, g_wk.r[st], 512, &g_wk.pool[st], g_wk.why[st], sizeof g_wk.why[st]);
@@ -1644,6 +1707,30 @@ static int bind_sets(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], cons
     if (g_sets_dry) { g_dry_pool = any_pool; return 1; }   // DM_VK_INSTANCE: the writes only (sets_push binds them)
     return sets_push(lay, bp, any_pool);
 }
+// PEANUTS begin: resolution scale: the stages of this draw or dispatch whose shader fetches by pixel (vka_shader.rs_fetch): their plain 2D textures (not arrays, not
+// multisampled) are all scaled images or none is, for rs_support's one factor. A mix scales the scaled ones down for good (RS_WHY_FETCH_MIX), outside any pass.
+// After make_images (every image exists), from the walk
+static void rs_fetch_fix(vka_shader *const sh[VKA_NSTAGE], const vka_dstate *d) {
+    for (int st = 0; st < VKA_NSTAGE; st++) {
+        const vka_shader *s = sh[st]; if (!s || !s->rs_fetch || (st == 1 && d->rast_discard)) continue;
+        const vka_res *r = g_wk.r[st]; int n = g_wk.n[st], ns = 0, nu = 0, same = 1, mixed = 0; uint32_t w = 0, h = 0;
+        for (int pass = 0; pass < 2; pass++) {
+            ns = nu = 0; same = 1; w = h = 0;
+            for (int i = 0; i < n; i++) {
+                if (r[i].what != VKA_R_TEX || !r[i].tid || (r[i].dim & (DMSH_VK_DIM_MASK | DMSH_VK_DIM_ARRAY | DMSH_VK_DIM_MS)) != 1) continue;   // (SPIR-V Dim 2D)
+                if ((i && r[i - 1].binding == r[i].binding) || (i + 1 < n && r[i + 1].binding == r[i].binding)) continue;                       // an array of textures: read without the helper
+                vka_img *im = vka_tex_id_img(r[i].tid, g_cb); if (!im) continue;
+                if (pass && im->rsc) { vka_rs_st.ctx_key = s->key; if (!vka_tex_rs_down(im, g_cb, RS_WHY_FETCH_MIX)) vka_rs_st.skip++; vka_rs_st.ctx_key = 0; }
+                if (im->rsc) { ns++; if (w && (w != im->w || h != im->h)) same = 0; w = im->w; h = im->h; } else nu++;
+            }
+            if (pass || !ns || !nu) break;
+            mixed = 1; vka_rs_st.fd_mixed++; vka_rp_end();   // a mix: the second round scales the scaled ones down (no pass open)
+        }
+        if (ns && !nu) { g_rsx[st].tx = 1; if (same) { g_rsx[st].w = w; g_rsx[st].h = h; } vka_rs_st.fd_all++; }
+        else if (!ns && !mixed) vka_rs_st.fd_none++;
+    }
+}
+// PEANUTS end
 // Images first used by a draw (from the walk, walk_all), or remade with storage use (vka_tex.c img_storage_upgrade): dry = only whether there is one
 static int make_images(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], int dry) {
     (void)d; int any = 0;
@@ -2463,6 +2550,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     PT(2);
     walk_all(d, sh);
     if (make_images(d, sh, 1)) { vka_rp_end(); make_images(d, sh, 0); }
+    if (vka_rs_on()) rs_fetch_fix(sh, d);   // PEANUTS: DM_RES_SCALE: a shader that fetches by pixel sees its 2D textures at one scale
     if (R.on && R.bar_pending && bar_hazard(sh, d)) { g_bar_late++; vka_rp_end(); }   // the game barrier taken inside the pass is needed here: the pass ends (its full barrier) first
     if (R.on && UB.n && ub_hazard(d, sh, mesh, dw, di)) vka_rp_end();
     if (R.on && (R.df || R.sf) && rt_same(rt, has_rt, &R.rt, R.has_rt)) {   // SetRenderTargets of the same targets between a depth write and sampling depth (or sampling depth then writing it)
@@ -2616,6 +2704,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     // Viewport and scissor. The translator writes clip space for Metal (y up, origin upper left): Metal's viewport, flipped for a lower-left window origin as on Metal, then given
     // a negative height, maps it as Metal does (android/SHADERS.md "Depth and Y")
     float vx = d->has_vp ? d->vp[0][0] : 0, vy = d->has_vp ? d->vp[0][1] : 0, vw = d->has_vp ? d->vp[0][2] : (float)R.full_w, vh = d->has_vp ? d->vp[0][3] : (float)R.full_h;
+    if (R.rsc && d->has_vp) { vx *= R.rsf; vy *= R.rsf; vw *= R.rsf; vh *= R.rsf; }   // PEANUTS: the game's viewport in a scaled pass's pixels (DM_RES_SCALE; without one it is the pass's own size above)
     if (vka_origin_ll()) { vy += vh; vh = -vh; }
     { uint32_t sw; memcpy(&sw, d->vp_sw[0], 4);
       if (sw == 0x100) { vy += vh; vh = -vh; }
@@ -2626,7 +2715,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     DY_SET(vp, vp, vk.vkCmdSetViewport(g_cb, 0, 1, &vp));
     VkRect2D scr = R.area;
     if (has_sc && !d->rast_discard) {
-        int64_t x0 = sc->x < 0 ? 0 : sc->x, y0 = sc->y < 0 ? 0 : sc->y, x1 = (int64_t)sc->x + sc->w, y1 = (int64_t)sc->y + sc->h;
+        int64_t x0, y0, x1, y1; rs_sc(sc, R.rsc, &x0, &y0, &x1, &y1);   // PEANUTS: in the pass's pixels (DM_RES_SCALE)
         if (x1 > R.area.extent.width) x1 = R.area.extent.width; if (y1 > R.area.extent.height) y1 = R.area.extent.height;
         if (x1 <= x0 || y1 <= y0) { if (g_rtl_pass && rtl_room()) VLOG("rt log draw %u: fragment %016llx not drawn: empty scissor %d,%d %dx%d", g_rtl_d++, (unsigned long long)(sh[1] ? sh[1]->key : 0), sc->x, sc->y, sc->w, sc->h); return; }   // an empty scissor: nothing drawn
         scr = (VkRect2D){{(int32_t)x0, (int32_t)y0}, {(uint32_t)(x1 - x0), (uint32_t)(y1 - y0)}};
@@ -3204,6 +3293,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
     }
     c0_at c0 = {0};
     walk_all(d, sh);
+    if (vka_rs_on()) rs_fetch_fix(sh, d);   // PEANUTS: DM_RES_SCALE: a shader that fetches by pixel sees its 2D textures at one scale
     if (g_do_nk || g_do_all) dobj_note(sh[5]->key, g_wk.r[5], g_wk.n[5]);   // DM_VK_DISP_OBJ (g_do_nk -1: not read yet)
     p = img_retype(sh[5], &lay, p);
     {   // DM_VK_BIND_LOG=<hex key>[,…]: the binding records of those compute shaders' dispatches (the first 12 in all) (what each binding is bound to), to follow a pass's inputs and outputs
@@ -3246,6 +3336,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
         for (int i = 0; i < g_wk.n[5]; i++) { const vka_res *r = &g_wk.r[5][i];
           if (r->desc == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && r->tid) tin = r->tid; else if (r->desc == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && r->tid) tout = r->tid; }
         vka_img *a = tin ? vka_tex_id_img(tin, g_cb) : NULL, *b = tout ? vka_tex_id_img(tout, g_cb) : NULL;
+        if (vka_rs_on()) { if (a && a->rsc && !vka_tex_rs_down(a, g_cb, RS_WHY_STANDIN)) vka_rs_st.skip++; if (b && b->rsc && !vka_tex_rs_down(b, g_cb, RS_WHY_STANDIN)) vka_rs_st.skip++; }   // PEANUTS: DM_RES_SCALE: an upscaler's input and output at the sizes it was made for
         // The textures' own formats, not their images': an image is shared by the textures of one memory and shape and made in the first one's format (Ocarina of Time's
         // RGB9E5 input lives in a B10G11R11 image, so judged by the image it read as the colour: washed out, over-bright)
         VkFormat fa = tin ? vka_tex_id_vkfmt(tin) : VK_FORMAT_UNDEFINED, fb = tout ? vka_tex_id_vkfmt(tout) : VK_FORMAT_UNDEFINED;

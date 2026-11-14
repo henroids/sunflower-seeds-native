@@ -306,7 +306,41 @@ typedef struct vka_img {
     // The texture cache's own bookkeeping (vka_tex.c "Live images"): its place in the live list + 1 (0: not in it), the next live image in its storage address's chain,
     // and the video pool registrations count (dm_codec_video_epoch) at which it was last checked for lying in a video pool
     int live_ix; struct vka_img *mnext; uint64_t vep;
+    // PEANUTS: resolution scale (vka_resscale.inc): rsc: its VkImage is DM_RES_SCALE times the texture's size (w, h are the image's, d.width / d.height the texture's);
+    // rs_no: it is not to be scaled (what it is, or its shape was denied): not asked again
+    uint8_t rsc, rs_no;
 } vka_img;
+// PEANUTS begin: resolution scale (DM_RES_SCALE, restart only): vka_resscale.h the arithmetic, vka_resscale.inc (in vka_tex.c) the images and what the rest is for
+#include "vka_resscale.h"
+extern uint32_t vka_rs_q;   // the factor in quarters (VKRS_ONE = 1x: off), set once by vka_rs_init before anything is replayed
+static inline int vka_rs_on(void) { return vka_rs_q != VKRS_ONE; }
+// Why a scaled image went back to 1x (counted; the first 16 of each logged)
+enum { RS_WHY_PASS_MIX, RS_WHY_B2T, RS_WHY_T2B, RS_WHY_STORAGE, RS_WHY_COPY_KIND, RS_WHY_RESOLVE, RS_WHY_FETCH_MIX, RS_WHY_STANDIN, RS_WHY_UPLOAD, RS_WHY_N };
+// The counts of the `res scale:` statistics line (written by the recording thread, or under the texture cache's lock; read for the line without either)
+typedef struct {
+    uint64_t up, up_no_mem, busy, down[RS_WHY_N];   // images scaled; not scaled for their size; a change put off because a holder read the image; scaled down, by reason
+    uint64_t skip;                                   // work left out once because a change of scale could not be made then (a draw, a copy, a clear, a binding)
+    uint64_t conv;                                   // texture copies between a scaled and an unscaled image, done as a converting blit
+    uint64_t pass_s, pass_1, pass_forced;            // passes over scaled targets; over targets at 1x; of those, ones with a target that could have been scaled
+    uint64_t fd_all, fd_none, fd_mixed;              // draws and dispatches of a shader that fetches by pixel: all its 2D textures scaled, none, some
+    uint64_t deny_full;
+    uint64_t ctx_key;                                // the shader of the draw being recorded, for a scale-down's log line
+} vka_rs_stat;
+extern vka_rs_stat vka_rs_st;
+extern _Atomic uint32_t vka_rs_sh[3];   // shaders made while the scale is on: all, with the fetch helper, with a pixel fetch or size query and no helper (vka_shader.c)
+extern pthread_mutex_t vka_rs_mu;       // a holder outside the recording thread reads a held image's size, scale and handle under it; a change of scale only tries it
+void vka_rs_init(void);
+int vka_tex_rs_can(vka_img *im);                                  // im could be scaled now
+int vka_tex_rs_up(vka_img *im, VkCommandBuffer cb);               // 1 = scaled (now or already), 0 = not and not later, -1 = not this time; no render pass open in cb
+int vka_tex_rs_down(vka_img *im, VkCommandBuffer cb, int why);    // 1 = at 1x (now or already), 0 = it could not be made 1x now; no render pass open in cb
+void vka_rs_stats(char *b, size_t n, double frames);
+int vka_rp_rs(const p_set_rt *rt, int has_rt);                    // vka_draw.c: the targets brought to one scale: 1 scaled, 0 at 1x, -1 not possible this time
+// A rectangle of the texture's level 0 as im's pixels (unchanged for an unscaled image); 0 = nothing of it lies inside
+static inline int vka_rs_rect(const vka_img *im, int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
+    if (!im->rsc) return 1;
+    return vkrs_region(x, w, (uint32_t)im->d.width, vka_rs_q) && vkrs_region(y, h, (uint32_t)im->d.height, vka_rs_q);
+}
+// PEANUTS end
 // Texture level lv as a level of im (a sparse or soft texture's image starts at level im->base): 0 when the image does not hold it
 static inline int vka_img_lv(const vka_img *im, uint32_t *lv) { return vksoft_lv(im->base, im->levels, lv); }
 // The layers a render target view of level lv can name: a 3D texture's slices at that level (drawn into through 2D / 2D-array views, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT), else the array layers
@@ -428,6 +462,7 @@ typedef struct vka_shader {
     struct vka_memu_sh *memu_d;         // a task / mesh shader drawn through compute: its layout and compute / vertex forms (vka_memu.c), made at its first draw
     uint8_t memu;                       // such a form itself: 1 a task / mesh shader as compute (the arena, records and push constant in its layout), 2 a generated vertex shader (the arena)
     uint64_t chash;                     // its library entry's hash (vka_shlib_entry_hash), for the pipeline cache's stamp (vka_pso.c); 0 = not in the library
+    uint8_t rs_fetch;                   // PEANUTS: it reads the support buffer's render_scale[1 + i] (a fetch by pixel or a size query of a 2D texture: vka_spv_rs_scan), read only while DM_RES_SCALE is on
 } vka_shader;
 // An instanced variant's key (vka_draw.c's instanced runs): its base shader's key XOR this. It is no key of the shader library, and the variant depends on the uniform
 // binding it was made for, which a pipeline key does not record: the prewarm list records the base key and the binding instead (pwrec.inst)

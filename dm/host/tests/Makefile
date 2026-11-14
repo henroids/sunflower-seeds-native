@@ -471,6 +471,15 @@ $(B)/t_android_holes: t_android_holes.c $(VKA)/vka_holes.h | $(B)
 android-holes: $(B)/t_android_holes
 	$(B)/t_android_holes
 # PEANUTS end
+# PEANUTS begin: the resolution scale's arithmetic (vka_resscale.h; vka_tex.c vka_resscale.inc, DM_RES_SCALE): the factor, image sizes, rectangles, the table of
+# shapes kept at 1x and the scan of a module for the translator's scale code. Built with run; android-resscale builds and runs it
+run: $(B)/t_android_resscale
+$(B)/t_android_resscale: t_android_resscale.c $(VKA)/vka_resscale.h | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_resscale.c
+.PHONY: android-resscale
+android-resscale: $(B)/t_android_resscale
+	$(B)/t_android_resscale
+# PEANUTS end
 # File-backed pools (vka_fileback.h; vka_mem.c "File-backed pools", DM_MEM_FILEBACK). Linux only (mremap, O_TMPFILE, SEEK_DATA, fallocate; the file in TMPDIR, made and
 # removed by the test): make fileback, in `run` on a Linux host. From Anka Native (MIT, EddizEge; NOTICE.md)
 .PHONY: fileback

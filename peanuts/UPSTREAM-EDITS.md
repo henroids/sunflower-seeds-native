@@ -269,3 +269,34 @@ nothing.
 Settings: rows, switches, buttons, choice dialogs, confirms); `dev.peanuts.ui.PUi` stays the copy without them (Peanuts' own screens call
 `Haptics` themselves). No upstream-candidate general fix: every line calls Peanuts-owned code. The list of what plays where:
 `android/app/src/main/java/dev/peanuts/settings/HOOKS.md`, section 4.
+
+## Round 8 (2026-11-14) — Console mode and Resolution scale
+
+Two settings for every game, each a Peanuts-owned file in upstream's launcher package (`Ui.Setting`, `Prefs.of` and `Profile` are package-private there) with
+one-line hooks: `ScreenMode.java` (Console mode: the host's `DM_OPMODE`) and `ResScale.java` (Resolution scale: the host's `DM_RES_SCALE`).
+
+Resolution scale is also a host feature, stage 1 of a general render-target scale. Its logic is in three Peanuts-owned files: `dm/gfx/vk_android/vka_resscale.h`
+(the arithmetic and the module scan, no Vulkan; `dm/host/tests/t_android_resscale.c`, `make android-resscale`), `dm/gfx/vk_android/vka_resscale.inc` (the images:
+included by `vka_tex.c`, since it works on the texture cache's tables under its lock) and `ResScale.java`. The hooks in upstream files, all guarded by
+`vka_rs_on()` or by an image's `rsc` flag (both false with the setting at 1x, where the replay records what it did before):
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka.h` | 3 | `vka_img.rsc` / `rs_no`; the declarations (`vka_rs_q`, `vka_rs_st`, `vka_rs_mu`, `vka_tex_rs_*`, `vka_rp_rs`, `vka_rs_rect`); `vka_shader.rs_fetch` | trailing `// PEANUTS: ...`; a `PEANUTS begin`/`PEANUTS end` span |
+| `dm/gfx/vk_android/vka_tex.c` | 8 | `g_rswant` and the scaled extent in `img_create_`; the include; `upload()` and the region writes never go into a scaled image; `img_storage_upgrade` and `vka_tex_id_storage_pending` make it 1x for a shader image binding; `rt_gpu` reads it through a 1x scratch image | trailing `// PEANUTS: ...`; a `PEANUTS begin`/`PEANUTS end` span |
+| `dm/gfx/vk_android/vka_draw.c` | 14 | `R.rsc` / `R.rsf`; `vka_rp_rs` (one scale per pass) and `rs_sc` (a scissor in the pass's pixels) with their three uses and `rp_begin`'s call; the viewport; `rs_support` (the support buffer's `render_scale`) and its call; `rs_fetch_fix` and its two calls; the memo's and the walk's resets; the NDSR stand-in's images at 1x | trailing `// PEANUTS: ...`; `PEANUTS begin`/`PEANUTS end` spans |
+| `dm/gfx/vk_android/vka_exec.c` | 9 | `scissored`; `clear_color` / `clear_ds` ask `vka_rp_rs`; `clear_tex`'s region; `copy_bt`; `copy_t2t`'s rectangles and the scaled / unscaled cases; the DLSS stand-in's images at 1x (2); the statistics line | trailing `// PEANUTS: ...`; a `PEANUTS begin`/`PEANUTS end` span |
+| `dm/gfx/vk_android/vka_present.c` | 3 | `present_one` reads the window texture under `vka_rs_mu` and scales the crop; the unlock; `present_main` takes it around `vka_fg_frame` | trailing `// PEANUTS: ...` |
+| `dm/gfx/vk_android/vka_framegen.c` | 1 | the crop in a scaled window texture's pixels | trailing `// PEANUTS: ...` |
+| `dm/gfx/vk_android/vka_shader.c` | 2 | `rs_scan` (what a shader does with the translator's scale code) and its call in `vka_shader_make` | a `PEANUTS begin`/`PEANUTS end` span; trailing `// PEANUTS: ...` |
+| `dm/gfx/vk_android/vka_dev.c` | 1 | `vka_rs_init()` before the present starts | trailing `// PEANUTS: ...` |
+| `dm/gfx/vk_android/vka_ctl.c` | 1 | `DM_RES_SCALE`, `DM_RES_SCALE_POT` in the restart-only names | `/* PEANUTS: ... */` |
+| `dm/host/tests/Makefile` | 1 | `t_android_resscale`, `android-resscale` | a `# PEANUTS begin`/`# PEANUTS end` span |
+| `docs/env_switches.tsv` | 2 rows | `DM_RES_SCALE`, `DM_RES_SCALE_POT` | `(PEANUTS; ...)` in the row |
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `console_mode`, `res_scale` in `GAME_SETTINGS` (Reset to defaults) | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 2 | `ScreenMode.env`, `ResScale.env` in `settingsEnv` | trailing `// PEANUTS: ...` on each line |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 2 | `ScreenMode.row`, `ResScale.row` in Picture | trailing `// PEANUTS: ...` on each line |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | `ScreenMode.defaultRow`, `ResScale.defaultRow` in Game defaults | trailing `// PEANUTS: ...` on each line |
+
+Upstream candidate: the host side as a whole is general (nothing in it names a game or Peanuts), but it is a first slice (see the header of
+`vka_resscale.inc` for what scales and what falls back) and has not run on a device yet; not proposed upstream until it has.

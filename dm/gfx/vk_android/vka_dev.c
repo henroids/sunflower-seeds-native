@@ -330,6 +330,7 @@ static int init_once(void) {
     void vka_driver_notes(void); vka_driver_notes();   // what driver_open did before the log was open (the Turnip UBWC hint)
     if (!V.placed && !V.fd_alias) VRED("no placed maps or exported guest memory alias: guest memory stays anonymous and the GPU sees no memory pool");
     if (!swap) VRED("no VK_KHR_swapchain: nothing is presented");
+    vka_rs_init();   // PEANUTS: DM_RES_SCALE, and the device's depth blits said in the log (vka_tex.c vka_resscale.inc)
     vka_present_init();
     return 1;
 }

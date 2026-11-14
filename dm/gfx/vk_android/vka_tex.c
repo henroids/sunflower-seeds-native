@@ -189,6 +189,7 @@ static pthread_mutex_t g_tmu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t g_img_bytes;
 static vksoft_set g_soft_hard; static uint64_t g_soft_n, g_soft_bytes, g_soft_made, g_soft_whole;   // (under g_tmu) soft textures ("Soft textures" below): live, the storage bytes left out, made, made whole
 static int g_zwant;   // (under g_tmu) img_create_ may make a zero-shared image: vka_tex_get's new image whose content is ST_ZERO ("Zero-shared images" below)
+static int g_rswant;   // PEANUTS: (under g_tmu) img_create_ makes the image at DM_RES_SCALE times the texture's size (vka_resscale.inc rs_set_locked)
 
 // The images' memory for the stats line: all of it, and the part whose content the GPU wrote (render targets, copy and storage destinations); the rest was filled from the
 // texture's storage in guest memory, which stays in its memory pool, so those bytes are held twice
@@ -284,7 +285,8 @@ static int same_shape(const vka_img *a, const tex_t *t, const vka_fmt *f, int le
     if (lv && lw) return 1;
     if (!learn) return 0;
     pthread_mutex_lock(&g_vlmu);   // (under g_tmu: the order vka_view takes them in)
-    int learned = (!lv && vl_learn(a->f.vk, f->vk, a->w, a->h)) | (!lw && f->view != f->vk && vl_learn(a->f.vk, f->view, a->w, a->h));
+    uint32_t lw_ = a->rsc ? (uint32_t)a->d.width : a->w, lh_ = a->rsc ? (uint32_t)a->d.height : a->h;   // PEANUTS: learned by the texture's size, which a scaled image's (DM_RES_SCALE) is not
+    int learned = (!lv && vl_learn(a->f.vk, f->vk, lw_, lh_)) | (!lw && f->view != f->vk && vl_learn(a->f.vk, f->view, lw_, lh_));   // PEANUTS: lw_, lh_
     pthread_mutex_unlock(&g_vlmu);
     static struct { VkFormat a, b; } seen[16]; static int ns; int k = 0;   // (under g_tmu)
     while (k < ns && !(seen[k].a == a->f.vk && seen[k].b == f->vk)) k++;
@@ -582,6 +584,7 @@ static vka_img *img_create_(const tex_t *t, const vka_fmt *f, uint32_t base, int
                                                                     vkz_max(f->kind >= 3, V.driver_id == VK_DRIVER_ID_MESA_TURNIP, (int64_t)VKA_ENVF("DM_VK_ZSHARE_MAX_MB", -1.0)), res, im->samples, is3d, compressed(f),
                                                                     (d->flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET | NVN_TEXTURE_FLAGS_DISPLAY)) != 0);
     if (zs) fl |= VK_IMAGE_CREATE_ALIAS_BIT;
+    if (g_rswant) { im->w = vkrs_dim(im->w, vka_rs_q); im->h = vkrs_dim(im->h, vka_rs_q); im->rsc = 1; zs = 0; fl &= ~(VkImageCreateFlags)VK_IMAGE_CREATE_ALIAS_BIT; }   // PEANUTS: a scaled render target (vka_resscale.inc): its format list above is the texture's own size's, so it shares as before
     VkImageType it = is3d ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
     VkImageFormatProperties ip;
     for (int k = 0; k < 3 && vk.vkGetPhysicalDeviceImageFormatProperties(V.pd, f->vk, it, VK_IMAGE_TILING_OPTIMAL, u, fl, &ip); k++)
@@ -1801,6 +1804,8 @@ static void vka_tex_prune_locked(void) {
     }
 }
 
+#include "vka_resscale.inc"   // PEANUTS: resolution scale (DM_RES_SCALE)
+
 vka_img *vka_tex_get(const tex_t *t, VkCommandBuffer cb) {
     if (!t || !t->serial || !vka_ok()) return NULL;
     pthread_mutex_lock(&g_tmu);
@@ -1945,7 +1950,7 @@ VkImageView vka_view(vka_img *im, VkFormat fmt, VkImageViewType type, VkImageAsp
     int listed = img_lists(im, fmt) || fmt == raw_unorm_twin(im->f.vk);
     if (!listed) {   // a format outside the image's format list (img_create): its own format instead; the pair is learned for the images made from now on (Learned view formats)
         int learned = 0;   // (only uncompressed colour formats of one texel size: vl_learn checks the pair)
-        if (im->f.kind <= 2 && !compressed(&im->f)) { pthread_mutex_lock(&g_vlmu); learned = vl_learn(im->f.vk, fmt, im->w, im->h); pthread_mutex_unlock(&g_vlmu); }
+        if (im->f.kind <= 2 && !compressed(&im->f)) { pthread_mutex_lock(&g_vlmu); learned = vl_learn(im->f.vk, fmt, im->rsc ? (uint32_t)im->d.width : im->w, im->rsc ? (uint32_t)im->d.height : im->h); /* PEANUTS: by the texture's size for a scaled image (DM_RES_SCALE) */ pthread_mutex_unlock(&g_vlmu); }
         if (learned)
             VLOG("image VkFormat %d (NVN %#x, %ux%u) asked for a view as VkFormat %d, which its format list does not have: viewed in its own format; learned (images of this format and size made from now on, and in the next runs, take it)", im->f.vk, im->d.format, im->w, im->h, fmt);
         else { static struct { VkFormat a, b; } seen[32]; static int ns; int k = 0;
@@ -2072,6 +2077,8 @@ cut:;
 }
 static int img_own(vka_img *im, VkCommandBuffer cb);
 static void upload(vka_img *im, const tex_t *t, VkCommandBuffer cb) {   // (callers hold g_tmu)
+    // PEANUTS: the storage's texels are the texture's size: a scaled image is made 1x first (vka_resscale.inc); when that cannot be done now, the upload is left out
+    if (im->rsc && rs_set_locked(im, cb, 0, RS_WHY_UPLOAD, 0) <= 0) { vka_rs_st.skip++; VRED_ONCE("res scale: an upload into scaled texture serial %llu was left out (it could not be made 1x then)", (unsigned long long)im->serial); return; }
     if (im->m.z) img_own(im, cb);   // a CPU write into a zero-shared image's storage (vka_tex_prepare): memory of its own before the upload
     uint64_t t0 = now_ns(), nb = 0; upload_(im, t, cb, &nb);
     atomic_fetch_add_explicit(&g_up_ns, now_ns() - t0, memory_order_relaxed); atomic_fetch_add_explicit(&g_up_bytes, nb, memory_order_relaxed);
@@ -2691,6 +2698,9 @@ static int storage_able(const vka_img *im, VkFormat need) {
 static int img_storage_upgrade(vka_img *im, VkCommandBuffer cb, VkFormat need) {
     int listed = !need || img_lists(im, need);
     if ((im->usage & VK_IMAGE_USAGE_STORAGE_BIT) && listed) return 1;
+    // PEANUTS: a scaled render target bound as a shader image: the shader writes it in the texture's pixels, so it is made 1x first (vka_resscale.inc; its caller, id_view, holds
+    // it once). Not inside an open pass (vka_tex_id_storage_pending ends it for a scaled image), and when it cannot be done now the binding reads as unbound this once
+    if (im->rsc && (!cb || (cb == vka_rp_cb() && vka_rp_is_open()) || rs_set_locked(im, cb, 0, RS_WHY_STORAGE, 1) <= 0)) { vka_rs_st.skip++; return 0; }
     if (!cb || !storage_able(im, need) || im->holds > 1) return 0;
     tex_t t = {0}; t.serial = im->serial; t.mem = im->mem; t.d = im->d; t.d.flags |= NVN_TEXTURE_FLAGS_IMAGE; t.L = im->L;
     vka_img *n = img_create(&t, &im->f, im->base);
@@ -3111,7 +3121,7 @@ int vka_tex_id_target(int id) {
 int vka_tex_id_storage_pending(int id) {
     pthread_mutex_lock(&g_tmu);
     smap_ent *e = id > 0 && id < g_ntreg && g_treg[id].t.serial ? map_get(g_treg[id].t.serial) : NULL;
-    int r = e && e->im && ((!(e->im->usage & VK_IMAGE_USAGE_STORAGE_BIT) && storage_able(e->im, VK_FORMAT_UNDEFINED) && !e->im->holds) || e->im->m.z);   // (a zero-shared image gets memory of its own: outside the pass too)
+    int r = e && e->im && ((!(e->im->usage & VK_IMAGE_USAGE_STORAGE_BIT) && storage_able(e->im, VK_FORMAT_UNDEFINED) && !e->im->holds) || e->im->m.z || e->im->rsc);   // (a zero-shared image gets memory of its own: outside the pass too)   // PEANUTS: rsc (a scaled image is made 1x for the binding: outside the pass too)
     pthread_mutex_unlock(&g_tmu);
     return r;
 }
@@ -3229,7 +3239,7 @@ void vka_tex_prepare(VkCommandBuffer cb) {
     for (int i = 0; i < g_nreg_writes; i++) {
         tex_region_write_t *w = &g_reg_writes[i];
         vka_img *im = w->im;
-        if (!im->gpu_owned && !img_pool_dead(im)) {
+        if (!im->gpu_owned && !img_pool_dead(im) && !im->rsc) {   // PEANUTS: rsc (a region in the texture's pixels: never into a scaled image, which the GPU owns anyway)
             vka_span s;
             if (vka_scratch(w->size, 16, &s)) {
                 if (rw_overlaps(w, rw_since)) { vka_barrier(cb); rw_reset(); rw_since = i; }   // PEANUTS: only copies since the last barrier, small ones by texel (rw_overlaps)
@@ -3481,7 +3491,27 @@ static int rt_gpu(vka_img *im, unsigned level, unsigned layer0, const NVNcopyReg
                 c[nc++] = (VkBufferImageCopy){(VkDeviceSize)z * wb * hb, 0, 0, {VK_IMAGE_ASPECT_COLOR_BIT, lv, sl, 1},
                                               {r->xoffset, r->yoffset, is3d ? r->zoffset + z : 0}, {(uint32_t)r->width, (uint32_t)(r->height > 0 ? r->height : 1), 1}};
             }
-            if (nc) vk.vkCmdCopyImageToBuffer(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, g_rtbuf, (uint32_t)nc, c);
+            // PEANUTS begin: a scaled image (vka_resscale.inc: one level, one layer) is read through a 1x scratch image: the region blitted to the texture's size, then
+            // copied as before. Its size, scale and handle are read under vka_rs_mu, which a change of scale on the recording thread only tries to take
+            int rs_lock = vka_rs_on(); VkImage rsrc = VK_NULL_HANDLE;
+            if (rs_lock) pthread_mutex_lock(&vka_rs_mu);
+            if (im->rsc) {
+                int32_t sx = r->xoffset, sy = r->yoffset, sw = r->width, sh = r->height > 0 ? r->height : 1, rw = sw, rh = sh;
+                VkImage si = nc == 1 && nz == 1 && vka_rs_rect(im, &sx, &sy, &sw, &sh) ? rs_rt_scratch(im->f.vk, (uint32_t)rw, (uint32_t)rh) : VK_NULL_HANDLE;
+                if (si) {
+                    VkImageSubresourceLayers l0 = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                    VkImageBlit bl = {l0, {{sx, sy, 0}, {sx + sw, sy + sh, 1}}, l0, {{0, 0, 0}, {rw, rh, 1}}};
+                    vka_img_barrier(cb, si, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+                    vk.vkCmdBlitImage(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, si, VK_IMAGE_LAYOUT_GENERAL, 1, &bl, feats(im->f.vk) & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
+                    VkMemoryBarrier sb = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
+                    vk.vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &sb, 0, NULL, 0, NULL);
+                    c[0].imageSubresource = l0; c[0].imageOffset = (VkOffset3D){0, 0, 0};
+                    rsrc = si;
+                } else nc = 0;   // (no scratch image, or nothing of the region inside: the read falls back to the storage, as any GPU read that fails)
+            }
+            if (nc) vk.vkCmdCopyImageToBuffer(cb, rsrc ? rsrc : im->img, VK_IMAGE_LAYOUT_GENERAL, g_rtbuf, (uint32_t)nc, c);
+            if (rs_lock) pthread_mutex_unlock(&vka_rs_mu);
+            // PEANUTS end
             VkMemoryBarrier hb_ = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_HOST_READ_BIT};
             vk.vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &hb_, 0, NULL, 0, NULL);
             vk.vkEndCommandBuffer(cb);
