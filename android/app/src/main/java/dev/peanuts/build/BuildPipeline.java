@@ -26,6 +26,27 @@ public final class BuildPipeline {
 
     private BuildPipeline() {}
 
+    /** The id of the notification channel a build's end is posted on while none of the app's own screens is in front: default importance, vibration on, no sound */
+    static final String CHANNEL_DONE = "peanuts_build_done";
+    private static volatile boolean front;
+    /** The library tells whether one of the app's own screens is resumed (dev.peanuts.ui.Library, activity lifecycle callbacks of this process) */
+    public static void front(boolean on) { front = on; }
+
+    /**
+     * The channel for a build's end notification. The progress channel is LOW (silent) and its importance cannot be raised once it exists, so a build that
+     * ends while the app is not in front goes to a second channel that alerts (the system vibrates for it; the service never calls the vibrator). In front
+     * the library itself gives the feedback, and a build the user stopped (Stop on the card, Cancel on the notification) stays silent: both keep the
+     * progress channel. A job Android paused on its own has the CANCELLED code too, but nobody asked for that, so it alerts.
+     */
+    static String endChannel(android.app.NotificationManager nm, String progressChannel, boolean stoppedByUser) {
+        if (front || stoppedByUser) return progressChannel;
+        android.app.NotificationChannel c = new android.app.NotificationChannel(CHANNEL_DONE, "Build finished", android.app.NotificationManager.IMPORTANCE_DEFAULT);
+        c.enableVibration(true);
+        c.setSound(null, null);
+        nm.createNotificationChannel(c);   // no change when it exists already (the user's own settings for it are kept)
+        return CHANNEL_DONE;
+    }
+
     /** Starts the build; returns its id (for {@link #attach}/{@link #cancel}), or 0 when the request is not buildable (the listener is told why) */
     public static int start(Context ctx, BuildRequest req, BuildListener l) { return start(ctx, req, false, l); }
 

@@ -150,7 +150,7 @@ public final class ModBuildService extends Service {
     }
 
     private Notification done(boolean ok, String message) {
-        Notification.Builder b = new Notification.Builder(this, CHANNEL).setSmallIcon(ok ? android.R.drawable.stat_sys_download_done : android.R.drawable.stat_notify_error)
+        Notification.Builder b = new Notification.Builder(this, BuildPipeline.endChannel(nm, CHANNEL, !ok && cancelled)).setSmallIcon(ok ? android.R.drawable.stat_sys_download_done : android.R.drawable.stat_notify_error)
                 .setContentTitle(ok ? name + " is ready to play with mods" : "Building " + name + " with mods stopped").setContentText(message)
                 .setStyle(new Notification.BigTextStyle().bigText(message)).setAutoCancel(true);
         Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());

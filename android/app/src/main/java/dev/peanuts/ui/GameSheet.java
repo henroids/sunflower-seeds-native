@@ -87,10 +87,29 @@ public final class GameSheet {
         render();
         dialog = PUi.sheet(a, title.name, box).setNegativeButton("Close", null).create();
         dialog.setOnDismissListener(d -> { if (current == this) current = null; });
+        Motion.sheet(dialog);
+        Haptics.quiet(200);   // the focus that lands inside the sheet is silent: the press that opened it was the feedback
         dialog.show();
+        android.widget.Button close = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);   // Close is quiet (cancel is everywhere); the D-pad on it ticks like the rows
+        if (close != null) close.setOnKeyListener(Haptics.KEYS);
+    }
+
+    private PUi.Setting companionRow;   // the Companion row of this render: its switch changes its line in place (a rebuild would cut the switch's own animation)
+
+    /** The Companion row's line, as the sheet's choice and the disk are now */
+    private String companionLine() {
+        String installed = companion == null ? null : CompanionPort.installedVersion(title.companionRoot(), companion.packageName);
+        return companion == null ? "No companion in the catalog for this game"
+                : installed == null ? companion.packageName + " " + companion.version + " · " + size(companion.size) + (installCompanion ? " · Install after the build" : " · Not installed after the build")
+                : installed.equals(companion.version) ? "installed " + installed + " · up to date"
+                : "installed " + installed + " · " + companion.version + " " + (installCompanion ? "after the build" : "available");
     }
 
     private void render() {
+        try { rows(); } finally { Haptics.watch(box); }   // the D-pad's focus haptic on every row, switch and button the sheet has now
+    }
+
+    private void rows() {
         box.removeAllViews();
         String missing = title.status == LibraryScanner.Status.NO_PROFILE ? Upstream.profileMissing(title.titleId, title.name) : null;
         if (missing != null) { PUi.add(box, PUi.body(a, missing), 0); return; }
@@ -114,7 +133,7 @@ public final class GameSheet {
         String up = updateGone ? chosenUpdate.file.getName() + " — this file is no longer where the app found it. Pick it again."
                 : chosenUpdate == null ? (title.updates.isEmpty() ? "None found · Choose…" : "None · Choose…")
                 : chosenUpdate.file.getName() + " · " + versionText(chosenUpdate.version) + (chosenUpdate == newest ? ", the newest found" : "") + " · Choose another…";
-        PUi.add(box, new PUi.Setting(a, "⬆️", "Update", v -> { if (!building) LibrarySettings.pickFile(a, REQ_UPDATE, "Pick the update (.nsp / .xci)"); }).value(up).chevron(a).view, 0);
+        PUi.add(box, new PUi.Setting(a, "⬆️", "Update", v -> { if (!building) { Haptics.play(v, Haptics.Word.TICK); LibrarySettings.pickFile(a, REQ_UPDATE, "Pick the update (.nsp / .xci)"); } }).value(up).chevron(a).view, 0);
         // Version (P1, UX-SPEC §2.2): the version the player has vs. what this build's profile supports, read before Build rather than discovered deep into a run
         boolean fileGone = baseGone || updateGone;
         if (!fileGone) renderVersionRow();
@@ -123,23 +142,26 @@ public final class GameSheet {
         for (LibraryScanner.Source d : title.dlcs) names.add(d.name.isEmpty() ? d.file.getName() : d.name);
         for (File f : extraDlc) { boolean known = false; for (LibraryScanner.Source d : title.dlcs) if (d.file.equals(f)) known = true; if (!known) names.add(f.getName()); }
         String dl = names.isEmpty() ? "None found · Add…" : names.size() + (names.size() == 1 ? " found: " : " found: ") + String.join(", ", names) + " · Add…";
-        PUi.add(box, new PUi.Setting(a, "➕", "DLC", v -> { if (!building) LibrarySettings.pickFile(a, REQ_DLC, "Pick a DLC (.nsp)"); }).value(dl).chevron(a).view, 0);
-        if (!extraDlc.isEmpty()) PUi.add(box, PUi.button(a, "Forget the DLC you added", PUi.Kind.QUIET, v -> { extraDlc.clear(); saveDlc(); render(); }), 0, PUi.wrap());
+        PUi.add(box, new PUi.Setting(a, "➕", "DLC", v -> { if (!building) { Haptics.play(v, Haptics.Word.TICK); LibrarySettings.pickFile(a, REQ_DLC, "Pick a DLC (.nsp)"); } }).value(dl).chevron(a).view, 0);
+        if (!extraDlc.isEmpty()) PUi.add(box, PUi.button(a, "Forget the DLC you added", PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.CLICK); extraDlc.clear(); saveDlc(); render(); }), 0, PUi.wrap());
         // Companion
         File root = title.companionRoot();
         String installed = companion == null ? null : CompanionPort.installedVersion(root, companion.packageName);
         boolean canInstall = companion != null && !companion.version.equals(installed);
-        String cs = companion == null ? "No companion in the catalog for this game"
-                : installed == null ? companion.packageName + " " + companion.version + " · " + size(companion.size) + (installCompanion ? " · Install after the build" : " · Not installed after the build")
-                : installed.equals(companion.version) ? "installed " + installed + " · up to date"
-                : "installed " + installed + " · " + companion.version + " " + (installCompanion ? "after the build" : "available");
-        PUi.Setting comp = new PUi.Setting(a, "🖥️", "Companion", null).value(cs);
-        if (canInstall) comp.toggle(a, installCompanion, (v, on) -> { installCompanion = on; PeanutsPrefs.installCompanion(a, title.titleId, on); render(); });
+        PUi.Setting comp = new PUi.Setting(a, "🖥️", "Companion", null).value(companionLine());
+        companionRow = comp;
+        // the switch: only the row's line depends on it (the build reads the choice when it starts), so the line is written in place and the rows stay
+        if (canInstall) comp.toggle(a, installCompanion, (v, on) -> {
+            Haptics.toggle(v, on);
+            installCompanion = on;
+            PeanutsPrefs.installCompanion(a, title.titleId, on);
+            if (companionRow == comp) comp.value(companionLine());
+        });
         PUi.add(box, comp.view, 0);
         // P2.5: "Versions…" opens the Companion Versions sheet (dev.peanuts.ui.CompanionVersions, another agent's package) when the catalog has this title at
         // all. onClose: installedVersion (above) is read live from disk on every render, not cached in a field here, so re-rendering after a rollback/switch
         // is the whole refresh — critique-phase2a §B's "cached state goes stale" note, satisfied without a separate cache to invalidate
-        if (companion != null) PUi.add(box, PUi.button(a, "Versions…", PUi.Kind.QUIET, v -> dev.peanuts.ui.CompanionVersions.open(a, title.titleId, this::render)), 2, PUi.wrap());
+        if (companion != null) PUi.add(box, PUi.button(a, "Versions…", PUi.Kind.QUIET, Haptics.on(Haptics.Word.TICK, v -> dev.peanuts.ui.CompanionVersions.open(a, title.titleId, this::render))), 2, PUi.wrap());
         // Mods (DESIGN-MODS.md "a Mods section per game"): local romfs/cheat/exefs imports, never a catalog. The row's value names how many are on
         // and whether any needs a build (dev.peanuts.mods.ModRuntime.needsBuild) — read live on every render, same as the Companion row above
         renderModsRow();
@@ -148,7 +170,7 @@ public final class GameSheet {
         // supports pinning (dev.peanuts.launch.GameShortcuts.supported), not only for a READY title, matching how Home's own Add-to-home-screen entry
         // (upstream, FRONTENDS.md) is not restricted to ready games either
         if (dev.peanuts.launch.GameShortcuts.supported(a))
-            PUi.add(box, PUi.button(a, "Add to home screen", PUi.Kind.QUIET, v -> addToHomeScreen()), 2, PUi.wrap());
+            PUi.add(box, PUi.button(a, "Add to home screen", PUi.Kind.QUIET, Haptics.on(Haptics.Word.CLICK, v -> addToHomeScreen())), 2, PUi.wrap());
         PUi.add(box, PUi.divider(a), 12, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, PUi.dp(a, 1)));
         // Build prerequisites (owner, 2026-11-13): keys and firmware fonts are a one-time setup requirement, checked cheaply (file presence only, never
         // re-validated against the importer here) before any build starts — not just an NSP/XCI import. A missing firmware font can crash some games at
@@ -180,12 +202,12 @@ public final class GameSheet {
         if (needKeys) {
             LinearLayout.LayoutParams lp = PUi.wrap();
             lp.leftMargin = PUi.dp(a, 10);
-            actions.addView(PUi.button(a, "Add keys…", PUi.Kind.SOFT, v -> LibrarySettings.pickKeys(a)), lp);
+            actions.addView(PUi.button(a, "Add keys…", PUi.Kind.SOFT, Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickKeys(a))), lp);
         }
         if (needFonts) {
             LinearLayout.LayoutParams lp = PUi.wrap();
             lp.leftMargin = PUi.dp(a, 10);
-            actions.addView(PUi.button(a, "Choose firmware…", PUi.Kind.SOFT, v -> LibrarySettings.pickFirmwareSource(a)), lp);
+            actions.addView(PUi.button(a, "Choose firmware…", PUi.Kind.SOFT, Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickFirmwareSource(a))), lp);
         }
         PUi.add(box, actions, 14);
     }
@@ -371,10 +393,11 @@ public final class GameSheet {
     private void doStartBuild(boolean anyway) {
         State s = state();
         s.buildAnyway = anyway;
-        if (s.base == null) { Toast.makeText(a, "No base game found", Toast.LENGTH_SHORT).show(); return; }
-        if (s.home == null) { Toast.makeText(a, "Set the game folder first (Settings › Library)", Toast.LENGTH_LONG).show(); return; }
+        if (s.base == null) { Haptics.play(box, Haptics.Word.REJECT); Toast.makeText(a, "No base game found", Toast.LENGTH_SHORT).show(); return; }
+        if (s.home == null) { Haptics.play(box, Haptics.Word.REJECT); Toast.makeText(a, "Set the game folder first (Settings › Library)", Toast.LENGTH_LONG).show(); return; }
         String why = lib.startBuild(s);
-        if (why != null) { new AlertDialog.Builder(a).setTitle("Build").setMessage(why).setPositiveButton("OK", null).show(); return; }
+        if (why != null) { Haptics.play(box, Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Build").setMessage(why).setPositiveButton("OK", null).show(); return; }
+        if (lib.building(title.titleId)) Haptics.play(box, Haptics.Word.HEAVY);   // the build was accepted (a refusal by the pipeline says so in its own dialog)
         dialog.dismiss();
     }
 
@@ -423,7 +446,7 @@ public final class GameSheet {
         String value = mods.isEmpty() ? "None imported"
                 : on + " of " + mods.size() + " on" + (dev.peanuts.mods.ModStore.needsBuild(mods) ? " · needs a build with mods" : "");
         PUi.add(box, new PUi.Setting(a, "🧩", "Mods",
-                v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name, modsHome, title.packDir, title.launch)).value(value).chevron(a).view, 0);
+                Haptics.on(Haptics.Word.TICK, v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name, modsHome, title.packDir, title.launch))).value(value).chevron(a).view, 0);
         // PEANUTS begin: "Play with mods" (DESIGN-MODS.md "Code injection"): shown once a modded variant pack exists for an enabled code mod set
         // (dev.peanuts.mods.ModStore.variantId), beside the normal Play on Home - which this never changes. The variant's own pack (never the
         // normal one) is what GameActivity actually plays; see dev.peanuts.ui.Upstream.game()/launch() for how that extra is carried.
@@ -431,7 +454,7 @@ public final class GameSheet {
         String variantId = dev.peanuts.mods.ModStore.variantId(title.titleId, codeMods);
         File variantPack = variantId == null ? null : dev.nxnative.android.AppStorage.pack(a, variantId);
         if (variantPack != null && new File(variantPack, "pack.tsv").isFile() && title.launch != null) {
-            PUi.add(box, PUi.button(a, "Play with mods", PUi.Kind.TONAL, v -> playWithMods(variantPack)), 8, PUi.wrap());
+            PUi.add(box, PUi.button(a, "Play with mods", PUi.Kind.TONAL, Haptics.on(Haptics.Word.HEAVY, v -> playWithMods(variantPack))), 8, PUi.wrap());
         }
         // PEANUTS end
     }
@@ -440,7 +463,9 @@ public final class GameSheet {
     private void playWithMods(File variantPack) {
         FontGate.check(a, title.titleId, title.name, () -> {
             Object g = dev.peanuts.ui.Upstream.game(title.titleId, title.name, title.launch, variantPack);
-            if (g == null || !dev.peanuts.ui.Upstream.launch(a, g)) Toast.makeText(a, "Could not start " + title.name + " with mods.", Toast.LENGTH_LONG).show();
+            if (g != null && dev.peanuts.ui.Upstream.launch(a, g)) { Motion.launched(a); return; }
+            Haptics.play(box, Haptics.Word.REJECT);
+            Toast.makeText(a, "Could not start " + title.name + " with mods.", Toast.LENGTH_LONG).show();
         });
     }
 

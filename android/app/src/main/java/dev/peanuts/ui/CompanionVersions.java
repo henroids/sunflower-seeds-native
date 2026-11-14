@@ -240,6 +240,7 @@ public final class CompanionVersions {
                 if (act.isFinishing() || act.isDestroyed()) { busy = false; return; }   // the screen closed during the work: no dialog on a gone window
                 busy = false;
                 refreshLocalState();
+                Haptics.play(act.getWindow().getDecorView(), ferr != null ? Haptics.Word.REJECT : Haptics.Word.CLICK);   // the install or switch ended: refused, or done
                 if (ferr != null) Toast.makeText(act, "Failed: " + ferr, Toast.LENGTH_LONG).show();
                 else if (fwarning != null) new AlertDialog.Builder(act).setTitle(item.version + " is active").setMessage(fwarning).setPositiveButton("OK", null).show();
                 else Toast.makeText(act, item.version + " is active. It loads at the game's next start.", Toast.LENGTH_LONG).show();

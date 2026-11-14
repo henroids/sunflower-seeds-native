@@ -30,7 +30,14 @@ drift check; re-copy when upstream changes `Ui.java`).
   (`CompanionPort`) off the main thread; a scanned game that is ready goes into upstream's list (`Upstream.addToList`) so Play and Manage are Banana's own.
 - `GameSheet` — the game's dialog: Base / Update / DLC / Companion rows, Build or Rebuild, Add keys… when prod.keys are missing. Its Choose/Add pickers come back
   through `LibrarySettings.result` (requests 65, 66).
-- `LibrarySettings` — Settings › Library: folders, keys, firmware fonts, Rescan, Companions; the pickers (also the first-run card's and the sheet's).
+- `LibrarySettings` — Settings › Library: folders, keys, firmware fonts, Rescan, Haptics (System / Off), Motion (System / Reduced), Companions; the pickers
+  (also the first-run card's and the sheet's).
+- `Haptics`, `Motion`: the launcher's feedback, six haptic words (TICK, CLICK, HEAVY, EDGE, DONE, REJECT) and six motion tokens (SNAP, FOCUS, ENTER, EXIT,
+  EMPHASIS, PROGRESS), called from `Library`, `GameSheet`, `LibrarySettings` and `CompanionVersions`, never from inside `PUi` (it stays a verbatim copy). No
+  upstream hook: the D-pad's focus haptic rides on the key listeners the library's own views have, the app-in-front flag and the focus after a game on
+  activity lifecycle callbacks `Library.fill` registers, and the sheet and launch animations are resources in `src/peanuts/res` found by name. Animations
+  write alpha, translation and scale only, and none runs while a direction is held. `Library.render` skips a rebuild that would show the same thing, and a
+  rebuild keeps the focus (by title ID) and the scroll position.
 - `LibraryScanner`, `Upstream`, `CompanionPort`, `ImporterPort`, `BuildPort` — as before (reflection into upstream and the sibling Peanuts packages).
 
 ## Launching a Ready game

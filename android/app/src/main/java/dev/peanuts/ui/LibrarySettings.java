@@ -34,7 +34,7 @@ public final class LibrarySettings {
     public static final int REQ_MOD_FOLDER = 69, REQ_MOD_ZIP = 70;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Extracting the fonts…" and what came of it, while the rows show
-    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow;
+    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow;
     private static Activity rowsOf;
 
     private LibrarySettings() {}
@@ -44,26 +44,43 @@ public final class LibrarySettings {
         rowsOf = a;
         PUi.add(content, PUi.section(a, "Library"), 16);
         LinearLayout card = PUi.add(content, PUi.listCard(a), 8);
-        gameRow = new PUi.Setting(a, "📁", "Game folder", v -> pickFolder(a, REQ_GAME, "Pick your game folder")).chevron(a);
+        // a row that opens a picker or another screen ticks; Rescan, which acts at once, clicks (Haptics)
+        gameRow = new PUi.Setting(a, "📁", "Game folder", Haptics.on(Haptics.Word.TICK, v -> pickFolder(a, REQ_GAME, "Pick your game folder"))).chevron(a);
         card.addView(gameRow.view);
-        buildRow = new PUi.Setting(a, "🗂️", "Build folder", v -> pickFolder(a, REQ_BUILD_DIR, "Pick your build folder")).chevron(a);
+        buildRow = new PUi.Setting(a, "🗂️", "Build folder", Haptics.on(Haptics.Word.TICK, v -> pickFolder(a, REQ_BUILD_DIR, "Pick your build folder"))).chevron(a);
         card.addView(buildRow.view);
         buildRow.view.setOnLongClickListener(v -> { PeanutsPrefs.buildDir(a, null); refreshRows(); Library.rescan(a); return true; });
-        updateRow = new PUi.Setting(a, "⬆️", "Update folder", v -> pickFolder(a, REQ_UPDATE_DIR, "Pick your update folder")).chevron(a);
+        updateRow = new PUi.Setting(a, "⬆️", "Update folder", Haptics.on(Haptics.Word.TICK, v -> pickFolder(a, REQ_UPDATE_DIR, "Pick your update folder"))).chevron(a);
         card.addView(updateRow.view);
         updateRow.view.setOnLongClickListener(v -> { PeanutsPrefs.updateDir(a, null); refreshRows(); Library.rescan(a); return true; });
-        dlcRow = new PUi.Setting(a, "➕", "DLC folder", v -> pickFolder(a, REQ_DLC_DIR, "Pick your DLC folder")).chevron(a);
+        dlcRow = new PUi.Setting(a, "➕", "DLC folder", Haptics.on(Haptics.Word.TICK, v -> pickFolder(a, REQ_DLC_DIR, "Pick your DLC folder"))).chevron(a);
         card.addView(dlcRow.view);
         dlcRow.view.setOnLongClickListener(v -> { PeanutsPrefs.dlcDir(a, null); refreshRows(); Library.rescan(a); return true; });
-        keysRow = new PUi.Setting(a, "🔑", "Keys", v -> pickKeys(a)).chevron(a);
+        keysRow = new PUi.Setting(a, "🔑", "Keys", Haptics.on(Haptics.Word.TICK, v -> pickKeys(a))).chevron(a);
         card.addView(keysRow.view);
-        fontsRow = new PUi.Setting(a, "🔤", "Firmware fonts", v -> pickFirmwareSource(a)).chevron(a);
+        fontsRow = new PUi.Setting(a, "🔤", "Firmware fonts", Haptics.on(Haptics.Word.TICK, v -> pickFirmwareSource(a))).chevron(a);
         card.addView(fontsRow.view);
-        card.addView(new PUi.Setting(a, "🔄", "Rescan", v -> { Library.rescan(a); Toast.makeText(a, "Looking in the folders again", Toast.LENGTH_SHORT).show(); })
+        card.addView(new PUi.Setting(a, "🔄", "Rescan", Haptics.on(Haptics.Word.CLICK, v -> { Library.rescan(a); Toast.makeText(a, "Looking in the folders again", Toast.LENGTH_SHORT).show(); }))
                 .value("Reads the folders again").chevron(a).view);
-        card.addView(new PUi.Setting(a, "🧹", "Free up space", v -> freeUpSpace(a))
+        card.addView(new PUi.Setting(a, "🧹", "Free up space", Haptics.on(Haptics.Word.TICK, v -> freeUpSpace(a)))
                 .value("Delete original dumps of games already built").chevron(a).view);
-        companionsRow = new PUi.Setting(a, "🖥️", "Companions", v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity")))
+        // Haptics and Motion: each row is its own switch between two values, System (the default: what Android's settings say) and the quieter one
+        hapticsRow = new PUi.Setting(a, "📳", "Haptics", v -> {
+            boolean off = !PeanutsPrefs.hapticsOff(a);
+            PeanutsPrefs.hapticsOff(a, off);
+            Haptics.refresh(a);
+            Haptics.play(v, Haptics.Word.CLICK);   // felt when it turns back on, nothing when it turns off
+            refreshRows();
+        });
+        card.addView(hapticsRow.view);
+        motionRow = new PUi.Setting(a, "🎞️", "Motion", v -> {
+            PeanutsPrefs.motionReduced(a, !PeanutsPrefs.motionReduced(a));
+            Motion.refresh(a);
+            Haptics.play(v, Haptics.Word.CLICK);
+            refreshRows();
+        });
+        card.addView(motionRow.view);
+        companionsRow = new PUi.Setting(a, "🖥️", "Companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
                 .chevron(a);
         card.addView(companionsRow.view);
         // Developer-only, no row of its own (PeanutsPrefs.developerReadout): a long press flips whether a title with no companion package shows the raw
@@ -97,6 +114,10 @@ public final class LibrarySettings {
         keysRow.value(keysValue(a));
         fontsRow.value(fontsValue(a, "Used by games and companions. Missing characters in Android's fonts can prevent a game from starting."));
         if (companionsRow != null) companionsRow.value(companionsValue(a));
+        if (hapticsRow != null) hapticsRow.value(PeanutsPrefs.hapticsOff(a) ? "Off. Tap to follow the system's touch feedback setting again."
+                : "System: follows Android's touch feedback setting. Tap to turn the app's own haptics off.");
+        if (motionRow != null) motionRow.value(PeanutsPrefs.motionReduced(a) ? "Reduced: fades and progress only. Tap to follow the system's animation setting again."
+                : "System: follows Android's animation setting. Tap for reduced motion (fades and progress only).");
     }
 
     static String keysValue(Activity a) {
@@ -219,7 +240,7 @@ public final class LibrarySettings {
                 String err = imp.lastError();
                 UI.post(() -> {
                     if (r != 0) error(a, "The importer does not accept these keys: " + err + "\nThe file is kept; pick another to replace it.");
-                    else Toast.makeText(a, "Keys accepted", Toast.LENGTH_SHORT).show();
+                    else { Haptics.play(a.getWindow().getDecorView(), Haptics.Word.CLICK); Toast.makeText(a, "Keys accepted", Toast.LENGTH_SHORT).show(); }
                     keysLanded(a);
                 });
             }, "peanuts-keys").start();
@@ -338,5 +359,5 @@ public final class LibrarySettings {
         d[0] = PUi.sheet(a, "Free up space", box).setPositiveButton("Done", null).show();
     }
 
-    private static void error(Activity a, String msg) { if (a.isFinishing() || a.isDestroyed()) return; new AlertDialog.Builder(a).setTitle("Library").setMessage(msg).setPositiveButton("OK", null).show(); }
+    private static void error(Activity a, String msg) { if (a.isFinishing() || a.isDestroyed()) return; Haptics.play(a.getWindow().getDecorView(), Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Library").setMessage(msg).setPositiveButton("OK", null).show(); }
 }

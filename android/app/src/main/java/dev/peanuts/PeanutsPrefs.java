@@ -83,6 +83,13 @@ public final class PeanutsPrefs {
     public static boolean developerReadout(Context c) { return of(c).getBoolean("developer_readout", false); }
     public static void developerReadout(Context c, boolean on) { of(c).edit().putBoolean("developer_readout", on).apply(); }
 
+    /** Settings > Library > Haptics: false (default) = the launcher's haptics follow the system's touch feedback setting, true = none at all */
+    public static boolean hapticsOff(Context c) { return of(c).getBoolean("haptics_off", false); }
+    public static void hapticsOff(Context c, boolean off) { of(c).edit().putBoolean("haptics_off", off).apply(); }
+    /** Settings > Library > Motion: false (default) = the launcher's animations follow the system's animator scale, true = fades and the progress fill only */
+    public static boolean motionReduced(Context c) { return of(c).getBoolean("motion_reduced", false); }
+    public static void motionReduced(Context c, boolean on) { of(c).edit().putBoolean("motion_reduced", on).apply(); }
+
     /** The roots the library scans: the game folder first, then the update and DLC folders when set and different, then the build folder (walked the same
      *  two levels deep, so its {@code <title ID>/<name>.nup} entries are found) */
     public static List<File> roots(Context c) {
