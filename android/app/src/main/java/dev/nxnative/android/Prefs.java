@@ -529,10 +529,14 @@ final class Prefs {
 
     /** The build identifier alone (Signer.buildId): "launcher-2@4a15067", "0.1 · 6a6448d". Home shows it under its title (the build tag would not fit a phone's width) */
     static String buildId() {
+        if (!BuildConfig.NX_PEANUTS_ID.isEmpty()) return BuildConfig.NX_PEANUTS_ID;   // PEANUTS: "peanuts-native-0.1.1" (release), "peanuts-native-0.1.1-dev" (any other build): build.gradle nxPeanutsId
         return Signer.buildId(BuildConfig.NX_PLAY, BuildConfig.VERSION_NAME, BuildConfig.NX_COMMIT, BuildConfig.NX_DIRTY, BuildConfig.NX_BRANCH);
     }
 
-    private static String buildTag() { return Signer.buildTag(BuildConfig.NX_PLAY, buildId()); }
+    private static String buildTag() {
+        if (!BuildConfig.NX_PEANUTS_ID.isEmpty()) return BuildConfig.NX_PEANUTS_ID;   // PEANUTS: the identifier is the whole tag (it names the app)
+        return Signer.buildTag(BuildConfig.NX_PLAY, buildId());
+    }
 
     /** Game settings › Aspect ratio, for a game whose profile has a variant labelled w:h (Profile.aspectVariant; a native 4:3 mod): the label chosen ("4:3"), null = as
      *  shipped (16:9). GameActivity passes DM_PATCH_VARIANT=<variant> and DM_VK_PICTURE_ASPECT=<label>; the pack holds both versions (pack_android.py rewrite_variants) */

@@ -41,6 +41,12 @@ def gitOut = { List<String> a -> try { providers.exec { commandLine(['git'] + a)
 def commit = gitOut(['rev-parse', '--short=12', 'HEAD'])
 def branch = gitOut(['rev-parse', '--abbrev-ref', 'HEAD'])
 def dirty = gitOut(['status', '--porcelain', '--untracked-files=no']) ? '+dirty' : ''
+// PEANUTS: what the Peanuts Native app shows as its build, in place of branch@commit[+dirty]: "peanuts-native-<version>" for the release (-PnxRelease=true, its
+// -PnxVersion) and "peanuts-native-<version>-dev" for every other build, <version> then being the one in work (peanuts/VERSION, unless -PnxVersion names one).
+// The commit stays in each log's "nxnative <version> (<commit>)" line. Empty for any other app
+def peanutsVersionFile = file('../../peanuts/VERSION')
+def peanutsVersion = providers.gradleProperty('nxVersion').getOrElse(peanutsVersionFile.isFile() ? peanutsVersionFile.text.trim() : '0.0.0')
+def nxPeanutsId = nxApp == 'peanuts' ? "peanuts-native-${peanutsVersion}" + (nxRelease ? '' : '-dev') : ''
 // Lossless Scaling frame generation (GPL-3.0-or-later, dm/gfx/vk_android/lsfg): in by default, which makes the APK GPL-3.0-or-later; -PnxLsfg=false builds without it (the packer's libdmsh_xlate.so is GPL-3.0-or-later too: android/NOTICE.md)
 def nxLsfg = providers.gradleProperty('nxLsfg').getOrElse('true') != 'false'
 // Preparing the game on the phone (android/ONDEVICE.md): "+ Add game" on a dump without a usable pack offers Prepare, which runs PackService (a foreground service
@@ -242,6 +248,7 @@ android {
         buildConfigField 'String', 'NX_COMMIT', "\"${commit ?: 'unknown'}\""
         buildConfigField 'String', 'NX_BRANCH', "\"${branch ?: 'unknown'}\""
         buildConfigField 'String', 'NX_DIRTY', "\"${commit ? dirty : ''}\""
+        buildConfigField 'String', 'NX_PEANUTS_ID', "\"$nxPeanutsId\""   // PEANUTS: see nxPeanutsId above
         buildConfigField 'boolean', 'NX_LSFG', "$nxLsfg"
         // The play app and the release behave alike (saves/<id>, the user's build tag, no test switches); every other app is a test app
         buildConfigField 'boolean', 'NX_PLAY', "${nxPlay || nxLive}"
