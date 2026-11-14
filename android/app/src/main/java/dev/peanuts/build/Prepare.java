@@ -142,7 +142,11 @@ final class Prepare {
                 String shaders = Upstream.packShaders(packDir, id);
                 // The code is redone when it cannot be started (blocking) and also when it is another rewriter's: an app update with a changed rewriter or
                 // profile patch (PackCheck.code, the check Home's own Prepare makes: Metroid Dread's 60 fps patch never reached a pack built before it, 2026-11-14)
-                boolean code = blocking != null || Boolean.FALSE.equals(Upstream.packCode(c, pack, dumpR)), sh = shaders != null;
+                // ...and when main was rewritten before the rewriter kept the file's own bytes of what it changed (main.orig.bin, which a companion package's
+                // module reads: dm/peanuts/peanuts.c rt_orig). Such a pack still counts as up to date, so nothing rebuilds on its own; a build the user starts
+                // gives it the file (Octopath Traveler 0, 2026-11-14: Build again left its code as it was)
+                boolean noOrig = new File(packDir, "main.changed.tsv").isFile() && !new File(packDir, "main.orig.bin").isFile();
+                boolean code = blocking != null || noOrig || Boolean.FALSE.equals(Upstream.packCode(c, pack, dumpR)), sh = shaders != null;
                 job = Upstream.jobAdopt(r, packDir, code, sh);
                 Upstream.jobSave(job);
                 Upstream.jobRemember(c, Upstream.jobFile(job));
