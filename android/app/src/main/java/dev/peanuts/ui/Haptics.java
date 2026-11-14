@@ -19,7 +19,7 @@ import android.view.accessibility.AccessibilityManager;
 import dev.peanuts.PeanutsPrefs;
 
 /**
- * The launcher's haptics: six words, used by the library, the game sheet and Settings > Library, and nothing outside them. A word is played with the view's
+ * The launcher's haptics: six words, used by the library, the game sheet and Settings > Library, and through {@link Feel} by the pages upstream draws (a game's page), and nothing outside them. A word is played with the view's
  * own haptic constant first (tuned by the device maker, follows the system's touch feedback setting, needs no permission) and with the vibrator's composition
  * primitives or a predefined effect when the view declines (USAGE_TOUCH, so the system's setting gates that path too). Every word has a minimum gap, a focus
  * tick is dropped right after a stronger word (one haptic per action) and while a direction is held (a buzz at the key repeat rate), and nothing is ever

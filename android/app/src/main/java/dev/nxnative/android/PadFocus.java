@@ -70,8 +70,13 @@ final class PadFocus {
         Builder(Context c) { super(c); }
         Builder(Context c, int theme) { super(c, theme); }
 
+        // PEANUTS begin: a confirm button that does something clicks (dev.peanuts.ui.Feel; an OK without a listener stays as quiet as Cancel)
+        @Override public Builder setPositiveButton(CharSequence text, android.content.DialogInterface.OnClickListener l) { super.setPositiveButton(text, dev.peanuts.ui.Feel.confirm(l)); return this; }
+        // PEANUTS end
+
         @Override public AlertDialog create() {
             AlertDialog d = super.create();
+            dev.peanuts.ui.Feel.dialog(d);   // PEANUTS: a choice picked in the dialog's list clicks
             d.setOnKeyListener((di, k, e) -> {
                 if (!isBack(k)) return false;
                 if (e.getAction() == KeyEvent.ACTION_UP) di.cancel();

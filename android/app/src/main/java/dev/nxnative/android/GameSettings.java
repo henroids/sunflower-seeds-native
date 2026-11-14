@@ -309,7 +309,7 @@ final class GameSettings {
             h.addView(t, Ui.weight());
         } else h.addView(Ui.spacer(a));
         if (play) {
-            android.widget.Button b = Ui.button(a, "Play", Ui.Kind.PRIMARY, v -> a.launch(g));
+            android.widget.Button b = Ui.button(a, "Play", Ui.Kind.PRIMARY, dev.peanuts.ui.Feel.launch(v -> a.launch(g)));   // PEANUTS: Play is the heavy word, and Home fades out over the game
             b.setCompoundDrawablesRelativeWithIntrinsicBounds(Ui.icon(a, R.drawable.ic_play, R.color.bn_on_banana), null, null, null);
             b.setCompoundDrawablePadding(Ui.dp(a, 4));
             b.setPadding(Ui.dp(a, 14), 0, Ui.dp(a, 18), 0);
@@ -459,7 +459,7 @@ final class GameSettings {
     }
     static int indexOfPct(int pct) { for (int i = 0; i < Profile.RENDER_PCTS.length; i++) if (Profile.RENDER_PCTS[i] == pct) return i; return -1; }
     private static void radio(MainActivity a, String title, String[] labels, int checked, java.util.function.IntConsumer picked) {
-        new AlertDialog.Builder(a).setTitle(title).setSingleChoiceItems(labels, checked, (x, w) -> { x.dismiss(); picked.accept(w); }).setNegativeButton("Cancel", null).show();
+        new AlertDialog.Builder(a).setTitle(title).setSingleChoiceItems(labels, checked, (x, w) -> { dev.peanuts.ui.Feel.picked(x); x.dismiss(); picked.accept(w); }).setNegativeButton("Cancel", null).show();   // PEANUTS: Feel.picked, the choice's haptic (a plain AlertDialog: PadFocus.Builder's hook does not see it)
     }
 
     static String windowLabel(MainActivity a, String id) {

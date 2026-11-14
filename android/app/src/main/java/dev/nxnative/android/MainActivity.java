@@ -108,6 +108,7 @@ public final class MainActivity extends Activity {
         settingsPage = false;
         Ondevice.pause(this);
         build();
+        dev.peanuts.ui.Feel.page(pageRoot(), 0);   // PEANUTS: the page enters (not when it is built again after a choice: gameSettingsAgain)
         if (resumed) onResumeViews();
     }
 
@@ -140,7 +141,7 @@ public final class MainActivity extends Activity {
     }
 
     /** The game's page at its top (another tab) */
-    void gameSettingsTop() { if (settingsGame != null) build(); }
+    void gameSettingsTop() { if (settingsGame != null) dev.peanuts.ui.Feel.tab(pageRoot(), 2, this::build); }   // PEANUTS: was build(); a tab's tap and L1 / R1 click, and what is under the header and the tabs (children 0 and 1, GameSettings.build) enters
 
     /** The page's ScrollView (Ui.page: the first view above the bananas) */
     private android.widget.ScrollView pageScroll() {
@@ -775,6 +776,7 @@ public final class MainActivity extends Activity {
                     s.view.setFocusable(false);
                     files.addView(s.view);
                 }
+                dev.peanuts.ui.Feel.added(files);   // PEANUTS: the rows read off the main thread fade in
             });
         }, "nx-game-files").start();
         Ui.add(content, Ui.section(this, "Pack"), 16);

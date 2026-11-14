@@ -67,6 +67,7 @@ public final class CompanionSection {
         boolean busy;
         String busyText = "";
         final LinearLayout body;
+        View buttonsRow;   // the row of Install / Update / Remove / Versions of the last render (null: none)
         // The installed-state cache (AUDIT.md #6): stale until refreshInstalled() runs, which render() asks for only on its first call and after fetch/install/remove finish
         boolean installedKnown;
         String installedPkg, installedVersion;
@@ -85,7 +86,12 @@ public final class CompanionSection {
                 List<Companions.Item> it = null; String err = null;
                 try { it = Companions.fetch(); } catch (IOException | RuntimeException e) { err = e.getMessage() == null ? e.toString() : e.getMessage(); }
                 final List<Companions.Item> fit = it; final String ferr = err;
-                main.post(() -> { catalog = fit; catalogError = ferr; installedKnown = false; render(); });
+                main.post(() -> {
+                    catalog = fit; catalogError = ferr; installedKnown = false;
+                    View had = buttonsRow;
+                    render();
+                    if (had == null && buttonsRow != null) dev.peanuts.ui.Feel.appeared(buttonsRow);   // Install / Versions came with the catalog: they fade in, once (a progress tick's render never does)
+                });
             }, "peanuts-catalog").start();
         }
 
@@ -124,10 +130,12 @@ public final class CompanionSection {
             if (update) SectionUi.add(buttons, ui.button("Update", SectionUi.PRIMARY, v -> install(item)), !busy);
             if (have != null) SectionUi.add(buttons, ui.button("Remove", SectionUi.DANGER, v -> remove(pkg)), !busy);
             if (hasVersions) SectionUi.add(buttons, ui.button("Versions", SectionUi.QUIET, v -> dev.peanuts.ui.CompanionVersions.open((Activity) c, titleId, () -> { installedKnown = false; render(); })), !busy);
-            if (buttons.getChildCount() > 0) body.addView(buttons, SectionUi.lp(0, 0));
+            buttonsRow = buttons.getChildCount() > 0 ? buttons : null;
+            if (buttonsRow != null) body.addView(buttons, SectionUi.lp(0, 0));
             String ss = secondScreen(c, titleId);
             body.addView(ui.setting("📱", "Second screen", ss.equals(OFF) ? "Off: the companion does not show" : "Physical: the companion shows on the second display",
                     v -> new AlertDialog.Builder(c).setTitle("Second screen").setSingleChoiceItems(new String[] {"Physical display", "Off"}, ss.equals(OFF) ? 1 : 0, (d, w) -> {
+                        dev.peanuts.ui.Feel.picked(d);
                         secondScreen(c, titleId, w == 1 ? OFF : PHYSICAL);
                         d.dismiss();
                         render();
@@ -135,7 +143,7 @@ public final class CompanionSection {
         }
 
         void install(Companions.Item item) {
-            if (root == null) { Toast.makeText(c, "Build the game first: the companion goes beside its pack.", Toast.LENGTH_LONG).show(); return; }
+            if (root == null) { dev.peanuts.ui.Feel.refused(c); Toast.makeText(c, "Build the game first: the companion goes beside its pack.", Toast.LENGTH_LONG).show(); return; }
             busy = true; busyText = "Downloading " + Companions.label(item.packageName, item.version) + "…";
             render();
             new Thread(() -> {
@@ -147,6 +155,7 @@ public final class CompanionSection {
                 main.post(() -> {
                     busy = false;
                     installedKnown = false;   // AUDIT.md #6: the one point this cache is invalidated - an install actually finished, not merely ticked
+                    if (ferr == null) dev.peanuts.ui.Feel.accepted(c); else dev.peanuts.ui.Feel.refused(c);   // the install ended: done, or refused
                     Toast.makeText(c, ferr == null ? "Installed " + Companions.label(item.packageName, item.version) + ". It loads at the game's next start." : "Install failed: " + ferr, Toast.LENGTH_LONG).show();
                     render();
                 });
@@ -155,7 +164,7 @@ public final class CompanionSection {
 
         void remove(String pkg) {
             new AlertDialog.Builder(c).setTitle("Remove the companion?").setMessage(pkg + " is deleted from the game's folder. The catalog can install it again.")
-                    .setPositiveButton("Remove", (d, w) -> {
+                    .setPositiveButton("Remove", dev.peanuts.ui.Feel.confirm((d, w) -> {
                         // off the UI thread: the delete walks shared storage and waits for the package's lock (an install of it may be downloading)
                         Handler mainUi = new Handler(Looper.getMainLooper());
                         new Thread(() -> {
@@ -163,12 +172,13 @@ public final class CompanionSection {
                             try { Companions.remove(root, pkg, c); } catch (IOException | RuntimeException e) { err = e.getMessage() == null ? e.toString() : e.getMessage(); }
                             final String ferr = err;
                             mainUi.post(() -> {
+                                if (ferr != null) dev.peanuts.ui.Feel.refused(c);
                                 Toast.makeText(c, ferr == null ? "Removed" : "Remove failed: " + ferr, ferr == null ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG).show();
                                 installedKnown = false;
                                 render();
                             });
                         }, "peanuts-companion-remove").start();
-                    }).setNegativeButton("Cancel", null).show();
+                    })).setNegativeButton("Cancel", null).show();
         }
     }
 

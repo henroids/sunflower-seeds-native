@@ -152,7 +152,7 @@ public final class ModsSection {
             bin.setFocusable(true);
             bin.setEnabled(enabled);
             bin.setAlpha(enabled ? 1f : 0.4f);
-            bin.setOnClickListener(v -> confirmDelete(m));
+            bin.setOnClickListener(dev.peanuts.ui.Feel.row(v -> confirmDelete(m)));   // it opens the question: a tick, as a row that opens something
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(SectionUi.dp(44), SectionUi.dp(44));
             p.leftMargin = SectionUi.dp(4);
             ((LinearLayout) row).addView(bin, p);
@@ -180,6 +180,7 @@ public final class ModsSection {
             try { ModStore.setEnabled(ModRuntime.modsRoot(home), titleId, m.dir.getName(), on); } catch (IOException e) { err = e.getMessage(); }
             final String ferr = err;
             MAIN.post(() -> {
+                if (ferr != null) dev.peanuts.ui.Feel.refused(a);
                 if (ferr != null) Toast.makeText(a, "Could not turn " + m.name + (on ? " on: " : " off: ") + ferr, Toast.LENGTH_LONG).show();
                 else if (!m.hasCode()) Toast.makeText(a, m.name + (on ? " is on" : " is off") + " from the game's next start.", Toast.LENGTH_SHORT).show();   // a code mod: the Build with mods row says what comes next
                 renderCurrent();   // from disk: the switch shows what was saved
@@ -189,7 +190,7 @@ public final class ModsSection {
 
     private void confirmDelete(ModStore.Mod m) {
         new AlertDialog.Builder(a).setTitle("Delete this mod?").setMessage(m.name + " and its files are deleted from this device. The game and its saves are not changed.")
-                .setPositiveButton("Delete", (d, w) -> startDelete(m)).setNegativeButton("Cancel", null).show();
+                .setPositiveButton("Delete", dev.peanuts.ui.Feel.confirm((d, w) -> startDelete(m))).setNegativeButton("Cancel", null).show();
     }
 
     /**
@@ -217,6 +218,7 @@ public final class ModsSection {
             MAIN.post(() -> {
                 deleteTitle = null; deleteName = null; deleteText = null; deletePct = -1;
                 if (ferr != null) android.util.Log.w("peanuts", "mods: delete of " + name + ": " + ferr);
+                if (current != null && ferr != null) dev.peanuts.ui.Feel.refused(current.a);
                 if (current != null && ferr != null) current.message("Delete failed", name + ": " + ferr + "\n\nWhat is left of it is removed the next time this page is opened.");
                 renderCurrent();
             });
@@ -234,13 +236,13 @@ public final class ModsSection {
     /** The folder picker's result. a: the activity that got it (the one the pick was started in may have been made again meanwhile) */
     public static void pickedFolder(Activity a, Uri tree) {
         ModsSection s = startImport();
-        if (s != null) ModImportUi.importFolder(a, tree, ModRuntime.modsRoot(s.home), s.titleId, null, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, message));
+        if (s != null) ModImportUi.importFolder(a, tree, ModRuntime.modsRoot(s.home), s.titleId, null, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, ok, message));
     }
 
     /** The zip picker's result; displayName: the picked file's name, the mod's name when its layout has none */
     public static void pickedZip(Activity a, Uri doc, String displayName) {
         ModsSection s = startImport();
-        if (s != null) ModImportUi.importZip(a, doc, ModRuntime.modsRoot(s.home), s.titleId, displayName, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, message));
+        if (s != null) ModImportUi.importZip(a, doc, ModRuntime.modsRoot(s.home), s.titleId, displayName, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, ok, message));
     }
 
     /** The section the pick was for, with its import marked as started; null when there is none (the app was started again while the picker showed) or another import runs */
@@ -259,8 +261,9 @@ public final class ModsSection {
     }
 
     /** The end of an import: its sentence (installed, or why not: a dialog, since a refusal such as a mod for another game is longer than a toast holds) */
-    private static void importDone(Activity a, String message) {
+    private static void importDone(Activity a, boolean ok, String message) {
         importTitle = null; importText = null;
+        if (ok) dev.peanuts.ui.Feel.accepted(a); else dev.peanuts.ui.Feel.refused(a);   // installed, or refused (a mod for another game)
         if (!a.isFinishing() && !a.isDestroyed()) new AlertDialog.Builder(a).setTitle("Install mod").setMessage(message).setPositiveButton("OK", null).show();
         renderCurrent();
     }
@@ -289,7 +292,7 @@ public final class ModsSection {
         body.addView(ui.setting("🔨", "Build with mods", value, failed == null || mine ? null : v -> message("Build with mods failed", failed)), SectionUi.lp(0, 0));
         if (mine) return;
         LinearLayout buttons = SectionUi.buttons(a);
-        SectionUi.add(buttons, ui.button(ready ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, v -> startBuild(variantId, variantPack, plan)), !building && deleteTitle == null);
+        SectionUi.add(buttons, ui.button(ready ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, dev.peanuts.ui.Feel.heavy(v -> startBuild(variantId, variantPack, plan))), !building && deleteTitle == null);
         body.addView(buttons, SectionUi.lp(0, 0));
     }
 
@@ -315,6 +318,7 @@ public final class ModsSection {
             @Override public void done(boolean ok, String message, String code) {
                 buildTitle = null; buildText = null;
                 if (!ok) FAILED.put(variantId, message);
+                if (ok) dev.peanuts.ui.Feel.done(act); else if (!BuildListener.CANCELLED.equals(code)) dev.peanuts.ui.Feel.refused(act);   // felt only while the app shows; a stop the user asked for is quiet
                 Toast.makeText(act.getApplicationContext(), ok ? name + " with mods is ready." : "Build with mods failed: " + message, Toast.LENGTH_LONG).show();
                 renderCurrent();
             }

@@ -79,6 +79,7 @@ not edited (see table above).
 | `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | marked | no |
 | `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | marked | no |
 | `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | marked | no |
+| `android/app/src/main/java/dev/nxnative/android/PadFocus.java` | marked (2026-11-14, Round 7) | no |
 | `android/app/src/main/java/dev/nxnative/android/Signer.java` | marked (rebrand) | no |
 | `android/app/src/main/java/dev/nxnative/android/Ui.java` | marked (rebrand) | no |
 | `android/app/src/main/java/dev/nxnative/android/Updater.java` | marked (rebrand) | no |
@@ -248,3 +249,23 @@ marked).
 No upstream-candidate general fix here either. `dm/tools/ips.py`, `dm/tools/patch_ips.py` (a patch's offsets
 count the NSO's 0x100-byte header, as Atmosphère applies them; a patch file named by the whole build ID),
 `dm/tools/xmod.py` and `dev.peanuts.build.ModBuild`/`ModdedBuild`/`Prepare` are Peanuts-owned files.
+
+## Round 7 (2026-11-14) — haptics and motion inside a game's page
+
+The launcher's haptics and motion (`dev.peanuts.ui.Haptics` / `Motion`, the vocabulary of `design/haptics-motion-proposal.md`) reach the page a
+held cover opens, which upstream draws. One hook per widget kind, each a call into `dev.peanuts.ui.Feel` (Peanuts-owned, all the logic); no call
+site of a row, a switch or a dialog is edited. Twelve hunks in four files, every one additive: a listener runs exactly as it did, with a haptic
+before it; with haptics off and motion reduced (Settings › Library) or in another process of the app (the game, the readiness check) the hooks do
+nothing.
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/Ui.java` | 5 | `Ui.Setting`'s constructor (`Feel.row`: a row's tap), `Ui.Setting.toggle` (`Feel.toggled`: a switch), `Ui.button` (`Feel.button`), `Ui.Segmented` (`Feel.picked`), `Ui.navItem` (`Feel.nav`: a rail entry, and its pane's entrance) | trailing `// PEANUTS: ...` on each line |
+| `android/app/src/main/java/dev/nxnative/android/PadFocus.java` | 2 | `Builder.create()` (`Feel.dialog`: a choice picked in the list), a `setPositiveButton` override (`Feel.confirm`: a confirm button with a listener) | trailing `// PEANUTS: ...`; a `PEANUTS begin`/`PEANUTS end` span |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 3 | `gameSettings()` (`Feel.page`: the page enters), `gameSettingsTop()` (`Feel.tab` around `build()`: a tab's tap and L1 / R1), `gameTab()`'s game-files list (`Feel.added`: the rows read off the main thread) | trailing `// PEANUTS: ...` on each line |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 2 | the header's Play (`Feel.launch`), `radio()` (`Feel.picked`: its dialog is a plain `AlertDialog.Builder`) | trailing `// PEANUTS: ...` on each line |
+
+`Ui.java` and `PadFocus.java` are shared with upstream's other screens, so those get the same feedback from the same hooks (Home's cards and
+Settings: rows, switches, buttons, choice dialogs, confirms); `dev.peanuts.ui.PUi` stays the copy without them (Peanuts' own screens call
+`Haptics` themselves). No upstream-candidate general fix: every line calls Peanuts-owned code. The list of what plays where:
+`android/app/src/main/java/dev/peanuts/settings/HOOKS.md`, section 4.

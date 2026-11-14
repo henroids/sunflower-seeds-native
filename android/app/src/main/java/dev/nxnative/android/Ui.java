@@ -433,7 +433,7 @@ final class Ui {
         b.setIncludeFontPadding(false);
         b.setTextColor(col(c, textColor(k)));
         style(c, b, k, 14);
-        b.setOnClickListener(l);
+        b.setOnClickListener(dev.peanuts.ui.Feel.button(l));   // PEANUTS: a button's tap clicks and dips (dev.peanuts.ui.Feel; null stays null)
         return b;
     }
 
@@ -550,7 +550,7 @@ final class Ui {
             view.setPadding(dp(c, 10), dp(c, 7), dp(c, 10), dp(c, 7));
             view.setMinimumHeight(dp(c, 52));
             view.setBackground(ripple(c, round(Color.TRANSPARENT, dp(c, 12), 0, 0)));
-            view.setOnClickListener(l);
+            view.setOnClickListener(dev.peanuts.ui.Feel.row(l));   // PEANUTS: a row's tap ticks and dips (dev.peanuts.ui.Feel; null stays null)
             tile = text(c, emoji, 17, R.color.bn_text, 400);
             tile.setGravity(Gravity.CENTER);
             tile.setIncludeFontPadding(false);
@@ -614,7 +614,7 @@ final class Ui {
         Setting toggle(Context c, boolean on, android.widget.CompoundButton.OnCheckedChangeListener l) {
             toggle = new Switch(c);
             toggle.setChecked(on);
-            toggle.setOnCheckedChangeListener((b, x) -> { if (l != null) l.onCheckedChanged(b, x); says(); });   // the value line follows the switch (says)
+            toggle.setOnCheckedChangeListener((b, x) -> { dev.peanuts.ui.Feel.toggled(b, x); if (l != null) l.onCheckedChanged(b, x); says(); });   // the value line follows the switch (says)   // PEANUTS: Feel.toggled, a switch's haptic
             view.addView(toggle);
             if (!view.hasOnClickListeners()) view.setOnClickListener(v -> { if (toggle.isEnabled()) toggle.toggle(); });
             return this;
@@ -681,7 +681,7 @@ final class Ui {
                 t.setPadding(dp(c, 10), 0, dp(c, 10), 0);
                 t.setClickable(true);
                 t.setFocusable(true);
-                t.setOnClickListener(v -> { if (i != selected) { select(i); pick.accept(i); } });
+                t.setOnClickListener(v -> { if (i != selected) { dev.peanuts.ui.Feel.picked(v); select(i); pick.accept(i); } });   // PEANUTS: Feel.picked, the choice's haptic
                 items[k] = t;
                 addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             }
@@ -754,7 +754,7 @@ final class Ui {
         t.setFocusable(true);
         t.setSelected(selected);
         t.setContentDescription(label);
-        t.setOnClickListener(l);
+        t.setOnClickListener(dev.peanuts.ui.Feel.nav(l));   // PEANUTS: a rail entry clicks, and its section's pane enters (dev.peanuts.ui.Feel)
         return t;
     }
 

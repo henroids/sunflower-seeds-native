@@ -32,7 +32,7 @@ import dev.peanuts.PeanutsPrefs;
 import java.util.ArrayList;
 
 /**
- * The launcher's motion: six tokens (a duration and an easing each), used by the library and its sheets, and nothing outside them. Only alpha, translation
+ * The launcher's motion: six tokens (a duration and an easing each), used by the library and its sheets, and through {@link Feel} by the pages upstream draws (a game's page), and nothing outside them. Only alpha, translation
  * and scale are animated: they are render node properties, so no frame of an animation measures, lays out or redraws a view's content (the cover grid is one
  * ScrollView holding every cover of the library; one layout pass touches all of them). The one exception is the cover crossfade, which redraws one tile per
  * frame and is capped. With the system's animator scale at 0 every helper sets the end state at once; under reduced motion (the app's setting, battery
@@ -50,7 +50,7 @@ final class Motion {
     /** A focused tile's scale: 3.5 % of a cover is under the 4 dp its cell keeps free on each side for the focus ring, so nothing is clipped */
     private static final float FOCUSED = 1.035f, PRESSED = 0.97f, POP_LOW = 0.95f, POP_HIGH = 1.04f;
     private static final long RAPID_MS = 120;   // two focus changes closer than this are a held direction, whatever moved the focus
-    private static final int MAX_ROWS = 3, MAX_COVER_FADES = 8;
+    private static final int MAX_ROWS = 3, MAX_COVER_FADES = 8, MAX_PIECES = 12;
 
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static final Rect RECT = new Rect();
@@ -160,6 +160,52 @@ final class Motion {
                 return true;
             }
         });
+    }
+
+    /**
+     * A page, or the part of one under its tabs, was built for the user (a game's page opened, another tab or section picked): what shows of column's
+     * children from index first on fades in and rises 8 dp (ENTER), the first three STAGGER apart; the fade alone under reduced motion. Decided once, in a
+     * pre-draw pass after the layout. A child taller than the window is not one layer (a card of thirty rows): its own children enter instead, so every
+     * layer is smaller than the window; at most twelve pieces, and what is under the fold just shows. Never called for a page built again after a choice.
+     */
+    static void enterPage(ViewGroup column, int first) {
+        if (!enabled || first >= column.getChildCount()) return;
+        column.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                ViewTreeObserver o = column.getViewTreeObserver();
+                if (o.isAlive()) o.removeOnPreDrawListener(this);
+                if (!column.isAttachedToWindow()) return true;
+                int window = column.getRootView().getHeight();
+                int[] n = {0};
+                for (int i = first; i < column.getChildCount(); i++) piece(column.getChildAt(i), window, on() ? 8 * column.getResources().getDisplayMetrics().density : 0f, n);
+                return true;
+            }
+        });
+    }
+
+    private static void piece(View v, int window, float rise, int[] n) {
+        if (n[0] >= MAX_PIECES || v.getVisibility() != View.VISIBLE || v.getAlpha() <= 0f || !v.getGlobalVisibleRect(RECT)) return;
+        if (v.getHeight() > window) {
+            if (v instanceof ViewGroup) { ViewGroup g = (ViewGroup) v; for (int i = 0; i < g.getChildCount(); i++) piece(g.getChildAt(i), window, rise, n); }
+            return;
+        }
+        float rest = v.getAlpha();   // a row that is off rests at 60 %, a button that is off at 42 %: the fade ends there
+        v.setAlpha(0f);
+        v.setTranslationY(rise);
+        v.addOnAttachStateChangeListener(CANCEL_ON_DETACH);
+        v.animate().alpha(rest).translationY(0f).setStartDelay(rise > 0f ? (long) Math.min(n[0], MAX_ROWS) * STAGGER : 0).setDuration(ENTER).setInterpolator(OUT).withLayer();
+        n[0]++;
+    }
+
+    /**
+     * A press on a row or a button of a page: it dips and comes back (SNAP each way) while what the press started goes on. The dip is the 3 dp a side a
+     * cover's tile dips by (97 % of a cover), so a row as wide as the page does not shrink by 12 dp a side. Nothing else of the view is cancelled: a row
+     * pressed while it still enters keeps its fade.
+     */
+    static void pressed(View v) {
+        if (!on() || v.getWidth() <= 0) return;
+        float s = Math.max(PRESSED, 1f - 6f * v.getResources().getDisplayMetrics().density / v.getWidth());
+        v.animate().scaleX(s).scaleY(s).setStartDelay(0).setDuration(SNAP).setInterpolator(OUT).withEndAction(() -> scale(v, 1f, SNAP));
     }
 
     /** A line of text that was not there before (the scan's "Looking in...", the empty library's sentence): it fades in (ENTER) */

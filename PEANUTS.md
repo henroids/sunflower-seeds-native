@@ -36,6 +36,9 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      hook per rule 2's own exception): a modded variant build's module-list override, per-module source override and exefs_patches application
      before the rewrite, plus writing the variant's own `profile.bin` when its module list adds one past the shipped profile. None given (the
      normal pack build): behaviour is byte-for-byte unchanged. `design/platform/DESIGN-MODS.md`, `peanuts/UPSTREAM-EDITS.md` Round 5.
+   - `android/app/src/main/java/dev/nxnative/android/Ui.java`, `PadFocus.java`, `MainActivity.java`, `GameSettings.java` — (2026-11-14, haptics
+     and motion inside a game's page) one call into `dev.peanuts.ui.Feel` per widget kind: a row's tap, a switch, a button, a segmented choice, a
+     rail entry, a choice dialog's list and confirm button, the page's and a tab's entrance, Play. Additive only; `peanuts/UPSTREAM-EDITS.md` Round 7.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).
