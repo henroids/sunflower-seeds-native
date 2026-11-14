@@ -327,6 +327,23 @@ def pack_rows(rows, cap, zero_row):
     return p.finish()
 
 
+MOD_MEMORY_KEYS = {'mem_reserve': 'MEM_RESERVE', 'mem_alias': 'MEM_ALIAS', 'app_pool': 'APP_POOL'}
+
+
+def mod_memory(title_id):
+    """{macro: value text} from mod_memory.tsv for this title: rows `<title ID> <key> <value>`, key one of MOD_MEMORY_KEYS, '#' comments"""
+    out = {}
+    f = HERE / 'mod_memory.tsv'
+    if not f.is_file(): return out
+    for line in f.read_text().splitlines():
+        cells = line.split('#', 1)[0].split()
+        if len(cells) != 3 or cells[0].upper() != str(title_id).upper(): continue
+        if cells[1] not in MOD_MEMORY_KEYS: sys.exit(f'gen_runtime_profile.py: mod_memory.tsv: {cells[1]} is not one of {sorted(MOD_MEMORY_KEYS)}')
+        as_int(cells[2])   # a number, or this stops here
+        out[MOD_MEMORY_KEYS[cells[1]]] = cells[2]
+    return out
+
+
 def build_profile_bytes(g, modules_override=None):
     """modules_override: a modded variant build's own module list (dm/tools/pack_android.py --modules, dev.peanuts.build.ModBuild.Plan.modules),
     replacing game.tsv's MODULES/NMOD for this one profile.bin; None (the normal path) uses header()'s own values, byte for byte as before."""
@@ -336,6 +353,11 @@ def build_profile_bytes(g, modules_override=None):
                          f'(and a converted call site if they are an ARRAY one) before trusting a generic build')
     missing = {n for n in SCALAR if n not in d}
     if missing: sys.exit(f'gen_runtime_profile.py: {g.id}: header() did not emit expected scalar macro(s) {sorted(missing)} (game.py changed shape?)')
+
+    # A modded variant's memory (mod_memory.tsv beside this file): a mod's larger files can need more of the application pool than the game's profile gives the
+    # game itself, and the profile's own numbers stay as tested for the game without mods (its memory lies where it did)
+    if modules_override is not None:
+        for key, value in mod_memory(g.id).items(): d[key] = value
 
     def val(name): return d[name]
 

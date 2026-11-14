@@ -423,6 +423,7 @@ if (nxPackEngine == 'native') {
     def toolsZip = tasks.register('nxPackTools', Zip) {
         from(repo) {
             include 'scripts/*.py', 'dm/tools/*.py', 'dm/games/*.py', 'dm/gfx/nvn/*.h'
+            include 'dm/peanuts/profile/mod_memory.tsv'   // PEANUTS: a modded variant's memory numbers, read by gen_runtime_profile.py
             include 'dm/peanuts/profile/gen_runtime_profile.py'   // PEANUTS: a build with a code mod that adds a module writes its own profile.bin with it (pack_android.py --modules); without the file every such build stopped at "Rewriting the game's code"
             include 'dm/tools/rewriter_equiv/*'   // earlier rewriter files of identical output: their pack keys still count (pack_android.py EQUIV, RewriteKey)
             nxGames.each { include "dm/games/$it/**" }   // the profile of each game the APK runs
