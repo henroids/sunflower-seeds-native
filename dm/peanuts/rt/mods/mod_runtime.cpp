@@ -799,6 +799,15 @@ void ModRuntime::Tick() {
                 summary += std::format("{}=? ", name);
             }
         }
+        // PNRT: the module's gates, so a page stuck on its standby screen says why in the log.
+        const auto gate = [&](const char* name) {
+            const auto it = snapshot.ints.find(name);
+            return it != snapshot.ints.end() ? it->second : s64{-1};
+        };
+        summary += std::format("[gates map_ready={} cutscene={} module_ready={} build_match={} "
+                               "map_lock_forced={}] ",
+                               gate("map_ready"), gate("cutscene"), gate("module_ready"),
+                               gate("build_match"), map_lock_forced_waits);
         LOG_INFO(Core, "DSMod snapshot: {}", summary);
     }
 

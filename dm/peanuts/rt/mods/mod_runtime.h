@@ -835,6 +835,12 @@ private:
     /// short holds (spinning with a yield, at most 250 us), returns false without the lock while
     /// a raster is in progress or the holder outlasts that.
     bool LockMapStateUnlessRaster(MapStateLock& lock) const;
+    /// PNRT: consecutive LockMapStateUnlessRaster refusals (tick thread), and the total of the waits
+    /// that ended one. A raster that restarts as fast as it ends (a handheld, the CPU canvas path:
+    /// every reveal is a new raster) refused every publish for good and the page stayed on its
+    /// first frame.
+    mutable u32 map_lock_refused_run{0};
+    mutable u32 map_lock_forced_waits{0};
     /// One module map publication (AcceptModuleMap / AcceptModuleMapState), copied out of the
     /// module's buffers so it can be applied after the call returns. Tick thread only.
     struct PendingMapUpdate {

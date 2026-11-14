@@ -600,11 +600,31 @@ bool ModRuntime::LockMapStateUnlessRaster(MapStateLock& lock) const {
     const auto start = std::chrono::steady_clock::now();
     for (;;) {
         if (lock.try_lock()) {
+            map_lock_refused_run = 0; // PNRT
             return true;
         }
         if (map_raster_busy.load(std::memory_order_acquire) != 0 ||
             std::chrono::steady_clock::now() - start > Grace) {
-            return false;
+            // PNRT: Peanuts ticks on a thread of its own (the game's vsync does not run on it), so
+            // waiting out a raster costs the page its tick, not the game a frame. Deferring for
+            // good starved the publish: after a second of refusals (the page's ~30 Hz publish
+            // attempts, plus the map updates') take the lock for real and let the frame through.
+            constexpr u32 ForceAfter = 60;
+            if (++map_lock_refused_run < ForceAfter) {
+                return false;
+            }
+            lock.lock();
+            map_lock_refused_run = 0;
+            if (++map_lock_forced_waits <= 3 || (map_lock_forced_waits % 100) == 0) {
+                LOG_INFO(Core,
+                         "DSMod: a map raster starved the page's publish; waited it out "
+                         "(wait #{}, {} ms)",
+                         map_lock_forced_waits,
+                         std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - start)
+                             .count());
+            }
+            return true;
         }
         std::this_thread::yield();
     }
