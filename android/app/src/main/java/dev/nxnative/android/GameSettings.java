@@ -279,7 +279,7 @@ final class GameSettings {
         advanced.add(new Ui.Setting(a, "📝", "Extra environment", v -> env(a, g, again))
                 .value(envLines == 0 ? "None" : envLines + (envLines == 1 ? " line: " : " lines: ") + env.replace('\n', ' ')).chevron(a));
 
-        options.rows.addView(dev.peanuts.settings.CompanionSection.modsView(a, id, g.name, g.packDir));   // PEANUTS: the Mods section, above Companion (the game's Mods sheet)
+        options.rows.addView(dev.peanuts.settings.ModsSection.view(a, id, g.name, g.gameDir, g.packDir, pack -> a.launch(new Game(id, g.name, g.gameDir, pack))));   // PEANUTS: the Mods section, above Companion (install, on/off, delete; a code mod's build with mods and its Play with mods, which starts the game with that build's pack)
         options.rows.addView(dev.peanuts.settings.CompanionSection.view(a, id, dev.peanuts.settings.CompanionSection.root(g.packDir)));   // PEANUTS: the Companion section (install/update/remove, second screen)
         Section[] all = perf ? new Section[] {picture, speed, advanced} : new Section[] {options, controls};   // Performance: what changes speed and picture; Game: the game's own options, language and controls
         View reset = recLine != null ? null : Ui.button(a, "Reset to defaults", Ui.Kind.SOFT, v -> new PadFocus.Builder(a).setTitle("Reset to defaults · " + g.name)

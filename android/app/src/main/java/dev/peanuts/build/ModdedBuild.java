@@ -54,6 +54,22 @@ public final class ModdedBuild {
     }
 
     /**
+     * The "build" rows of a pack's {@code pack.tsv} ({@code build}, a tab, {@code <module>=<build id>}; one per module): module → build ID, in the pack's
+     * order, for {@code dev.peanuts.mods.ModImporter}'s check that a mod's IPS patches are for this game's build. Empty when the pack has none or cannot be read.
+     */
+    public static java.util.Map<String, String> buildIds(File normalPack) {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        try {
+            for (String line : Files.readAllLines(new File(normalPack, "pack.tsv").toPath(), StandardCharsets.UTF_8)) {
+                String[] c = line.split("\t");
+                int eq = c.length < 2 ? -1 : c[1].indexOf('=');
+                if (c[0].equals("build") && eq > 0) out.put(c[1].substring(0, eq).trim(), c[1].substring(eq + 1).trim());
+            }
+        } catch (IOException e) { /* no pack.tsv: nothing to compare a mod with */ }
+        return out;
+    }
+
+    /**
      * The modded "rewrite" step's extra argv, one token per line (joined by the caller into {@code Job.modArgs}; {@code PackService}'s "rewrite"
      * case splits it back on "\n"). Empty when plan has nothing a mod supplies ({@code plan.source} empty): a plain replace-only mod still produces
      * {@code --modules}/{@code --mod-exefs} lines (its module stays in the same position, but its bytes come from the mod), while a mod that adds

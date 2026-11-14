@@ -14,9 +14,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
+import java.util.Map;
 
 /**
- * "Add mod…" (DESIGN-MODS.md, this task's step 1): the system pickers (folder or zip), resolved to a real path exactly as
+ * "Install mod…" (DESIGN-MODS.md, this task's step 1; dev.peanuts.settings.ModsSection): the system pickers (folder or zip), resolved to a real path exactly as
  * {@code dev.peanuts.ui.LibrarySettings}' own pickers do (a cloud-provider document with no real path is refused with the same wording), then handed
  * to {@link ModImporter} off the UI thread with a progress callback. Request codes and the {@code onActivityResult} hookup live in
  * {@code LibrarySettings} (which already owns that range); this class only does the picking UI and the import work once a path is in hand, so it has
@@ -29,7 +30,7 @@ public final class ModImportUi {
 
     public interface Callback { void onDone(boolean ok, String message); }
 
-    /** "Add mod…": folder or zip, same two-choice shape as Settings › Library's "Firmware fonts" picker */
+    /** "Install mod…": folder or zip, same two-choice shape as Settings › Library's "Firmware fonts" picker */
     public static void pick(Activity a, String titleId, Runnable onFolder, Runnable onZip) {
         android.widget.LinearLayout box = new android.widget.LinearLayout(a);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
@@ -38,7 +39,7 @@ public final class ModImportUi {
                 + "Nothing is downloaded or checked against a catalog, only files already on this device."));
         box.addView(row(a, "📁", "Folder", v -> { d[0].dismiss(); onFolder.run(); }));
         box.addView(row(a, "🗜️", "Zip file", v -> { d[0].dismiss(); onZip.run(); }));
-        d[0] = sheet(a, "Add mod", box);
+        d[0] = sheet(a, "Install mod", box);
         d[0].show();
     }
 
@@ -59,7 +60,7 @@ public final class ModImportUi {
     /** A picked folder's tree result (ACTION_OPEN_DOCUMENT_TREE): resolved to a real path (as every other folder picker in this app does), then
      *  imported directly from there — no separate staging copy for the folder case, since the source is already real files on the device's own
      *  storage and {@link ModImporter} never writes into it. {@code progress} and {@code done} are called on the main thread. */
-    public static void importFolder(Activity a, Uri tree, File modsRoot, String titleId, String displayName, ProgressUi progress, Callback done) {
+    public static void importFolder(Activity a, Uri tree, File modsRoot, String titleId, String displayName, Map<String, String> gameBuilds, ProgressUi progress, Callback done) {
         String path = treeToPath(tree);
         if (path == null) { done.onDone(false, "That folder is not on the phone's storage (a cloud provider, say). Pick one on the phone or its SD card."); return; }
         File staging = new File(path);
@@ -69,7 +70,7 @@ public final class ModImportUi {
         new Thread(() -> {
             String problem = ModImporter.freeSpaceProblem(staging, modsRoot);
             if (problem != null) { UI.post(() -> done.onDone(false, problem)); return; }
-            doImport(staging, modsRoot, titleId, displayName, false, progress, done);
+            doImport(staging, modsRoot, titleId, displayName, gameBuilds, false, progress, done);
         }, "peanuts-mod-import").start();
     }
 
@@ -77,10 +78,10 @@ public final class ModImportUi {
      *  provider, an archive app's content provider) is copied into the app's cache first, exactly as {@code LibrarySettings.pickedFirmwareZip}
      *  does for a firmware zip, since the content resolver's stream can only be read once and extraction needs to retry-safe seek in spirit (and,
      *  more simply, so the free-space check below can see the whole file's size before extracting a byte). */
-    public static void importZip(Activity a, Uri doc, File modsRoot, String titleId, String displayNameHint, ProgressUi progress, Callback done) {
+    public static void importZip(Activity a, Uri doc, File modsRoot, String titleId, String displayNameHint, Map<String, String> gameBuilds, ProgressUi progress, Callback done) {
         String local = documentToPath(doc);
         String displayName = displayNameHint != null ? ModImporter.nameFromPickedDisplayName(displayNameHint) : null;
-        if (local != null && new File(local).isFile()) { extractAndImport(a, new File(local), null, modsRoot, titleId, displayName, progress, done); return; }
+        if (local != null && new File(local).isFile()) { extractAndImport(a, new File(local), null, modsRoot, titleId, displayName, gameBuilds, progress, done); return; }
         progress.onProgress(0, 0, "Copying the zip…");
         new Thread(() -> {
             File tmp = new File(a.getCacheDir(), "mod_import_" + System.nanoTime() + ".zip");
@@ -93,11 +94,11 @@ public final class ModImportUi {
                 UI.post(() -> done.onDone(false, "Could not copy the zip: " + e.getMessage()));
                 return;
             }
-            UI.post(() -> extractAndImport(a, tmp, tmp, modsRoot, titleId, displayName, progress, done));
+            UI.post(() -> extractAndImport(a, tmp, tmp, modsRoot, titleId, displayName, gameBuilds, progress, done));
         }, "peanuts-mod-copy").start();
     }
 
-    private static void extractAndImport(Activity a, File zipFile, File deleteAfter, File modsRoot, String titleId, String displayName, ProgressUi progress, Callback done) {
+    private static void extractAndImport(Activity a, File zipFile, File deleteAfter, File modsRoot, String titleId, String displayName, Map<String, String> gameBuilds, ProgressUi progress, Callback done) {
         String problem = sizeProblem(zipFile, modsRoot);
         if (problem != null) { if (deleteAfter != null) deleteAfter.delete(); done.onDone(false, problem); return; }
         new Thread(() -> {
@@ -107,7 +108,7 @@ public final class ModImportUi {
                 try (InputStream in = new FileInputStream(zipFile)) {
                     ModImporter.extractZip(in, staging, zipFile.length(), (done2, total, name) -> UI.post(() -> progress.onProgress(done2, total, name)));
                 }
-                finishImport(staging, modsRoot, titleId, displayName, progress, done);
+                doImport(staging, modsRoot, titleId, displayName, gameBuilds, true, progress, done);
             } catch (IOException e) {
                 ModImporter.deleteTree(staging);
                 UI.post(() -> done.onDone(false, "Could not extract the zip: " + e.getMessage()));
@@ -130,17 +131,13 @@ public final class ModImportUi {
     }
 
     /** Already off the UI thread (called from {@code importFolder}'s or {@code extractAndImport}'s own worker thread): the import itself, plus the
-     *  staging cleanup and the result callback, so every import path reports the same "Imported <name>" / "<error>" wording through {@link #doImport} */
-    private static void finishImport(File staging, File modsRoot, String titleId, String displayName, ProgressUi progress, Callback done) {
-        doImport(staging, modsRoot, titleId, displayName, true, progress, done);
-    }
-
-    private static void doImport(File staging, File modsRoot, String titleId, String displayName, boolean deleteStagingAfter, ProgressUi progress, Callback done) {
-        ModImporter.Result r = ModImporter.importFrom(staging, modsRoot, titleId, displayName,
+     *  staging cleanup and the result callback, so every import path reports the same "Installed <name>" / "<error>" wording */
+    private static void doImport(File staging, File modsRoot, String titleId, String displayName, Map<String, String> gameBuilds, boolean deleteStagingAfter, ProgressUi progress, Callback done) {
+        ModImporter.Result r = ModImporter.importFrom(staging, modsRoot, titleId, displayName, gameBuilds,
                 (bytesDone, total, name) -> UI.post(() -> progress.onProgress(bytesDone, total, name)));
         if (deleteStagingAfter) ModImporter.deleteTree(staging);
-        UI.post(() -> done.onDone(r.ok, r.ok ? "Imported " + r.modName + (ModStore.KIND_CODE.equals(r.kind)
-                ? " · code mod: its romfs/cheats apply now, its exefs needs a build with mods" : "") : r.error));
+        UI.post(() -> done.onDone(r.ok, r.ok ? "Installed " + r.modName + ". It is off: turn it on in the list."
+                + (ModStore.KIND_CODE.equals(r.kind) ? " Its code needs a build with mods." : "") : r.error));
     }
 
     public interface ProgressUi { void onProgress(long bytesDone, long total, String currentFile); }
@@ -161,8 +158,7 @@ public final class ModImportUi {
         }
     }
 
-    // ---- tiny Banana-styled dialog bits (PUi lives in dev.peanuts.ui and this package deliberately does not depend on it beyond this file's own
-    // pickers; ModsSheet, the main Mods list, does use PUi directly since it already sits beside GameSheet's own rendering) ----
+    // ---- tiny dialog bits (PUi lives in dev.peanuts.ui and this package deliberately does not depend on it) ----
 
     private static android.widget.TextView textBody(Activity a, String s) {
         android.widget.TextView t = new android.widget.TextView(a);

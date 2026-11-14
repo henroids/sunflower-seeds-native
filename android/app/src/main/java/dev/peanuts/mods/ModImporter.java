@@ -8,7 +8,10 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * The layout normalizer (DESIGN-MODS.md "a Mods section per game", this task's step 1): given a plain folder on disk that already holds a copy of
@@ -56,6 +59,15 @@ public final class ModImporter {
      *                   if it collides ({@link ModStore#freeName})
      */
     public static Result importFrom(File staging, File modsRoot, String titleId, String displayName, Progress progress) {
+        return importFrom(staging, modsRoot, titleId, displayName, null, progress);
+    }
+
+    /**
+     * Same, for a built game: gameBuilds is its pack's module → build ID rows ({@code dev.peanuts.build.ModdedBuild.buildIds}); a mod whose IPS patches
+     * are all named for other builds is refused ({@link #buildIdProblem}). null or empty: nothing to compare with, no check. With or without them, a mod
+     * whose exefs/main.npdm is another game's is refused ({@link #npdmTitleId}).
+     */
+    public static Result importFrom(File staging, File modsRoot, String titleId, String displayName, Map<String, String> gameBuilds, Progress progress) {
         if (progress == null) progress = NONE;
         try {
             Layout layout = detect(staging, titleId);
@@ -63,6 +75,11 @@ public final class ModImporter {
                     + "an Atmosphère-layout folder (atmosphere/contents/<title ID>/...), or its zip.");
             if (layout.mismatchedTitleId != null) return Result.fail("This mod is for title ID " + layout.mismatchedTitleId + ", not this game ("
                     + titleId.toUpperCase(Locale.ROOT) + "). Not imported.");
+            String npdmId = layout.exefs == null ? null : npdmTitleId(new File(layout.exefs, "main.npdm"));
+            if (npdmId != null && !npdmId.equalsIgnoreCase(titleId)) return Result.fail("This mod is for another game: its exefs/main.npdm is for title ID "
+                    + npdmId + ", not this game (" + titleId.toUpperCase(Locale.ROOT) + "). Not installed.");
+            String wrongBuild = buildIdProblem(layout, gameBuilds);
+            if (wrongBuild != null) return Result.fail(wrongBuild);
             // The Yuzu/Eden "load" layout's wrapper folder name is the mod's real name (that is how those tools organize mods); it wins over whatever
             // the picked zip/folder was called. The Atmosphère and bare layouts carry no such embedded name, so the player's own name (from the
             // picked document, usually the zip's own filename) is all there is
@@ -86,7 +103,7 @@ public final class ModImporter {
             ModStore.Mod m = new ModStore.Mod(dest);
             m.name = name;
             m.version = "";
-            m.enabled = false;   // imported off; the player turns it on from the Mods list (so an import never silently changes a running game)
+            m.enabled = false;   // imported off; the player turns it on in the Mods section (so an import never silently changes a running game)
             m.order = ModStore.list(modsRoot, titleId).size();
             m.kind = anyCode ? ModStore.KIND_CODE : ModStore.KIND_FILES;
             ModStore.save(m);
@@ -154,6 +171,66 @@ public final class ModImporter {
             }
         }
         return null;
+    }
+
+    /**
+     * The game a mod's exefs/main.npdm is for: the program ID in its ACI0 (the META header's u32 at 0x70 is where the ACI0 starts, its u64 at +0x10 the ID,
+     * both little endian), 16 hex digits in upper case. A console's loader refuses an npdm of another program, so a mod that ships one names its game with
+     * it, also in the bare and "load" layouts, which have no title ID folder. null: no such file, or not an npdm (then there is nothing to tell from it).
+     */
+    private static String npdmTitleId(File npdm) {
+        if (!npdm.isFile() || npdm.length() > (1 << 20)) return null;
+        try {
+            byte[] b = Files.readAllBytes(npdm.toPath());
+            if (b.length < 0x80 || b[0] != 'M' || b[1] != 'E' || b[2] != 'T' || b[3] != 'A') return null;
+            long aci = le(b, 0x70, 4);
+            if (aci < 0x80 || aci + 0x18 > b.length || b[(int) aci] != 'A' || b[(int) aci + 1] != 'C' || b[(int) aci + 2] != 'I' || b[(int) aci + 3] != '0') return null;
+            return String.format(Locale.ROOT, "%016X", le(b, (int) aci + 0x10, 8));
+        } catch (IOException e) { return null; }
+    }
+
+    private static long le(byte[] b, int at, int n) {
+        long v = 0;
+        for (int i = n - 1; i >= 0; i--) v = v << 8 | (b[at + i] & 0xff);
+        return v;
+    }
+
+    /**
+     * An IPS patch is named after the build ID of the module it patches ({@code <build id>.ips}, in {@code exefs_patches/<set>/} or in {@code exefs/}), so
+     * the names say which game build the mod was made for. A bare or "load"-layout mod carries no title ID at all: without this check a mod for another
+     * game was imported and attached without a word (its patches then never apply, or the build with mods stops). Refused only when it can be told: the
+     * mod has patches named by a build ID and none of them is for a module of this game's build (the first 32 hex digits, any case; a name cut short is
+     * padded with zeros, as the tools that write them drop trailing zeros). A mod that ships several versions' patches passes when one of them fits. A
+     * whole replacement module (exefs/main) says nothing about the build it replaces, so it is not judged here. null: no problem, or nothing to compare.
+     */
+    private static String buildIdProblem(Layout l, Map<String, String> gameBuilds) {
+        if (gameBuilds == null || gameBuilds.isEmpty()) return null;
+        List<String> named = new ArrayList<>();
+        addIpsBuilds(l.exefs, named);
+        File[] sets = l.exefsPatches == null ? null : l.exefsPatches.listFiles(File::isDirectory);
+        if (sets != null) for (File s : sets) addIpsBuilds(s, named);
+        if (named.isEmpty()) return null;
+        for (String id : gameBuilds.values()) if (named.contains(build32(id))) return null;
+        String main = gameBuilds.containsKey("main") ? gameBuilds.get("main") : gameBuilds.values().iterator().next();
+        return "This mod is for another game or another version of this game: its patches are for build " + named.get(0).substring(0, 16)
+                + ", and this game's build is " + build32(main).substring(0, 16) + ". Not installed. Use the mod made for this game and version.";
+    }
+
+    private static void addIpsBuilds(File dir, List<String> out) {
+        String[] names = dir == null ? null : dir.list();
+        if (names == null) return;
+        for (String n : names) {
+            if (!n.toLowerCase(Locale.ROOT).endsWith(".ips")) continue;
+            String stem = n.substring(0, n.length() - 4);
+            if (stem.matches("[0-9A-Fa-f]{8,}")) out.add(build32(stem));   // any other name is not a build ID: nothing to tell from it
+        }
+    }
+
+    /** A build ID's first 32 hex digits in upper case, padded with zeros when shorter */
+    private static String build32(String id) {
+        StringBuilder b = new StringBuilder(id.trim().toUpperCase(Locale.ROOT));
+        while (b.length() < 32) b.append('0');
+        return b.substring(0, 32);
     }
 
     private static boolean hasFiles(File dir) {

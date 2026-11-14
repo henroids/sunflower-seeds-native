@@ -217,6 +217,6 @@ No upstream-candidate general fix: every one of these exists only to carry a Pea
 fix to the normal path. `dm/peanuts/profile/gen_runtime_profile.py`'s new `profile-modules` subcommand
 and all of `dev.peanuts.build.ModdedBuild`/`ModBuildService`/`ModBuildPipeline`/`ModBuildRequest` and the
 `dev.peanuts.ui.Upstream.game()` addition are Peanuts-owned new code, not upstream edits, so they are out
-of scope for this file. `dev.peanuts.mods.ModsSheet`'s and `dev.peanuts.ui.GameSheet`'s edits are
+of scope for this file. `dev.peanuts.settings.ModsSection`'s and `dev.peanuts.ui.GameSheet`'s edits are
 Peanuts-owned files too. Full detail, the variant's on-disk layout and the device-test recipe: the mods
 build report (owner's session log) and `PEANUTS.md`'s 2026-11-13 "build-time half" status entry.

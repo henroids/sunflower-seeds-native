@@ -67,7 +67,7 @@ public final class ModBuild {
      * {@code exefs()} directory is scanned for files named exactly one of {@link #isKnownModuleName}'s names (a module the mod replaces, when the name
      * is already in profileModules, or adds, when it is not): the first mod in priority order to name a given module wins it (replace or add), later
      * mods naming the same module are ignored for it — the same first-enabled-wins rule as the romfs overlay and {@code ModStore.enabledRomfsDirs}, so
-     * a player reordering mods in the Mods tab gets one consistent rule everywhere, not a different one for code than for files. An added module (not
+     * a player whose mods are in another order gets one consistent rule everywhere, not a different one for code than for files. An added module (not
      * already in profileModules) is appended in the order its mod was first seen. genericHost: Peanuts' own default build (-PnxGenericHost=true);
      * false refuses outright as soon as any mod would add a module, since the per-title host has no spare module slot to give it (see the class doc).
      */

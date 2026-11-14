@@ -11,7 +11,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 /**
- * The modded-variant counterpart of {@link BuildPipeline} ("Build with mods" on the Mods sheet, DESIGN-MODS.md "Code injection"): hands a {@link
+ * The modded-variant counterpart of {@link BuildPipeline} ("Build with mods" in the game's Mods section, DESIGN-MODS.md "Code injection"): hands a {@link
  * ModBuildRequest} to {@link ModBuildService} (its own foreground service, never {@link BuildService} — the normal build/import/companion pipeline
  * is untouched by this feature) and keeps a {@link BuildListener} for it. Its own id space and listener map, separate from {@link BuildPipeline}'s,
  * so a normal build and a modded-variant build can in principle run at once without fighting over one "running" flag (today each service still

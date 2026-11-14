@@ -23,7 +23,7 @@ import java.util.List;
  *     enabled mod's file winning a same-named collision.</li>
  * </ul>
  * Only "files"-kind content (romfs, cheats) is ever wired here. A "code" mod's exefs/exefs_patches never reach the normal build's process at
- * all — {@link ModStore#needsBuild} is what the Mods sheet reads to show "Needs a build with mods" instead of pretending the code ran.
+ * all — {@link ModStore#needsBuild} is what the Mods section (dev.peanuts.settings.ModsSection) reads to offer "Build with mods" instead of pretending the code ran.
  */
 public final class ModRuntime {
     private ModRuntime() {}
@@ -98,8 +98,4 @@ public final class ModRuntime {
         if (kids != null) for (File k : kids) deleteTree(k);
         f.delete();
     }
-
-    /** For the Mods sheet's "Needs a build with mods" line: true when an enabled mod carries exefs/exefs_patches, which the normal build never
-     *  applies (only this title's play-time romfs/cheats do, from the same mod) */
-    public static boolean needsBuild(File gameHome, String titleId) { return ModStore.needsBuild(mods(gameHome, titleId)); }
 }

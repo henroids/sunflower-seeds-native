@@ -31,7 +31,7 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` — (2026-11-13, code mods) the "rewrite" step appends `Job.modArgs()`
      (split on `"\n"`) to `pack_android.py`'s argv when it is not empty — block-marked, a no-op for a normal job.
    - `android/app/src/ondevice/AndroidManifest.xml` — (2026-11-13, code mods) one new `<service>` line, `dev.peanuts.build.ModBuildService`
-     (the modded-variant build, ModsSheet's "Build with mods"), beside the existing `BuildService` line.
+     (the modded-variant build, the Mods section's "Build with mods"), beside the existing `BuildService` line.
    - `scripts/pack_android.py` — (2026-11-13, code mods) `--modules`/`--mod-exefs`/`--mod-patches`, block-marked (too much logic for a one-line
      hook per rule 2's own exception): a modded variant build's module-list override, per-module source override and exefs_patches application
      before the rewrite, plus writing the variant's own `profile.bin` when its module list adds one past the shipped profile. None given (the
@@ -91,7 +91,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - 2026-11-13 (Mods, play-time half, `design/platform/DESIGN-MODS.md`): a per-game Mods section (`dev.peanuts.mods`, new package) — local-import only
   (a picked folder or zip, never a catalog), normalizing Atmosphère (`atmosphere/contents/<tid>/{romfs,exefs}` + `exefs_patches`), Yuzu/Eden "load"
   (`<mod>/romfs`, `<mod>/exefs`) and bare (`romfs`/`exefs` at the root) layouts into `<app files>/mods/<TITLEID>/<modName>/` with a `mod.json`
-  (`ModStore`, the shared contract with the build-time code-mod agent). `GameSheet`'s new "Mods" row opens `ModsSheet` (list, enable, move up/down
+  (`ModStore`, the shared contract with the build-time code-mod agent). The Mods section of a game's settings (`dev.peanuts.settings.ModsSection`, the Game tab of the page a held cover opens; first a `ModsSheet` opened from `GameSheet`) shows them (list, on / off
   = priority, remove). At launch, `GameActivity.start()` adds `DM_ROMFS_OVERLAY` (enabled mods' romfs dirs, highest priority first, the scene
   overlay falling back last — hle_fs.c:222-223/375-388/1289-1326, first root to have the file wins, directories union) and `DM_CHEATS` (enabled
   mods' cheat files staged into one folder — hle_cheats.c's flat-folder scan, hle_cheats.c:1316-1322). A "code" mod's romfs/cheats apply the same
@@ -107,7 +107,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   carry it on a *separate* job keyed at `<game home>/<variantId>-work` and a *separate* pack (`AppStorage.pack(c, variantId)`, made `public` for
   this) — `Prepare.runModded` (new method) never touches the normal job/pack, and reuses the normal pack's own shader library (code mods never
   change shaders) instead of re-translating. `dev.peanuts.build.ModBuildService`/`ModBuildPipeline`/`ModBuildRequest` (new, own foreground service
-  and id space, `BuildService`/`BuildPipeline` untouched) run it from `ModsSheet`'s new "Build with mods"/"Rebuild with mods" button, which replaces
+  and id space, `BuildService`/`BuildPipeline` untouched) run it from the Mods section's "Build with mods"/"Rebuild with mods" button, which replaces
   the old static "not available from this sheet yet" chip; `GameSheet` offers "Play with mods" once a variant pack exists (`dev.peanuts.ui.Upstream
   .game()`, a throwaway `Game` pointed at the variant pack, never added to the library list). An added `subsdk9`-named module (or one whose bytes
   contain an "exlaunch" marker) gets a plain-worded, non-blocking warning (`ModdedBuild.exlaunchWarning`) that its runtime hooks will not take

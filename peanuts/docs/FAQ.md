@@ -22,7 +22,7 @@ You need three things from your own console first: your game dumps, your `prod.k
 5. Tap **Firmware fonts**, then **Folder** or **Zip file**, and pick your firmware dump. The row reads **Extracting the fonts…** and then **Fonts extracted from …**. Do this after the keys: the fonts cannot be read without them.
 6. Tap **Show my games**. You should see a grid of covers. A game that can be built has a **Build** label on its cover.
 7. Optional: install a GPU driver in Settings › **GPU driver**. See [Which driver is recommended?](#which-driver-is-recommended)
-8. Tap a cover. Its sheet opens with the rows **Base**, **Update**, **DLC**, **Companion** and **Mods**. Check them and tap **Build**. Android asks to allow notifications: allow it, so you can see the progress outside the app.
+8. Tap a cover. Its sheet opens with the rows **Base**, **Update**, **DLC** and **Companion**. Check them and tap **Build**. Android asks to allow notifications: allow it, so you can see the progress outside the app.
 9. Wait. The cover shows **Building · N %**. You can leave the app.
 10. When the build ends you see **… is ready to play.** and the cover gets a green check. Tap the cover to play.
 
@@ -291,7 +291,7 @@ Do not remove the card during a build or while a game from it runs.
 | **Rebuild** | The same sheet, opened for a game that is already built | Makes the `.nup` and the pack again from the files in the sheet, and updates the companion. |
 | **Build again** | Hold the cover › **Storage** tab | Opens that sheet for a built game. You then tap **Rebuild**. |
 | **Prepare again** | Hold the cover › **Storage** tab, only for a game added as a dump folder | Remakes only the parts of the pack that do not fit, from the dump. It does not import or touch the companion. |
-| **Build with mods** | The Mods sheet | Makes a separate build that carries code mods. See [Mods](#mods). |
+| **Build with mods** | Hold the cover › **Game** tab › **Mods** | Makes a separate build that carries code mods. See [Mods](#mods). |
 
 A tap on a ready cover plays the game, so the way to its sheet is hold the cover › **Storage** › **Build again**.
 
@@ -596,15 +596,26 @@ Local mods only: `romfs` file replacements, cheats, `exefs` code and IPS patches
 
 ### How do I add or remove a mod?
 
-1. Open the game's sheet and tap **Mods**, then **Add mod…** For a built game the sheet is under hold the cover › **Storage** › **Build again**.
-2. Pick the mod's **Folder** or **Zip file**. Atmosphère-layout folders and plain `romfs`/`exefs` folders are recognized.
-3. Turn mods on or off and order them. The first enabled mod wins when two mods touch the same file.
+Mods are in the game's page, not in the build sheet. The game must be built first: for a game that is not built the section reads **Build the game first**.
 
-To remove a mod, tap the bin beside it. Its files are deleted from the device. The game is not changed otherwise.
+1. Hold the game's cover. Its page opens.
+2. Open the **Game** tab and find the **Mods** section, above **Companion**.
+3. Tap **Install mod…** and pick the mod's **Folder** or **Zip file**. Atmosphère-layout folders and plain `romfs`/`exefs` folders are recognized.
+4. The mod appears in the list, turned off. The line under its name says what it carries: **Files**, **Cheats** or **Code**.
+
+A mod made for another game, or for another version of the game, is refused with a message that names the build or title ID it is for. Nothing is installed then.
+
+To remove a mod, tap the bin at the end of its row and confirm with **Delete**. Its files are deleted from the device. The game and its saves are not changed.
+
+### How do I turn a mod on or off?
+
+Use the switch in the mod's row. A change applies at the game's next start. When two mods that are on touch the same file, the one higher in the list wins. The list is in the order the mods were installed.
 
 ### What is a build with mods?
 
-File mods and cheats apply without a build. A mod that carries code shows **Needs a build with mods**. Build the game normally first, then tap **Build with mods** in the Mods sheet. That makes a separate variant. The normal build is kept as it is. Start the variant with **Play with mods** on the game's sheet. If you change which code mods are on, tap **Rebuild with mods**.
+File mods and cheats apply without a build. A mod that carries code reads **Code: needs a build with mods**. Turn it on, then tap **Build with mods** in the same **Mods** section. The row shows the progress, then **Ready**, or **Failed** with the reason (tap the row to read all of it). The build is a separate variant: the normal build is kept as it is.
+
+Start the variant with **Play with mods** in the **Mods** section. The page's **Play** and a tap on the cover still start the game without its code mods. If you change which code mods are on, the section offers **Build with mods** again for the new set. After you rebuild the game itself, tap **Rebuild with mods**.
 
 ## Troubleshooting
 

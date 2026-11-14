@@ -302,7 +302,7 @@ final class Prepare {
             c.startForegroundService(Upstream.packStart(c, file));
         } catch (RuntimeException e) {
             Log.w(TAG, "PackService start refused (modded): " + e);
-            throw new BuildListener.Failure("Android did not let the packer start in the background. The modded build is saved; try again from the game's Mods sheet.", BuildListener.CANCELLED);
+            throw new BuildListener.Failure("Android did not let the packer start in the background. The modded build is saved; try again from the game's Mods section (hold the cover, Game tab).", BuildListener.CANCELLED);
         }
         p.on(1, STEP_TEXT[0]);
         long startedAt = SystemClock.elapsedRealtime(), lastChange = startedAt;
@@ -330,19 +330,19 @@ final class Prepare {
             }
             if (state.equals("failed")) {
                 throw new BuildListener.Failure("Building with mods failed at " + STEP_TEXT[si].toLowerCase(Locale.ROOT) + (o.optString("error").isEmpty() ? "." : ": " + o.optString("error"))
-                        + "\nRetry from the game's Mods sheet.", BuildListener.TOOL_STOPPED);
+                        + "\nRetry from the game's Mods section (hold the cover, Game tab).", BuildListener.TOOL_STOPPED);
             }
             int pct = pct(si, done, total);
             if (state.equals("paused")) {
                 if (reason.equals("user") || reason.equals("timeout") || reason.equals("refused") || reason.equals("apk"))
-                    throw new BuildListener.Failure("Building with mods paused (" + reasonText(reason) + "). Retry from the game's Mods sheet.", BuildListener.CANCELLED);
+                    throw new BuildListener.Failure("Building with mods paused (" + reasonText(reason) + "). Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.CANCELLED);
                 p.on(pct, "Paused: " + reasonText(reason) + ". " + stepText(si, done, total, stage));
                 lastChange = SystemClock.elapsedRealtime();
                 continue;
             }
             p.on(pct, stepText(si, done, total, stage));
             if (SystemClock.elapsedRealtime() - lastChange > STALL_MS && !(link != null && link.alive))
-                throw new BuildListener.Failure("The packer stopped reporting progress. Retry from the game's Mods sheet.", BuildListener.STALLED);
+                throw new BuildListener.Failure("The packer stopped reporting progress. Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.STALLED);
         }
         throw new BuildListener.Failure("Build cancelled.", BuildListener.CANCELLED);
     }

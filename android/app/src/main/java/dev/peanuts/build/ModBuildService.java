@@ -20,7 +20,7 @@ import java.io.IOException;
  * "Build with mods": a foreground service ("Building &lt;name&gt; with mods") that runs {@link Prepare#runModded} for one variant at a time — the
  * modded-variant counterpart of {@link BuildService}, but with none of its import/companion steps: a modded build always starts from a dump that is
  * already imported (the normal build's own), so there is nothing to import, and a companion is not mod content (DESIGN-MODS.md "Code injection").
- * ACTION_CANCEL stops the running build between progress updates (the packer's job stays saved; Retry from the Mods sheet resumes it).
+ * ACTION_CANCEL stops the running build between progress updates (the packer's job stays saved; Retry from the Mods section resumes it).
  */
 public final class ModBuildService extends Service {
     public static final String ACTION_BUILD = "dev.peanuts.build.MOD_BUILD", ACTION_CANCEL = "dev.peanuts.build.MOD_CANCEL";

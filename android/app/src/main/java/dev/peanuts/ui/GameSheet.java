@@ -162,9 +162,6 @@ public final class GameSheet {
         // all. onClose: installedVersion (above) is read live from disk on every render, not cached in a field here, so re-rendering after a rollback/switch
         // is the whole refresh — critique-phase2a §B's "cached state goes stale" note, satisfied without a separate cache to invalidate
         if (companion != null) PUi.add(box, PUi.button(a, "Versions…", PUi.Kind.QUIET, Haptics.on(Haptics.Word.TICK, v -> dev.peanuts.ui.CompanionVersions.open(a, title.titleId, this::render))), 2, PUi.wrap());
-        // Mods (DESIGN-MODS.md "a Mods section per game"): local romfs/cheat/exefs imports, never a catalog. The row's value names how many are on
-        // and whether any needs a build (dev.peanuts.mods.ModRuntime.needsBuild) — read live on every render, same as the Companion row above
-        renderModsRow();
         // Launcher support (owner request, LAUNCHERS.md): a pinned shortcut that starts this title through dev.nxnative.android.FrontendLaunch's own
         // title_id path (FRONTENDS.md) — a ready game starts at once, a game not yet built opens Home with it instead. Shown whenever the launcher
         // supports pinning (dev.peanuts.launch.GameShortcuts.supported), not only for a READY title, matching how Home's own Add-to-home-screen entry
@@ -434,39 +431,6 @@ public final class GameSheet {
             Bitmap cover = f == null ? null : BitmapFactory.decodeFile(f.getPath());
             a.runOnUiThread(() -> dev.peanuts.launch.GameShortcuts.pin(a, titleId, name, cover));
         }, "peanuts-shortcut").start();
-    }
-
-    /** The Mods row: how many mods are on, and whether any enabled one needs a build (its exefs part), read fresh from disk every render — a mod
-     *  toggled or reordered in {@code dev.peanuts.mods.ModsSheet} needs no cache invalidation here, same shape as the Companion row's installedVersion */
-    private void renderModsRow() {
-        java.io.File modsHome = dev.peanuts.mods.ModRuntime.home(a, title.titleId, title.launch, title.home);
-        java.util.List<dev.peanuts.mods.ModStore.Mod> mods = dev.peanuts.mods.ModRuntime.mods(modsHome, title.titleId);
-        int on = 0;
-        for (dev.peanuts.mods.ModStore.Mod m : mods) if (m.enabled) on++;
-        String value = mods.isEmpty() ? "None imported"
-                : on + " of " + mods.size() + " on" + (dev.peanuts.mods.ModStore.needsBuild(mods) ? " · needs a build with mods" : "");
-        PUi.add(box, new PUi.Setting(a, "🧩", "Mods",
-                Haptics.on(Haptics.Word.TICK, v -> dev.peanuts.mods.ModsSheet.open(a, title.titleId, title.name, modsHome, title.packDir, title.launch))).value(value).chevron(a).view, 0);
-        // PEANUTS begin: "Play with mods" (DESIGN-MODS.md "Code injection"): shown once a modded variant pack exists for an enabled code mod set
-        // (dev.peanuts.mods.ModStore.variantId), beside the normal Play on Home - which this never changes. The variant's own pack (never the
-        // normal one) is what GameActivity actually plays; see dev.peanuts.ui.Upstream.game()/launch() for how that extra is carried.
-        java.util.List<dev.peanuts.mods.ModStore.Mod> codeMods = dev.peanuts.mods.ModStore.enabledCodeMods(mods);
-        String variantId = dev.peanuts.mods.ModStore.variantId(title.titleId, codeMods);
-        File variantPack = variantId == null ? null : dev.nxnative.android.AppStorage.pack(a, variantId);
-        if (variantPack != null && new File(variantPack, "pack.tsv").isFile() && title.launch != null) {
-            PUi.add(box, PUi.button(a, "Play with mods", PUi.Kind.TONAL, Haptics.on(Haptics.Word.HEAVY, v -> playWithMods(variantPack))), 8, PUi.wrap());
-        }
-        // PEANUTS end
-    }
-
-    /** "Play with mods": the same launch as Home's own Play, but with the modded variant's pack instead of the normal one (never the normal pack) */
-    private void playWithMods(File variantPack) {
-        FontGate.check(a, title.titleId, title.name, () -> {
-            Object g = dev.peanuts.ui.Upstream.game(title.titleId, title.name, title.launch, variantPack);
-            if (g != null && dev.peanuts.ui.Upstream.launch(a, g)) { Motion.launched(a); return; }
-            Haptics.play(box, Haptics.Word.REJECT);
-            Toast.makeText(a, "Could not start " + title.name + " with mods.", Toast.LENGTH_LONG).show();
-        });
     }
 
     /** The keys landed (Add keys…): Build comes on if firmware fonts are there too. NOTE for the owner of LibrarySettings.java (not touched here): only

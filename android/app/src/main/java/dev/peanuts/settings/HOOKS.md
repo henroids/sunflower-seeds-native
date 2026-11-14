@@ -1,6 +1,6 @@
-# PEANUTS hooks for the build pipeline and the Companion section
+# PEANUTS hooks for the build pipeline, the Companion section and the Mods section
 
-Two one-line additions to upstream files (PEANUTS.md rule 2). Neither is applied by agent C; the session owner inserts them.
+One-line additions to upstream files (PEANUTS.md rule 2).
 
 ## 1. GameSettings.java — the Companion section (one line)
 
@@ -23,6 +23,21 @@ New (one line inserted between them):
 
 `CompanionSection.root(g.packDir)` computes the companion root the way `dev.peanuts.Games.Entry.companionRoot` does: `<packDir>/../peanuts`
 (`<game>/<title ID>-work/peanuts`), or null without a pack (then the section says "build the game first" and Install is off).
+
+## 1b. GameSettings.java: the Mods section (one line)
+
+Same file, in `static void build(MainActivity a, LinearLayout content, Game g, Runnable again, Runnable close)`, directly before the Companion section's line, so
+Mods shows above Companion in the Game tab:
+
+```java
+        options.rows.addView(dev.peanuts.settings.ModsSection.view(a, id, g.name, g.gameDir, g.packDir, pack -> a.launch(new Game(id, g.name, g.gameDir, pack))));   // PEANUTS: the Mods section, above Companion (...)
+```
+
+`ModsSection` lists the game's mods (a switch and a bin each), installs one from a folder or a zip (`dev.peanuts.mods.ModImportUi`; the pickers' results come
+back through `MainActivity.onActivityResult` → `dev.peanuts.ui.LibrarySettings.result`, requests 69 and 70 → `ModsSection.pickedFolder` / `pickedZip`), and for
+code mods starts the build with mods (`dev.peanuts.build.ModBuildPipeline`) and shows its state. The last argument is how "Play with mods" starts the game with
+the variant's pack: upstream's own `MainActivity.launch` with a `Game` that is never put into the list, so the normal build and the page's Play stay as they are.
+A game without a pack gets one row, "Build the game first". Both sections draw upstream's rows through `SectionUi` (reflection onto `Ui`).
 
 ## 2. AndroidManifest.xml — the build service (one element)
 
