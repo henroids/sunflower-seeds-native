@@ -348,15 +348,45 @@ final class LibraryScanner {
 
     // ---- Icons ----
 
-    /** The title's icon as files/icons/<ID>.png: the one already there, else the importer's from an NSP/XCI of the title (off the main thread); null without one */
+    private static final int NUP_ICON_MAX = 4 << 20;   // a title's icon is a 256x256 picture, some hundred KiB as a PNG; anything larger is not one
+    private static final byte[] PNG_SIGNATURE = { (byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+
+    /**
+     * The icon the PC builder wrote beside a .nup ("<the .nup's name without .nup>.png", peanuts/scripts/peanuts_build.py) copied to out; false without one.
+     * The file comes from shared storage, so it is taken only when it is a PNG by its signature and at most NUP_ICON_MAX bytes, and it reaches out by a rename:
+     * a file kept in files/icons is never read again, so half a copy or a file the decoder refuses would hide the game's cover for good.
+     */
+    private static boolean nupIcon(File nup, File out) {
+        String n = nup.getName();
+        File dir = nup.getParentFile(), to = out.getParentFile();
+        if (dir == null || to == null || n.length() <= 4) return false;
+        File png = new File(dir, n.substring(0, n.length() - 4) + ".png");
+        long len = png.isFile() ? png.length() : 0;
+        if (len < PNG_SIGNATURE.length || len > NUP_ICON_MAX) return false;
+        File tmp = new File(to, out.getName() + ".tmp");
+        try {
+            byte[] b = Files.readAllBytes(png.toPath());
+            if (b.length < PNG_SIGNATURE.length || b.length > NUP_ICON_MAX) return false;   // the file may have grown since length()
+            for (int i = 0; i < PNG_SIGNATURE.length; i++) if (b[i] != PNG_SIGNATURE[i]) return false;
+            to.mkdirs();
+            Files.write(tmp.toPath(), b);
+            if (tmp.renameTo(out)) return true;
+        } catch (Exception e) { Log.w("peanuts", "icon beside " + n + ": " + e); }
+        tmp.delete();
+        return false;
+    }
+
+    /** The title's icon as files/icons/<ID>.png: the one already there, else the PNG beside a .nup of the title (the PC builder's), else the importer's from an
+     *  NSP/XCI of the title (off the main thread); null without one */
     static File icon(Context c, Title t) {
         File out = new File(PeanutsPrefs.iconsDir(c), t.titleId + ".png");
         if (out.isFile() && out.length() > 0) return out;
-        ImporterPort imp = ImporterPort.get();
-        if (!imp.available() || !ImporterPort.ensureKeys(c)) return null;
         List<Source> all = new ArrayList<>();
         if (t.base != null) all.add(t.base);
         all.addAll(t.updates);
+        for (Source s : all) if (s.isNup() && nupIcon(s.file, out)) return out;   // a .nup holds no icon
+        ImporterPort imp = ImporterPort.get();
+        if (!imp.available() || !ImporterPort.ensureKeys(c)) return null;
         for (Source s : all) {
             if (!s.needsImport()) continue;
             out.getParentFile().mkdirs();
