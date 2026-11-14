@@ -123,7 +123,8 @@ final class Prepare {
             String s = Upstream.jobState(existing);
             boolean same = Upstream.jobDump(existing).getPath().equals(dumpR.getPath()) && Upstream.jobVersion(existing) == version;
             if (same && (s.equals("running") || s.equals("paused") || s.equals("failed") || s.equals("pending"))) job = existing;   // resumed where it stopped
-            else if (same && s.equals("done") && Upstream.jobPack(existing).isDirectory() && Upstream.packRead(Upstream.jobPack(existing)) != null) {
+            else if (same && s.equals("done") && Upstream.jobPack(existing).isDirectory() && Upstream.packRead(Upstream.jobPack(existing)) != null
+                    && current(Upstream.jobPack(existing), dumpR, id)) {   // (a pack an app update left behind is redone below: step 3)
                 // already prepared by an earlier run: the game only needs listing
                 p.on(100, "Already prepared");
                 Upstream.addGame(c, existing);
@@ -139,7 +140,9 @@ final class Prepare {
             if (pack != null && !Boolean.TRUE.equals(Upstream.get(pack, "simulated")) && id.equals(Upstream.str(Upstream.get(pack, "titleId")))) {
                 String blocking = Upstream.packBlocking(c, pack, dumpR);
                 String shaders = Upstream.packShaders(packDir, id);
-                boolean code = blocking != null, sh = shaders != null;
+                // The code is redone when it cannot be started (blocking) and also when it is another rewriter's: an app update with a changed rewriter or
+                // profile patch (PackCheck.code, the check Home's own Prepare makes: Metroid Dread's 60 fps patch never reached a pack built before it, 2026-11-14)
+                boolean code = blocking != null || Boolean.FALSE.equals(Upstream.packCode(c, pack, dumpR)), sh = shaders != null;
                 job = Upstream.jobAdopt(r, packDir, code, sh);
                 Upstream.jobSave(job);
                 Upstream.jobRemember(c, Upstream.jobFile(job));
@@ -245,6 +248,14 @@ final class Prepare {
         } finally {
             unbind();
         }
+    }
+
+    /** Whether the pack fits this APK as it is: startable code of this rewriter (PackCheck.blocking / code) and this APK's shader library (PackCheck.shaders) */
+    private boolean current(File packDir, File dump, String id) {
+        try {
+            Object pack = Upstream.packRead(packDir);
+            return pack != null && Upstream.packBlocking(c, pack, dump) == null && !Boolean.FALSE.equals(Upstream.packCode(c, pack, dump)) && Upstream.packShaders(packDir, id) == null;
+        } catch (ReflectiveOperationException | RuntimeException e) { return true; }   // cannot judge: as before
     }
 
     private File runModded0(File dump, String titleId, File workDir, File packDir, String modArgs, File normalPackShaders, Progress p)

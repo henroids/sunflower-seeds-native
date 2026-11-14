@@ -90,6 +90,13 @@ final class Upstream {
         return s == null ? null : s.toString();
     }
 
+    /** PackCheck.code(c, pack, dump): TRUE when the pack's rewritten code is this APK's rewriter's (its tools, the profile's patches.py and build rows), FALSE when it
+     *  is out of date, null when it cannot be judged */
+    static Boolean packCode(Context c, Object pack, File dump) throws ReflectiveOperationException {
+        Object s = call(k("PackCheck"), null, "code", new Class<?>[] {Context.class, k("Pack"), File.class}, c, pack, dump);
+        return s instanceof Boolean ? (Boolean) s : null;
+    }
+
     /** PackCheck.shaders(packDir, titleId): the shader library's problem, null when current */
     static String packShaders(File packDir, String titleId) throws ReflectiveOperationException {
         Object s = call(k("PackCheck"), null, "shaders", new Class<?>[] {File.class, String.class}, packDir, titleId);
