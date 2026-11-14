@@ -748,6 +748,7 @@ public final class MainActivity extends Activity {
             saves.addView(new Ui.Setting(this, "💾", "Back up saves", v -> SaveUi.backup(this, g)).value(SaveUi.backupLine(this, g)).chevron(this).view);
             saves.addView(new Ui.Setting(this, "♻️", "Restore saves", v -> SaveUi.restoreList(this, g)).value("From a backup; the current save is backed up first").chevron(this).view);
             saves.addView(new Ui.Setting(this, "📥", "Import save", v -> SaveUi.importPick(this, g)).value("A .zip or a save folder").chevron(this).view);
+            saves.addView(new Ui.Setting(this, "🗑", "Delete save data", v -> SaveUi.delete(this, g)).value("Backed up first; the game starts from the beginning").chevron(this).view);   // PEANUTS
             File save = Folders.save(this, g);
             TextView where = Ui.add(content, Ui.small(this, "The save: " + (save != null ? save.getPath() : "not set")), 6);
             where.setTextSize(12);

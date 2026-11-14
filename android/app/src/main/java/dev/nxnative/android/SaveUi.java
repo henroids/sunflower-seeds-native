@@ -132,6 +132,42 @@ final class SaveUi {
         });
     }
 
+    // PEANUTS begin: Delete save data (the game page's Saves tab). The save is backed up first, checked, where Back up saves puts its copies (or in app
+    // storage when backups go out as a .zip), so Restore saves can bring it back; then every file of the save's parts is deleted and the game starts as new
+    static void delete(MainActivity a, Game g) {
+        if (!ready(a, g, "delete the save")) return;
+        File save = Folders.save(a, g);
+        if (save == null || !hasSave(save)) { a.error(g.name + " has no save: nothing to delete."); return; }
+        String st = stamp();
+        File to = target(a, g);
+        Ui.confirmDanger(a, "Delete " + g.name + "'s save data?", "The game starts from the beginning the next time. The save is backed up first (checked), so "
+                + "Restore saves can bring it back. No backup is deleted.\n\nSave: " + save + "\nBackup of it: " + new File(to, st),
+                "Delete", () -> {
+                    if (!ready(a, g, "delete the save")) return;
+                    run(a, g, "Backing up, then deleting " + g.name + "'s save…", () -> {
+                        SaveStore.Backup b = SaveStore.backup(save, to, st);
+                        for (File part : SaveStore.parts(save).values()) { File[] kids = part.listFiles(); if (kids != null) for (File k : kids) wipe(k); }
+                        return b;
+                    }, (r, err) -> {
+                        if (err != null) {
+                            Ui.explain(a, "Save not deleted", r == null && !hasSave(save) ? "The save is gone, but something went wrong at the end." : "Something went wrong. What is left of the save is as it was; "
+                                    + "if a backup was made it is in Restore saves.", err + "\nSave: " + save).setPositiveButton("OK", null).show();
+                            return;
+                        }
+                        SaveStore.Backup b = (SaveStore.Backup) r;
+                        Ui.explain(a, "Save data deleted", g.name + " starts from the beginning. The old save (" + b.files + " files, " + SaveStore.size(b.bytes)
+                                + ") is in Restore saves.", b.dir.getPath()).setPositiveButton("OK", null).show();
+                    });
+                });
+    }
+
+    private static void wipe(File f) throws IOException {
+        File[] kids = f.listFiles();
+        if (kids != null) for (File k : kids) wipe(k);
+        if (!f.delete() && f.exists()) throw new IOException("could not delete " + f);
+    }
+    // PEANUTS end
+
     /** The backup made in app storage, then written as a zip to the picked document, read back and checked */
     private static void exportTo(MainActivity a, Game g, Uri doc) {
         if (!ready(a, g, "back up")) return;

@@ -352,7 +352,7 @@ Yes. **Settings › Library** has two rows. **Haptics** is **System** or **Off**
 
 ### Where are my saves, and can I import one?
 
-Saves are in the app's own storage, under `saves/<title ID>`. The **Saves** tab shows the path and has **Back up saves**, **Restore saves** and **Import save** (a `.zip` or a save folder). Stop the game first. Before a restore or an import, the app backs up the current save.
+Saves are in the app's own storage, under `saves/<title ID>`. The **Saves** tab shows the path and has **Back up saves**, **Restore saves**, **Import save** (a `.zip` or a save folder) and **Delete save data**, which starts the game from the beginning. Stop the game first. Before a restore, an import or a delete, the app backs up the current save, so **Restore saves** can bring it back.
 
 ### Where is the game log?
 
