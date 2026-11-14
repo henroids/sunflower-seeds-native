@@ -203,6 +203,7 @@ void vka_ctl_shot_record(VkCommandBuffer cb, vka_img *im, VkFormat fmt, int cx, 
     g_rec_shot.on = 0;
     if (!atomic_load_explicit(&g_shot_want, memory_order_relaxed) || !im || !im->inited) return;
     atomic_store(&g_shot_want, 0);
+    { char sp[64]; void vka_tex_dump_record(VkCommandBuffer, const char *); if (vka_env_str("DM_VK_IMG_DUMP", sp, sizeof sp)) vka_tex_dump_record(cb, sp); }   // PEANUTS: DM_VK_IMG_DUMP (vka_tex.c)
     if (!fmt) fmt = im->f.vk;   // the window texture's format (vka_present.c present_fmt): the copy gives the bits, read in that format
     int bpp = shot_bpp(fmt);
     if (!bpp || im->samples != 1 || im->aspect != VK_IMAGE_ASPECT_COLOR_BIT) { VLOG("ctl: screenshot: the window texture's format %d is not one the writer takes (RGBA8, BGRA8, RGB10A2, RGBA16F)", im->f.vk); return; }
@@ -244,6 +245,7 @@ static uint8_t half8(uint16_t h) {   // an RGBA16F channel, clamped to [0, 1] an
     return (uint8_t)(powf(v, 1 / 2.2f) * 255 + 0.5f);
 }
 void vka_ctl_shot_done(VkFence fence) {   // present thread, after the present's submission
+    { void vka_tex_dump_done(VkFence, const char *); ctl_dir(); vka_tex_dump_done(fence, g_ctl_dir); }   // PEANUTS: DM_VK_IMG_DUMP's files beside the screenshot
     if (!g_rec_shot.on) return;
     g_rec_shot.on = 0;
     if (vk.vkWaitForFences(V.dev, 1, &fence, VK_TRUE, 2000000000ull)) { VLOG("ctl: screenshot: the present's copy did not finish in 2 s"); return; }

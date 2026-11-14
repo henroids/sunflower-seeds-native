@@ -2918,6 +2918,35 @@ VkFormat vka_tex_id_vkfmt(int id) {
     pthread_mutex_unlock(&g_tmu);
     return r;
 }
+// PEANUTS: a buffer texture as a texel buffer (a shader's UNIFORM_TEXEL_BUFFER or STORAGE_TEXEL_BUFFER binding, vka_draw.c tbuf_view): where its elements are in guest memory, the
+// bytes they take and the format they are read in. want: the numeric class the shader declares (0 float, 1 uint, 2 sint; a texture of another class of the same texel size is read
+// through its class twin, as a texture's view is). 0 when the ID is no buffer texture (a 1D or 2D texture there reads as unbound), the format has no texel buffer use, or it is not
+// whole texels of guest memory
+static VkFormatFeatureFlags buf_feats(VkFormat f) {   // PEANUTS: texel buffer use of a format (cached)
+    static struct { VkFormat f; VkFormatFeatureFlags ff; } cache[64]; static int n; static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&mu);
+    for (int i = 0; i < n; i++) if (cache[i].f == f) { VkFormatFeatureFlags ff = cache[i].ff; pthread_mutex_unlock(&mu); return ff; }
+    VkFormatProperties p; vk.vkGetPhysicalDeviceFormatProperties(V.pd, f, &p);
+    if (n < 64) cache[n++].f = f, cache[n - 1].ff = p.bufferFeatures;
+    pthread_mutex_unlock(&mu);
+    return p.bufferFeatures;
+}
+int vka_tex_id_tbuf(int id, int want, int storage, uint64_t *addr, uint64_t *bytes, VkFormat *fmt, uint32_t *texel) {
+    int ok = 0;
+    pthread_mutex_lock(&g_tmu);
+    if (id > 0 && id < g_ntreg && g_treg[id].t.serial && g_treg[id].t.d.target == NVN_TEXTURE_TARGET_BUFFER && g_treg[id].t.mem) {
+        const treg_ent *e = &g_treg[id]; vka_fmt f;
+        if (vka_fmt_of(e->has_v && e->v.set_format ? e->v.format : e->t.d.format, &f) && f.bw == 1 && f.bh == 1 && f.kind < 3 && f.bpb) {
+            int have = f.kind == 1 ? 1 : f.kind == 2 ? 2 : 0; VkFormat vf = f.vk;
+            if (want != have) vf = class_twin(f.vk, want);
+            uint64_t n = (uint64_t)e->t.d.width * f.bpb; if (e->t.L.size && n > e->t.L.size) n = e->t.L.size / f.bpb * f.bpb;
+            if (vf != VK_FORMAT_UNDEFINED && n && (buf_feats(vf) & (storage ? VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT : VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT))) {
+                *addr = (uint64_t)(uintptr_t)e->t.mem; *bytes = n; *fmt = vf; *texel = f.bpb; ok = 1; }
+        }
+    }
+    pthread_mutex_unlock(&g_tmu);
+    return ok;
+}
 // The numeric class of the format texture ID id is viewed in (its texture view's, else its own): 1 uint, 2 sint, 0 float / normalized / depth / none. A compute shader's float
 // storage image bound to an integer one is retyped (vka_draw.c img_masks, vka_shader_img_module) instead of reading it through a float view of the same size (class_twin)
 int vka_tex_id_class(int id) {
@@ -3066,8 +3095,8 @@ void vka_tex_id_peek(int id, char *b, size_t n) {
     uint64_t ims = im ? im->serial : 0; const void *imm = im ? im->mem : NULL; uint32_t iw = im ? im->w : 0, ih = im ? im->h : 0, il = im ? im->layers : 0, iv = im ? im->levels : 0; int fv = im ? (int)im->f.vk : 0;
     pthread_mutex_unlock(&g_tmu);
     const view_t *v = e.has_v ? &e.v : NULL;
-    snprintf(b, n, "serial %llu target %d format %#x %ux%ux%u levels %u mem %p; view target %d levels %u+%u layers %u+%u; image %s serial %llu mem %p %ux%u layers %u levels %u vk %d",
-             (unsigned long long)e.t.serial, e.t.d.target, e.t.d.format, e.t.d.width, e.t.d.height, e.t.d.depth, e.t.d.levels, (void *)e.t.mem,
+    snprintf(b, n, "serial %llu target %d format %#x %ux%ux%u levels %u mem %p flags %#x stride %u packaged block height %d (0 = automatic); view target %d levels %u+%u layers %u+%u; image %s serial %llu mem %p %ux%u layers %u levels %u vk %d",
+             (unsigned long long)e.t.serial, e.t.d.target, e.t.d.format, e.t.d.width, e.t.d.height, e.t.d.depth, e.t.d.levels, (void *)e.t.mem, e.t.d.flags, e.t.d.stride, e.t.d.pkg_block_h,   // PEANUTS: the layout inputs
              v && v->set_target ? v->target : -1, v && v->set_levels ? v->base_level : 0, v && v->set_levels ? v->nlevels : 0, v && v->set_layers ? v->min_layer : 0, v && v->set_layers ? v->nlayers : 0,
              im ? "made" : m ? "refused" : "not made", (unsigned long long)ims, imm, iw, ih, il, iv, fv);
 }
@@ -3099,6 +3128,70 @@ VkSampler vka_samp_id(int id) {
     }
     pthread_mutex_unlock(&g_tmu);
     return s;
+}
+// PEANUTS: DM_VK_TEX_PEEK: the registered sampler's wrap modes (NVN enums: 0 clamp 1 repeat 2 mirror clamp 3 mirror clamp to edge 4 mirror clamp to border 5 clamp to border 6 mirrored repeat
+// 7 clamp to edge), filters, lod range and border as the replay resolves the ID now, with the registration's version
+void vka_samp_peek(int id, char *out, size_t n) {
+    pthread_mutex_lock(&g_tmu);
+    if (id > 0 && id < g_nsreg) { const samp_par *p = &g_sreg[id];
+        snprintf(out, n, "wrap %d,%d,%d filter min %d mag %d lod %g..%g bias %g aniso %g border %g,%g,%g,%g version %u cached %s", p->ws, p->wt, p->wr, p->minf, p->magf, p->lod_min, p->lod_max, p->lod_bias, p->aniso,
+                 p->border[0], p->border[1], p->border[2], p->border[3], g_sver ? (unsigned)g_sver[id] : 0u, id < g_nsres && g_sres[id] ? "yes" : "no"); }
+    else snprintf(out, n, "sampler ID %d not registered (default clamp sampler)", id);
+    pthread_mutex_unlock(&g_tmu);
+}
+// PEANUTS: DM_VK_IMG_DUMP=<w>x<h>[,<VkFormat number>] (live, with a ctl `screenshot`): level 0 of every live image of that size (and format) is copied to a host buffer outside a render pass
+// (vka_tex_dump_record, on the present's command buffer, as the screenshot's copy) and written by vka_tex_dump_done as imgdump-<serial>-<w>x<h>-vk<format>.bin beside the screenshot: the raw
+// blocks (compressed formats) or texels, rows top to bottom, no padding. At most 24 images and 64 MiB
+static struct { int n; struct { uint64_t serial; uint32_t w, h; int vkf; VkDeviceSize off, len; } e[24]; VkBuffer buf; VkDeviceMemory mem; uint8_t *map; } g_idump;
+void vka_tex_dump_record(VkCommandBuffer cb, const char *spec) {
+    unsigned W = 0, H = 0; int F = 0;
+    if (g_idump.n || !spec || sscanf(spec, "%ux%u,%d", &W, &H, &F) < 2) return;
+    vka_img *ims[24]; int n = 0; VkDeviceSize tot = 0;
+    pthread_mutex_lock(&g_tmu);
+    for (int id = 1; id < g_ntreg && n < 24; id++) {
+        if (!g_treg[id].t.serial) continue;
+        smap_ent *m = map_get(g_treg[id].t.serial); vka_img *im = m ? m->im : NULL;
+        if (!im || !im->img || !im->inited || im->w != W || im->h != H || im->samples != 1 || im->aspect != VK_IMAGE_ASPECT_COLOR_BIT || !im->f.bpb || (F && (int)im->f.vk != F)) continue;
+        int dup = 0; for (int i = 0; i < n; i++) dup |= ims[i] == im;
+        if (dup) continue;
+        VkDeviceSize len = (VkDeviceSize)((im->w + im->f.bw - 1) / im->f.bw) * ((im->h + im->f.bh - 1) / im->f.bh) * im->f.bpb;
+        if (tot + len > (64u << 20)) break;
+        ims[n] = im; g_idump.e[n].serial = im->serial; g_idump.e[n].w = im->w; g_idump.e[n].h = im->h; g_idump.e[n].vkf = (int)im->f.vk; g_idump.e[n].off = tot; g_idump.e[n].len = len; tot += len; n++;
+    }
+    pthread_mutex_unlock(&g_tmu);
+    if (!n) { VLOG("ctl: img dump: no live image %ux%u%s", W, H, F ? " of that format" : ""); return; }
+    VkBufferCreateInfo bi = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = tot, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+    VkMemoryRequirements mr; void *map = NULL;
+    if (vk.vkCreateBuffer(V.dev, &bi, NULL, &g_idump.buf)) { VLOG("ctl: img dump: no buffer of %llu bytes", (unsigned long long)tot); return; }
+    vk.vkGetBufferMemoryRequirements(V.dev, g_idump.buf, &mr);
+    uint32_t mt = vka_mem_type(mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    VkMemoryAllocateInfo ai = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = mr.size, .memoryTypeIndex = mt};
+    if (mt == UINT32_MAX || vk.vkAllocateMemory(V.dev, &ai, NULL, &g_idump.mem) || vk.vkBindBufferMemory(V.dev, g_idump.buf, g_idump.mem, 0) || vk.vkMapMemory(V.dev, g_idump.mem, 0, VK_WHOLE_SIZE, 0, &map)) {
+        if (g_idump.mem) vk.vkFreeMemory(V.dev, g_idump.mem, NULL);
+        vk.vkDestroyBuffer(V.dev, g_idump.buf, NULL); g_idump.buf = VK_NULL_HANDLE; g_idump.mem = VK_NULL_HANDLE; VLOG("ctl: img dump: no host-visible memory"); return; }
+    g_idump.map = map;
+    vka_barrier(cb);
+    for (int i = 0; i < n; i++) {
+        VkBufferImageCopy r = {g_idump.e[i].off, 0, 0, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {0, 0, 0}, {ims[i]->w, ims[i]->h, 1}};   // tightly packed rows
+        vk.vkCmdCopyImageToBuffer(cb, ims[i]->img, VK_IMAGE_LAYOUT_GENERAL, g_idump.buf, 1, &r);
+    }
+    VkMemoryBarrier mb = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_HOST_READ_BIT};
+    vk.vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &mb, 0, NULL, 0, NULL);
+    g_idump.n = n;
+}
+void vka_tex_dump_done(VkFence fence, const char *dir) {   // after the present's submission
+    if (!g_idump.n) return;
+    int n = g_idump.n; g_idump.n = 0;
+    if (vk.vkWaitForFences(V.dev, 1, &fence, VK_TRUE, 2000000000ull)) VLOG("ctl: img dump: the copy did not finish in 2 s");
+    else for (int i = 0; i < n; i++) {
+        char p[1200]; snprintf(p, sizeof p, "%s/imgdump-%llu-%ux%u-vk%d.bin", dir, (unsigned long long)g_idump.e[i].serial, g_idump.e[i].w, g_idump.e[i].h, g_idump.e[i].vkf);
+        FILE *f = fopen(p, "wb");
+        if (f && fwrite(g_idump.map + g_idump.e[i].off, 1, g_idump.e[i].len, f) == g_idump.e[i].len) VLOG("ctl: img dump: image serial %llu %ux%u VkFormat %d, %llu bytes → %s", (unsigned long long)g_idump.e[i].serial, g_idump.e[i].w, g_idump.e[i].h, g_idump.e[i].vkf, (unsigned long long)g_idump.e[i].len, p);
+        else VLOG("ctl: img dump: cannot write %s", p);
+        if (f) fclose(f);
+    }
+    vk.vkUnmapMemory(V.dev, g_idump.mem); vk.vkFreeMemory(V.dev, g_idump.mem, NULL); vk.vkDestroyBuffer(V.dev, g_idump.buf, NULL);
+    g_idump.buf = VK_NULL_HANDLE; g_idump.mem = VK_NULL_HANDLE; g_idump.map = NULL;
 }
 VkSampler vka_samp_default(void) {
     static VkSampler s;

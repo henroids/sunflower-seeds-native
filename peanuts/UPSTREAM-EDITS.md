@@ -55,9 +55,12 @@ brief, these are listed here rather than marked:
 | `dm/gfx/tools/vk_android_same.tsv` | two added rows mapping our tool digests onto the current chain version | feeds `DMSH_VK_CHAIN` (comparison table, byte-sensitive) | No — these rows are proof-of-no-change evidence for *our* specific chain state; they need to be re-proven against each new upstream chain version, not sent upstream as-is |
 | `dm/gfx/tools/vk_android_spv.py` | `_remap_operands`: OpImageWrite and OpAtomicStore (instructions with no result id) get their own branches, so a promoted local's load is replaced in the image write's coordinate too (2026-11-14, OCTOPATH TRAVELER 0, issue #9: 2,142 of its 2,521 compute shaders failed spirv-val with "ID has not been defined"); `OP_ATOMIC_STORE` constant | feeds `DMSH_VK_CHAIN`; the change moves the chain version (`dmsh_chain_vk.h` 4b1886941d10 → 4ccbdc391b15) | Yes — a plain correctness fix in a translator post-pass; it changes the output only of modules that failed validation before |
 
-No igawa6 commit touches `dm/gfx/tools/vk_android_delta.py` or `dm/gfx/nvn/dmsh_abi_vk.h`, so there is
-nothing to log for those two beyond noting they are exceptions by the same rule if a future change
-ever touches them.
+| `dm/gfx/tools/vk_android_spv.py` (2026-11-14, second edit) | `buffer_textures_split`: a buffer texture the translator declares as a combined image and sampler of Dim Buffer becomes a plain sampled Buffer image (UNIFORM_TEXEL_BUFFER, no sampler); `OP_IMAGE` constant (OCTOPATH TRAVELER 0: 6,749 compute, 2,090 vertex and 74 pixel shaders' bindings read as unbound) | feeds `DMSH_VK_CHAIN` | Yes — a general fix: Vulkan has no combined descriptor of a texel buffer |
+| `dm/gfx/tools/vk_android_build.py` (2026-11-14, second edit) | calls `buffer_textures_split` before reflection; the kinds `TEX_DYN` / `SAMP_DYN` for Ryujinx's `<stage>_tb_cb0_40000000` / `_s_cb0_40000000` fallback arrays (profile key `tex_dyn_slots`) | feeds `DMSH_VK_CHAIN` | Yes, with the host side (vka_bind.c) |
+| `dm/gfx/nvn/dmsh_abi_vk.h` | `DMSH_VK_KIND_TEX_DYN` (23) and `DMSH_VK_KIND_SAMP_DYN` (24) | feeds `DMSH_VK_CHAIN` and `DMSH_VK_ABI` | Yes, with the two edits above |
+
+`dm/gfx/tools/vk_android_delta.py` is untouched; it is an exception by the same rule if a future change
+touches it.
 
 ## Marker status of every upstream file we touch
 
