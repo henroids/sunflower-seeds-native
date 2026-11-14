@@ -145,8 +145,9 @@ public final class ModImportUi {
     private static void doImport(File staging, File modsRoot, String titleId, String displayName, Map<String, String> gameBuilds, boolean deleteStagingAfter, ProgressUi progress, Callback done) {
         ModImporter.Result r = ModImporter.importFrom(staging, modsRoot, titleId, displayName, gameBuilds, throttled(progress));
         if (deleteStagingAfter) ModImporter.deleteTree(staging);
-        UI.post(() -> done.onDone(r.ok, r.ok ? "Installed " + r.modName + ". It is off: turn it on in the list."
-                + (ModStore.KIND_CODE.equals(r.kind) ? " Its code needs a build with mods." : "") : r.error));
+        // installed on (ModImporter); a code mod's build is started by the section that asked for the install, which shows it
+        UI.post(() -> done.onDone(r.ok, r.ok ? "Installed " + r.modName + ". It is on from the game's next start."
+                + (ModStore.KIND_CODE.equals(r.kind) ? " Its code needs a build with mods, which starts by itself: the Mods section shows how far it is." : "") : r.error));
     }
 
     public interface ProgressUi { void onProgress(long bytesDone, long total, String currentFile); }

@@ -35,7 +35,8 @@ import dev.peanuts.ui.LibrarySettings;
  * code mod is built from the pack. Local files only, never a catalog and never a download (DESIGN-MODS.md: a mod is someone else's edit of the game).
  * <p>
  * Files and cheats apply on the normal build (dev.peanuts.mods.ModRuntime, at the game's start). Code (exefs, IPS patches) needs a build of its own, a variant
- * pack beside the normal one (ModStore.variantId: one per set of enabled code mods), which the section's "Build with mods" makes. The normal build is never
+ * pack beside the normal one (ModStore.variantId: one per set of enabled code mods). A mod is on when it is installed, and that build starts by itself when a set of code mods
+ * that is on has none ({@link #autoBuild}); the section's "Build with mods" is for a failed one and for a rebuild. The normal build is never
  * changed. Every start of the game (the page's Play, Home, a shortcut, a frontend: all go through MainActivity.launch) asks {@link #packToPlay} for the pack:
  * the variant's while code mods are on and their build is ready, else the normal one. So a mod that is on plays, and one that is off or deleted does not.
  * <p>
@@ -50,6 +51,10 @@ public final class ModsSection {
     private static ModsSection pickFor;
     /** The import or the build with mods in progress: the game's title ID and its line; null: none */
     private static String importTitle, importText, buildTitle, buildText;
+    private static String buildVariant;   // the variant buildTitle is being built as: another set of the same game's code mods waits for it as another game's does
+    /** The one build with mods that waits to start by itself ({@link #autoBuild}): its game's section and its variant; null: none. Not kept over a restart of the app */
+    private static ModsSection waiting;
+    private static String waitingVariant;
     private static String deleteTitle, deleteName, deleteText;   // a mod being deleted (one at a time, as an import): its game, its name and how far it is
     private static int deletePct = -1;
     /** Variant ID → why its build failed, until it is started again */
@@ -77,7 +82,7 @@ public final class ModsSection {
             @Override public void onViewAttachedToWindow(View v) {}
             @Override public void onViewDetachedFromWindow(View v) { if (current == s) current = null; }
         });
-        s.render();
+        s.autoBuild();   // renders; and a build with mods that is due (the game was built again, the app started again while one waited) starts
         return box;
     }
 
@@ -144,6 +149,61 @@ public final class ModsSection {
     }
 
     private static void renderCurrent() { if (current != null) current.render(); }
+
+    // ---- A code mod's build starts by itself: a mod that needs a build gets it when it is installed or switched, without a tap on the button ----
+
+    /** What a build with mods must wait for: another one, a normal build of any game (one packer serves them all), or an install or a delete, whose files it reads */
+    private static boolean busy() {
+        return buildTitle != null || importTitle != null || deleteTitle != null || ModBuildPipeline.running() != 0 || dev.peanuts.build.BuildPipeline.running() != 0;
+    }
+
+    /** Whether the app shows now: Android refuses a foreground service (the build) started by an app in the background */
+    private static boolean onScreen() {
+        android.app.ActivityManager.RunningAppProcessInfo i = new android.app.ActivityManager.RunningAppProcessInfo();
+        android.app.ActivityManager.getMyMemoryState(i);
+        return i.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
+    }
+
+    /**
+     * Starts the build with mods of the code mods that are on when it is due (ModdedBuild.autoBuild: buildable, not ready, not failed, not being built), as a tap
+     * on the button would, or notes it as waiting when something else must end first; then renders the section on screen. Called where the answer can change:
+     * the page opens ({@link #view}), a mod was installed, a code mod's switch was flipped, a code mod was deleted, and for the waiting one when a build with
+     * mods, an install or a delete ends and every five seconds while it waits ({@link #poll}: a normal build's end is not told to this class). One build waits at
+     * a time: a second game's takes the place, and the first is started when its page is opened again. Main thread; reads the mods' manifests, as render does
+     */
+    private void autoBuild() {
+        if (home == null) { renderCurrent(); return; }
+        if (waiting != null && waiting.titleId.equals(titleId)) { waiting = null; waitingVariant = null; }   // decided again below
+        List<ModStore.Mod> mods = ModRuntime.mods(home, titleId);
+        Variant v = ModStore.needsBuild(mods) ? variant(mods) : null;
+        boolean buildable = v != null && v.stopTitle == null;
+        String due = ModdedBuild.autoBuild(buildable, buildable && v.problem == null, buildable && FAILED.containsKey(v.id),
+                buildable && titleId.equals(buildTitle) && v.id.equals(buildVariant), busy() || !onScreen());
+        if (due.equals(ModdedBuild.AUTO_START)) { startBuild(v.id, v.pack, v.plan); return; }
+        if (due.equals(ModdedBuild.AUTO_WAIT)) {
+            waiting = this; waitingVariant = v.id;
+            MAIN.removeCallbacks(POLL);
+            MAIN.postDelayed(POLL, 5000);
+        }
+        renderCurrent();
+    }
+
+    private static final Runnable POLL = ModsSection::poll;
+
+    /** The waiting build's next try: at once when nothing is in its way, else in five seconds */
+    private static void poll() {
+        MAIN.removeCallbacks(POLL);
+        ModsSection w = waiting;
+        if (w == null) return;
+        if (busy() || !onScreen()) MAIN.postDelayed(POLL, 5000);
+        else w.autoBuild();
+    }
+
+    /** A game's failed builds with mods are forgotten when its code mods change (installed, switched, deleted): the next build is of other mods, or a new try */
+    private static void forget(String titleId) {
+        String prefix = titleId.toUpperCase(java.util.Locale.ROOT) + "-mod-";
+        FAILED.keySet().removeIf(id -> id.startsWith(prefix));
+    }
 
     /** Builds the rows again from what is on disk (the mods' folders and manifests are small: read here, as the Companion row reads its package) */
     private void render() {
@@ -214,7 +274,8 @@ public final class ModsSection {
                 if (ferr != null) dev.peanuts.ui.Feel.refused(a);
                 if (ferr != null) Toast.makeText(a, "Could not turn " + m.name + (on ? " on: " : " off: ") + ferr, Toast.LENGTH_LONG).show();
                 else if (!m.hasCode()) Toast.makeText(a, m.name + (on ? " is on" : " is off") + " from the game's next start.", Toast.LENGTH_SHORT).show();   // a code mod: the Build with mods row says what comes next
-                renderCurrent();   // from disk: the switch shows what was saved
+                if (ferr == null && m.hasCode()) { forget(titleId); autoBuild(); }   // another set of code mods: its build starts by itself when it has none (renders)
+                else renderCurrent();   // from disk: the switch shows what was saved
             });
         }, "peanuts-mod-toggle").start();
     }
@@ -241,6 +302,7 @@ public final class ModsSection {
         File root = ModRuntime.modsRoot(home), gameHome = home;
         String id = titleId, folder = m.dir.getName(), name = m.name;
         android.content.Context app = a.getApplicationContext();
+        ModsSection self = this;
         new Thread(() -> {
             String err = null;
             try {
@@ -258,7 +320,9 @@ public final class ModsSection {
                 if (ferr != null) android.util.Log.w("peanuts", "mods: delete of " + name + ": " + ferr);
                 if (current != null && ferr != null) dev.peanuts.ui.Feel.refused(current.a);
                 if (current != null && ferr != null) current.message("Delete failed", name + ": " + ferr + "\n\nWhat is left of it is removed the next time this page is opened.");
-                renderCurrent();
+                if (code) forget(id);
+                if (code) self.autoBuild(); else renderCurrent();   // the code mods that are left on: their build starts by itself when they have none (renders)
+                poll();   // and a build that waited for this delete
             });
         }, "peanuts-mod-delete").start();
     }
@@ -291,13 +355,13 @@ public final class ModsSection {
     /** The folder picker's result. a: the activity that got it (the one the pick was started in may have been made again meanwhile) */
     public static void pickedFolder(Activity a, Uri tree) {
         ModsSection s = startImport();
-        if (s != null) ModImportUi.importFolder(a, tree, ModRuntime.modsRoot(s.home), s.titleId, null, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, ok, message));
+        if (s != null) ModImportUi.importFolder(a, tree, ModRuntime.modsRoot(s.home), s.titleId, null, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, s, ok, message));
     }
 
     /** The zip picker's result; displayName: the picked file's name, the mod's name when its layout has none */
     public static void pickedZip(Activity a, Uri doc, String displayName) {
         ModsSection s = startImport();
-        if (s != null) ModImportUi.importZip(a, doc, ModRuntime.modsRoot(s.home), s.titleId, displayName, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, ok, message));
+        if (s != null) ModImportUi.importZip(a, doc, ModRuntime.modsRoot(s.home), s.titleId, displayName, ModdedBuild.buildIds(s.pack), ModsSection::importProgress, (ok, message) -> importDone(a, s, ok, message));
     }
 
     /** The section the pick was for, with its import marked as started; null when there is none (the app was started again while the picker showed) or another import runs */
@@ -315,46 +379,69 @@ public final class ModsSection {
         renderCurrent();
     }
 
-    /** The end of an import: its sentence (installed, or why not: a dialog, since a refusal such as a mod for another game is longer than a toast holds) */
-    private static void importDone(Activity a, boolean ok, String message) {
+    /** The end of an import: its sentence (installed, or why not: a dialog, since a refusal such as a mod for another game is longer than a toast holds).
+     *  s: the section the install was started in. The mod is on (ModImporter), and a code mod's build starts here by itself, whatever page shows by now */
+    private static void importDone(Activity a, ModsSection s, boolean ok, String message) {
         importTitle = null; importText = null;
         if (ok) dev.peanuts.ui.Feel.accepted(a); else dev.peanuts.ui.Feel.refused(a);   // installed, or refused (a mod for another game)
         if (!a.isFinishing() && !a.isDestroyed()) new AlertDialog.Builder(a).setTitle("Install mod").setMessage(message).setPositiveButton("OK", null).show();
-        renderCurrent();
+        if (ok) { forget(s.titleId); s.autoBuild(); } else renderCurrent();
+        poll();   // a build that waited for this install
     }
 
     // ---- Code mods: the build with mods (dev.peanuts.build.ModBuild / ModdedBuild / ModBuildPipeline) and its Play ----
 
-    /** The rows under the list while a code mod is on: what stops a build, or its state (building, failed and why, ready) with Build with mods */
-    private void buildRows(List<ModStore.Mod> mods) {
+    /** The build with mods of the code mods that are on, as the rows show it and as {@link #autoBuild} decides on it */
+    private static final class Variant {
+        String stopTitle, stopText;   // why nothing can be built (a row of its own); null: it can
+        String warning;               // a module whose hooks will not run (a row of its own, and the build goes on); null: none
+        ModBuild.Plan plan;
+        String id, problem;           // its variant id, and why its pack cannot be played (variantProblem); null: ready
+        File pack;
+    }
+
+    private Variant variant(List<ModStore.Mod> mods) {
+        Variant v = new Variant();
         List<String> profileModules = ModdedBuild.normalModules(pack);
-        if (profileModules == null) { explain("⚠️", "Cannot build with mods", "This game's pack has no module list (pack.tsv). Rebuild the game, then build with mods."); return; }
+        if (profileModules == null) { v.stopTitle = "Cannot build with mods"; v.stopText = "This game's pack has no module list (pack.tsv). Rebuild the game, then build with mods."; return v; }
         List<ModStore.Mod> codeMods = ModStore.enabledCodeMods(mods);
-        ModBuild.Plan plan = ModBuild.compose(profileModules, codeMods, dev.nxnative.android.BuildConfig.NX_GENERIC_HOST);
-        if (plan.refusal != null) { explain("⚠️", "Cannot build with these mods", plan.refusal); return; }
-        String exl = ModdedBuild.exlaunchWarning(profileModules, plan);
-        if (exl != null) explain("⚠️", "A module's hooks will not run", exl);
-        String variantId = ModStore.variantId(titleId, codeMods);
+        v.plan = ModBuild.compose(profileModules, codeMods, dev.nxnative.android.BuildConfig.NX_GENERIC_HOST);
+        if (v.plan.refusal != null) { v.stopTitle = "Cannot build with these mods"; v.stopText = v.plan.refusal; return v; }
+        v.warning = ModdedBuild.exlaunchWarning(profileModules, v.plan);
+        v.id = ModStore.variantId(titleId, codeMods);
         // No module and no patch file in them (an exefs/ with a .pchtxt or a main.npdm alone): the build's extra arguments would be empty, and a job without
         // them is a build of the game itself, into the variant's folder and remembered as the game's own job (PackService)
-        if (variantId == null || plan.source.isEmpty() && plan.patchSets.isEmpty()) {
-            explain("⚠️", "Nothing to build", "The code mods that are on have no module (main, subsdk…) and no IPS patch in them. A .pchtxt patch is not one the app can build. Turn them off, or install them again.");
-            return;
+        if (v.id == null || v.plan.source.isEmpty() && v.plan.patchSets.isEmpty()) {
+            v.stopTitle = "Nothing to build";
+            v.stopText = "The code mods that are on have no module (main, subsdk…) and no IPS patch in them. A .pchtxt patch is not one the app can build. Turn them off, or install them again.";
+            return v;
         }
-        File variantPack = dev.nxnative.android.AppStorage.pack(a, variantId);
-        String problem = variantProblem(a, titleId, variantPack);   // as packToPlay asks: the row says what Play does
-        boolean ready = problem == null, built = !ModdedBuild.NOT_BUILT.equals(problem), building = buildTitle != null, mine = titleId.equals(buildTitle);
+        v.pack = dev.nxnative.android.AppStorage.pack(a, v.id);
+        v.problem = variantProblem(a, titleId, v.pack);   // as packToPlay asks: the row says what Play does
+        return v;
+    }
+
+    /** The rows under the list while a code mod is on: what stops a build, or its state (building, waiting, failed and why, ready) with Build with mods.
+     *  The build starts by itself ({@link #autoBuild}); the button is for a failed one, one that waits for a build this class does not see, and a rebuild */
+    private void buildRows(List<ModStore.Mod> mods) {
+        Variant v = variant(mods);
+        if (v.warning != null) explain("⚠️", "A module's hooks will not run", v.warning);
+        if (v.stopTitle != null) { explain("⚠️", v.stopTitle, v.stopText); return; }
+        String variantId = v.id;
+        boolean ready = v.problem == null, built = !ModdedBuild.NOT_BUILT.equals(v.problem), building = buildTitle != null, mine = titleId.equals(buildTitle) && variantId.equals(buildVariant);
+        boolean waits = waiting != null && titleId.equals(waiting.titleId) && variantId.equals(waitingVariant);
         String failed = FAILED.get(variantId);
         String value = mine ? "Building: " + buildText
+                : waits ? "Waiting: starts when the " + (importTitle != null ? "install" : deleteTitle != null ? "delete" : "build") + " that is running finishes."
                 : building ? "Another game is being built with mods. Wait for it to finish."
                 : failed != null ? "Failed: " + failed
                 : ready ? "Ready. Play starts the game with its code mods."
-                : built ? "The build with mods must be made again: " + problem + ". Until then Play starts the game without its code mods."
+                : built ? "The build with mods must be made again: " + v.problem + ". Until then Play starts the game without its code mods."
                 : "Code mods need a build of their own: until it is made, Play starts the game without them. The normal build is kept as it is.";
-        body.addView(ui.setting("🔨", "Build with mods", value, failed == null || mine ? null : v -> message("Build with mods failed", failed)), SectionUi.lp(0, 0));
+        body.addView(ui.setting("🔨", "Build with mods", value, failed == null || mine || waits ? null : x -> message("Build with mods failed", failed)), SectionUi.lp(0, 0));
         if (mine) return;
         LinearLayout buttons = SectionUi.buttons(a);
-        SectionUi.add(buttons, ui.button(built ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, dev.peanuts.ui.Feel.heavy(v -> startBuild(variantId, variantPack, plan))), !building && deleteTitle == null);
+        SectionUi.add(buttons, ui.button(built ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, dev.peanuts.ui.Feel.heavy(x -> startBuild(variantId, v.pack, v.plan))), !building && deleteTitle == null);
         body.addView(buttons, SectionUi.lp(0, 0));
     }
 
@@ -365,26 +452,29 @@ public final class ModsSection {
 
     private void message(String title, String text) { new AlertDialog.Builder(a).setTitle(title).setMessage(text).setPositiveButton("OK", null).show(); }
 
+    /** The build, from the button or by itself (autoBuild, which has no haptic of a tap): the same rows, the same end. Renders the section on screen */
     private void startBuild(String variantId, File variantPack, ModBuild.Plan plan) {
+        if (waiting != null && waiting.titleId.equals(titleId)) { waiting = null; waitingVariant = null; }   // this is its start, or the user's own
         ModBuildRequest r = new ModBuildRequest();
         r.titleId = titleId; r.name = gameName; r.dump = game; r.normalPack = pack; r.variantId = variantId;
         r.workDir = ModdedBuild.workDir(home, variantId);
         r.packDir = variantPack;
         r.modArgs = ModdedBuild.rewriteArgvJoined(plan);
         FAILED.remove(variantId);
-        buildTitle = titleId; buildText = "starting…";
+        buildTitle = titleId; buildVariant = variantId; buildText = "starting…";
         String name = gameName;
         Activity act = a;
         ModBuildPipeline.start(a, r, new BuildListener() {   // a request that cannot be built comes back through done() too, with why
             @Override public void progress(String step, int percent, String detail) { buildText = detail + " (" + percent + " %)"; renderCurrent(); }
             @Override public void done(boolean ok, String message, String code) {
-                buildTitle = null; buildText = null;
-                if (!ok) FAILED.put(variantId, message);
+                buildTitle = null; buildVariant = null; buildText = null;
+                if (!ok) FAILED.put(variantId, message);   // also what keeps a failed or stopped build from starting again by itself (autoBuild)
                 if (ok) dev.peanuts.ui.Feel.done(act); else if (!BuildListener.CANCELLED.equals(code)) dev.peanuts.ui.Feel.refused(act);   // felt only while the app shows; a stop the user asked for is quiet
                 Toast.makeText(act.getApplicationContext(), ok ? name + " with mods is ready." : "Build with mods failed: " + message, Toast.LENGTH_LONG).show();
                 renderCurrent();
+                poll();   // a build that waited for this one (another game's, or this game's other set of code mods)
             }
         });
-        render();
+        renderCurrent();
     }
 }

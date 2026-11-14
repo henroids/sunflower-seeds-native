@@ -70,6 +70,22 @@ public final class ModdedBuild {
         return out;
     }
 
+    /** {@link #autoBuild}'s answers: nothing to do by itself, start the build with mods now, or start it when what is going on has ended */
+    public static final String AUTO_NONE = "none", AUTO_START = "start", AUTO_WAIT = "wait";
+
+    /**
+     * Whether the build with mods of the code mods that are on starts by itself (after an install, a switch, a delete, or when the game's page opens), so that
+     * a mod that needs a build gets it without a tap on "Build with mods". buildable: code mods are on and there is something to build from them (the game is
+     * built, the plan has no refusal and names a module or a patch); ready: their variant's pack can be played ({@link #variantProblem} null); failed: the build
+     * of this very variant failed or was stopped since the app started, and nothing was changed or tapped since (no second try by itself: it would fail the same
+     * way, for ever); building: this variant is being built now; busy: something else must end first (another build, of any game, with or without mods: they
+     * share one packer; an install or a delete, whose files the build reads; or the app is not on screen, where Android starts no build).
+     */
+    public static String autoBuild(boolean buildable, boolean ready, boolean failed, boolean building, boolean busy) {
+        if (!buildable || ready || failed || building) return AUTO_NONE;
+        return busy ? AUTO_WAIT : AUTO_START;
+    }
+
     /** {@link #variantProblem}'s answer for a variant that has no pack yet */
     public static final String NOT_BUILT = "not built";
 

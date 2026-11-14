@@ -59,6 +59,12 @@ public final class ModHardeningTest {
             }
             case "sweepUnknown": System.out.println(ModdedBuild.sweepVariants(a[2], null, new File(a[3]), new File(a[4]), new File(a[5]))); break;
             case "variantProblem": System.out.println(ModdedBuild.variantProblem(root)); break;
+            case "auto": {   // auto <unused> <buildable> <ready> <failed> <building> <busy>
+                boolean[] b = new boolean[5];
+                for (int i = 0; i < 5; i++) b[i] = a[2 + i].equals("1");
+                System.out.println(ModdedBuild.autoBuild(b[0], b[1], b[2], b[3], b[4]));
+                break;
+            }
             case "import": {   // import <staging> <modsRoot> <title> <name> [main's build ID]
                 Map<String, String> builds = new HashMap<>();
                 if (a.length > 5) builds.put("main", a[5]);
@@ -180,6 +186,29 @@ class ModHardeningTest(unittest.TestCase):
         p = self.pack()
         (p / 'subsdk1.android.key').unlink()   # pack_android.py rewrite: the key goes before the module is rewritten
         self.assertIn('subsdk1', self.run_cmd('variantProblem', p))
+
+    # ---- the build that starts by itself ----
+    def auto(self, buildable=1, ready=0, failed=0, building=0, busy=0):
+        return self.run_cmd('auto', self.dir, buildable, ready, failed, building, busy)
+
+    def test_a_build_that_is_due_starts_by_itself_or_waits(self):
+        self.assertEqual(self.auto(), 'start')
+        self.assertEqual(self.auto(busy=1), 'wait')   # another build, an install or a delete goes on
+
+    def test_no_build_by_itself_without_need_or_after_a_failure(self):
+        self.assertEqual(self.auto(buildable=0), 'none')   # no code mod on, a refusal, nothing to build, the game not built
+        self.assertEqual(self.auto(buildable=0, busy=1), 'none')
+        self.assertEqual(self.auto(ready=1), 'none')
+        self.assertEqual(self.auto(failed=1), 'none')      # no loop: a failed build waits for a tap or another set of mods
+        self.assertEqual(self.auto(failed=1, busy=1), 'none')
+        self.assertEqual(self.auto(building=1, busy=1), 'none')
+
+    def test_a_mod_is_on_when_it_is_installed(self):
+        staging = self.dir / 'staging'
+        (staging / 'exefs').mkdir(parents=True); (staging / 'exefs' / 'main').write_bytes(b'x')
+        self.assertEqual(self.run_cmd('import', staging, self.mods, TITLE, 'Code Mod'), 'ok: Code Mod code')
+        self.assertIn('"enabled": true', (self.mods / 'Code Mod' / 'mod.json').read_text())
+        self.assertRegex(self.run_cmd('variant', self.mods, TITLE), TITLE + '-mod-[0-9a-f]{12}')   # on: its variant is the one a start of the game asks for
 
     # ---- what an interrupted install or delete leaves ----
     def test_a_half_installed_mod_and_a_half_deleted_one_are_swept_and_a_mod_is_not(self):

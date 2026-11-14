@@ -615,7 +615,7 @@ Mods are in the game's page, not in the build sheet. The game must be built firs
 1. Hold the game's cover. Its page opens.
 2. Open the **Game** tab and find the **Mods** section, above **Companion**.
 3. Tap **Install mod…** and pick the mod's **Folder** or **Zip file**. Atmosphère-layout folders and plain `romfs`/`exefs` folders are recognized.
-4. The mod appears in the list, turned off. The line under its name says what it carries: **Files**, **Cheats** or **Code**.
+4. The mod appears in the list, turned on. The line under its name says what it carries: **Files**, **Cheats** or **Code**. Files and cheats apply at the game's next start. A mod with code is built by itself, see [What is a build with mods?](#what-is-a-build-with-mods)
 
 A mod made for another game, or for another version of the game, is refused with a message that names the build or title ID it is for. Nothing is installed then.
 
@@ -623,15 +623,19 @@ To remove a mod, tap the bin at the end of its row and confirm with **Delete**. 
 
 ### How do I turn a mod on or off?
 
-Use the switch in the mod's row. A change applies at the game's next start. When two mods that are on touch the same file, the one higher in the list wins. The list is in the order the mods were installed.
+Use the switch in the mod's row. A change applies at the game's next start. When the switch changes which code mods are on, their build starts by itself. When two mods that are on touch the same file, the one higher in the list wins. The list is in the order the mods were installed.
 
 ### What is a build with mods?
 
-File mods and cheats apply without a build. A mod that carries code reads **Code: needs a build with mods**. Turn it on, then tap **Build with mods** in the same **Mods** section. The row shows the progress, then **Ready**, or **Failed** with the reason (tap the row to read all of it). The build is a separate variant: the normal build is kept as it is.
+File mods and cheats apply without a build. A mod that carries code reads **Code: needs a build with mods**. You do not start that build yourself: it starts when the mod is installed, and again whenever a switch or a delete leaves a set of code mods that has no build yet. The **Build with mods** row in the same **Mods** section shows the progress, then **Ready**, or **Failed** with the reason (tap the row to read all of it). The build is a separate variant: the normal build is kept as it is.
+
+Only one build runs at a time. If another build is running, or a mod is still being installed or deleted, the row reads **Waiting** and the build starts when that has finished. Keep the app open while it waits. If the app was closed in between, open the game's **Mods** section again and the build starts.
+
+A build that failed or was cancelled does not start again by itself. Tap **Build with mods** to try again, or change which code mods are on.
 
 A mod that hooks the game through an `.ips` patch and a module of its own can work this way: Luminescent Platinum on Pokémon Brilliant Diamond builds and runs. A mod that patches the game's code while the game runs (exlaunch-style hooks) does not work yet. The section then shows **A module's hooks will not run** before you build. If a set of mods cannot be built at all, it shows **Cannot build with these mods** and the reason.
 
-Once it reads **Ready**, every start of the game uses the mods that are on: the page's **Play**, a tap on the cover, a home screen shortcut. Turn a mod off or delete it and the game starts without it. While code mods are on but not built yet, the game starts without them and says so. If you change which code mods are on, the section offers **Build with mods** again for the new set. After you rebuild the game itself, replace a mod's files or update the app, tap **Rebuild with mods**: it redoes the parts that changed and keeps the rest.
+Once it reads **Ready**, every start of the game uses the mods that are on: the page's **Play**, a tap on the cover, a home screen shortcut. Turn a mod off or delete it and the game starts without it. While code mods are on but their build is not ready yet (it is running, waiting or failed), the game starts without them and says so. If you change which code mods are on, the new set is built by itself, and a set that was built before is used again as it is. After you rebuild the game itself, replace a mod's files or update the app, tap **Rebuild with mods**: it redoes the parts that changed and keeps the rest.
 
 ## Troubleshooting
 

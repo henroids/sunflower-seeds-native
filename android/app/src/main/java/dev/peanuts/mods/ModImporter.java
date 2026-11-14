@@ -108,7 +108,7 @@ public final class ModImporter {
             ModStore.Mod m = new ModStore.Mod(dest);
             m.name = name;
             m.version = "";
-            m.enabled = false;   // imported off; the player turns it on in the Mods section (so an import never silently changes a running game)
+            m.enabled = true;   // installed on: it applies from the game's next start, and a code mod's build starts by itself (dev.peanuts.settings.ModsSection); a running game reads its mods at its start only
             m.order = ModStore.list(modsRoot, titleId).size();
             m.kind = anyCode ? ModStore.KIND_CODE : ModStore.KIND_FILES;
             Files.deleteIfExists(new File(dest, ModStore.INSTALLING).toPath());   // complete: the manifest below makes it a mod
