@@ -1356,7 +1356,10 @@ static vka_res g_res[512];   // the NaN scan's own walk (DM_VK_NANSCAN_FS)
 // that holds them (the bytes the CPU writes: placed memory is host coherent), made once per (buffer, offset, range, format) and kept while the segment table stands (vka_mem_gen:
 // a segment that goes takes its buffer, so the views go with any change of the table, destroyed once the submissions that may use them complete). Elements outside placed memory
 // or at an offset the device cannot view (minTexelBufferOffsetAlignment) are copied for the submission when only read (Octopath Traveler 0's boost particles read 112-byte
-// buffers 8 bytes off the alignment: as empty buffers the effect covered the battle in white), else read as a null texel buffer, noted
+// buffers 8 bytes off the alignment: as empty buffers the effect covered the battle in white), else read as a null texel buffer, noted.
+// A read-only buffer of up to 1 MiB is read through such a copy even where it could be viewed in place (DM_VK_TBUF_COPY, default 1): the view reads guest memory when the
+// GPU runs the draw, and Unreal Engine has by then refilled its particle buffers for the next frame (the same game at boost level 3, at 60 fps: particles drawn from the next
+// frame's half-written data put infinite texels in the scene, which its temporal passes spread over the picture; slowed down, the picture was right)
 typedef struct { VkBuffer b; VkDeviceSize off, range; VkFormat f; VkBufferView v; } tbv_ent;
 static tbv_ent g_tbv[512]; static uint64_t g_tbv_gen;
 static void tbv_destroy(void *v) { vk.vkDestroyBufferView(V.dev, (VkBufferView)(uintptr_t)v, NULL); }
@@ -1368,9 +1371,19 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
         return VK_NULL_HANDLE; }
     VkBuffer b; VkDeviceSize o; uint64_t run = vka_addr_run(addr, bytes, &b, &o);
     uint32_t al = (uint32_t)V.props.limits.minTexelBufferOffsetAlignment; if (!al) al = 1;
-    if ((run < bytes || (o % al)) && !storage && bytes && bytes <= (1u << 20)) {   // read only and not viewable where it is: a view of a copy of its bytes as the CPU has them now, for this submission
+    if (VKA_ENV("DM_VK_TBUF_LOG", 0)) {   // PEANUTS: DM_VK_TBUF_LOG=<lines> (diagnostic, live): each texel buffer binding as it is resolved: where, how large, its view format and texel size, in place or copied, its first words
+        static _Atomic int nl; if (atomic_fetch_add(&nl, 1) < VKA_ENV("DM_VK_TBUF_LOG", 0)) { uint32_t w[8] = {0}; float fl[8]; cpu_read(addr, w, bytes < 32 ? (size_t)bytes : 32); memcpy(fl, w, 32);
+            uint64_t vka_frame(void);
+            VLOG("tbuf: frame %llu shader %016llx binding %u texture ID %d at %#llx %llu bytes VkFormat %d texel %u %s offset %% %u = %u (run %llu): %08x %08x %08x %08x %08x %08x %08x %08x (%g %g %g %g %g %g %g %g)", (unsigned long long)vka_frame(),
+                 (unsigned long long)sh->key, r->binding, tid, (unsigned long long)addr, (unsigned long long)bytes, (int)f, texel, storage ? "storage" : "uniform", al, (unsigned)(o % al), (unsigned long long)run,
+                 w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], fl[0], fl[1], fl[2], fl[3], fl[4], fl[5], fl[6], fl[7]); }
+    }
+    if ((run < bytes || (o % al) || VKA_ENV("DM_VK_TBUF_COPY", 1)) && !storage && bytes && bytes <= (1u << 20)) {   // DM_VK_TBUF_COPY (live, default 1; 0: only what cannot be viewed in place): see below   // read only and not viewable where it is: a view of a copy of its bytes as the CPU has them now, for this submission
         vka_span sp; uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements, n = texel && bytes / texel > mx ? mx * texel : bytes;
-        if (vka_scratch(n, al > 16 ? al : 16, &sp) && cpu_read(addr, sp.ptr, (size_t)n)) {
+        // (its bytes as the GPU will have them at this point of the submission: guest memory with the buffer copies, fills and inline updates recorded so far, vka_tex_gw_read.
+        // Unreal Engine fills its particle buffers with buffer copies from a staging buffer: read as the CPU has them at recording, they were the frame before's or what the
+        // memory held last, and Octopath Traveler 0's boost level 3 particles drew from garbage)
+        if (vka_scratch(n, al > 16 ? al : 16, &sp) && (vka_tex_gw_read(addr, n, sp.ptr) || cpu_read(addr, sp.ptr, (size_t)n))) {
             VkBufferViewCreateInfo ci = {VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO, .buffer = sp.buf, .format = f, .offset = sp.off, .range = n};
             VkBufferView v = VK_NULL_HANDLE;
             if (!vk.vkCreateBufferView(V.dev, &ci, NULL, &v)) { vka_after(vka_fence_last() + 1, tbv_destroy, (void *)(uintptr_t)v); return v; }
