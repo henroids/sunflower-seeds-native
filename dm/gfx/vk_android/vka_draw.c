@@ -33,6 +33,15 @@ static uint64_t g_skip_dev[VKS_N];   // the skips whose cause is the device or i
 static uint32_t g_claim_words;   // the draw's claim words (an upper bound of its primitives): 0 = its geometry shader takes no claim
 #define SKIPD(c, ...) do { g_skip_dev[c]++; SKIP(__VA_ARGS__); } while (0)   // (SKIP, counted as a device cause)
 #define SKIP(...) do { g_skipped++; static _Atomic int n_; if (atomic_fetch_add(&n_, 1) < 4) VRED(__VA_ARGS__); return; } while (0)
+// PEANUTS begin: the uses of guest memory that is not placed, counted by kind. Each site's [RED] line prints its first one to four times only, so a log did not say
+// whether four draws were lost or every model for the rest of the session (Pokemon Brilliant Diamond after guest memory was given back inside a placed segment,
+// vka_mem.c vka_mem_release); the replay statistics print the counts while they move (vka_draw_unplaced, every 300 frames)
+enum { UNP_INDEX, UNP_INDIRECT, UNP_VERTEX, UNP_STORAGE, UNP_UNIFORM, UNP_UPDATE, UNP_N };
+static const char *const g_unp_name[UNP_N] = {"index buffer", "indirect arguments", "vertex stream", "storage buffer", "uniform buffer", "inline buffer update"};
+static uint64_t g_unp[UNP_N], g_unp_addr; static int g_unp_kind;
+#define UNPLACED(k, a) do { g_unp[k]++; g_unp_addr = (uint64_t)(a); g_unp_kind = (k); } while (0)
+#define SKIPU(k, a, ...) do { UNPLACED(k, a); SKIP(__VA_ARGS__); } while (0)   // (SKIP, counted as memory that is not placed)
+// PEANUTS end
 
 // Whether draws and dispatches run. Without placed guest memory (an emulator's driver) the GPU sees no memory pool, so a game's draws would read nothing and only cost:
 // pipeline compiles there take minutes each. Off there by default, on with placed memory; DM_VK_DRAW=0 / 1 overrides, the selftest turns them on for its own memory
@@ -226,7 +235,7 @@ static void ub_flush(void) {
         memcpy(s.ptr, data, (size_t)sz);
         for (uint64_t done = 0; done < sz;) {
             VkBuffer b; VkDeviceSize o; uint64_t k = vka_addr_run(dst + done, sz - done, &b, &o);
-            if (!k) { VRED_ONCE("inline buffer update at %#llx is not in placed guest RAM", (unsigned long long)(dst + done)); break; }
+            if (!k) { UNPLACED(UNP_UPDATE, dst + done); VRED_ONCE("inline buffer update at %#llx is not in placed guest RAM", (unsigned long long)(dst + done)); break; }   // PEANUTS: counted
             VkBufferCopy c = {s.off + done, o, k}; vk.vkCmdCopyBuffer(g_cb, s.buf, b, 1, &c); done += k;
         }
         last_d = dst; last_n = sz;
@@ -947,7 +956,7 @@ static int ubo_desc(uint64_t addr, uint64_t size, VkDescriptorBufferInfo *bi) {
     vka_span s; if (!vka_scratch(size, V.ub_align, &s)) return 0;
     if (!cpu_read(addr, s.ptr, size)) { memset(s.ptr, 0, size); VRED_ONCE("uniform buffer at %#llx is not readable: it reads zeros", (unsigned long long)addr); }
     else if (run) VRED_ONCE("uniform buffer at %#llx is not %llu-byte aligned: bound as a copy of the CPU's bytes", (unsigned long long)addr, (unsigned long long)V.ub_align);
-    else VRED_ONCE("uniform buffer at %#llx is not in placed guest RAM: bound as a copy of the CPU's bytes", (unsigned long long)addr);
+    else { UNPLACED(UNP_UNIFORM, addr); VRED_ONCE("uniform buffer at %#llx is not in placed guest RAM: bound as a copy of the CPU's bytes", (unsigned long long)addr); }   // PEANUTS: counted
     *bi = (VkDescriptorBufferInfo){s.buf, s.off, size}; return 1;
 }
 // DM_VK_SB_PEEK=<hex key>[,…] (diagnostic): the storage buffers those shaders may write, as the CPU sees them when the draw or dispatch is recorded and again once its
@@ -1201,7 +1210,7 @@ static void rt_peek(const char *what, int i, const tex_t *t, const vka_img *im, 
 static int ssbo_desc(uint64_t addr, uint64_t size, VkDescriptorBufferInfo *bi) {
     VkBuffer b; VkDeviceSize o;
     uint64_t run = vka_addr_run(addr, size ? size : V.sb_range, &b, &o);
-    if (!run) { VRED_ONCE("storage buffer at %#llx is not in placed guest RAM: it is not bound", (unsigned long long)addr); return 0; }
+    if (!run) { UNPLACED(UNP_STORAGE, addr); VRED_ONCE("storage buffer at %#llx is not in placed guest RAM: it is not bound", (unsigned long long)addr); return 0; }   // PEANUTS: counted
     if (run > V.sb_range) run = V.sb_range;
     *bi = (VkDescriptorBufferInfo){b, o, run}; return 1;
 }
@@ -1790,7 +1799,7 @@ static void vin_bind(const vka_dstate *d) {
         VkBuffer b = g_zero.buf; VkDeviceSize o = g_zero.off, sz = 65536;
         uint64_t addr = d->vbuf[st].address, size = d->vbuf[st].size;
         if (addr) { VkBuffer cb; VkDeviceSize co; uint64_t run = vka_addr_run(addr, size ? size : 1ull << 30, &cb, &co);
-                    if (run) { b = cb; o = co; sz = run; } else VRED_ONCE("vertex stream at %#llx is not in placed guest RAM: it reads zeros", (unsigned long long)addr); }
+                    if (run) { b = cb; o = co; sz = run; } else { UNPLACED(UNP_VERTEX, addr); VRED_ONCE("vertex stream at %#llx is not in placed guest RAM: it reads zeros", (unsigned long long)addr); } }   // PEANUTS: counted
         vb_set(st, b, o, sz, &n0, &nn, rb, ro, rs);
     }
     if (VI.zero) vb_set(VI.zb, g_zero.buf, g_zero.off, 65536, &n0, &nn, rb, ro, rs);
@@ -2740,7 +2749,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     } else if (mesh) {   // count workgroups of the task shader, or of the mesh shader without one (the device's limit per dimension: maxTaskWorkGroupCount / maxMeshWorkGroupCount, 65535 on the Adreno 840)
         if (ind) {
             VkBuffer b; VkDeviceSize o;
-            if (!vka_mdx_args(ind, &b, &o)) SKIP("indirect mesh draw record at %#llx not in placed guest RAM, or its {count, 1, 1} copy not made: skipped", (unsigned long long)ind);
+            if (!vka_mdx_args(ind, &b, &o)) SKIPU(UNP_INDIRECT, ind, /* PEANUTS: counted */ "indirect mesh draw record at %#llx not in placed guest RAM, or its {count, 1, 1} copy not made: skipped", (unsigned long long)ind);
             if (vk.vkCmdDrawMeshTasksIndirectEXT) vk.vkCmdDrawMeshTasksIndirectEXT(g_cb, b, o, 1, 12);
             else SKIPD(VKS_FEATURE, "vkCmdDrawMeshTasksIndirectEXT not available: skipped");
         } else {
@@ -2766,7 +2775,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
         if (ind) { VkBuffer b, cb; VkDeviceSize o, co;
                    VRED_ONCE("indirect draws: outside vertex shaders, the driver segment's base instance (c0 + 0x644) reads the record's, not the GPU's");
                    if (mdi_n) { if (mdi_ranges(ind, mdi, mdi_n, mdi_st, 16, &b, &o, &cb, &co)) vk.vkCmdDrawIndirectCount(g_cb, b, o, cb, co, mdi_n, mdi_st); else mdi_cpu(0, ind, mdi, mdi_n, mdi_st); }
-                   else { if (!vka_addr(ind, 16, &b, &o, NULL) || (o & 3)) SKIP("indirect draw arguments at %#llx are not in placed guest RAM: skipped", (unsigned long long)ind);
+                   else { if (!vka_addr(ind, 16, &b, &o, NULL) || (o & 3)) SKIPU(UNP_INDIRECT, ind, /* PEANUTS: counted */ "indirect draw arguments at %#llx are not in placed guest RAM: skipped", (unsigned long long)ind);
                           vk.vkCmdDrawIndirect(g_cb, b, o, 1, 16); } }
         else vk.vkCmdDraw(g_cb, (uint32_t)dw->count, inst, (uint32_t)dw->first, binst);
     } else {
@@ -2786,11 +2795,11 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
             vin_bind(d); VBC.valid = 0;
             if (!sets_push(&lay, VK_PIPELINE_BIND_POINT_GRAPHICS, 0)) { g_skipped++; return; }
             ijoin = 0; ib = i_ib; io = i_io; it = i_it;
-        } else if (!vka_addr(di->ibuf, ind ? isz : isz * (uint64_t)(di->count > 0 ? di->count : 1), &ib, &io, NULL) || io % isz) SKIP("index buffer at %#llx is not in placed guest RAM: skipped", (unsigned long long)di->ibuf);
+        } else if (!vka_addr(di->ibuf, ind ? isz : isz * (uint64_t)(di->count > 0 ? di->count : 1), &ib, &io, NULL) || io % isz) SKIPU(UNP_INDEX, di->ibuf, /* PEANUTS: counted */ "index buffer at %#llx is not in placed guest RAM: skipped", (unsigned long long)di->ibuf);
         ib_bind(ib, io, it);
         if (ind) { VkBuffer b, cb; VkDeviceSize o, co;
                    if (mdi_n) { if (mdi_ranges(ind, mdi, mdi_n, mdi_st, 20, &b, &o, &cb, &co)) vk.vkCmdDrawIndexedIndirectCount(g_cb, b, o, cb, co, mdi_n, mdi_st); else mdi_cpu(1, ind, mdi, mdi_n, mdi_st); }
-                   else { if (!vka_addr(ind, 20, &b, &o, NULL) || (o & 3)) SKIP("indirect draw arguments at %#llx are not in placed guest RAM: skipped", (unsigned long long)ind);
+                   else { if (!vka_addr(ind, 20, &b, &o, NULL) || (o & 3)) SKIPU(UNP_INDIRECT, ind, /* PEANUTS: counted */ "indirect draw arguments at %#llx are not in placed guest RAM: skipped", (unsigned long long)ind);
                           vk.vkCmdDrawIndexedIndirect(g_cb, b, o, 1, 20); } }
         else if (istart) {   // the run's first draw: indirect, its instance count raised by the draws that join
             RUN.args[0] = (uint32_t)di->count; RUN.args[1] = 1; RUN.args[2] = 0; RUN.args[3] = (uint32_t)di->base_vertex; RUN.args[4] = 0;
@@ -3184,7 +3193,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
     if (!p) { g_skipped++; g_skip_dev[VKS_PIPELINE]++; return; }
     d->b.dispatch[0] = (uint32_t)dp->x; d->b.dispatch[1] = (uint32_t)dp->y; d->b.dispatch[2] = (uint32_t)dp->z; d->b.nvn2 = (uint32_t)vka_nvn2();
     VkBuffer ib = VK_NULL_HANDLE; VkDeviceSize io = 0;
-    if (dp->ind && (!vka_addr(dp->ind, 12, &ib, &io, NULL) || (io & 3))) SKIP("indirect dispatch arguments at %#llx are not in placed guest RAM: skipped", (unsigned long long)dp->ind);
+    if (dp->ind && (!vka_addr(dp->ind, 12, &ib, &io, NULL) || (io & 3))) SKIPU(UNP_INDIRECT, dp->ind, /* PEANUTS: counted */ "indirect dispatch arguments at %#llx are not in placed guest RAM: skipped", (unsigned long long)dp->ind);
     uint32_t sb = spill_bytes(sh[5]); uint64_t ns = 0;   // shared memory in the spill buffer: the slices this dispatch binds (spill_buf)
     if (sb) {
         if (!spill_buf(sb)) SKIP("dispatch of %016llx skipped: no shared memory spill buffer of %u bytes", (unsigned long long)sh[5]->key, sb);
@@ -3320,6 +3329,19 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
 void vka_draw_stats(uint64_t *draws, uint64_t *skipped, uint64_t *dispatches, uint64_t *pipelines) {
     if (draws) *draws = g_draws; if (skipped) *skipped = g_skipped; if (dispatches) *dispatches = g_dispatches; if (pipelines) *pipelines = 0;
 }
+// PEANUTS begin: the uses of memory that is not placed since the last line and in all, for the replay statistics (vka_exec.c mtl_set_frame); "" while none is new
+void vka_draw_unplaced(char *b, size_t n) {
+    static uint64_t last[UNP_N]; uint64_t d[UNP_N], dt = 0;
+    for (int i = 0; i < UNP_N; i++) { d[i] = g_unp[i] - last[i]; dt += d[i]; }
+    b[0] = 0; if (!dt) return;
+    snprintf(b, n, "guest memory that is not placed, since the last line (in all): %llu (%llu) draws skipped for their index buffer, %llu (%llu) draws or dispatches skipped for their indirect arguments, "
+             "%llu (%llu) vertex streams read zeros, %llu (%llu) storage buffers not bound, %llu (%llu) uniform buffers bound as copies, %llu (%llu) inline buffer updates cut; the last: %s at %#llx",
+             (unsigned long long)d[UNP_INDEX], (unsigned long long)g_unp[UNP_INDEX], (unsigned long long)d[UNP_INDIRECT], (unsigned long long)g_unp[UNP_INDIRECT], (unsigned long long)d[UNP_VERTEX], (unsigned long long)g_unp[UNP_VERTEX],
+             (unsigned long long)d[UNP_STORAGE], (unsigned long long)g_unp[UNP_STORAGE], (unsigned long long)d[UNP_UNIFORM], (unsigned long long)g_unp[UNP_UNIFORM], (unsigned long long)d[UNP_UPDATE], (unsigned long long)g_unp[UNP_UPDATE],
+             g_unp_name[g_unp_kind], (unsigned long long)g_unp_addr);
+    memcpy(last, g_unp, sizeof last);
+}
+// PEANUTS end
 // The device-caused skips by cause, the draws and dispatches that ran and every other skip (vka_skipwarn.h), for the skipped-work warning (vka_exec.c mtl_set_frame)
 void vka_draw_skips(uint64_t dev[VKS_N], uint64_t *work, uint64_t *other) {
     uint64_t t = 0; for (int i = 0; i < VKS_N; i++) { dev[i] = g_skip_dev[i]; t += dev[i]; }

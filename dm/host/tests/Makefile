@@ -462,6 +462,15 @@ $(B)/t_android_fmtlist: t_android_fmtlist.c $(VKA)/vka_fmtlist.h | $(B)
 # Large memory pools placed by parts: the range arithmetic (vka_place.h; vka_mem.c mtl_pool_need)
 $(B)/t_android_place: t_android_place.c $(VKA)/vka_place.h | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_place.c
+# PEANUTS begin: guest memory given back inside a placed segment: the table of holes and the parts of a segment that stay placed (vka_holes.h; vka_mem.c
+# vka_mem_release). Built with run; android-holes builds and runs it
+run: $(B)/t_android_holes
+$(B)/t_android_holes: t_android_holes.c $(VKA)/vka_holes.h | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_holes.c
+.PHONY: android-holes
+android-holes: $(B)/t_android_holes
+	$(B)/t_android_holes
+# PEANUTS end
 # File-backed pools (vka_fileback.h; vka_mem.c "File-backed pools", DM_MEM_FILEBACK). Linux only (mremap, O_TMPFILE, SEEK_DATA, fallocate; the file in TMPDIR, made and
 # removed by the test): make fileback, in `run` on a Linux host. From Anka Native (MIT, EddizEge; NOTICE.md)
 .PHONY: fileback
