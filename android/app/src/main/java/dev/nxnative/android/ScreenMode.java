@@ -89,7 +89,7 @@ final class ScreenMode {
             }).setNegativeButton("Cancel", null).show();
         }).value(SHORT[mode(a, id)] + (own(a, id) ? "" : " (default)")).chevron(a);
         String n = NOTES.get(id);
-        return s.note((n != null ? n + " " : "The picture size the game draws at, as on a Switch. Handheld also turns on the game's touch screen. ") + "From the next start.");
+        return s.note((n != null ? n + " " : "The picture size the game draws at, as on a Switch. Handheld also turns on the game's touch screen. ") + "From the next start; while the game runs, its in-game panel changes it at once.");
     }
 
     /** Settings › Game defaults */

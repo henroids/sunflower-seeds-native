@@ -313,6 +313,9 @@ static int32_t pick(int32_t a, int32_t b) { return (a < 0 ? -a : a) >= (b < 0 ? 
 // service does. The front end reports from its own thread, where an event cannot be bound, so only a bound one is signalled (one the game destroyed is not bound any more)
 static void *_Atomic g_style_ev[DM_PLAYERS];
 static void style_changed(uint32_t id) { void *ev = id < DM_PLAYERS ? atomic_load(&g_style_ev[id]) : NULL; if (ev) hle_signal_bound_system_event(ev); }
+// PEANUTS: the operation mode changed while the game runs (hle_oe.c oe_state_set: the in-game panel's Console mode): player 1 is on the Handheld npad in handheld mode and on
+// No1 docked (connected_id), so No1's style changes; a game that waits for the style event (Link's Awakening) would otherwise keep reading the npad that went away
+void dm_hid_opmode_changed(void) { for (uint32_t id = 0; id < DM_PLAYERS; id++) style_changed(id); }
 // PEANUTS: the controllers appear (styles_set above): the style events bound before fire, as on a connect. why: what lifted it, for the log
 static void styles_now(const char *why) {
     if (styles_set()) return;

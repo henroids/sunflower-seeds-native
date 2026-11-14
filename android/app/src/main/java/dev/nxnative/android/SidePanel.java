@@ -64,7 +64,7 @@ final class SidePanel extends FrameLayout {
     }
 
     // The ids of the choices a rebuild gives the focus back to (restyle)
-    private static final int ID_SIZE = 5000, ID_TEXT = 5100, ID_FIT = 5200, ID_MAP = 5300, ID_ONE = 5400, ID_RES = 5500, ID_RES_PRESET = 5590;
+    private static final int ID_SIZE = 5000, ID_TEXT = 5100, ID_FIT = 5200, ID_MAP = 5300, ID_ONE = 5400, ID_RES = 5500, ID_RES_PRESET = 5590, ID_CONSOLE = 5600 /* PEANUTS: the two buttons of Console mode */;
 
     SidePanel(Activity a, Rows rows) {
         super(a);
@@ -388,6 +388,24 @@ final class SidePanel extends FrameLayout {
         if (tab == TAB_CONTROLS) { controls(); return; }
         if (tab == TAB_GENERAL) { general(); return; }
 
+        // PEANUTS begin: Console mode (Docked / Handheld) while the game runs, for a game whose Resolution does not set the mode (ScreenMode): the host changes the
+        // operation mode and posts the console's change notifications, as when a Switch is taken out of its dock (Native.graphicsModeSet with the scale following the
+        // mode, hle_oe.c nxhost_graphics_mode_set); the choice is kept for the game
+        if (ScreenMode.fixed(game()) == null) {
+            head("Console mode");
+            RadioGroup cm = new RadioGroup(act);
+            for (int k = 0; k < 2; k++) { RadioButton b = new RadioButton(act); b.setId(ID_CONSOLE + k); b.setText(ScreenMode.NAMES[k]); cm.addView(b); }
+            cm.check(ID_CONSOLE + ScreenMode.mode(act, game()));
+            cm.setOnCheckedChangeListener((gr, id) -> {
+                int m = id - ID_CONSOLE;
+                ScreenMode.set(act, game(), m);
+                if (act instanceof GameActivity && !Native.graphicsModeSet(-1, 1 - m)) Native.note("Console mode: this host cannot change it while the game runs; it applies at the next start");
+                restyle(id);
+            });
+            box.addView(cm);
+            note("Changes now, as when a Switch leaves its dock, and is kept for this game. A game may take the new picture size only at its next scene, or at its next start.");
+        }
+        // PEANUTS end
         head("Frame rate cap");   // the game's own frame rate; frame generation (below, its own heading) adds frames on top
         caps = new RadioGroup(act);
         if (Prefs.limited(game())) {   // a frame limit, no locking (Prefs.PACE_CAPS)

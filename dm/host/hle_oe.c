@@ -204,6 +204,7 @@ static void oe_state_set(int m, int scale) {
         if (g_ntf_opmode) mq_push(MSG_OPMODE);
         if (g_ntf_perfmode && !DM_GAME_PERF_BOOST) mq_push(MSG_PERFMODE);   // the performance mode follows the operation mode (profile perf_mode boost: always Boost, it does not change)
         int n = atomic_load(&g_defres_n); for (int i = 0; i < n; i++) hle_signal_system_event(g_defres_ev[i]);
+        { void dm_hid_opmode_changed(void); dm_hid_opmode_changed(); }   // PEANUTS: player 1's controller moves between No1 and Handheld with the mode: the style events fire, as on the console
     }
     if (scale_changed && g_ntf_gfxscale) mq_push(MSG_GFXSCALE);
 }
