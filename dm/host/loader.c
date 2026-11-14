@@ -988,8 +988,13 @@ static void map_image(module_t *m, const char *dir) {
 // cannot be kept stops the start with its reason (a module that is not loaded, a table of another build, a distance beyond the 128 MB a branch reaches: the modules
 // must stand in the arena). The text is sealed by then (map_image): its pages are opened for the writes and sealed again. Not on iOS, whose code is signed in the
 // executable and which loads no pack
+// The same for an address such a module keeps as data, a ptr row: a relative relocation whose addend lies outside the module (that mod's subsdk1 has 116 in its GOT, for
+// globals of main: slot +0x5b050, addend -0xada100, main+0x4c2df00 on the console) gave the console's distance from this module's base, 0x170000 off here; the game
+// read 0 through it and stopped at subsdk1+0x172b8. The slot gets the target's real address once the module is relocated (relocate() writes base + addend there first)
 #if !PLAT_IOS
-static unsigned xmod_apply(module_t *m, const char *dir, unsigned *into) {
+static module_t *xmod_named(const char *name) { for (int i = 0; i < g_nmod; i++) if (!strcmp(g_mod[i].name, name)) return &g_mod[i]; return NULL; }
+// ptrs 0: the table's b / bl rows, before relocation; 1: its ptr rows, after it. into: rows applied, by target module
+static unsigned xmod_apply(module_t *m, const char *dir, unsigned *into, int ptrs) {
     char path[1024]; snprintf(path, sizeof path, "%s/%s.xmod.tsv", dir, m->name);
     FILE *f = fopen(path, "r");
     if (!f) return 0;
@@ -1003,11 +1008,16 @@ static unsigned xmod_apply(module_t *m, const char *dir, unsigned *into) {
             if (sscanf(line, "# BUILD_ID %39s", id) == 1 && *m->build_id && strcmp(id, m->build_id)) die("%s is of build %s, %s is %s: build the game with its mods again", path, id, m->name, m->build_id);
             continue;
         }
-        if (sscanf(line, "%lx %7s %31s %lx", &off, kind, to, &toff) != 4 || (strcmp(kind, "b") && strcmp(kind, "bl"))) die("%s: not a row of offset, b or bl, module, offset: %s", path, line);
-        module_t *t = NULL;
-        for (int i = 0; i < g_nmod; i++) if (!strcmp(g_mod[i].name, to)) t = &g_mod[i];
-        if (!t || t == m) die("%s: %s+%#lx branches into %s, which is not loaded (the modules come from pack.tsv's modules row): build the game with its mods again", path, m->name, off, to);
-        if ((off & 3) || off + 4 > m->text_end || (toff & 3) || toff >= t->text_end) die("%s: %s+%#lx to %s+%#lx is outside the code", path, m->name, off, to, toff);
+        int isptr = 0;
+        if (sscanf(line, "%lx %7s %31s %lx", &off, kind, to, &toff) != 4 || (strcmp(kind, "b") && strcmp(kind, "bl") && !(isptr = !strcmp(kind, "ptr"))))
+            die("%s: not a row of offset, b / bl / ptr, module, offset: %s", path, line);
+        module_t *t = xmod_named(to);
+        if (!t || t == m) die("%s: %s+%#lx goes into %s, which is not loaded (the modules come from pack.tsv's modules row): build the game with its mods again", path, m->name, off, to);
+        if (isptr) {   // a word of the module's own data (after its code, before bss and the key page), holding an address anywhere in the target's image
+            uint64_t end = m->key_page_off < m->size ? m->key_page_off : m->size;
+            if ((off & 7) || off < m->text_end || off + 8 > end || toff >= t->key_page_off) die("%s: the pointer at %s+%#lx to %s+%#lx is outside the modules' data", path, m->name, off, to, toff);
+        } else if ((off & 3) || off + 4 > m->text_end || (toff & 3) || toff >= t->text_end) die("%s: %s+%#lx to %s+%#lx is outside the code", path, m->name, off, to, toff);
+        if (isptr != ptrs) continue;
         if (n == cap && !(rows = realloc(rows, (cap = cap ? cap * 2 : 256) * sizeof *rows))) die("%s: out of memory", path);
         rows[n++] = (row_t){off, toff, t, !strcmp(kind, "bl")};
         if (off < lo) lo = off;
@@ -1015,6 +1025,11 @@ static unsigned xmod_apply(module_t *m, const char *dir, unsigned *into) {
     }
     fclose(f);
     if (!n) { free(rows); return 0; }
+    if (ptrs) {   // data pages: writable as map_image left them (only the code and the key page are sealed)
+        for (size_t i = 0; i < n; i++) { *(uint64_t *)(m->base + rows[i].off) = (uint64_t)(uintptr_t)(rows[i].to->base + rows[i].toff); into[rows[i].to - g_mod]++; }
+        free(rows);
+        return (unsigned)n;
+    }
     lo &= ~0x3FFFull; hi = (hi + 0x3FFF) & ~0x3FFFull;
     if (mprotect(m->base + lo, hi - lo, PROT_READ | PROT_WRITE)) die("%s mprotect text for its cross-module branches", m->name);
     for (size_t i = 0; i < n; i++) {
@@ -1032,20 +1047,26 @@ static unsigned xmod_apply(module_t *m, const char *dir, unsigned *into) {
     free(rows);
     return (unsigned)n;
 }
+static unsigned g_xmod_b[64][64];   // branches aimed before relocation, by module and target: logged with the pointers
 #endif
-// Every module's table, after all are mapped and before anything is relocated or run; one log line: xmod: main 106 branches into subsdk1; subsdk1 1228 branches into main
-static void xmod_apply_all(const char **mdir) {
+// Every module's table: its branches (ptrs 0) after all modules are mapped and before anything is relocated or run, its pointers (ptrs 1) right after relocation.
+// One log line then: xmod: main 106 branches into subsdk1; subsdk1 1228 branches and 116 pointers into main
+static void xmod_apply_all(const char **mdir, int ptrs) {
 #if !PLAT_IOS
     char log[1024] = ""; size_t at = 0;
-    for (int i = 0; i < g_nmod; i++) {
+    for (int i = 0; i < g_nmod && i < 64; i++) {
         unsigned into[64] = {0};
-        if (!xmod_apply(&g_mod[i], mdir[i], into)) continue;
-        for (int k = 0; k < g_nmod; k++) if (into[k] && at < sizeof log - 1)
-            at += (size_t)snprintf(log + at, sizeof log - at, "%s%s %u branches into %s", at ? "; " : "", g_mod[i].name, into[k], g_mod[k].name);
+        xmod_apply(&g_mod[i], mdir[i], ptrs ? into : g_xmod_b[i], ptrs);
+        for (int k = 0; ptrs && k < g_nmod && k < 64; k++) if ((g_xmod_b[i][k] || into[k]) && at < sizeof log - 1) {
+            at += (size_t)snprintf(log + at, sizeof log - at, "%s%s", at ? "; " : "", g_mod[i].name);
+            if (g_xmod_b[i][k] && at < sizeof log - 1) at += (size_t)snprintf(log + at, sizeof log - at, " %u branches", g_xmod_b[i][k]);
+            if (into[k] && at < sizeof log - 1) at += (size_t)snprintf(log + at, sizeof log - at, "%s %u pointers", g_xmod_b[i][k] ? " and" : "", into[k]);
+            if (at < sizeof log - 1) at += (size_t)snprintf(log + at, sizeof log - at, " into %s", g_mod[k].name);
+        }
     }
     if (at) LOG("xmod: %s", log);
 #else
-    (void)mdir;
+    (void)mdir; (void)ptrs;
 #endif
 }
 // PEANUTS end
@@ -1100,9 +1121,10 @@ void load_modules(const char *dir, const char **names, int n) {
         LOG("%s: base %p size %#zx", names[i], m->base, m->size);
         m->loaded = 1; g_loaded[g_nloaded++] = m; g_nmod++;
     }
-    xmod_apply_all(mdir);   // PEANUTS: a code mod's branches between modules (see xmod_apply)
+    xmod_apply_all(mdir, 0);   // PEANUTS: a code mod's branches between modules (see xmod_apply)
     force_init();
     t = now_ns(); for (int i = 0; i < g_nmod; i++) relocate(&g_mod[i]); tr = now_ns() - t;
+    xmod_apply_all(mdir, 1);   // PEANUTS: and the addresses of another module it keeps as data, over what relocate() wrote there
     force_check();
     preload_nros(dir, nros);   // mapped now, relocated when the game loads them (hle_ro.c)
     { void hlecount_seal(void); hlecount_seal(); }   // DM_HLECOUNT: relocation done, seal the counting stub pages as read-only executable
@@ -1116,6 +1138,18 @@ void load_modules(const char *dir, const char **names, int n) {
 void run_module_inits(void) {
     for (int i = 0; i < g_nmod; i++) {
         module_t *m = &g_mod[i];
+        // PEANUTS: DM_MOD_INIT_ARRAY=1 (a test switch, off by default): a module without DT_INIT that has an init_array (a mod's own module built with
+        // devkitA64, such as Luminescent Platinum's subsdk1: 5 entries, static constructors) gets its entries called here in order. rtld calls DT_INIT only,
+        // so by default they do not run, as far as is known on the console either; the switch is for a mod whose globals read as zero without them
+        if (!m->init && !m->nro && m->init_arraysz >= 8 && getenv("DM_MOD_INIT_ARRAY") && *getenv("DM_MOD_INIT_ARRAY") == '1') {
+            LOG("%s: no DT_INIT: its %llu init_array entries are called (DM_MOD_INIT_ARRAY=1)", m->name, (unsigned long long)(m->init_arraysz / 8));
+            for (uint64_t k = 0; k < m->init_arraysz / 8; k++) {
+                uint64_t f; memcpy(&f, m->base + m->init_array + 8 * k, 8);
+                if (f && f != (uint64_t)-1) ((void (*)(void))(uintptr_t)f)();
+            }
+            continue;
+        }
+        // PEANUTS end
         if (!m->init || m->nro) continue;   // an NRO's init runs when the game loads it (hle_ro.c)
         LOG("%s: DT_INIT +%#llx (init_array %llu entries)", m->name, m->init, m->init_arraysz / 8);
         ((void (*)(void))(m->base + m->init))();

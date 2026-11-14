@@ -26,7 +26,7 @@
 # unfinished: the launcher refuses it, the next run rewrites it). Libraries of other versions in the pack's shaders/ are kept.
 # --code-only rewrites the modules and stops (pack.tsv, game.tsv and the shaders untouched); --keep-code packs without rewriting (the phone's two steps).
 # Usage: pack_android.py <game folder | .nup file> [--version N] [--out DIR] [-j N] [--shader-cache DIR] [--shader-pkg DIR] [--shader-python PY] [-J N] [--no-shaders] [--code-only | --keep-code] [--in-process]   (exit 1 on error)
-import argparse, hashlib, os, runpy, shutil, signal, subprocess, sys, time
+import argparse, hashlib, os, runpy, shutil, signal, struct, subprocess, sys, time   # PEANUTS: struct (cross_module)
 from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / 'scripts')); sys.path.insert(0, str(REPO / 'dm/games'))
@@ -319,28 +319,34 @@ def cross_module(mods, srcs, supplied, patched, out):
     import nso, xmod
     try: lay = xmod.layout({m: xmod.header(srcs[m].read_bytes()[:0x100], m) for m in mods})
     except ValueError as e: raise Error(str(e)) from None
-    far = {}
+    far, ptrs = {}, {}
     for m in mods:
         if m not in supplied and not patched.get(m): continue
         try: mod = nso.load(srcs[m].read_bytes(), str(srcs[m]))
         except nso.Error as e: raise Error(f'{srcs[m]}: {e}') from None
         words = None if m in supplied else patched[m]
         far[m] = ('all' if words is None else 'sites', words or [], xmod.far_branches(mod.image, mod.text_end, lay[m][2], words))
+        # the addresses a mod's module keeps as data (its relocations). Not searched in a module of the game that a patch changed: its relocations are the game's
+        # own, which never leave the module, and a patch of code adds none
+        if m in supplied:
+            try: ptrs[m] = xmod.far_pointers(mod.image, lay[m][2])
+            except (ValueError, struct.error) as e: raise Error(f'{srcs[m]}: its relocations cannot be read ({e})') from None
     files = {}
-    for m, text in xmod.plan(lay, far).items():
+    for m, text in xmod.plan(lay, far, ptrs).items():
         d = out / '.mod-src' / m; d.mkdir(parents=True, exist_ok=True)
         files[m] = d / f'{m}.xmod-layout'
         if not files[m].is_file() or files[m].read_text(encoding='utf-8') != text: write_lf(files[m], text)
     for m in mods:
         if m not in files: (out / f'{m}.xmod.tsv').unlink(missing_ok=True)
     if files:
-        print('mod: cross-module branches: ' + '; '.join(f'{m} at main{lay[m][0]:+#x} on the console' + (f', {len(far[m][2])} out' if m in far and far[m][2] else '') for m in files), flush=True)
+        print('mod: cross-module branches: ' + '; '.join(f'{m} at main{lay[m][0]:+#x} on the console' + (f', {len(far[m][2])} out' if m in far and far[m][2] else '') + (f', {len(ptrs[m])} pointers out' if ptrs.get(m) else '') for m in files), flush=True)
     return files
 
 
 def xmod_keys(keys, layout):
-    """A module's keys (rewrite_keys) when it is rewritten with a cross-module layout: each with the layout file's bytes hashed in"""
-    b = layout.read_bytes()
+    """A module's keys (rewrite_keys) when it is rewritten with a cross-module layout: each with the layout file's bytes hashed in, and xmod.py's, which
+    the rewriter reads such a module's relocations with (not one of REWRITER: no other module's key depends on it)"""
+    b = layout.read_bytes() + b'\0' + (REPO / 'dm/tools/xmod.py').read_bytes()
     return [hashlib.sha256(k.encode() + b'\0' + XMOD_KEY.encode() + b'\0' + b).hexdigest() + ' target=android xmod' for k in keys]
 # PEANUTS end
 

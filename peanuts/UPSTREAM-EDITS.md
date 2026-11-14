@@ -236,6 +236,15 @@ all behind "a build without code mods takes none of this":
 | `scripts/pack_android.py` | `cross_module()`, `xmod_keys()`, the `xmod` argument of `rewrite()`/`upgrade_keys()` (a module rewritten with a layout is keyed with it), an added module placed in the console's order (`merge_mod_modules`), `mod_build` rows in `pack.tsv` for the modules a mod supplies (a `build` row is compared with the game's own file, `BuildCheck.build`) | inside the existing `PEANUTS begin`/`PEANUTS end` blocks, `PEANUTS` comments on the single lines |
 | `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | the "pack" case appends `Job.modArgs()`'s tokens too: `pack.tsv` listed the game's own modules and the host never loaded the added one | `PEANUTS begin`/`PEANUTS end` block |
 
+Second pass, same day: the addresses such a module keeps as data. The mod's subsdk1 has 116 relative
+relocations whose addend lies outside the module (its GOT entries for globals and functions of main, at the
+console's distance); the first one read stopped the game at subsdk1+0x172b8. `patch_nso.py`'s `xmod_table()`
+lists them as `ptr` rows (the same block; the file before is `rewriter_equiv/patch_nso.py.e9e2bc834168`, the
+output without `--xmod` again byte for byte the same: main and subsdk0, 16 of 16 files), `loader.c`'s
+`xmod_apply()` stores the real address after `relocate()` (the same block, a second marked call),
+`pack_android.py`'s `cross_module()` reads them with `xmod.far_pointers()` (inside its block; `import struct`
+marked).
+
 No upstream-candidate general fix here either. `dm/tools/ips.py`, `dm/tools/patch_ips.py` (a patch's offsets
 count the NSO's 0x100-byte header, as Atmosphère applies them; a patch file named by the whole build ID),
 `dm/tools/xmod.py` and `dev.peanuts.build.ModBuild`/`ModdedBuild`/`Prepare` are Peanuts-owned files.

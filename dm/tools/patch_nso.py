@@ -1895,17 +1895,23 @@ with open(P('obs.tsv'), 'w', encoding='utf-8', newline='\n') as f:
 #   scan all | scan sites, then site <offset> rows   where to look: all the code (a module the mod supplies), or only the words a patch changed (the game's own module:
 #                                                    a word of its data that reads as a far branch is never one)
 #   in <offset> <from>                               an offset of this module that another module branches to
+#   inptr <offset> <from>                            an offset of this module that another module keeps the address of
 # A branch that leaves this module and lands in no other module's code stops the rewrite, and so does one this rewriter moved (a site, a window, a spin wait's copy:
-# the loader patches the word where the file has it) and one that comes in at the middle of a window or a retry block, whose instructions run from their copy
+# the loader patches the word where the file has it) and one that comes in at the middle of a window or a retry block, whose instructions run from their copy.
+# Addresses kept as data are listed too, as ptr rows (scan all only: a module the mod supplies): a relocation that makes an address outside the module (xmod.py
+# far_pointers; that mod's subsdk1 has 116 in its GOT, for the globals and functions of main it uses) is a pointer into another module at the console's distance. The slot is
+# where the file has it (this rewriter moves no data and no relocation table), the loader stores the real address there after it has relocated the module. One
+# that lands in no module stops the rewrite; one into another module's code follows the rule of a branch coming in; one into its data or bss needs nothing: the
+# image keeps the file's offsets up to the end of bss, and the key page and the patch area come after
 def xmod_table():
-    mods, sites, scan, incoming = {}, [], None, []
+    mods, sites, scan, incoming, n_inptr = {}, [], None, [], 0
     with open(XMOD, encoding='utf-8') as f:
         for line in f.read().splitlines():
             c = line.split('\t')
             if c[0] == 'module': mods[c[1]] = (int(c[2], 16), int(c[3], 16), int(c[4], 16))
             elif c[0] == 'scan': scan = c[1]
             elif c[0] == 'site': sites.append(int(c[1], 16))
-            elif c[0] == 'in': incoming.append((int(c[1], 16), c[2]))
+            elif c[0] in ('in', 'inptr'): incoming.append((int(c[1], 16), c[2])); n_inptr += c[0] == 'inptr'
     if NAME not in mods or scan not in ('all', 'sites'): sys.exit(f'[RED] {NAME}: {XMOD} is not a cross-module layout of this module')
     own, _, size = mods[NAME]
     moved = {w for off, n in changed_runs() for w in range(off, off + n, 4)} | done
@@ -1929,18 +1935,29 @@ def xmod_table():
         if o in moved: far.append(f'{NAME}+{o:#x} {kind} to {to}+{own + t - mods[to][0]:#x}: the rewriter moved this instruction (a rewrite site, a window or a spin wait)'); continue
         assert bytes(IMG[o:o + 4]) == ORIG_TEXT[o:o + 4], f'{o:#x}'
         rows.append((o, kind, to, own + t - mods[to][0]))
+    ptrs = []
+    if scan == 'all':
+        import xmod
+        img_end = MOD.segments[2][0] + MOD.segments[2][1]   # text + ro + data, as the file has them: where a relocation's slot can be
+        for o, t in xmod.far_pointers(IMG[:img_end], size):
+            to = next((m for m, (at, _, msize) in mods.items() if m != NAME and at <= own + t < at + msize), None)
+            if to is None: far.append(f'{NAME}+{o:#x} holds the address {NAME}{t:+#x} (main{own + t:+#x} on the console): in no module'); continue
+            if o & 7 or not TEXT_END <= o <= img_end - 8: far.append(f'{NAME}+{o:#x} holds the address of {to}+{own + t - mods[to][0]:#x}: the slot is not a word of the module\'s data'); continue
+            ptrs.append((o, 'ptr', to, own + t - mods[to][0]))
     win_mid = {x.address for wseg in windows for x in wseg[1:]}
     for t, frm in incoming:
-        if t in win_mid or t in rmid_all: far.append(f'{frm} branches to {NAME}+{t:#x}: the middle of a window or retry block, which runs from its copy')
+        if t in win_mid or t in rmid_all: far.append(f'{frm} branches or points to {NAME}+{t:#x}: the middle of a window or retry block, which runs from its copy')
     if far:
         for line in far[:20]: print(f'[RED] cross-module branch: {line}')
-        sys.exit(f'[RED] {NAME}: {len(far)} cross-module branches cannot be kept ({len(rows)} can): the build with this mod is refused')
+        sys.exit(f'[RED] {NAME}: {len(far)} cross-module branches or pointers cannot be kept ({len(rows) + len(ptrs)} can): the build with this mod is refused')
     with open(P('xmod.tsv'), 'w', encoding='utf-8', newline='\n') as f:
         f.write(f'# BUILD_ID\t{BUILD_ID}\n')
-        for o, kind, to, t in rows: f.write(f'{o:#x}\t{kind}\t{to}\t{t:#x}\n')   # Columns: offset in this image, b or bl, the module it goes to, offset there
+        for o, kind, to, t in rows + ptrs: f.write(f'{o:#x}\t{kind}\t{to}\t{t:#x}\n')   # Columns: offset in this image, b or bl or ptr (a data word holding an address), the module it goes to, offset there
     into = {m: sum(1 for r in rows if r[2] == m) for m in mods}
     n_site = sum(1 for t, _ in incoming if t < TEXT_END and bytes(IMG[t:t + 4]) != ORIG_TEXT[t:t + 4])
-    print(f'{NAME}: xmod: {len(rows)} branches out' + ''.join(f', {n} into {m}' for m, n in into.items() if n) + f'; {len(incoming)} come in, {n_site} of them at a rewritten instruction (its stub runs)')
+    pinto = {m: (sum(1 for r in ptrs if r[2] == m), sum(1 for r in ptrs if r[2] == m and r[3] < mods[m][1])) for m in mods}
+    print(f'{NAME}: xmod: {len(rows)} branches out' + ''.join(f', {n} into {m}' for m, n in into.items() if n) + f'; {len(incoming) - n_inptr} come in, {n_site} of them at a rewritten instruction (its stub runs)'
+          + (f'; {len(ptrs)} pointers out' + ''.join(f', {n} into {m} ({c} of them into its code)' for m, (n, c) in pinto.items() if n) if ptrs else '') + (f'; {n_inptr} pointers come in' if n_inptr else ''))
     if other: print(f'[RED] {NAME}: {other} adr / adrp / ldr literal words point outside the module by their own position: not re-aimed (data in the code, or the mod reads another module that way)')
 if XMOD: xmod_table()
 # PEANUTS end
