@@ -3406,7 +3406,8 @@ def main():
         if want is not None:
             big, todo = scan_jobs(files, want)
             dg = scan_digest(inputs, big + todo + mains)
-            print(f'targeted split: {len(want):,} of {len(files):,} RomFS files hold the shaders of the profile\'s shader_map.tsv (main build {", ".join(build_id(m) for m in main_v)}); only these are scanned', flush=True)
+            if not (rd and os.path.isfile(tf := os.path.join(rd, 'targeted.failed')) and open(tf).read().strip() == dg):   # PEANUTS: not on a rerun that an earlier run's targeted.failed sends to the full scan, as before the modes loop
+                print(f'targeted split: {len(want):,} of {len(files):,} RomFS files hold the shaders of the profile\'s shader_map.tsv (main build {", ".join(build_id(m) for m in main_v)}); only these are scanned', flush=True)
             # PEANUTS: on-device split support (see file header) — the direct scan first (DM_SPLIT_DIRECT: the recorded containers of each file, direct_targets), the targeted
             # scan of the whole files when its tables differ; each keeps its own results and its own 'failed' digest (ScanCache's digest with the containers, as the results hold other shaders)
             modes = [('targeted', None, dg)]
