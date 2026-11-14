@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <map>
+#include <mutex>
+#include <string>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -305,6 +308,17 @@ void ModRuntime::InitializeGameModule() {
         auto& rt = *static_cast<ModRuntime*>(p);
         if (!rt.module_snapshot || !ValidString(name, MaxName) || !ValidString(value, MaxText)) {
             return;
+        }
+        // PEANUTS: a module's diagnostic texts (names ending in ".diag": why a reader is not ready) go to the log when they change; nothing shows them on this host
+        if (const size_t nl = std::strlen(name); nl > 5 && std::strcmp(name + nl - 5, ".diag") == 0) {
+            static std::mutex mu;
+            static std::map<std::string, std::string> last;
+            std::scoped_lock lk{mu};
+            auto& was = last[name];
+            if (was != value) {
+                was = value;
+                LOG_INFO(Core, "DSMod module text {} = '{}'", name, value);
+            }
         }
         if (std::strcmp(name, "__map_state") == 0) {
             rt.AcceptModuleMapState(value);
