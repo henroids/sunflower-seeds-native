@@ -135,6 +135,10 @@ public:
     HID::HIDCore hid_core;
     Core::PerfStats perf_stats;
     FileSys::VirtualDir romfs_root;
+    FileSys::VirtualDir romfs_base_root; // the game's RomFS without its mods' folders ("base:"); empty: romfs_root
+    [[nodiscard]] FileSys::VirtualDir RomfsBaseRoot() const {
+        return romfs_base_root ? romfs_base_root : romfs_root;
+    }
     FileSys::VirtualDir save_root;
     FileSys::VirtualDir sysfont_root;
     u64 title_id{};

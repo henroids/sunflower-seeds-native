@@ -102,7 +102,7 @@ mod_view_default.h, mod_input_tokens.h (their functionality lives inside the fil
 |---|---|
 | mods/mod_runtime.h | `friend struct PnRtAccess;` so peanuts_rt.cpp can switch `current_page` and read `tick_count`/page id/module state for pn_rt_set_page / pn_rt_status (Tick itself is reached without a friend: the CoreTiming shim keeps the scheduled event and pn_rt_tick fires it). |
 | mods/mod_assets.cpp | `#if !PNRT` around `SerialVfsFile` + `OpenPrivateRomFS` (Eden loader/PatchManager/NCA chain); `OpenGameRomFS()` body replaced by `root = system.RomfsRoot()`; the `sysfont:` source's archive opener replaced by `system.SysfontRoot()` (no system NAND). |
-| mods/mod_romfs_sources.cpp (R5) | `BuildBase` = `system.RomfsRoot()` ("base:" is the same extracted dir as "romfs:"), `BuildAoc` = nullptr ("aoc:" never available; the Eden bodies stay under `#else`). |
+| mods/mod_romfs_sources.cpp (R5) | `BuildBase` = `system.RomfsBaseRoot()` ("base:" is the game's RomFS without its mods' folders; "romfs:" has them layered over it when the host names any, `PnRtConfig::romfs_overlay_dirs`), `BuildAoc` = nullptr ("aoc:" never available; the Eden bodies stay under `#else`). |
 | mods/mod_module_services.cpp (R5) | `ResolveTitleSaveDirectory` = `system.SaveRoot()` (PnRtConfig::save_dir) instead of the save-data HLE + profile manager. |
 | mods/mod_module.cpp | `GameModule::Load`'s build-id check accepts the host's 16-hex-digit (8-byte, zero-padded) build id as a prefix of a manifest's full 20-byte id and vice versa (one PNRT hunk at the `build_ids` any_of). |
 
@@ -266,7 +266,7 @@ RomFS-relative, '/'-separated, no leading slash; callbacks must be thread-safe (
 tick thread). Shim: `FileSys::OpenProviderDirectory(const PnRtRomfs&)` (vfs.h / shim.cpp):
 `ProviderDir` / `ProviderFile` -- a file holds its handle for the VfsFile's life and reads ranges
 through `read` (no whole-image loads); `pn_rt_create` sets `System::romfs_root` to it, so
-"romfs:" and "base:" (BuildBase = RomfsRoot) both resolve through it. No lifted file changed.
+"romfs:" and "base:" both resolve through it ("romfs:" under the mods' folders when there are any). No lifted file changed.
 
 Host side (dm/peanuts/peanuts_nup.{h,c}, C, over dm/host/nup_image.h): `pn_nup_open(spec)` opens
 the package DM_ROMFS names (`<game>.nup:update/<v>/romfs`) as layer 0 and, when the selector is

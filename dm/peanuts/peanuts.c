@@ -617,6 +617,7 @@ static void rt_start(void) {
     }
     c.package_dir = dir;
     c.romfs_dir = base_romfs[0] ? base_romfs : NULL;
+    c.romfs_overlay_dirs = getenv("DM_ROMFS_OVERLAY");   // the mods' folders the game's rom: mount reads first (hle_fs.c): a companion sees the files the game sees (Luminescent Platinum's companion tells the mod by one of its files)
     c.title_id = title;
     // The whole NSO build id when the launcher hands it (PN_BUILD_ID, dev.peanuts.build.GameEnv: 64 hex digits; the host's own is the first 8 bytes): a package's native
     // module may list whole ids and refuse a prefix. Taken only when it begins with the host's

@@ -109,6 +109,9 @@ typedef struct PnRtConfig {
     /// The game's romfs extracted to a directory ("romfs:/..." assets). Optional (NULL = none:
     /// such assets are logged as missing and their widgets left blank).
     const char* romfs_dir;
+    /// Optional: the mods' RomFS folders the game reads before its own files (':'-separated, the first wins: the host's DM_ROMFS_OVERLAY).
+    /// They are layered over the game's RomFS for "romfs:", as a module sees LayeredFS mods on the emulator; "base:" stays without them.
+    const char* romfs_overlay_dirs;
     /// R5: a writable per-app data directory. Holds the persisted runtime flags
     /// (<data_dir>/dualscreen/persist), the player's "user:" assets (<data_dir>/dualscreen/user)
     /// and the private staging directory a package's native module is copied to before dlopen

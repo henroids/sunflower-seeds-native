@@ -173,6 +173,25 @@ PnRt* pn_rt_create(const PnRtConfig* config) {
         LOG_INFO(Core, "peanuts_rt: game romfs served by the host's provider callbacks{}",
                  rt->romfs.list != nullptr ? "" : " (no directory listing)");
     }
+    // The mods' folders over the game's RomFS, as the game reads them ("romfs:"); "base:" keeps the game's own files
+    sys.romfs_base_root = sys.romfs_root;
+    if (config->romfs_overlay_dirs != nullptr && *config->romfs_overlay_dirs != 0) {
+        std::vector<FileSys::VirtualDir> layers;
+        const std::string all{config->romfs_overlay_dirs};
+        for (size_t at = 0; at <= all.size();) {
+            const size_t end = std::min(all.find(':', at), all.size());
+            if (end > at) {
+                if (auto d = FileSys::OpenHostDirectory(all.substr(at, end - at))) layers.push_back(std::move(d));
+            }
+            at = end + 1;
+        }
+        if (!layers.empty()) {
+            const size_t n = layers.size();
+            if (sys.romfs_root) layers.push_back(sys.romfs_root);
+            sys.romfs_root = FileSys::MakeLayeredDir(std::move(layers));
+            LOG_INFO(Core, "peanuts_rt: game romfs under {} mod folder(s): {}", n, all);
+        }
+    }
     if (config->save_dir != nullptr) {
         sys.save_root = FileSys::OpenHostDirectory(config->save_dir);
     }
