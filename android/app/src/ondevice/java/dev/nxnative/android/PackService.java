@@ -168,7 +168,7 @@ public final class PackService extends Service {
         }
         if ("running".equals(j.state())) {   // PEANUTS: still "running" at a start: the process before this one was ended (Android's low-memory killer, most likely): fewer workers from now on
             j.memLevelUp();
-            stepLog(j, "the phone ran out of memory (Android ended the build's process); retrying with fewer workers (level " + j.memLevel() + "; " + memLine() + ")");
+            stepLog(j, "the build's process ended before its step finished (most often Android freeing memory); resuming with fewer workers (level " + j.memLevel() + "; " + memLine() + ")");
         }
         stopReason = null;
         heatOverride = false;   // asked again for each run of the job
@@ -590,7 +590,7 @@ public final class PackService extends Service {
         final int shaderWorkers = mem.workers;
         workers = Math.min(workers, Math.max(1, mem.workers * 2));
         stepLog(j, s + ": " + mem.why);
-        if (j.memLevel() > 0 && (s.equals("split") || s.equals("shaders"))) j.stepNote(s, "The phone ran out of memory before; using " + mem.workers + " worker" + (mem.workers == 1 ? "" : "s") + " now");
+        if (j.memLevel() > 0 && (s.equals("split") || s.equals("shaders"))) j.stepNote(s, "The build stopped before (most often for memory); using " + mem.workers + " worker" + (mem.workers == 1 ? "" : "s") + " now");
         PackEngine.setenv("DM_GAME", j.titleId());
         PackEngine.setenv("DM_REWRITE_J", "1");
         PackEngine.setenv("NX_PACK_JOBS", String.valueOf(workers));
