@@ -1293,7 +1293,7 @@ public final class Library {
         // that can start a build (the sheet's Build/Build anyway/Rebuild, and Resume below): GameSheet already disables its Build button for the same
         // reason, so this is only a last line of defense, never a per-build re-validation against the importer.
         if (!PeanutsPrefs.hasKeys(a)) return "Add your keys first (Settings › Library), then build.";
-        if (!PeanutsPrefs.hasFonts(a)) return "Add your firmware fonts first (Settings › Library), then build.";
+        if (!PeanutsPrefs.hasFonts(a)) return "Add your firmware first (Settings › Library), then build.";
         BuildRequest r = new BuildRequest();
         r.titleId = s.titleId; r.name = s.name; r.base = s.base; r.update = s.update;
         r.dlcs = new ArrayList<>(s.dlcs);
@@ -1351,7 +1351,7 @@ public final class Library {
         PUi.add(c, t, 6, PUi.wrap());
         LinearLayout steps = PUi.row(a);
         steps.setGravity(Gravity.CENTER);
-        String[] s = {"1  Keys", "2  Game folder", "3  Updates & DLC", "4  Firmware fonts"};
+        String[] s = {"1  Keys", "2  Game folder", "3  Updates & DLC", "4  Firmware"};
         for (int k = 0; k < s.length; k++) {
             LinearLayout.LayoutParams lp = PUi.wrap();
             if (k > 0) lp.leftMargin = PUi.dp(a, 6);
@@ -1373,7 +1373,7 @@ public final class Library {
         String updDlcValue = updateDir == null && dlcDir == null ? "Point at your update and DLC files if they're not inside the game folder already. Skip if everything's together."
                 : (updateDir != null ? "Update: " + updateDir : "Update: not set") + (dlcDir != null ? " · DLC: " + dlcDir : "");
         PUi.add(c, new PUi.Setting(a, "⬆️", "Updates & DLC", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.extraFolders(a))).value(updDlcValue).chevron(a).view, 0);
-        PUi.add(c, new PUi.Setting(a, "🔤", "Firmware fonts", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickFirmwareSource(a)))
+        PUi.add(c, new PUi.Setting(a, "🔤", "Firmware", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickFirmwareSource(a)))
                 .value(LibrarySettings.fontsValue(a, "Needed before building. A missing font can crash some games at boot.")).chevron(a).view, 0);
         PUi.Action show = PUi.action(a, R.drawable.ic_add, "Show my games", PUi.Kind.PRIMARY, v -> {
             if (PeanutsPrefs.gameDir(a) == null) { Haptics.play(v, Haptics.Word.REJECT); Toast.makeText(a, "Pick the game folder first", Toast.LENGTH_LONG).show(); return; }

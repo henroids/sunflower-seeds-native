@@ -26,8 +26,8 @@ final class FontGate {
     static void check(Activity a, String titleId, String name, Runnable go) {
         if (PeanutsPrefs.hasFonts(a)) { GameEnv.ensureFonts(a, titleId); go.run(); return; }
         if (!needs(titleId)) { go.run(); return; }
-        new AlertDialog.Builder(a).setTitle("Firmware fonts needed")
-                .setMessage(name + " stops at startup with Android's fonts. Add your firmware's fonts first (Settings › Library › Firmware fonts), then play.")
+        new AlertDialog.Builder(a).setTitle("Firmware needed")
+                .setMessage(name + " stops at startup with Android's fonts. Add your firmware first (Settings › Library › Firmware), then play.")
                 .setPositiveButton("Choose firmware…", (d, w) -> LibrarySettings.pickFirmwareSource(a))
                 .setNeutralButton("Play anyway", (d, w) -> go.run())
                 .setNegativeButton("Cancel", null).show();

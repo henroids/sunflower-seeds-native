@@ -33,7 +33,7 @@ public final class LibrarySettings {
      *  package and only needs these two request codes, not any other picker here */
     public static final int REQ_MOD_FOLDER = 69, REQ_MOD_ZIP = 70;
     private static final Handler UI = new Handler(Looper.getMainLooper());
-    private static String fontsState;   // "Extracting the fonts…" and what came of it, while the rows show
+    private static String fontsState;   // "Reading the firmware…" and what came of it, while the rows show
     private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow;
     private static Activity rowsOf;
 
@@ -58,7 +58,7 @@ public final class LibrarySettings {
         dlcRow.view.setOnLongClickListener(v -> { PeanutsPrefs.dlcDir(a, null); refreshRows(); Library.rescan(a); return true; });
         keysRow = new PUi.Setting(a, "🔑", "Keys", Haptics.on(Haptics.Word.TICK, v -> pickKeys(a))).chevron(a);
         card.addView(keysRow.view);
-        fontsRow = new PUi.Setting(a, "🔤", "Firmware fonts", Haptics.on(Haptics.Word.TICK, v -> pickFirmwareSource(a))).chevron(a);
+        fontsRow = new PUi.Setting(a, "🔤", "Firmware", Haptics.on(Haptics.Word.TICK, v -> pickFirmwareSource(a))).chevron(a);
         card.addView(fontsRow.view);
         card.addView(new PUi.Setting(a, "🔄", "Rescan", Haptics.on(Haptics.Word.CLICK, v -> { Library.rescan(a); Toast.makeText(a, "Looking in the folders again", Toast.LENGTH_SHORT).show(); }))
                 .value("Reads the folders again").chevron(a).view);
@@ -128,8 +128,8 @@ public final class LibrarySettings {
     static String fontsValue(Activity a, String none) {
         String fw = PeanutsPrefs.firmwareDir(a);
         if (fontsState != null) return fontsState;
-        if (PeanutsPrefs.hasFonts(a)) return "Fonts extracted" + (fw != null ? " from " + fw : "");
-        return fw != null ? fw + " · no fonts extracted yet" : none;
+        if (PeanutsPrefs.hasFonts(a)) return "Firmware added" + (fw != null ? " from " + fw : "");
+        return fw != null ? fw + " · not added yet" : none;
     }
 
     /** Home's first-run card: the two optional folders in a small sheet */
@@ -167,7 +167,7 @@ public final class LibrarySettings {
         PUi.add(box, PUi.body(a, "Pick the folder your firmware is extracted into, or a firmware .zip (its NCA files flat inside, stored or deflated)."), 0);
         PUi.add(box, new PUi.Setting(a, "📁", "Folder", v -> { d[0].dismiss(); pickFolder(a, REQ_FIRMWARE, "Pick your firmware folder"); }).chevron(a).view, 12);
         PUi.add(box, new PUi.Setting(a, "🗜️", "Zip file", v -> { d[0].dismiss(); pickFile(a, REQ_FIRMWARE_ZIP, "Pick your firmware zip", "application/zip"); }).chevron(a).view, 0);
-        d[0] = PUi.sheet(a, "Firmware fonts", box).setPositiveButton("Cancel", null).show();
+        d[0] = PUi.sheet(a, "Firmware", box).setPositiveButton("Cancel", null).show();
     }
 
     /** As upstream's MainActivity.pickFolder: the system folder picker opened at the shared storage's root */
@@ -259,12 +259,12 @@ public final class LibrarySettings {
     private static void extractFonts(Activity a, String source, File deleteAfter) {
         ImporterPort imp = ImporterPort.get();
         if (!imp.available()) {
-            fontsState = "The importer is not in this build: the fonts are extracted when it is.";
+            fontsState = "The importer is not in this build: the firmware is read when it is.";
             refreshRows();
             if (deleteAfter != null) deleteAfter.delete();
             return;
         }
-        fontsState = "Extracting the fonts…";
+        fontsState = "Reading the firmware…";
         refreshRows();
         File out = PeanutsPrefs.fontsDir(a);
         out.mkdirs();
@@ -272,7 +272,7 @@ public final class LibrarySettings {
             int r = imp.firmwareFonts(source, out.getPath());
             String err = imp.lastError();
             if (deleteAfter != null) deleteAfter.delete();
-            UI.post(() -> { fontsState = r == 0 ? null : "Fonts not extracted: " + err; fontsLanded(a); });
+            UI.post(() -> { fontsState = r == 0 ? null : "Firmware not added: " + err; fontsLanded(a); });
         }, "peanuts-fonts").start();
     }
 
@@ -302,7 +302,7 @@ public final class LibrarySettings {
                 while ((n = in.read(buf)) > 0) { o.write(buf, 0, n); total += n; if (total > 8L << 30) throw new IOException("that file is too large for a firmware zip"); }
             } catch (IOException e) {
                 tmp.delete();
-                UI.post(() -> { fontsState = "Fonts not extracted: could not copy the zip (" + e.getMessage() + ")"; refreshRows(); });
+                UI.post(() -> { fontsState = "Firmware not added: could not copy the zip (" + e.getMessage() + ")"; refreshRows(); });
                 return;
             }
             String name = displayName(a, u);

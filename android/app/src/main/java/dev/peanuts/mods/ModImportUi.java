@@ -30,7 +30,7 @@ public final class ModImportUi {
 
     public interface Callback { void onDone(boolean ok, String message); }
 
-    /** "Install mod…": folder or zip, same two-choice shape as Settings › Library's "Firmware fonts" picker */
+    /** "Install mod…": folder or zip, same two-choice shape as Settings › Library's "Firmware" picker */
     public static void pick(Activity a, String titleId, Runnable onFolder, Runnable onZip) {
         android.widget.LinearLayout box = new android.widget.LinearLayout(a);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);

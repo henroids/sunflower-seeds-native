@@ -4,7 +4,7 @@ For version 0.1.1. Labels in **bold** are the words the app shows. "Settings" is
 
 ## Quick answers
 
-- **Build is off, or a game stops at startup:** add your keys and firmware fonts in Settings › Library (**Keys**, **Firmware fonts**), then build or play again. See [Keys and firmware fonts](#keys-and-firmware-fonts).
+- **Build is off, or a game stops at startup:** add your keys and firmware in Settings › Library (**Keys**, **Firmware**), then build or play again. See [Keys and firmware](#keys-and-firmware-fonts).
 - **Black screen, wrong picture or a crash at start:** pick another GPU driver in Settings › **GPU driver**, then run Settings › **Readiness check**. See [GPU drivers](#gpu-drivers).
 - **A cover says Wrong version:** the update you have is not one this app version supports. See [What does "Wrong version" mean?](#what-does-wrong-version-mean-and-how-do-i-fix-it)
 - **The companion is empty or keeps waiting after an app update:** hold the game's cover, open **Storage**, tap **Build again**, then **Rebuild**.
@@ -15,11 +15,11 @@ For version 0.1.1. Labels in **bold** are the words the app shows. "Settings" is
 
 You need three things from your own console first: your game dumps, your `prod.keys` and a firmware dump. Copy them to the device. Then:
 
-1. Install the APK and open the app. The first screen is the card **Set up your games**. It lists four steps: **1 Keys**, **2 Game folder**, **3 Updates & DLC**, **4 Firmware fonts**.
+1. Install the APK and open the app. The first screen is the card **Set up your games**. It lists four steps: **1 Keys**, **2 Game folder**, **3 Updates & DLC**, **4 Firmware**.
 2. Tap **Keys** and pick your `prod.keys`. You should see the message **Keys accepted**, and the row reads **Added: prod.keys is in the app.**
 3. Tap **Game folder** and pick the folder that holds your dumps. The first time, a dialog **Allow file access** appears. Tap **Open settings**, turn on All files access for Peanuts Native, and go back to the app. You should see the folder's path in the row.
 4. Optional: tap **Updates & DLC** if your update or DLC files are in other folders. Set **Update folder** and **DLC folder**, then **Done**. Skip this if everything is inside the game folder.
-5. Tap **Firmware fonts**, then **Folder** or **Zip file**, and pick your firmware dump. The row reads **Extracting the fonts…** and then **Fonts extracted from …**. Do this after the keys: the fonts cannot be read without them.
+5. Tap **Firmware**, then **Folder** or **Zip file**, and pick your firmware dump. The row reads **Reading the firmware…** and then **Firmware added from …**. Do this after the keys: the fonts cannot be read without them.
 6. Tap **Show my games**. You should see a grid of covers. A game that can be built has a **Build** label on its cover.
 7. Optional: install a GPU driver in Settings › **GPU driver**. See [Which driver is recommended?](#which-driver-is-recommended)
 8. Tap a cover. Its sheet opens with the rows **Base**, **Update**, **DLC** and **Companion**. Check them and tap **Build**. Android asks to allow notifications: allow it, so you can see the progress outside the app.
@@ -77,7 +77,7 @@ The app runs only dumps you made from your own console, and it contains no game 
 
 Not in this version.
 
-## Keys and firmware fonts
+## Keys and firmware
 
 Both come from your own console. The app contains no keys and no firmware, and it never downloads them.
 
@@ -97,22 +97,22 @@ The file is not a usable `prod.keys`. The message names what is missing, for exa
 
 Your keys do not have the key this game or update needs. This usually means the keys were dumped on an older firmware than the game needs. Dump the keys again from your own console after updating it, then pick the new file in Settings › Library › **Keys**.
 
-### How do I add the firmware fonts?
+### How do I add the firmware?
 
 1. Add your keys first. Without keys the firmware cannot be read.
-2. Open Settings › Library › **Firmware fonts**. The same row is on the first-run card, and a game's sheet has **Choose firmware…** while fonts are missing.
-3. A small sheet **Firmware fonts** asks: **Folder** or **Zip file**.
+2. Open Settings › Library › **Firmware**. The same row is on the first-run card, and a game's sheet has **Choose firmware…** while fonts are missing.
+3. A small sheet **Firmware** asks: **Folder** or **Zip file**.
    - **Folder**: pick the folder your firmware dump is extracted into (hint: **Pick your firmware folder**). The app looks for `.nca` files in it, up to three folders deep.
    - **Zip file**: pick the firmware `.zip` (hint: **Pick your firmware zip**), with the `.nca` files inside it.
-4. The row reads **Extracting the fonts…**. A zip that is not on the device's own storage is copied first (**Copying the firmware zip…**).
+4. The row reads **Reading the firmware…**. A zip that is not on the device's own storage is copied first (**Copying the firmware zip…**).
 
-What you should see: **Fonts extracted from** followed by the folder or zip you picked.
+What you should see: **Firmware added from** followed by the folder or zip you picked.
 
 The app keeps only two font files from the firmware. It does not copy or install the rest, and you can delete the firmware dump from the device afterwards.
 
 ### What do the firmware font errors mean?
 
-The row shows **Fonts not extracted:** and a reason. The last one in this table comes as a dialog instead.
+The row shows **Firmware not added:** and a reason. The last one in this table comes as a dialog instead.
 
 | Reason | Meaning | Fix |
 |---|---|---|
@@ -126,11 +126,11 @@ The row shows **Fonts not extracted:** and a reason. The last one in this table 
 
 Replace: pick again. The new file or firmware takes the place of the old one. The app has no button to remove them. They are stored in the app's private storage, not in your folders.
 
-### When do I need the firmware fonts, and why does the app ask for them?
+### When do I need the firmware, and why does the app ask for them?
 
-Before the first build. **Build** stays off and the sheet shows **Setup needed** until both keys and firmware fonts are added. The line beside it says which is missing, for example **Firmware fonts are needed before building.**
+Before the first build. **Build** stays off and the sheet shows **Setup needed** until both keys and firmware are added. The line beside it says which is missing, for example **Firmware is needed before building.**
 
-Some games also need the fonts to start at all, for example Echoes of Wisdom. If such a game was built without them, Play shows the dialog **Firmware fonts needed** instead of crashing:
+Some games also need the fonts to start at all, for example Echoes of Wisdom. If such a game was built without them, Play shows the dialog **Firmware needed** instead of crashing:
 
 - **Choose firmware…** opens the same Folder or Zip file choice. Add the fonts, then tap the cover again.
 - **Play anyway** starts the game without them. Echoes of Wisdom stops at startup this way.
@@ -141,7 +141,7 @@ Some games also need the fonts to start at all, for example Echoes of Wisdom. If
 ### How do I add and build my games?
 
 1. Open the app. The first screen is **Set up your games**.
-2. Add **Keys**, pick the **Game folder**, set **Updates & DLC** if those files are in other folders, and add **Firmware fonts**.
+2. Add **Keys**, pick the **Game folder**, set **Updates & DLC** if those files are in other folders, and add **Firmware**.
 3. Tap **Show my games**.
 
 Then tap a game's cover to open its sheet. Check the **Base**, **Update**, **DLC** and **Companion** rows and tap **Build**. The build imports the game, prepares it and installs the companion. Only one build runs at a time.
@@ -622,7 +622,7 @@ Once it reads **Ready**, every start of the game uses the mods that are on: the 
 ### The game crashes at start or shows a black screen. What should I check?
 
 1. Settings › **Readiness check**.
-2. The firmware fonts (Settings › Library › **Firmware fonts**).
+2. The firmware (Settings › Library › **Firmware**).
 3. Another GPU driver.
 4. The game update: **You have** in the game's sheet must be a version under **This build supports**.
 5. **Build again**, if the app was updated since the build.

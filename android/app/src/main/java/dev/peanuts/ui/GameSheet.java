@@ -176,9 +176,9 @@ public final class GameSheet {
         boolean needFonts = !PeanutsPrefs.hasFonts(a);
         boolean missingSetup = needKeys || needFonts;
         if (missingSetup) {
-            String what = needKeys && needFonts ? "Keys and firmware fonts are needed before building."
+            String what = needKeys && needFonts ? "Keys and firmware are needed before building."
                     : needKeys ? "Keys are needed before building."
-                    : "Firmware fonts are needed before building.";
+                    : "Firmware is needed before building.";
             LinearLayout r = PUi.row(a);
             r.addView(PUi.warnChip(a, "Setup needed", "Setup needed", what));
             TextView t = PUi.small(a, what);
