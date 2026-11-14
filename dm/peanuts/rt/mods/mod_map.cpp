@@ -798,6 +798,16 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         // (which stamps the key and rasterises if needed), then look the companion up by the
         // same stamped key. Absent when no drawn room holds an item.
         std::string mk = "map:" + src.substr(6);
+        if (endpoint == MapFadeEndpoint::Animated) {
+            // PNRT: the pulse built with the area's newest composite. Re-stamping here landed on a
+            // later fade step than the map lookup just made and rebuilt the whole map again.
+            std::scoped_lock memo_lk{map_state_mutex};
+            if (const auto mit = map_composite_memo.find(src.substr(6));
+                mit != map_composite_memo.end() && mit->second.size_key == src.substr(6)) {
+                return mit->second.pulse_key.empty() ? nullptr
+                                                     : CacheFindImage(mit->second.pulse_key);
+            }
+        }
         if (GetImage(mk, endpoint) == nullptr) {
             return nullptr;
         }
@@ -1340,6 +1350,28 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         std::array<int, 4> rect{0, 0, width, height};
         bool incremental = false;
         const PixelCellTables& cell_map = CellTables(width, height);
+        // The cells still inside their fade window (what MaskUnvisited blends): their box.
+        std::array<int, 4> fading_now{0, 0, -1, -1};
+        if (const auto fvit = map_visited.find(area_name); fvit != map_visited.end()) {
+            const u64 fade_len = std::max<u64>(1, manifest.map_style.fade_ticks);
+            const auto& g = fvit->second;
+            int fc0 = VisitedGrid::Cols, fc1 = -1, fr0 = VisitedGrid::Rows, fr1 = -1;
+            for (size_t i = 0; i < g.cells.size() && i < g.change_tick.size(); ++i) {
+                const u32 ct = g.change_tick[i];
+                if (ct != 0 && tick_count - ct < fade_len) {
+                    const int c = static_cast<int>(i % VisitedGrid::Cols);
+                    const int r = static_cast<int>(i / VisitedGrid::Cols);
+                    fc0 = std::min(fc0, c);
+                    fc1 = std::max(fc1, c);
+                    fr0 = std::min(fr0, r);
+                    fr1 = std::max(fr1, r);
+                }
+            }
+            if (fc1 >= fc0 && fr1 >= fr0) {
+                fading_now = {fc0, fr0, fc1, fr1};
+                map_fade_steps.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
         if (endpoint == MapFadeEndpoint::Animated) {
             const auto mit = map_composite_memo.find(area_name);
             const auto vit = map_visited.find(area_name);
@@ -1361,7 +1393,23 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                             r1 = std::max(r1, r);
                         }
                     }
-                    if (c1 >= c0 && r1 >= r0) {
+                    // Cells that were fading in the last build settle or step on now.
+                    const auto widen = [&](const std::array<int, 4>& f) {
+                        if (f[2] >= f[0] && f[3] >= f[1]) {
+                            c0 = std::min(c0, f[0]);
+                            r0 = std::min(r0, f[1]);
+                            c1 = std::max(c1, f[2]);
+                            r1 = std::max(r1, f[3]);
+                        }
+                    };
+                    widen(m.fading);
+                    widen(fading_now);
+                    if (c1 < c0 || r1 < r0) {
+                        // Nothing differs from the last composite: reuse it as is.
+                        rect = {0, 0, 0, 0};
+                        incremental = true;
+                        image.pixels = m.image->pixels;
+                    } else {
                         // Pixel columns/rows whose cell is inside the changed cell box.
                         const auto& cols = cell_map.col_of_px;
                         const auto& rows = cell_map.row_of_py;
@@ -1512,6 +1560,7 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         // revealed item, as the composite's own pixels in white -- the map widget draws it over
         // the map at a slow blink, like the minimap's pulse for rooms with items left. Cached as
         // "pulse:<same key>" beside the composite and rebuilt with it (a pickup bumps wall_gen).
+        std::string built_pulse_key;
         if (endpoint != MapFadeEndpoint::Previous) {
             const std::string pprefix = std::format("pulse:{}@{}x{}#", area_name, width, height);
             CacheEraseImagesIf([&](const std::string& key) {
@@ -1635,7 +1684,8 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                 }
             }
             if (any) {
-                CachePutImage("pulse:" + src.substr(4), std::move(pulse));
+                built_pulse_key = "pulse:" + src.substr(4);
+                CachePutImage(built_pulse_key, std::move(pulse));
             }
         }
         // Add the downloaded section map underneath the explored detail only after building
@@ -1697,6 +1747,9 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                 m.unlocked = map_unlocked;
                 m.cells = vit->second.cells;
                 m.image = built;
+                m.fading = fading_now;
+                m.size_key = std::format("{}@{}x{}", area_name, width, height);
+                m.pulse_key = built_pulse_key;
             }
         }
         map_composites.fetch_add(1, std::memory_order_relaxed);
@@ -1893,7 +1946,12 @@ ModRuntime::MapStamp ModRuntime::StampFor(const std::string& area) const {
     // (and again for the pulse companion, whose own lookup landed on the next step), so a reveal
     // took seconds to show and the page held the map lock for most of them. A reveal now shows at
     // once, in one (incremental) build.
-    const u64 fade = 0;
+    u64 fade = 0;
+    if (const auto it = map_visited.find(area);
+        it != map_visited.end() && tick_count - it->second.last_reveal_tick <
+                                       std::max<u64>(1, manifest.map_style.fade_ticks)) {
+        fade = tick_count; // PNRT: one step per tick; each step is an incremental build
+    }
     return {VisitedGen(area), water_gen, fade, wall_gen, zone_gen};
 }
 

@@ -855,13 +855,17 @@ private:
         bool unlocked{};
         std::vector<u8> cells;
         std::shared_ptr<const Image> image;
+        /// Cell box (c0, r0, c1, r1 inclusive; c1 < c0 = none) that was still fading when built.
+        std::array<int, 4> fading{0, 0, -1, -1};
+        std::string size_key;  ///< "<area>@<w>x<h>"
+        std::string pulse_key; ///< the pulse companion built with `image` ("" = none)
     };
     mutable std::map<std::string, MapCompositeMemo> map_composite_memo;
     /// PNRT counters for the snapshot line: base rasters, composites built (and how many were
     /// incremental), ms of the last composite and of the last base raster, publishes skipped for
     /// a busy map.
     mutable std::atomic<u32> map_base_rasters{0}, map_composites{0}, map_composites_incremental{0},
-        map_last_composite_ms{0}, map_base_last_ms{0}, map_publish_skipped{0};
+        map_last_composite_ms{0}, map_base_last_ms{0}, map_publish_skipped{0}, map_fade_steps{0};
     /// One module map publication (AcceptModuleMap / AcceptModuleMapState), copied out of the
     /// module's buffers so it can be applied after the call returns. Tick thread only.
     struct PendingMapUpdate {

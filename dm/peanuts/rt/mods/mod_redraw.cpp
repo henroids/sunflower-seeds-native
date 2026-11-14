@@ -200,7 +200,7 @@ u64 ModRuntime::UiSignature(const StateSnapshot& s, u32 target_w, u32 target_h) 
         for (const auto& [area, grid] : map_visited) {
             sig ^= mix(hs(area) ^ mix(grid.generation));
             if (visible_map && tick_count - grid.last_reveal_tick < fade)
-                sig ^= mix((tick_count / 4) * 0xD1B54A32D192ED03ULL); // animate the fade at ~15 Hz
+                sig ^= mix(tick_count * 0xD1B54A32D192ED03ULL); // one fade step per tick (incremental, cheap)
         }
     }
     {
@@ -480,7 +480,7 @@ u64 ModRuntime::WidgetDependencyHash(const Widget& w, const StateSnapshot& s,
             h ^= MixHash(hs(area) ^ MixHash(it->second.generation));
             const u64 fade = std::max<u64>(1, manifest.map_style.fade_ticks);
             if (tick_count - it->second.last_reveal_tick < fade) {
-                h ^= MixHash((tick_count / 4) * 0xD1B54A32D192ED03ULL);
+                h ^= MixHash(tick_count * 0xD1B54A32D192ED03ULL);
             }
         }
     }
