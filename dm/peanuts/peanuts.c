@@ -303,6 +303,9 @@ void peanuts_tick(void) {
 // The game's RomFS (DM_ROMFS) is the runtime's romfs root: a plain folder as a directory, a .nup's inner path through the provider callbacks of peanuts_nup.c.
 #include <android/log.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "peanuts_nup.h"
 
 static int g_rt_tried;
@@ -340,7 +343,34 @@ static int rt_mem_read(void *u, uint64_t addr, void *buf, size_t len) {
     if (now - miss_at >= 500) { miss_at = now; rt_ranges_refresh(); }
     return 1;
 }
-static int rt_mem_write(void *u, uint64_t addr, const void *buf, size_t len) { (void)u; return plat_mem_write(addr, buf, len) == 0; }
+// A guest write: process_vm_writev (plat_mem_write) first. Reads of the cached ranges are plain memcpys, so a seccomp policy that refuses process_vm_* (ENOSYS / EPERM)
+// was never noticed on the read side, but it fails every write - and a companion's writes (Octopath Traveler 0 hiding its party HUD and raising the command panel on the
+// top screen) all go through here. The fallback copies through a pipe: write(2) the bytes in, read(2) them out at the guest address; the kernel copies to the user page and
+// fails with EFAULT on an unmapped or read-only one instead of faulting, as process_vm_writev does. The first fallback and the first total failure are logged once
+static int rt_pipe_write(uint64_t addr, const void *buf, size_t len) {
+    int p[2]; if (pipe2(p, O_CLOEXEC)) return -1;
+    size_t done = 0;
+    while (done < len) {
+        size_t k = len - done > 4096 ? 4096 : len - done;
+        if (write(p[1], (const uint8_t *)buf + done, k) != (ssize_t)k) break;
+        if (read(p[0], (void *)(uintptr_t)(addr + done), k) != (ssize_t)k) break;
+        done += k;
+    }
+    close(p[0]); close(p[1]);
+    return done == len ? 0 : -1;
+}
+static int rt_mem_write(void *u, uint64_t addr, const void *buf, size_t len) {
+    (void)u;
+    if (!plat_mem_write(addr, buf, len)) return 1;
+    static atomic_int via_pipe, failed;
+    int e = errno;
+    if (!rt_pipe_write(addr, buf, len)) {
+        if (!atomic_exchange(&via_pipe, 1)) __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion guest writes: process_vm_writev failed (errno %d at 0x%" PRIx64 "), writing through a pipe instead", e, addr);
+        return 1;
+    }
+    if (!atomic_exchange(&failed, 1)) __android_log_print(ANDROID_LOG_WARN, "peanuts", "companion guest write of %zu bytes at 0x%" PRIx64 " failed (vm errno %d, pipe errno %d)", len, addr, e, errno);
+    return 0;
+}
 static uint8_t *rt_mem_pointer(void *u, uint64_t addr, size_t len) {
     (void)u; uint8_t b;
     if (!len) return NULL;
