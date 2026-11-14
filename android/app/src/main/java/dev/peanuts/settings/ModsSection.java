@@ -50,6 +50,8 @@ public final class ModsSection {
     private static ModsSection pickFor;
     /** The import or the build with mods in progress: the game's title ID and its line; null: none */
     private static String importTitle, importText, buildTitle, buildText;
+    private static String deleteTitle, deleteName, deleteText;   // a mod being deleted (one at a time, as an import): its game, its name and how far it is
+    private static int deletePct = -1;
     /** Variant ID → why its build failed, until it is started again */
     private static final Map<String, String> FAILED = new HashMap<>();
 
@@ -125,13 +127,15 @@ public final class ModsSection {
             return;
         }
         List<ModStore.Mod> mods = ModRuntime.mods(home, titleId);
-        boolean importing = titleId.equals(importTitle);
+        boolean deleting = titleId.equals(deleteTitle), importing = titleId.equals(importTitle) || deleting;   // either: the list's switches and bins wait
+        if (deleteTitle == null && SWEPT.add(home.getPath())) new Thread(() -> ModStore.sweepDeleted(ModRuntime.modsRoot(home), titleId), "peanuts-mod-sweep").start();
         if (mods.isEmpty() && !importing) body.addView(ui.setting("🧩", "No mods installed", "Files, cheats and code mods from this device", null), SectionUi.lp(0, 0));
         for (ModStore.Mod m : mods) body.addView(modRow(m, !importing), SectionUi.lp(0, 0));
-        if (importing) body.addView(ui.setting("📥", "Installing a mod", importText, null), SectionUi.lp(0, 0));
+        if (titleId.equals(importTitle)) body.addView(ui.setting("📥", "Installing a mod", importText, null), SectionUi.lp(0, 0));
+        if (deleting) body.addView(ui.setting("🗑", "Deleting " + deleteName, deleteText + " Install, the switches and Build with mods wait for it.", null), SectionUi.lp(0, 0));
         if (ModStore.needsBuild(mods)) buildRows(mods);
         LinearLayout buttons = SectionUi.buttons(a);
-        SectionUi.add(buttons, ui.button("Install mod…", SectionUi.PRIMARY, v -> install()), importTitle == null);   // one import at a time: its line is one field
+        SectionUi.add(buttons, ui.button("Install mod…", SectionUi.PRIMARY, v -> install()), importTitle == null && deleteTitle == null);   // one import or delete at a time: its line is one field
         body.addView(buttons, SectionUi.lp(0, 4));
     }
 
@@ -185,16 +189,40 @@ public final class ModsSection {
 
     private void confirmDelete(ModStore.Mod m) {
         new AlertDialog.Builder(a).setTitle("Delete this mod?").setMessage(m.name + " and its files are deleted from this device. The game and its saves are not changed.")
-                .setPositiveButton("Delete", (d, w) -> new Thread(() -> {   // off the UI thread: a mod's romfs can be GBs of files
-                    String err = null;
-                    try { ModStore.remove(ModRuntime.modsRoot(home), titleId, m.dir.getName()); } catch (IOException e) { err = e.getMessage(); }
-                    final String ferr = err;
-                    MAIN.post(() -> {
-                        Toast.makeText(a, ferr == null ? "Deleted " + m.name : "Delete failed: " + ferr, ferr == null ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG).show();
-                        renderCurrent();
-                    });
-                }, "peanuts-mod-delete").start()).setNegativeButton("Cancel", null).show();
+                .setPositiveButton("Delete", (d, w) -> startDelete(m)).setNegativeButton("Cancel", null).show();
     }
+
+    /**
+     * Deletes off the UI thread with its own row and percentage: a mod's files can be GBs on a memory card and take minutes (Luminescent: 1.7 GB, 3,464 files).
+     * The mod leaves the list and the game at once (ModStore.remove renames its folder first); while the files go, install, the switches, the bins and Build
+     * with mods are off. The end is shown in the row's place when this section is on screen, and not as a message over whatever is on screen by then
+     * (a toast came up in another game).
+     */
+    private void startDelete(ModStore.Mod m) {
+        if (deleteTitle != null || importTitle != null) return;
+        deleteTitle = titleId; deleteName = m.name; deleteText = "Counting its files…"; deletePct = -1;
+        renderCurrent();
+        File root = ModRuntime.modsRoot(home);
+        String id = titleId, folder = m.dir.getName(), name = m.name;
+        new Thread(() -> {
+            String err = null;
+            try {
+                ModStore.remove(root, id, folder, (done, total) -> {
+                    int pct = total > 0 ? (int) (done * 100 / total) : -1;
+                    if (pct == deletePct) return;
+                    MAIN.post(() -> { deletePct = pct; deleteText = pct < 0 ? "Counting its files…" : pct + " %."; renderCurrent(); });
+                });
+            } catch (IOException e) { err = e.getMessage(); }
+            final String ferr = err;
+            MAIN.post(() -> {
+                deleteTitle = null; deleteName = null; deleteText = null; deletePct = -1;
+                if (ferr != null) android.util.Log.w("peanuts", "mods: delete of " + name + ": " + ferr);
+                if (current != null && ferr != null) current.message("Delete failed", name + ": " + ferr + "\n\nWhat is left of it is removed the next time this page is opened.");
+                renderCurrent();
+            });
+        }, "peanuts-mod-delete").start();
+    }
+    private static final java.util.Set<String> SWEPT = java.util.Collections.synchronizedSet(new java.util.HashSet<>());   // game folders whose interrupted deletes were looked for in this run
 
     // ---- Install mod…: the pickers' results come back through MainActivity.onActivityResult → dev.peanuts.ui.LibrarySettings.result ----
 
@@ -261,7 +289,7 @@ public final class ModsSection {
         body.addView(ui.setting("🔨", "Build with mods", value, failed == null || mine ? null : v -> message("Build with mods failed", failed)), SectionUi.lp(0, 0));
         if (mine) return;
         LinearLayout buttons = SectionUi.buttons(a);
-        SectionUi.add(buttons, ui.button(ready ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, v -> startBuild(variantId, variantPack, plan)), !building);
+        SectionUi.add(buttons, ui.button(ready ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, v -> startBuild(variantId, variantPack, plan)), !building && deleteTitle == null);
         body.addView(buttons, SectionUi.lp(0, 0));
     }
 

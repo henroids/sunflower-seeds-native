@@ -79,7 +79,7 @@ public final class ModStore {
         File dir = gameDir(modsRoot, titleId);
         File[] kids = dir.listFiles();
         if (kids != null) for (File k : kids) {
-            if (!k.isDirectory()) continue;
+            if (!k.isDirectory() || k.getName().startsWith(DELETING)) continue;   // a mod being deleted (remove)
             File manifest = new File(k, "mod.json");
             if (!manifest.isFile()) continue;
             Mod m = new Mod(k);
@@ -128,9 +128,46 @@ public final class ModStore {
     }
 
     /** Deletes a mod's whole folder (the confirm dialog is the UI's job, not this method's) */
-    public static void remove(File modsRoot, String titleId, String modFolderName) throws IOException {
-        File dir = new File(gameDir(modsRoot, titleId), modFolderName);
-        deleteTree(dir);
+    public static void remove(File modsRoot, String titleId, String modFolderName) throws IOException { remove(modsRoot, titleId, modFolderName, null); }
+
+    /** How far a delete is: files gone of the files counted (total 0 while counting) */
+    public interface DeleteProgress { void on(long done, long total); }
+
+    /**
+     * As above, saying how far it is. The folder is first renamed to a dot name (".deleting-..."), which {@link #list} does not read (no mod.json it looks at)
+     * and the game does not load: from that moment the mod is gone for the list and for a start of the game, and the files, which can be GBs on a memory card
+     * and take minutes, go after. A process that ends in the middle leaves the dot folder; {@link #sweepDeleted} removes such leftovers.
+     */
+    public static void remove(File modsRoot, String titleId, String modFolderName, DeleteProgress progress) throws IOException {
+        File root = gameDir(modsRoot, titleId), dir = new File(root, modFolderName);
+        if (!dir.exists()) return;
+        File trash = new File(root, DELETING + modFolderName + "-" + System.currentTimeMillis());
+        if (!dir.renameTo(trash)) { new File(dir, "mod.json").delete(); trash = dir; }   // no rename: without its manifest it is not a mod either
+        if (progress != null) progress.on(0, 0);
+        long[] n = {0, countTree(trash)};
+        deleteTree(trash, progress, n);
+    }
+
+    private static final String DELETING = ".deleting-";
+
+    /** Removes what an interrupted delete left (see remove); quiet, for a background thread */
+    public static void sweepDeleted(File modsRoot, String titleId) {
+        File[] kids = gameDir(modsRoot, titleId).listFiles();
+        if (kids != null) for (File k : kids) if (k.isDirectory() && k.getName().startsWith(DELETING)) { try { deleteTree(k); } catch (IOException e) { /* the next sweep */ } }
+    }
+
+    private static long countTree(File f) {
+        File[] kids = f.listFiles();
+        long n = 1;
+        if (kids != null) for (File k : kids) n += countTree(k);
+        return n;
+    }
+
+    private static void deleteTree(File f, DeleteProgress progress, long[] n) throws IOException {
+        File[] kids = f.listFiles();
+        if (kids != null) for (File k : kids) deleteTree(k, progress, n);
+        if (!f.delete() && f.exists()) throw new IOException("could not delete " + f);
+        if (progress != null && (++n[0] & 31) == 0) progress.on(n[0], n[1]);
     }
 
     private static void deleteTree(File f) throws IOException {
