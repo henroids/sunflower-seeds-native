@@ -7,3 +7,4 @@ dm/games/010055D009F78000/shader_map.tsv	a data table read row by row (a marker 
 .github/ISSUE_TEMPLATE/question_or_idea.yml	GitHub issue form, Peanuts branding (PR #5) and the example version
 dm/games/0100A6301214E000/shader_map.tsv	a data table read row by row; the 55 cs_engine.bin compute rows (unity default resources) are a Peanuts addition: the scanner since the 2026-11-13 upstream sync reads these Unity compute kernels, and a full scan of the 2.0.0 dump on the Thor makes them (targeted 118 files = full scan, byte for byte)
 dm/games/0100A6301214E000/shader_facts.tsv	the compute answers of the same 55 kernels (see shader_map.tsv above)
+dm/host/tests/t_movie_avc.c	the test cases of nxnative 75c1a8cf / 637f3fa7 ported as they are (the deferred video signal, terminal inputs after end of stream); a later sync can take nxnative's file

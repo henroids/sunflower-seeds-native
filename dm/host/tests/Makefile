@@ -122,7 +122,7 @@ audren-work: $(B)/t_audren_work
 run: $(B)/t_audren_layout
 $(B)/t_audren_layout: t_audren_layout.c ../hle_audren.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -I.. $(GINC) -o $@ t_audren_layout.c
-# the Android output path of hle_audio.c built for Linux: the NDK and arm64 headers are stand-ins in stub_aaudio/, GAME only picks a profile header
+# PEANUTS: the Android output path of hle_audio.c built for Linux: the NDK and arm64 headers are stand-ins in stub_aaudio/, GAME only picks a profile header
 run: $(B)/t_audio_feed
 $(B)/t_audio_feed: t_audio_feed.c ../hle_audio.c ../hle.h ../dm.h stub_aaudio/aaudio/AAudio.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-unused-function -D__ANDROID__ -D__aarch64__ -Istub_aaudio -I.. $(GINC) -o $@ t_audio_feed.c -lpthread

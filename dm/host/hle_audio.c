@@ -44,6 +44,7 @@ typedef struct {
     _Atomic uint64_t cb_n;             // device callbacks of this output (the watchdog's evidence that the device still plays it)
     uint64_t wd_n, wd_t;               // watchdog: callback count last seen and when it last moved (under g_aos_lock)
     int stalled, retry_ms; uint64_t retry_at;   // the device stopped calling back (or would not start): the silent sink stands in and the watchdog retries the AudioUnit at retry_at, backing off
+    int host_out;                      // PEANUTS: the in-process audio renderer's output (dm_pcmout_open): no feeder ring by default (aa_open)
 } aout;
 
 // Registry of open outputs: suspended / resumed all at once by the front-end lifecycle (going to background).
@@ -381,7 +382,8 @@ static aaudio_result_t aa_open(struct aa_out *o) {
     }
     int32_t burst = AAudioStream_getFramesPerBurst(o->s), want = 4 * burst;
     {   // PEANUTS: the ring (see struct aa_out)
-        const char *fe = getenv("DM_AUDIO_FEED"); int feed = fe ? atoi(fe) != 0 : burst >= (int32_t)((int64_t)FEED_MIN_BURST * o->rate / RATE);
+        const char *fe = getenv("DM_AUDIO_FEED"); int feed = fe ? atoi(fe) != 0 : !o->a->host_out && burst >= (int32_t)((int64_t)FEED_MIN_BURST * o->rate / RATE);
+        // (not the audio renderer's own output by default: games pace on its consumption, and Metroid Dread's cutscenes stalled behind the ring, 2026-11-14)
         if (feed && o->ch <= FEED_MAXCH && (o->ring = malloc((size_t)FEED_RING * 2 * o->ch))) o->target = (uint32_t)((int64_t)burst * RATE / o->rate) + RATE / 200;
     }
     if (want < o->rate / 100) want = o->rate / 100;
@@ -560,6 +562,7 @@ static Result au_open_at(void *g, void *ev, const char *name, const uint8_t *par
     if (rate && rate != RATE) die("AudioOut sample rate %d not supported (48 kHz only)", rate);
     aout *a = calloc(1, sizeof *a);
     pthread_mutex_init(&a->m, NULL); a->event = ev; a->ch = ch;
+    a->host_out = !lr && name && !strcmp(name, "AudioRenderer");   // PEANUTS: (aa_open's feeder ring default)
     atomic_init(&a->state, STATE_STOPPED); atomic_init(&a->vol, 0x3f800000u);
     atomic_init(&a->q_head, 0); atomic_init(&a->q_tail, 0);
     atomic_init(&a->rel_head, 0); atomic_init(&a->rel_tail, 0);

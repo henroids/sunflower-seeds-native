@@ -841,6 +841,7 @@ HLE_FORCE("_ZN5movie7Decoder24SendInputBufferForDecodeEiiilj", "movie decoder: s
         break;
     }
     d->inown[i] = d->instale[i] = 0;
+    // PEANUTS: nxnative 637f3fa7: the duplicate and full-queue checks are made above, before any state change, and in_eos is set below, for an accepted packet only
     int fmt_now = 0;
     if (d->type == MD_TYPE_VP9 && !d->w && size > 0 && vp9_size(d->in[i] + off, size, &d->w, &d->h)) LOG("[movie] VP9 key frame: %d×%d", d->w, d->h);
     if (d->type == MD_TYPE_VP8 && !d->w && size > 0 && vp8_size(d->in[i] + off, size, &d->w, &d->h)) LOG("[movie] VP8 key frame: %d×%d", d->w, d->h);
