@@ -1,12 +1,36 @@
 # Peanuts Native FAQ
 
-For version 0.1.1. Labels in **bold** are the words the app shows.
+For version 0.1.1. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
 
 ## Quick answers
 
-- **Build is off, or a game stops at startup:** add your keys and firmware fonts in Settings › Library (**Keys**, **Firmware fonts**), then build or play again.
-- **Black screen, wrong picture or a crash at start:** pick another GPU driver in Settings › **GPU driver**, then run Settings › **Readiness check**.
+- **Build is off, or a game stops at startup:** add your keys and firmware fonts in Settings › Library (**Keys**, **Firmware fonts**), then build or play again. See [Keys and firmware fonts](#keys-and-firmware-fonts).
+- **Black screen, wrong picture or a crash at start:** pick another GPU driver in Settings › **GPU driver**, then run Settings › **Readiness check**. See [GPU drivers](#gpu-drivers).
+- **A cover says Wrong version:** the update you have is not one this app version supports. See [What does "Wrong version" mean?](#what-does-wrong-version-mean-and-how-do-i-fix-it)
 - **The companion is empty or keeps waiting after an app update:** hold the game's cover, open **Storage**, tap **Build again**, then **Rebuild**.
+
+## First run, step by step
+
+### How do I go from a fresh install to a running game?
+
+You need three things from your own console first: your game dumps, your `prod.keys` and a firmware dump. Copy them to the device. Then:
+
+1. Install the APK and open the app. The first screen is the card **Set up your games**. It lists four steps: **1 Keys**, **2 Game folder**, **3 Updates & DLC**, **4 Firmware fonts**.
+2. Tap **Keys** and pick your `prod.keys`. You should see the message **Keys accepted**, and the row reads **Added: prod.keys is in the app.**
+3. Tap **Game folder** and pick the folder that holds your dumps. The first time, a dialog **Allow file access** appears. Tap **Open settings**, turn on All files access for Peanuts Native, and go back to the app. You should see the folder's path in the row.
+4. Optional: tap **Updates & DLC** if your update or DLC files are in other folders. Set **Update folder** and **DLC folder**, then **Done**. Skip this if everything is inside the game folder.
+5. Tap **Firmware fonts**, then **Folder** or **Zip file**, and pick your firmware dump. The row reads **Extracting the fonts…** and then **Fonts extracted from …**. Do this after the keys: the fonts cannot be read without them.
+6. Tap **Show my games**. You should see a grid of covers. A game that can be built has a **Build** label on its cover.
+7. Optional: install a GPU driver in Settings › **GPU driver**. See [Which driver is recommended?](#which-driver-is-recommended)
+8. Tap a cover. Its sheet opens with the rows **Base**, **Update**, **DLC**, **Companion** and **Mods**. Check them and tap **Build**. Android asks to allow notifications: allow it, so you can see the progress outside the app.
+9. Wait. The cover shows **Building · N %**. You can leave the app.
+10. When the build ends you see **… is ready to play.** and the cover gets a green check. Tap the cover to play.
+
+What you should see at the end: the game on the main screen and, on a dual-screen device, its companion on the second screen.
+
+### Why are my games listed without covers, or not at all, before I add keys?
+
+Without keys the app cannot read inside NSP and XCI files. It then lists a file only when its name contains the 16-digit title ID, without its cover, its real name or its version. Add your keys, then tap Settings › Library › **Rescan**.
 
 ## Basics
 
@@ -36,10 +60,6 @@ Plan for the size of the game plus a few GB. Before a build, the game's sheet sh
 
 You dump your own games, keys and firmware from your own console. The app ships with none of them and does not link to any.
 
-### When do I need the firmware fonts, and why does the app ask for them?
-
-Before the first build. **Build** stays off and the sheet shows **Setup needed** until both keys and firmware fonts are added. Some games also need the fonts to start at all, for example Echoes of Wisdom. If such a game was prepared without them, Play shows **Firmware fonts needed** instead of crashing. Tap **Choose firmware…** there and pick the folder or `.zip` of the firmware you dumped from your own console. **Play anyway** starts the game without them.
-
 ### Where do my files go?
 
 - Your dumps stay where you put them, in the game folder you picked.
@@ -47,7 +67,7 @@ Before the first build. **Build** stays off and the sheet shows **Setup needed**
 - Keys and extracted fonts are kept inside the app.
 - Saves are in the app's own storage. The game's **Saves** tab shows the exact path.
 
-The setup screen says it plainly: keys, firmware and folders stay on this device, and nothing is uploaded.
+The setup screen says it plainly: **Keys, firmware and folders stay on this device. Nothing is uploaded.**
 
 ### Is it legal to use with my own dumps?
 
@@ -56,6 +76,65 @@ The app runs only dumps you made from your own console, and it contains no game 
 ### Can I play online?
 
 Not in this version.
+
+## Keys and firmware fonts
+
+Both come from your own console. The app contains no keys and no firmware, and it never downloads them.
+
+### How do I add my keys?
+
+1. Open Settings › Library › **Keys**. The same row is on the first-run card, and a game's sheet has **Add keys…** while keys are missing.
+2. The file picker opens with the hint **Pick your prod.keys**. Pick the `prod.keys` file from your own console. A file larger than 1 MB is refused.
+3. The app copies the file into its own storage and checks it.
+
+What you should see: the message **Keys accepted**. The row then reads **prod.keys is in the app (N bytes)**.
+
+### The app says "The importer does not accept these keys". What is wrong?
+
+The file is not a usable `prod.keys`. The message names what is missing, for example **has no header_key** or **has no key_area_key_application_00**. Pick the right file to replace it. Note that the rejected file is kept, so the row still reads **prod.keys is in the app**. A build will fail until you replace it.
+
+### A build stops with "prod.keys has no titlekek_…". What now?
+
+Your keys do not have the key this game or update needs. This usually means the keys were dumped on an older firmware than the game needs. Dump the keys again from your own console after updating it, then pick the new file in Settings › Library › **Keys**.
+
+### How do I add the firmware fonts?
+
+1. Add your keys first. Without keys the firmware cannot be read.
+2. Open Settings › Library › **Firmware fonts**. The same row is on the first-run card, and a game's sheet has **Choose firmware…** while fonts are missing.
+3. A small sheet **Firmware fonts** asks: **Folder** or **Zip file**.
+   - **Folder**: pick the folder your firmware dump is extracted into (hint: **Pick your firmware folder**). The app looks for `.nca` files in it, up to three folders deep.
+   - **Zip file**: pick the firmware `.zip` (hint: **Pick your firmware zip**), with the `.nca` files inside it.
+4. The row reads **Extracting the fonts…**. A zip that is not on the device's own storage is copied first (**Copying the firmware zip…**).
+
+What you should see: **Fonts extracted from** followed by the folder or zip you picked.
+
+The app keeps only two font files from the firmware. It does not copy or install the rest, and you can delete the firmware dump from the device afterwards.
+
+### What do the firmware font errors mean?
+
+The row shows **Fonts not extracted:** and a reason. The last one in this table comes as a dialog instead.
+
+| Reason | Meaning | Fix |
+|---|---|---|
+| **keys not loaded** | Keys were not added, or not yet read in this session. | Add **Keys** (pick the file again if needed), then pick the firmware again. |
+| **no NCA files not found among 0 NCAs** | The folder or zip holds no firmware files the app could read. | Pick the folder or zip of a full firmware dump. |
+| **the shared font archives were not found among N NCAs** | It is a firmware dump, but the font archives are missing from it, or your keys cannot open them. | Dump the firmware again, complete, and check your keys. |
+| **could not copy the zip** | The zip could not be read from where it is. | Copy the zip to the device's storage and pick it there. |
+| **That folder is not on the phone's storage** | You picked a cloud folder. | Pick a folder on the device or its SD card. |
+
+### Can I replace or remove the keys or fonts?
+
+Replace: pick again. The new file or firmware takes the place of the old one. The app has no button to remove them. They are stored in the app's private storage, not in your folders.
+
+### When do I need the firmware fonts, and why does the app ask for them?
+
+Before the first build. **Build** stays off and the sheet shows **Setup needed** until both keys and firmware fonts are added. The line beside it says which is missing, for example **Firmware fonts are needed before building.**
+
+Some games also need the fonts to start at all, for example Echoes of Wisdom. If such a game was built without them, Play shows the dialog **Firmware fonts needed** instead of crashing:
+
+- **Choose firmware…** opens the same Folder or Zip file choice. Add the fonts, then tap the cover again.
+- **Play anyway** starts the game without them. Echoes of Wisdom stops at startup this way.
+- **Cancel** goes back.
 
 ## Adding and building games
 
@@ -69,19 +148,105 @@ Then tap a game's cover to open its sheet. Check the **Base**, **Update**, **DLC
 
 Later, change the folders in Settings › Library. **Rescan** reads them again.
 
+### Where does the app look for my games?
+
+In the **Game folder**, the **Update folder**, the **DLC folder** and the **Build folder**, each up to two folders deep. It finds `.nsp`, `.xci` and `.nup` files and dump folders. Updates and DLC are matched to their game by title ID, wherever they are in those folders. A file deeper than two folders is not found: move it up, or point the folder setting at it.
+
+If the home screen says **No games found in …**, put your files in that folder and tap Settings › Library › **Rescan**.
+
 ### What do the labels on a cover mean?
 
-| Label | Meaning |
+| On the cover | Meaning |
 |---|---|
-| **Ready** | Built. Tap the cover to play. |
-| **Build needed** | Found in your folder, not built yet. Tap to open its sheet. |
-| **Building · N %** | A build is running. |
+| A green check | Ready. Built. Tap the cover to play. |
+| **Build** | Found in your folder, not built yet. Tap to open its sheet. |
+| **Building · N %** or **Building · preparing** | A build is running. Tap to see its card. |
 | **Build stopped** | The build failed or was stopped. Its card says why. |
 | **Wrong version** | Your update is not one this app version supports. |
-| **File gone** | The game file is no longer where the app found it. |
+| **File gone** | A file of this game is no longer where the app found it. |
 | **Not in this app version** | This app version has no profile for the game. |
+| A green badge with two bars, bottom right | A companion is installed for this game. |
 
-The same names are the filters at the top of the library.
+The filters at the top are **All**, **Building** (only while something builds), **Ready**, **Build needed** and **Not in this app version**. **Wrong version** and **File gone** games are under **Build needed**. **Find** searches by name.
+
+### What does "Wrong version" mean, and how do I fix it?
+
+Every supported game has a profile in the app, and the profile lists the game versions it was made for. The app compares the version of your update with that list. With no update, it compares the base game's version. **Wrong version** means your version is not on the list.
+
+To see both sides, tap the cover. Under the **Update** row the sheet shows:
+
+- **You have:** the version of the update the build will use;
+- **This build supports:** the versions in the profile, with the best one marked **(recommended)**.
+
+The usual causes and their fixes:
+
+| Cause | How it looks | Fix |
+|---|---|---|
+| No update file was found | **Update** reads **None found · Choose…**, **You have: v0** | Put the update from your own console in the game folder or the **Update folder**, then **Rescan**. Or tap the **Update** row and pick the file. |
+| The update is in a folder the app does not scan | The same | Set Settings › Library › **Update folder**, or tap the **Update** row and pick the file. |
+| Your update is newer or older than the supported ones | **You have** shows a version that is not in **This build supports** | Use the update the app lists, dumped from your own console. If you have it, tap the **Update** row (**Choose another…**) and pick it. |
+| Keys are not added yet | Every version reads **v0** | Add **Keys**, then **Rescan**. |
+
+What you should see when it is fixed: a green line **Matches this build's shader tables.** and the button reads **Build**. A yellow line **Supported, but builds slower the first time** is also fine: the version is supported, the first build just takes longer.
+
+Two notes:
+
+- The file picker for **Choose another…** needs a file on the device's storage. A file from Recent or a cloud provider is refused.
+- The label on the cover looks at the newest update found in your folders. The sheet looks at the update you chose. If you keep a newer, unsupported update in the folder and choose the supported one in the sheet, the build is fine even though the cover still says **Wrong version** until it is built.
+
+### How do I read the version numbers?
+
+The app shows a short number such as **v5**, and for a version the profile knows, the game's own version in brackets: **v5 (1.2.0)**.
+
+- **v0** is the base game with no update.
+- The short number counts the game's updates. It is not the game's own version number: v5 is 1.2.0 for Fire Emblem: Three Houses and 1.0.5 for Octopath Traveler 0.
+- Dump tools and file names often show the long form, for example `v327680`. Divide it by 65536 to get the short form: 327680 is v5, 1507328 is v23.
+
+The project's README lists each tested game with the game version it needs.
+
+### What does Build anyway do, and what can go wrong?
+
+For a version that is not on the list, the button reads **Build anyway**. It asks first (**Build anyway?**) and then builds without the version check.
+
+- The game may not start, may crash, or may draw parts wrongly.
+- The first build is slower, because it scans every shader.
+- Your dump and your saves are not changed.
+
+It is a try, not a supported path. If it fails, use the supported update and build again. Do not report bugs for a game built this way without saying so.
+
+### What does "Not in this app version" mean, and what can I do?
+
+Every game needs a profile built into the app. This app version has none for that game, so it cannot be built or played. There is no Build button for it: its sheet only says **This app version does not include … Install a build that includes it.**
+
+- To see which games this version includes: Settings › scroll to **About** › **Games in this app:**. The list has each game's name and title ID.
+- Check for a newer app version: Settings › **Check for updates**, or the project's releases page.
+- If no version includes it, you can ask in the GitHub issues. Give the game's name and its title ID (the sheet shows it).
+
+How the three labels differ:
+
+| Label | The problem | Can you fix it? |
+|---|---|---|
+| **Not in this app version** | The app has no profile for the game. | No. Only a newer app version can. |
+| **Wrong version** | The app supports the game, but not the update you have. | Yes: use a supported update, or try **Build anyway**. |
+| **File gone** | The app supports the game, but a file it found is missing now. | Yes: put the file back, or pick it again. |
+
+### What does "File gone" mean?
+
+The base game or its newest update was in your folder at the last scan and is not there now. Typical causes: the file was moved, renamed or deleted, or the microSD card was removed.
+
+1. Put the file back, or insert the card.
+2. Tap Settings › Library › **Rescan**. If the folder itself moved, pick the **Game folder** again.
+3. For an update, you can also tap the **Update** row in the sheet and pick the file again.
+
+Until then the sheet says **Pick the file again above before building** and **Build** is off.
+
+For a game that is already built, tapping the cover shows the dialog **Game file gone** with **Pick it again**, **Remove** and **Cancel**. **Remove** takes the game off the list only. If a built game's file stays missing, the app drops it from the list by itself after about a minute. Your saves and your other files are kept either way, and the game comes back when the file is found again.
+
+### Which games are supported?
+
+The project's README lists the tested games with the update each one needs. In 0.1.1 they are Link's Awakening, Echoes of Wisdom, Fire Emblem: Three Houses, Fire Emblem Engage, Metroid Dread, Super Mario Odyssey, Mario Kart 8 Deluxe, Animal Crossing: New Horizons, Persona 5 Royal, Castlevania: Belmont's Curse, Octopath Traveler 0 and Pokémon Brilliant Diamond.
+
+Settings › **About** may list more titles. Those have a profile but are not on the tested list.
 
 ### Why does building take so long?
 
@@ -89,7 +254,14 @@ The app rewrites all of the game's code and translates every shader on the devic
 
 ### Can I use the device while it builds?
 
-Yes. The build goes on if you leave the app, and a notification shows its progress. You cannot build a second game at the same time. Some builds start the game once to capture shaders, so close any running game first.
+Yes. The build goes on if you leave the app. You cannot build a second game at the same time. Some builds start the game once to capture shaders, so close any running game first.
+
+### What notifications does a build show?
+
+- While it builds: **Building** and the game's name, with the current step, a progress bar and a **Cancel** action. It is silent.
+- When it ends while the app is not in front: **… is ready to play**, or **Building … stopped** with the reason. This one vibrates.
+
+The app asks for the notification permission at your first build. Without it the build still runs, but you see no progress outside the app. Android lists the two kinds as **Building games** and **Build finished**, so you can silence either one.
 
 ### What happens if the build is interrupted or the device sleeps?
 
@@ -101,7 +273,27 @@ Probably not. Large games can stay on one step for many minutes. Open the **Buil
 
 ### Can I build on a microSD card?
 
-Yes. By default a build is written beside the game, so a game on the card is built on the card. To choose, pick a folder in Settings › Library › **Build folder**, on the device or on the microSD card. Hold that row to forget the folder.
+Yes. By default a build is written beside the game, so a game on the card is built on the card. To choose, pick a folder in Settings › Library › **Build folder**, on the device or on the microSD card. Every new build then goes there, one folder per game, named by title ID. Hold that row to forget the folder. Builds made before you set the folder stay where they are and keep working.
+
+### What happens when I remove the microSD card?
+
+- Built games on the card disappear from the grid. Nothing is deleted. A button **N hidden · Show** appears beside the filters and shows them again.
+- Games on the card that are not built yet are simply not found.
+- Put the card back and tap Settings › Library › **Rescan**. The games return.
+
+Do not remove the card during a build or while a game from it runs.
+
+### What is the difference between Build, Rebuild, Build again and Prepare again?
+
+| Name | Where | What it does |
+|---|---|---|
+| **Build** | The sheet of a game that is not built | The first build: imports the game into one `.nup`, prepares it and installs the companion. |
+| **Rebuild** | The same sheet, opened for a game that is already built | Makes the `.nup` and the pack again from the files in the sheet, and updates the companion. |
+| **Build again** | Hold the cover › **Storage** tab | Opens that sheet for a built game. You then tap **Rebuild**. |
+| **Prepare again** | Hold the cover › **Storage** tab, only for a game added as a dump folder | Remakes only the parts of the pack that do not fit, from the dump. It does not import or touch the companion. |
+| **Build with mods** | The Mods sheet | Makes a separate build that carries code mods. See [Mods](#mods). |
+
+A tap on a ready cover plays the game, so the way to its sheet is hold the cover › **Storage** › **Build again**.
 
 ### What is Build again, and when do I need it?
 
@@ -119,9 +311,7 @@ Yes. A script prepares the game on a computer and pushes it to the device over U
 
 ### How do updates and DLC work?
 
-Put them in the game folder, or set Settings › Library › **Update folder** and **DLC folder**. They are matched to their games by title ID. The sheet shows the update it will use (**Choose another…** picks a different file) and the DLC it found (**Add…** picks more). The **Version** row shows **You have** and **This build supports**.
-
-For an update that is not supported, the button reads **Build anyway** and asks first. The game may not start, may crash, or may draw parts wrongly, and the first build is slower. Your dump and saves are not changed.
+Put them in the game folder, or set Settings › Library › **Update folder** and **DLC folder**. They are matched to their games by title ID. The sheet shows the update it will use, the newest one found unless you chose another (**Choose another…** picks a different file), and the DLC it found (**Add…** picks more).
 
 ### How do I free up storage?
 
@@ -132,7 +322,7 @@ For an update that is not supported, the button reads **Build anyway** and asks 
 
 ### How do I start and stop a game, and which controls work?
 
-Tap a **Ready** cover. To stop, open the in-game panel and choose **Stop the game**. The panel opens with a swipe in from the right edge, with Back, or on a controller with Home or by holding − and + for half a second.
+Tap a ready cover. To stop, open the in-game panel and choose **Stop the game**. The panel opens with a swipe in from the right edge, with Back, or on a controller with Home or by holding − and + for half a second.
 
 Games take the handheld's own buttons and sticks, external controllers and on-screen touch controls. Settings has **On-screen controls** (Auto, On, Off), **Button mapping**, **Xbox button label swap** and **Rumble**. Each game can override them in its own settings.
 
@@ -148,6 +338,10 @@ Most supported games run at 60 fps on the Thor. Animal Crossing: New Horizons ru
 
 Some of these rows show only with Settings › **Tester settings** on.
 
+### What is Tester settings?
+
+A switch in Settings › Help. Off, a game that has **Resolution** choices shows just those. On, it also shows the rows made for testing: advanced resolution, **Upscaler** and **Dynamic resolution**. Leave it off unless you are trying things out or were asked to change one of those rows.
+
 ### Where are a game's own settings, such as its language?
 
 Hold its cover. The page has four tabs: **Performance**, **Game**, **Saves** and **Storage**. A game's settings override the defaults in Settings. **Reset to defaults** puts them back. The game's language is **Game** tab › **Game language**.
@@ -160,29 +354,113 @@ Yes. **Settings › Library** has two rows. **Haptics** is **System** or **Off**
 
 Saves are in the app's own storage, under `saves/<title ID>`. The **Saves** tab shows the path and has **Back up saves**, **Restore saves** and **Import save** (a `.zip` or a save folder). Stop the game first. Before a restore or an import, the app backs up the current save.
 
-### Which games are supported, and what does "Not in this app version" mean?
+### Where is the game log?
 
-Every game needs a profile built into the app. Your app version has none for that game, so it cannot be built or played. Settings › **About** lists the games this version includes.
+Every run of a game writes a log. To send it:
 
-The project's README lists the tested games with the update each one needs. In 0.1.1 they are Link's Awakening, Echoes of Wisdom, Fire Emblem: Three Houses, Fire Emblem Engage, Metroid Dread, Super Mario Odyssey, Mario Kart 8 Deluxe, Animal Crossing: New Horizons, Persona 5 Royal, Castlevania: Belmont's Curse, Octopath Traveler 0 and Pokémon Brilliant Diamond. Settings › **About** may list more titles. Those have a profile but are not on the tested list.
+- one game's newest log: hold its cover › **Storage** tab › **Share log**;
+- the newest log of any run, including a Graphics self-test: Settings › **Share log**.
 
-## Graphics and performance
+After a crash the app's notice has a **Share log** button for that run.
 
-### Which GPU driver should I use, and how do I install one?
+## GPU drivers
 
-Graphics run on a Vulkan driver: **System (the phone's own driver)** or a custom one such as Turnip. If the system driver is older than Vulkan 1.3, as reported on Adreno 650 devices, you need a custom driver. If a game draws wrongly or crashes on one driver, try the other.
+### What is a GPU driver here, and do I need a custom one?
 
-To install and pick one:
+The GPU driver is the software that draws the game's picture through Vulkan. Your device has one built in, shown as **System (the phone's own driver)**. A custom driver is another one that the app loads only for games, without changing the device. The usual custom driver is Turnip, the open-source driver for Adreno GPUs.
 
-1. Settings › **GPU driver** › **Install…**
-2. Choose **Download…** to list Turnip releases, or **Pick a zip…** for a driver zip you already have (a zip with a `meta.json`).
-3. Pick the driver in the list. It takes effect at the next game start.
+- The system driver is fine when it supports Vulkan 1.3 and your games draw correctly on it.
+- You need a custom driver when the system driver is older than Vulkan 1.3. The Readiness check then says the game needs Vulkan 1.3. This is reported on the Adreno 650 (Snapdragon 865).
+- Try a custom driver when a game is slow, draws wrongly or crashes on the system driver.
 
-For one game only, use its **Performance** tab › **GPU driver**. **Remove picked…** deletes the app's copy of a driver.
+### Which driver is recommended?
+
+A Turnip driver. Honest details:
+
+- The developer's test device is the AYN Thor (Snapdragon 8 Gen 2, Adreno 740). It is used and tested with a Turnip driver. The one in the developer's logs is **Turnip Adreno Driver T30 (Mr. Purple)**, from the **Mr. Purple Turnip** entry of the app's Download list.
+- A device whose stock driver is older than Vulkan 1.3 must use a custom driver. The one report so far is an Adreno 650 with the same T30 driver: the app's checks passed, but that game still showed a black screen. So older Adreno chips are not known to work yet.
+- Other chips are untested. If the system driver passes the Readiness check and your games look right, you can stay on it.
+
+The app does not mark any driver as recommended in its list. Whichever you use, name it when you report a bug.
+
+### How do I install a driver from the app's Download list?
+
+You need an internet connection. The app downloads nothing until you tap a file.
+
+1. Open Settings › **GPU driver**. The dialog **GPU driver (takes effect at the next game start)** opens.
+2. Tap **Install…**, then **Download…**.
+3. **Download a driver (GitHub releases)** lists the sources, for example **Mr. Purple Turnip** and **KIMCHI Turnip**. Tap one.
+4. The app reads that source's releases and lists the driver zips, each with its release name and size. Tap the one you want. For the recommended driver, pick the T30 release under **Mr. Purple Turnip**.
+5. Wait for **Downloading …**.
+
+What you should see: the message **Installed and picked** with the driver's name, and the driver dialog again with that driver selected. The Settings row **GPU driver** now shows its name. It is used from the next game start.
+
+If you see **No network (cannot reach GitHub)** or **GitHub rate limit, try again later**, check the connection or wait and try again.
+
+### How do I install a driver from a zip I already have?
+
+1. Open Settings › **GPU driver** › **Install…** › **Pick a zip…**.
+2. Pick the driver zip. It must be a driver package with a `meta.json` inside, the format other Android emulators use.
+
+What you should see: **GPU driver installed and picked:** with the driver's name. If the zip is not a driver package you see **GPU driver not installed:** and the reason, for example **no meta.json in the zip**. Nothing changes in that case.
+
+### How do I pick a driver for all games, or for one game?
+
+For all games:
+
+1. Open Settings › **GPU driver**.
+2. Tap **System (the phone's own driver)** or an installed driver. The dialog closes.
+
+For one game:
+
+1. Hold the game's cover and open the **Performance** tab.
+2. Tap **GPU driver**.
+3. Pick **Default (the main screen's: …)** to follow Settings, **System (the phone's own driver)**, or an installed driver.
+
+What you should see: the row shows the name you picked. A game's own choice wins over the one in Settings. The change applies the next time the game starts, not to a running game.
+
+### How do I go back to the system driver, or remove a driver?
+
+Go back: Settings › **GPU driver** › **System (the phone's own driver)**. For one game, set its own **GPU driver** row to **Default** or **System**.
+
+Remove:
+
+1. Open Settings › **GPU driver** and pick the driver you want to remove. The dialog closes.
+2. Open Settings › **GPU driver** again and tap **Remove picked…**.
+3. Confirm with **Remove driver**.
+
+What you should see: **Removed …; the system driver is used**. Only the app's copy of the driver is deleted. Your zip, games, builds and saves are kept.
+
+### How do I check which driver a game really used?
+
+- **Settings row.** Settings › **GPU driver** shows **System** or the picked driver's name.
+- **Readiness check.** Settings › **Readiness check**, section **GPU**. The line **GPU and driver** names the GPU, its Vulkan version and the driver, and ends with **the system's driver** or **custom driver** and its name. **GPU driver picked** shows your choice. A game with its own driver has a line **Its own GPU driver**.
+- **Graphics self-test.** Since 0.1.1 it runs on the driver picked in Settings. Its log has the line `graphics selftest: GPU driver: system` or `graphics selftest: GPU driver:` and the driver's name.
+- **Game log.** Near the top, look for `GPU driver: system` or `GPU driver:` and the driver's name, followed by `(picked in the launcher; …)`. With a custom driver the log also has `[nxlaunch] env DM_VK_DRIVER=…` and `[vk] custom GPU driver: …`. The line `[vk] driver: …` names the driver that really ran. A line with `the system driver is used` means the custom driver could not be loaded.
+
+### A driver made things worse. What can I try?
+
+1. Go back to **System (the phone's own driver)** and start the game again, to confirm the driver is the cause.
+2. Try another release of the same driver, older or newer, from **Download…**.
+3. Try a driver from another source in the list.
+4. If only one game is affected, give that game its own driver (hold the cover › **Performance** › **GPU driver**) and leave the others alone.
+5. Run Settings › **Readiness check** and **Graphics self-test** on the new driver.
+
+The first start on a new driver can stutter or show objects late, because each driver builds its own pipeline cache. Judge it on the second start.
+
+If the game closes with **The GPU driver stopped responding, so the game had to close.**, that driver does not work for this game: pick another.
+
+### Can a Mali or other non-Adreno device use Turnip?
+
+No. The custom drivers the app can install are for Adreno GPUs only. On a Mali, Xclipse or PowerVR GPU the system driver is the only choice. If it lacks what a game needs, the app says so before the game starts (**Not ready for this game**), and that device cannot draw the game yet. Non-Adreno devices are untested.
 
 ### What do the Readiness check and the Graphics self-test tell me?
 
-Settings › **Readiness check** checks Android, memory, file access, the GPU, the picked driver and each game's needs. Its verdict is **Ready**, **Ready, with limits** or **Not ready**, and a failed item has a button that opens the fix. Settings › **Graphics self-test** needs no game and ends in **PASS** or **FAIL (return code N)**. Since 0.1.1 it runs on the driver you picked. A FAIL on the system driver with a PASS on a custom one means: use the custom one.
+Settings › **Readiness check** checks Android, memory, file access, the GPU, the picked driver and each game's needs. Its verdict is **Ready**, **Ready, with limits** or **Not ready**, and a failed item has a button that opens the fix, such as **Pick a GPU driver** or **Allow file access**. **Run again** repeats it, and **Copy report** copies the text for a bug report. If you change the driver while it is open, leave the screen and open it again.
+
+Settings › **Graphics self-test** needs no game. It draws a test picture for a few seconds and ends in **PASS** or **FAIL**, with a return code. Since 0.1.1 it runs on the driver you picked. A FAIL on the system driver with a PASS on a custom one means: use the custom one.
+
+When a game starts, the app runs the same check for that game on that game's driver. If something required is missing you see **Not ready for this game** with **Try anyway**.
 
 ### What does "% of draws skipped" mean?
 
@@ -215,33 +493,100 @@ If it still crackles, open an issue with the game and its version, where in the 
 
 ## Second screen companions
 
-### What is a companion, and which games have one?
+### What is a companion, and what does it need?
 
-A page for one game on the second screen: a map, your party, items or quests, read live from the running game. It is installed per game from a catalog. A game without a companion leaves the second screen free for Android.
+A companion is a set of pages for one game, shown on the second screen while the game runs on the main one. The pages are read live from the running game: a map, your party, items or quests. It is a separate download per game, installed from a catalog.
 
-Settings › **Companions** shows the catalog: **Your games** first, then **Other companions · add the game first**. The catalog is read online, so the list can change without an app update. Every game on the tested list above has a companion.
+It needs:
 
-### How do I install, update, remove or turn off a companion?
+- a second display. The app uses the first display Android reports besides the one the game is on. That is the built-in second screen of a dual-screen handheld such as the AYN Thor. An external display should count too, but only the Thor is tested;
+- a built game, with the game update the companion supports;
+- the companion installed for that game.
 
-- At build time: the sheet's **Companion** row installs it after the build.
-- Later: Settings › **Companions**, with **Install**, **Update** or **Remove** per game.
-- **Versions…** on the game's sheet lists every release, to go back to an earlier one.
+On a single-screen device the game runs without it. A game without a companion leaves the second screen free for Android.
 
-Build the game first, and close the game before you install. A new companion loads at the game's next start. Each download is checked against its published checksum.
+### Which games have a companion?
 
-To turn the second screen off for one game, hold its cover and open the **Game** tab. Its Companion section has **Second screen**: **Physical display** or **Off**.
+Settings › Library › **Companions** shows the catalog: **Your games** first, then **Other companions · add the game first**. Every game on the tested list has a companion. The catalog is read online, so the list can change without an app update.
+
+### How do I install a companion for the first time?
+
+With the build (the usual way):
+
+1. Tap the game's cover to open its sheet.
+2. Look at the **Companion** row. It shows the companion's name, version and size, and its switch is on: **Install after the build**.
+3. Tap **Build**. The companion is downloaded and installed as the last step.
+
+Later, for a game that is already built:
+
+1. Open Settings › Library › **Companions**.
+2. Find the game under **Your games** and tap **Install**.
+3. Wait for the line at the top to read **Installed …**.
+
+You can also do it from the game's own page: hold the cover › **Game** tab › **Companion** section › **Install**.
+
+What you should see: the row reads **installed** with the version and **up to date**, and the game's cover has a green badge with two bars. Start the game: the companion appears on the second screen. Close the game before you install. A companion installed while the game runs loads at the game's next start.
+
+### How do I see which version is installed, update it, or go back to an earlier one?
+
+- **See the version:** the **Companion** row in the game's sheet, in Settings › Library › **Companions**, or in the game's **Game** tab. It reads **installed** and the version, then **up to date** or the newer version that is available.
+- **Update:** tap **Update** in Settings › Library › **Companions** or in the game's **Game** tab. **Rebuild** also updates it.
+- **Go back to an earlier version:**
+  1. Open the game's sheet and tap **Versions…** (in the game's **Game** tab the button is **Versions**).
+  2. The sheet lists every release, newest first, with its date and size. The installed one is marked **installed**. Tap a row to read its release notes.
+  3. Tap **Roll back** on an older version, or **Switch to** on a newer one.
+
+What you should see: **… is active. It loads at the game's next start.** A version you used before is kept on the device (**on this device**) and switches without a download. **Forget** deletes such a kept version.
+
+Each download is checked against its published checksum. A release without a checksum cannot be installed.
+
+### How do I remove a companion, or turn the second screen off for one game?
+
+Remove: tap **Remove** in Settings › Library › **Companions** or in the game's **Game** tab, or **Remove companion** in the Versions sheet. Close the game first. The game and its saves stay, and the catalog can install the companion again.
+
+Turn it off without removing it:
+
+1. Hold the game's cover and open the **Game** tab.
+2. In the **Companion** section tap **Second screen**.
+3. Pick **Off**. **Physical display** turns it back on.
+
+What you should see: the row reads **Off: the companion does not show**. It applies at the game's next start, and the second screen is left to Android.
+
+### What can I do on a companion's pages?
+
+It depends on the companion. In general:
+
+- **Views.** Most pages only show the game's state and change nothing. Fire Emblem: Three Houses shows the chapter, turn and phase, the battle map with every unit, and the selected unit's card. Echoes of Wisdom shows your location and equipped items.
+- **Touch.** Pages take taps and gestures, for example to switch pages, and give haptic feedback. Some send button presses to the game.
+- **Settings inside a companion.** Some companions have their own options, such as hiding a part of the game's HUD on the main screen because the second screen already shows it. It is per companion and covers only the parts that companion handles. There is no app-wide switch for it.
+
+The companions are published with screenshots and a description of each at https://github.com/igawa6/eden-duo-companions.
 
 ### Why is the companion empty or waiting?
 
-- After an app update, a companion that uses map or helper features needs **Build again** once.
-- Your game update must be one the companion supports. Check the **Version** row in the game's sheet.
-- A companion installed while the game runs loads at the next start.
+- **After an app update:** a companion that uses map or helper features needs **Build again** once. Hold the cover › **Storage** › **Build again** › **Rebuild**.
+- **Game update:** your game update must be the one the companion supports. Check **You have** in the game's sheet against the README's list. After switching to or installing a version that does not list your game's build, the app warns that it may fail to load.
+- **Installed while the game was running:** it loads at the game's next start. Stop the game and start it again.
+- **Second screen is Off** for that game: see the entry above.
+- **No second display:** on a single-screen device nothing is shown.
+- **App too old for the companion:** the install is refused with a message that asks you to update the app.
 
-### Does touch work on the second screen, and can a companion hide the game's own HUD?
+### What happens with companions when I am offline?
 
-Yes. Companion pages take taps and gestures, and some send button presses to the game. They give haptic feedback when you tap.
+The catalog is read from the internet each time. Offline:
 
-Some companions also hide parts of the game's HUD on the top screen and show them on the second screen instead. Octopath Traveler 0's does this for the party HUD. It is per companion and covers only the parts that companion handles. There is no app-wide switch for it yet.
+- Settings › Library › **Companions** shows **Catalog unavailable:** and you cannot install or update.
+- A game's sheet may read **No companion in the catalog for this game** even though one exists. Go online and tap Settings › Library › **Rescan**.
+- A build still finishes. The game is ready to play without the companion, and you can install it later.
+- A companion that is already installed keeps working. It is on the device.
+- The Versions sheet needs the catalog too, so you cannot switch versions offline.
+
+### What are the current limits?
+
+- A companion works only with the game update it was made for.
+- A companion cannot be installed, switched or removed while the game runs.
+- Octopath Traveler 0: the stats pages and hiding the map HUD work. Hiding the battle party cards and moving the command panel do not work yet.
+- Only the AYN Thor is tested as a second screen.
 
 ## Mods
 
@@ -268,7 +613,7 @@ File mods and cheats apply without a build. A mod that carries code shows **Need
 1. Settings › **Readiness check**.
 2. The firmware fonts (Settings › Library › **Firmware fonts**).
 3. Another GPU driver.
-4. The game update: the sheet's **Version** row must show a supported one.
+4. The game update: **You have** in the game's sheet must be a version under **This build supports**.
 5. **Build again**, if the app was updated since the build.
 
 After a crash the app shows the reason it knows, with a **Share log** button.
@@ -298,7 +643,7 @@ A screenshot or a short video helps for a wrong picture. Never attach or link ga
 
 ### Do I need to rebuild my games after an update?
 
-Usually not. Do **Build again** once for a game whose companion uses map or helper features, and whenever the game's page or a message asks for **Build again** or **Prepare again**. It is quick when the game's code is otherwise current.
+Rebuilding every game after an app update is strongly recommended. An update can change how a game's code and shaders are prepared, and a game built by an older version keeps the old result until it is built again. Hold the game's cover, open **Storage**, tap **Build again**, then **Rebuild**. Your saves are not touched. It is quick when the game's code is otherwise current, and takes as long as a first build when it is not.
 
 ### Will I lose my saves?
 
