@@ -26,9 +26,17 @@ final class ScreenMode {
     /** What a mode costs in a game, said under its row */
     private static final Map<String, String> NOTES = Map.of(
             "0100000000010000", "Handheld turns off this game's motion moves.",
-            "010055D009F78000", "Docked is 1080p and runs below 60 fps on some devices.");
+            "010055D009F78000", "Docked is 1080p and runs below 60 fps on some devices.",
+            "01006BB00C6F0000", "Docked is 1080p and dips below 60 fps on some devices.");
 
+    /** Handheld by default here although the profile says docked: Link's Awakening's 1920x1080 frame took the Thor's GPU 15 ms at the 90th percentile and play dipped to 50 fps; handheld holds 60 */
+    private static final Set<String> PREFER_HANDHELD = Set.of("01006BB00C6F0000");
+
+    /** The mode the host starts the game in without a line (its profile's op_mode) */
     static int profile(String id) { return HANDHELD.contains(id) ? 1 : 0; }
+
+    /** The mode a game has when nothing is chosen for it */
+    static int own(String id) { return HANDHELD.contains(id) || PREFER_HANDHELD.contains(id) ? 1 : 0; }
 
     /** null: the player chooses; "": no row (the game's Resolution sets the mode); else the text of a row that cannot be changed */
     static String fixed(String id) {
@@ -50,7 +58,7 @@ final class ScreenMode {
 
     static int mode(Context c, String id) {
         int g = global(c);
-        return Prefs.of(c).getInt(Prefs.gameKey(KEY, id), g < 0 ? profile(id) : g) == 1 ? 1 : 0;
+        return Prefs.of(c).getInt(Prefs.gameKey(KEY, id), g < 0 ? own(id) : g) == 1 ? 1 : 0;
     }
 
     static void set(Context c, String id, Integer v) {
@@ -73,7 +81,7 @@ final class ScreenMode {
         if (fx != null && fx.isEmpty()) return null;
         if (fx != null) return new Ui.Setting(a, "📺", "Console mode", null).value(fx);
         Ui.Setting s = new Ui.Setting(a, "📺", "Console mode", v -> {
-            String[] labels = {"Default (" + (global(a) < 0 ? "this game: " + SHORT[profile(id)] : "Settings: " + SHORT[global(a)]) + ")", NAMES[0], NAMES[1]};
+            String[] labels = {"Default (" + (global(a) < 0 ? "this game: " + SHORT[own(id)] : "Settings: " + SHORT[global(a)]) + ")", NAMES[0], NAMES[1]};
             new PadFocus.Builder(a).setTitle("Console mode · " + g.name).setSingleChoiceItems(labels, own(a, id) ? mode(a, id) + 1 : 0, (x, w) -> {
                 set(a, id, w == 0 ? null : w - 1);
                 x.dismiss();

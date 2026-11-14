@@ -24,10 +24,30 @@ public final class GameEnv {
      * Switch's own 1280x720 for this game) — in console mode its 1920x1080 frame takes the Thor's GPU 7.5 ms median and 15 ms at the 90th percentile for ~830 draws, so
      * play dipped to 50 fps; handheld holds 60 at 4.3 / 8.6 ms, and the picture is what the Switch shows on its own screen
      */
-    private static final String[][] DEFAULTS = {{"01006BB00C6F0000", "DM_OPMODE", "0"}};
+    private static final String[][] DEFAULTS = {};
+    /**
+     * Lines an earlier build put into a game's Extra environment as a default, taken out again once: Link's Awakening's DM_OPMODE=0 is now the default of the game's
+     * Console mode row (dev.nxnative.android.ScreenMode: handheld for this game), and the line, which wins over every row, would keep the row from doing anything.
+     * A player who wants the line can put it back; it is only removed the first time
+     */
+    private static final String[][] RETIRED = {{"01006BB00C6F0000", "DM_OPMODE", "0"}};
 
     public static void ensureDefaults(Context c, String titleId) {
         if (titleId == null) return;
+        for (String[] d : RETIRED) {
+            if (!d[0].equalsIgnoreCase(titleId)) continue;
+            android.content.SharedPreferences p = c.getSharedPreferences("peanuts", Context.MODE_PRIVATE);
+            String flag = "env_retired_" + d[1] + "@" + d[0];
+            if (p.getBoolean(flag, false)) continue;
+            try {
+                String env = Upstream.gameEnv(c, titleId);
+                String out = without(env, d[1], d[2]);
+                if (!out.equals(env == null ? "" : env)) { Upstream.gameEnv(c, titleId, out); Log.i(TAG, "env " + titleId + ": " + d[1] + "=" + d[2] + " taken out (now a setting)"); }
+                p.edit().putBoolean(flag, true).apply();
+            } catch (ReflectiveOperationException e) {
+                Log.w(TAG, "env " + titleId + ": " + e);
+            }
+        }
         for (String[] d : DEFAULTS) {
             if (!d[0].equalsIgnoreCase(titleId)) continue;
             try {
@@ -76,6 +96,16 @@ public final class GameEnv {
     }
 
     /** text with KEY=value added when no line sets KEY */
+    /** text without the line key=value (that exact value: another value is the player's own) */
+    static String without(String text, String key, String value) {
+        List<String> out = new ArrayList<>();
+        for (String l : (text == null ? "" : text).split("\n")) {
+            if (l.trim().isEmpty() || l.trim().equals(key + "=" + value)) continue;
+            out.add(l);
+        }
+        return String.join("\n", out);
+    }
+
     static String withDefault(String text, String key, String value) {
         List<String> out = new ArrayList<>();
         for (String l : (text == null ? "" : text).split("\n")) {
