@@ -251,6 +251,7 @@ public final class MainActivity extends Activity {
         if (!Profile.anyResolution()) resRow.view.setVisibility(View.GONE);   // no game of this APK has a window_fn or graphics_scale lever: the default would do nothing
         capRow = new Ui.Setting(this, "⏱️", "Frame rate cap", v -> fpsCap()).chevron(this);
         play.addView(capRow.view);
+        play.addView(ScreenMode.defaultRow(this).view);   // PEANUTS: Console mode's default for every game
         play.addView(new Ui.Setting(this, "📳", "Rumble", null).toggle(this, Prefs.rumble(this), (b, on) -> Prefs.rumbleDefault(this, on))
                 .value("On the controller, or the phone without one").view);
         play.addView(new Ui.Setting(this, "🚀", "Use fast cores", null).toggle(this, Prefs.pinThreads(this), (b, on) -> Prefs.pinThreadsDefault(this, on))

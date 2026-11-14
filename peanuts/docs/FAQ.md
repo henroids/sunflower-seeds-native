@@ -338,6 +338,10 @@ Most supported games run at 60 fps on the Thor. Animal Crossing: New Horizons ru
 
 Some of these rows show only with Settings › **Tester settings** on.
 
+### Can I choose docked or handheld mode?
+
+Yes. **Console mode** is in Settings › Game defaults and in each game's settings (hold the cover › **Performance** › Picture). **Docked** makes the game draw as it does on a TV, up to 1080p. **Handheld** makes it draw as on the Switch's own screen, up to 720p: that is lighter, so it can hold a higher frame rate, and the app's upscaler fills the screen. Handheld also turns on the game's touch screen. The choice applies from the next start. A few games are fixed to Handheld because they need the touch screen there.
+
 ### What is Tester settings?
 
 A switch in Settings › Help. Off, a game that has **Resolution** choices shows just those. On, it also shows the rows made for testing: advanced resolution, **Upscaler** and **Dynamic resolution**. Leave it off unless you are trying things out or were asked to change one of those rows.

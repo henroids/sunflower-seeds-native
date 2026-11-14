@@ -435,6 +435,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         // Game resolution: the game's own setting, else the main screen's: the window size the host gives the game (window_fn), or the graphics scale and operation
         // mode that give that size (graphics_scale rows), as its profile says (Profile.resolutionEnv); nothing for a game with neither
         Profile prof = Profile.of(id);
+        ScreenMode.env(this, id, env);   // PEANUTS: Console mode (DM_OPMODE) for a game whose Resolution does not set it
         if (prof != null) env.addAll(prof.resolutionEnv(Prefs.startWindow(this, id)));   // a Resolution preset's window, else Game resolution's (Prefs.startWindow, ResPresets)
         // Resolution, Upscaling quality and Graphics quality (a render_cfg row: Profile.renderCfg), kept as the setting this run starts with: the loader sizes the render target
         // pool for it, and the in-game panel compares a pick with it (Profile.renderRestartNote)

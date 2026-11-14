@@ -151,6 +151,7 @@ final class GameSettings {
             if (!SceneRes.presets(prof).isEmpty())   // a profile with scene_scale rows but no presets: the 3D scene below the window by the game's own palette (SceneRes)
                 picture.add(prepared(new Ui.Setting(a, "🎬", "3D scene", v -> scene(a, g, again)), sceneValue(a, g, SceneRes.presets(prof))).chevron(a));
         }
+        { Ui.Setting cm = ScreenMode.row(a, g, again); if (cm != null) picture.add(cm); }   // PEANUTS: Console mode (Docked / Handheld)
         if (prof != null && prof.renderCfg()) renderRows(a, g, prof, picture, again);   // Resolution, Upscaling quality, Graphics quality instead of Resolution (a render_cfg row)
         if (simple) {   // the Upscaler stays as stored (GameActivity reads the preference); only testers change it for a game with Resolution presets
         } else if (Prefs.dlssGame(id)) {   // a game on the DLSS stand-in (game.tsv dlss_standin): its Upscaler is the stand-in (GSR2's sliders under GSR 2, the sharpness under FSR 1)
