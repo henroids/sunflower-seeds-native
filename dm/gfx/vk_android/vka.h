@@ -309,6 +309,9 @@ typedef struct vka_img {
     // PEANUTS: resolution scale (vka_resscale.inc): rsc: its VkImage is DM_RES_SCALE times the texture's size (w, h are the image's, d.width / d.height the texture's);
     // rs_no: it is not to be scaled (what it is, or its shape was denied): not asked again
     uint8_t rsc, rs_no;
+    // PEANUTS: region writes queued for it and not yet copied (vka_tex.c mtl_tex_write_region; each holds a reference): it is not evicted meanwhile, and a pool drop
+    // takes them back (rw_cancel_locked), since both give the image up whatever its reference count says
+    uint32_t rw_pend;
 } vka_img;
 // PEANUTS begin: resolution scale (DM_RES_SCALE, restart only): vka_resscale.h the arithmetic, vka_resscale.inc (in vka_tex.c) the images and what the rest is for
 #include "vka_resscale.h"

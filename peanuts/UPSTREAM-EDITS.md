@@ -300,3 +300,22 @@ included by `vka_tex.c`, since it works on the texture cache's tables under its 
 
 Upstream candidate: the host side as a whole is general (nothing in it names a game or Peanuts), but it is a first slice (see the header of
 `vka_resscale.inc` for what scales and what falls back) and has not run on a device yet; not proposed upstream until it has.
+
+### Round 8, after the first device run (2026-11-15): queued region writes and forced image drops
+
+Breath of the Wild at 1.5x aborted after 131 s in `img_destroy` (a second free). The cache gives an image up whatever its reference count in two places
+(eviction, `vka_tex_prune_locked` / `img_evict_locked`, and `vka_tex_drop_pool`), and a queued region write (`mtl_tex_write_region`: WriteTexels) holds its
+image by pointer with a reference only. An image the game writes but has not drawn for two frames can be evicted and freed at once with writes still queued;
+the next prepare then copies into, and releases, whatever has taken the freed `vka_img`'s memory. With the resolution scale that can be the old image of an
+in-place swap (it was made right after a prune, with a count of 1), which the stray release destroys once more than its own callback. Without the scale the
+same stray release lands on a new image of the cache. This is the cause as far as reading the code and a model of it go
+(`dm/host/tests/t_android_imglife.c`, `make android-imglife`; `build/t_android_imglife old` shows the fault); it has not been confirmed on the device.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka.h` | 1 | `vka_img.rw_pend`: region writes queued for the image | `// PEANUTS: ...` |
+| `dm/gfx/vk_android/vka_tex.c` | 7 | `rw_cancel_locked` and its forward declaration; `mtl_tex_write_region` counts a queued write (and sends a write to a scaled image through the whole upload); the drain skips a cancelled entry and counts down; `vka_tex_prune_locked` does not evict an image with queued writes; `vka_tex_drop_pool` takes them back first | `// PEANUTS: ...` on or above each line |
+| `dm/host/tests/Makefile` | (same span) | `t_android_imglife`, `android-imglife` | inside the `# PEANUTS begin`/`# PEANUTS end` span of Round 8 |
+
+Upstream candidate: yes, the `rw_pend` part (eviction and pool drops against queued region writes) is a general fix, independent of the resolution scale.
+In `vka_resscale.inc` (Peanuts-owned): no prune inside a change of scale any more, and the old image's holder gets a count no stray release can bring to zero.

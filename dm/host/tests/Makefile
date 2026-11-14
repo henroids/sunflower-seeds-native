@@ -479,6 +479,15 @@ $(B)/t_android_resscale: t_android_resscale.c $(VKA)/vka_resscale.h | $(B)
 .PHONY: android-resscale
 android-resscale: $(B)/t_android_resscale
 	$(B)/t_android_resscale
+# A model of the texture cache's image lifetimes under random operations (references, holds, the old image of an in-place swap, lingering, eviction, pool drops,
+# queued region writes; vka_tex.c): the sanitizer stops at the first image used or freed after it was freed. `build/t_android_imglife old` shows the fault of the
+# first device run of the resolution scale. Built with run; android-imglife builds and runs it
+run: $(B)/t_android_imglife
+$(B)/t_android_imglife: t_android_imglife.c | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -o $@ t_android_imglife.c
+.PHONY: android-imglife
+android-imglife: $(B)/t_android_imglife
+	$(B)/t_android_imglife
 # PEANUTS end
 # File-backed pools (vka_fileback.h; vka_mem.c "File-backed pools", DM_MEM_FILEBACK). Linux only (mremap, O_TMPFILE, SEEK_DATA, fallocate; the file in TMPDIR, made and
 # removed by the test): make fileback, in `run` on a Linux host. From Anka Native (MIT, EddizEge; NOTICE.md)

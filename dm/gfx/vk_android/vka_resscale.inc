@@ -20,6 +20,12 @@
 // nearest for depth and stencil where the format has blits, else the new image starts cleared, logged once), swapped in place so every texture, view and pool slot
 // follows. A holder outside the recording thread (the present, frame generation, a texel read) reads the image's size and handle together under vka_rs_mu, which the
 // change only tries to take: when it cannot, the change is not made this time and its caller leaves its work out once (counted as busy / skipped).
+//
+// Lifetimes, checked against the three swaps the cache already had (img_own, soft_harden, img_storage_upgrade): the new vka_img from img_create is in no table (the
+// serial map and the live list take an image only in vka_tex_get), so after the swap it is only the holder of the old VkImage, its memory and its views, destroyed
+// once: by the callback queued for the submission after the last one reserved, or, while im is held, from im->zold when the last holder lets go (im_unhold_locked) or
+// im itself goes (img_destroy). im keeps its identity: its references, holds, map entries, place in the live list and lingering are untouched. Nothing is evicted
+// here (no prune: the next new image's creation makes room), so no other image is freed while a caller holds pointers from this pass.
 uint32_t vka_rs_q = VKRS_ONE;
 vka_rs_stat vka_rs_st;
 _Atomic uint32_t vka_rs_sh[3];
@@ -90,7 +96,6 @@ static int rs_set_locked(vka_img *im, VkCommandBuffer cb, int up, int why, int s
     }
     int locked = 0;
     if (im->holds > self) { if (pthread_mutex_trylock(&vka_rs_mu)) { vka_rs_st.busy++; return -1; } locked = 1; }
-    if (up) vka_tex_prune_locked();   // (room under the cache's limit first, as a new image's creation makes it)
     tex_t t = {0}; t.serial = im->serial; t.mem = (uint8_t *)im->mem; t.d = im->d; t.L = im->L;
     if (im->usage & VK_IMAGE_USAGE_STORAGE_BIT) t.d.flags |= NVN_TEXTURE_FLAGS_IMAGE;   // (down only: made with storage use, or upgraded to it)
     g_rswant = up; vka_img *n = img_create(&t, &im->f, 0); g_rswant = 0;
@@ -117,6 +122,10 @@ static int rs_set_locked(vka_img *im, VkCommandBuffer cb, int up, int why, int s
     }
     vka_barrier(cb);
     n->inited = 1;
+    // From here n is no image of the cache but the old VkImage's holder until the GPU is done with it: in no table, reached only through im->zold or the callback
+    // below. Its count is set where no stray release can bring it to zero and destroy it a second time (the first device run aborted in a second img_destroy; the
+    // one way found by reading: a region write's reference to an evicted image, whose memory this holder had taken; vka_tex.c rw_pend)
+    n->refs = INT32_MAX / 2;
     VkImage oi = im->img; vka_imem om = im->m; void *ov = im->views; uint64_t ob = im->bytes; uint32_t ow = im->w, oh = im->h;
     im->img = n->img; im->m = n->m; im->views = NULL; im->usage = n->usage; im->cflags = n->cflags; im->nvf = n->nvf; memcpy(im->vf, n->vf, sizeof im->vf); im->bytes = n->bytes; im->fl = n->fl;
     im->w = n->w; im->h = n->h; im->pool_fit = n->pool_fit; im->rsc = (uint8_t)(up != 0);
