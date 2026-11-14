@@ -1355,7 +1355,8 @@ static vka_res g_res[512];   // the NaN scan's own walk (DM_VK_NANSCAN_FS)
 // PEANUTS: texel buffers. A buffer texture (NVN target BUFFER) read or written through a texel buffer binding is a VkBufferView over its elements in the placed guest memory segment
 // that holds them (the bytes the CPU writes: placed memory is host coherent), made once per (buffer, offset, range, format) and kept while the segment table stands (vka_mem_gen:
 // a segment that goes takes its buffer, so the views go with any change of the table, destroyed once the submissions that may use them complete). Elements outside placed memory
-// or at an offset the device cannot view (minTexelBufferOffsetAlignment) read as a null texel buffer, noted
+// or at an offset the device cannot view (minTexelBufferOffsetAlignment) are copied for the submission when only read (Octopath Traveler 0's boost particles read 112-byte
+// buffers 8 bytes off the alignment: as empty buffers the effect covered the battle in white), else read as a null texel buffer, noted
 typedef struct { VkBuffer b; VkDeviceSize off, range; VkFormat f; VkBufferView v; } tbv_ent;
 static tbv_ent g_tbv[512]; static uint64_t g_tbv_gen;
 static void tbv_destroy(void *v) { vk.vkDestroyBufferView(V.dev, (VkBufferView)(uintptr_t)v, NULL); }
@@ -1367,6 +1368,14 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
         return VK_NULL_HANDLE; }
     VkBuffer b; VkDeviceSize o; uint64_t run = vka_addr_run(addr, bytes, &b, &o);
     uint32_t al = (uint32_t)V.props.limits.minTexelBufferOffsetAlignment; if (!al) al = 1;
+    if ((run < bytes || (o % al)) && !storage && bytes && bytes <= (1u << 20)) {   // read only and not viewable where it is: a view of a copy of its bytes as the CPU has them now, for this submission
+        vka_span sp; uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements, n = texel && bytes / texel > mx ? mx * texel : bytes;
+        if (vka_scratch(n, al > 16 ? al : 16, &sp) && cpu_read(addr, sp.ptr, (size_t)n)) {
+            VkBufferViewCreateInfo ci = {VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO, .buffer = sp.buf, .format = f, .offset = sp.off, .range = n};
+            VkBufferView v = VK_NULL_HANDLE;
+            if (!vk.vkCreateBufferView(V.dev, &ci, NULL, &v)) { vka_after(vka_fence_last() + 1, tbv_destroy, (void *)(uintptr_t)v); return v; }
+        }
+    }
     if (run < bytes || (o % al)) {
         static _Atomic int nm; if (atomic_fetch_add(&nm, 1) < 8) VRED("shader %016llx binding %u: the buffer texture at %#llx (%llu bytes) is %s: it reads as an empty texel buffer", (unsigned long long)sh->key, r->binding,
             (unsigned long long)addr, (unsigned long long)bytes, run < bytes ? "not in placed guest memory" : "not aligned to the device's texel buffer offset");
