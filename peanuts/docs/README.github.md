@@ -5,13 +5,13 @@
 </p>
 
 <p align="center">
-  <img alt="status" src="https://img.shields.io/badge/status-pre--release-lightgrey">
+  <img alt="status" src="https://img.shields.io/badge/release-0.1.1-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
 </p>
 
 > [!NOTE]
-> Peanuts Native is in development and has no public release yet. It is not affiliated with Nintendo.
+> Peanuts Native is in development. The current release is on the [releases page](https://github.com/igawa6/peanuts-native/releases). It is not affiliated with Nintendo.
 
 ## What it is
 
@@ -43,7 +43,7 @@ which update you have and which one a game supports, and asks before building an
 | Super Mario Odyssey | `0100000000010000` | 1.4.1 | Yes | 60 fps |
 | Mario Kart 8 Deluxe | `0100152000022000` | 4.0.0, 4.0.1 | Yes | 60 fps |
 | Animal Crossing: New Horizons | `01006F8002326000` | 3.0.3 | Yes | 30 fps, as on Switch |
-| Persona 5 Royal | `01005CA01580E000` | 1.0.2 | Yes | 30 fps, as on Switch |
+| Persona 5 Royal | `01005CA01580E000` | 1.0.2 | Yes | 60 fps |
 | Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes | 60 fps |
 | OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes | 60 fps |
 | Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes | 60 fps |
