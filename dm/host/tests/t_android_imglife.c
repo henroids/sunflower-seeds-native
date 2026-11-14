@@ -7,6 +7,8 @@
 // force the count and freed the image at once; the swap's new vka_img took that memory, and the drain's release of the stale pointer destroyed it once more than its
 // own callback. So: an image with queued region writes is not evicted, a pool drop takes its queued writes back, and a swap's old image cannot be brought to zero.
 // `t_android_imglife old` runs the cache as it was (the sanitizer reports the use after free), for showing that the model has the fault.
+// `t_android_imglife poolheld` runs a pool drop that also gives up images a holder has, as vka_tex_drop_pool did until it skipped them (the same report: the present's
+// drop of a window texture whose pool the game finalized first).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +24,7 @@ static uint64_t g_frame = 1, g_last = 1, g_done;                             // 
 static struct { uint64_t f; img *im; } A[NAFTER]; static int nA;             // vka_after(img_destroy)
 static int pool_alive[3] = {1, 1, 1};
 static img *RW[NRW]; static int nRW;                                         // queued region writes
-static int fixed = 1;
+static int fixed = 1, pool_held = 0;   // pool_held: a pool drop also gives up the images a holder has, as vka_tex_drop_pool did (`t_android_imglife poolheld`)
 
 static void destroy(img *im) {
     if (im->zold) { destroy(im->zold); im->zold = NULL; }
@@ -107,9 +109,9 @@ static void run(unsigned seed, long steps) {
             if (heldn == 3) { img *o = held[0]; held[0] = held[1]; held[1] = held[2]; heldn = 2; unhold(o); unref(o); }
             held[heldn++] = im; if (rand() % 2) view(im);
         }
-        else if (op < 84) {   // a memory pool is finalized: its images go whatever their count (not ones a holder has: the window textures' pool stays for the run)
-            int p = rand() % 3; pool_alive[p] = 0;
-            for (int i = 0; i < g_nlive;) { img *im = g_live[i]; if (im->pool == p && !im->holds) { if (fixed) rw_cancel(im); force(im); } else i++; }
+        else if (op < 84) {   // a memory pool is finalized: its images go whatever their count, but not ones a holder has (vka_tex_drop_pool's !im->holds: the present still
+            int p = rand() % 3; pool_alive[p] = 0;   // drops the window textures it keeps for three presents, and a game may finalize their pool before that)
+            for (int i = 0; i < g_nlive;) { img *im = g_live[i]; if (im->pool == p && (!im->holds || pool_held)) { if (fixed) rw_cancel(im); force(im); } else i++; }
             for (int k = 0; k < NSER; k++) if (T[k].alive && T[k].pool == p) release(k);
         }
         else if (op < 91) { img *im = T[s].alive ? g_map[s] : NULL; if (im && !im->gpu && nRW < NRW) { im->refs++; im->rw_pend++; RW[nRW++] = im; } }   // WriteTexels: a reference, no hold, no use stamp
@@ -128,7 +130,8 @@ static void run(unsigned seed, long steps) {
 
 int main(int argc, char **argv) {
     if (argc > 1 && !strcmp(argv[1], "old")) fixed = 0;
+    if (argc > 1 && !strcmp(argv[1], "poolheld")) pool_held = 1;   // the pool drop as it was: the sanitizer stops at the present's drop of a freed image
     for (unsigned seed = 1; seed <= 12; seed++) run(seed, 60000);
-    printf("t_android_imglife: ok%s\n", fixed ? "" : " (the old rules: the sanitizer should have stopped this)");
+    printf("t_android_imglife: ok%s\n", fixed && !pool_held ? "" : " (the old rules: the sanitizer should have stopped this)");
     return 0;
 }

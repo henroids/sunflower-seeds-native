@@ -50,8 +50,6 @@ public final class ModStoreTest {
                     System.out.println(m.dir.getName() + " " + m.order + " " + m.enabled + " " + m.kind);
                 break;
             }
-            case "moveUp": ModStore.moveUp(modsRoot, titleId, args[3]); break;
-            case "moveDown": ModStore.moveDown(modsRoot, titleId, args[3]); break;
             case "setEnabled": ModStore.setEnabled(modsRoot, titleId, args[3], Boolean.parseBoolean(args[4])); break;
             case "remove": ModStore.remove(modsRoot, titleId, args[3]); break;
             case "needsBuild": System.out.println(ModStore.needsBuild(ModStore.list(modsRoot, titleId))); break;
@@ -91,20 +89,6 @@ public final class ModStoreTest {
         self.assertEqual(lines, ['Alpha 0 true files', 'Beta 1 true files', 'Gamma 2 false files'])
         # First-enabled-wins order: Alpha then Beta (Gamma disabled, not in the overlay list)
         self.assertEqual(self.run_cmd('overlay'), 'Alpha:Beta')
-
-    def test_move_up_swaps_with_previous_and_renumbers(self):
-        self.run_cmd('make', 'Alpha', 'files', 'true')
-        self.run_cmd('make', 'Beta', 'files', 'true')
-        self.run_cmd('moveUp', 'Beta')
-        lines = self.run_cmd('list').splitlines()
-        self.assertEqual(lines, ['Beta 0 true files', 'Alpha 1 true files'])
-        self.assertEqual(self.run_cmd('overlay'), 'Beta:Alpha')
-
-    def test_move_up_at_top_is_a_no_op(self):
-        self.run_cmd('make', 'Alpha', 'files', 'true')
-        self.run_cmd('make', 'Beta', 'files', 'true')
-        self.run_cmd('moveUp', 'Alpha')
-        self.assertEqual(self.run_cmd('list').splitlines(), ['Alpha 0 true files', 'Beta 1 true files'])
 
     def test_disable_removes_from_overlay_but_keeps_order_slot(self):
         self.run_cmd('make', 'Alpha', 'files', 'true')

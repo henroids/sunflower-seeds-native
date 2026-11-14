@@ -286,8 +286,11 @@ final class Prepare {
                 // resume this exact variant's own job where it stopped. A finished one is not the answer to Build / Rebuild with mods: the mod's files or the
                 // app's tools may have changed since (the variant's id is only the mods' names, versions and order), so a new job runs, and its rewrite step
                 // keeps every module whose key still fits (pack_android.py rewrite: "unchanged, kept") and redoes the others. Returning the finished pack here
-                // left a pack an earlier app built wrong as it was, whatever was tapped
-                if (!s.equals("done")) job = existing;
+                // left a pack an earlier app built wrong as it was, whatever was tapped.
+                // Nor is a stopped one whose extra arguments are not this build's (the mod's patch folders changed, or an update of the app writes them
+                // another way): resumed, it went on with the folders and the module list it was created with
+                String had = Upstream.str(Upstream.call(existing.getClass(), existing, "modArgs", new Class<?>[0]));
+                if (!s.equals("done") && had.equals(modArgs == null ? "" : modArgs)) job = existing;
             } catch (ReflectiveOperationException | RuntimeException e) { /* damaged: a fresh job replaces it */ }
         }
         if (job == null) {

@@ -85,12 +85,14 @@ def apply_patches(image, patch_paths):
     representable by an in-place IPS/IPS32 patch here)."""
     out = bytearray(image)
     for path in patch_paths:
-        with open(path, 'rb') as f:
-            data = f.read()
         try:
+            with open(path, 'rb') as f:
+                data = f.read()
             out = ips.apply(out, data, max_size=len(image), header=ips.NSO_HEADER)
         except ips.Error as e:
             raise ips.Error(f'{path}: {e}') from None
+        except OSError as e:   # found a moment ago and gone or unreadable now (the mod deleted during its build): the same refusal, not a traceback
+            raise ips.Error(f'{path}: cannot be read ({e.strerror or e})') from None
     return out
 
 

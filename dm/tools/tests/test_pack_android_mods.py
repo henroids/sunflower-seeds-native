@@ -110,5 +110,15 @@ class ApplyModPatches(unittest.TestCase):
                 pa.apply_mod_patches('main', src, [patches], out)
 
 
+class ModMemoryRows(unittest.TestCase):
+    """Which titles' builds with mods get a profile.bin of their own for mod_memory.tsv's numbers alone (a mod that adds no module)"""
+    def test_a_title_with_rows_and_one_without(self):
+        rows = [c for line in (REPO / 'dm/peanuts/profile/mod_memory.tsv').read_text(encoding='utf-8').splitlines() if len(c := line.split('#', 1)[0].split()) == 3]
+        self.assertTrue(rows, 'mod_memory.tsv has no rows')
+        self.assertTrue(pa.mod_memory_rows(rows[0][0]))
+        self.assertTrue(pa.mod_memory_rows(rows[0][0].lower()))
+        self.assertFalse(pa.mod_memory_rows('0100FFFFFFFFF000'))
+
+
 if __name__ == '__main__':
     unittest.main()

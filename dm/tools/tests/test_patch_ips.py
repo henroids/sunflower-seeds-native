@@ -137,6 +137,14 @@ class ApplyPatches(unittest.TestCase):
                 patch_ips.apply_patches(mod.image, [str(f)])
             self.assertIn(str(f), str(c.exception))
 
+    def test_a_patch_file_that_is_gone_is_the_same_refusal(self):   # the mod deleted while it is built: a sentence with the file, not a traceback
+        mod = nso.load(make_nso())
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / 'gone.ips'
+            with self.assertRaises(ips.Error) as c:
+                patch_ips.apply_patches(mod.image, [str(f)])
+            self.assertIn(str(f), str(c.exception))
+
 
 class WriteNso(unittest.TestCase):
     def test_round_trip_unpatched(self):

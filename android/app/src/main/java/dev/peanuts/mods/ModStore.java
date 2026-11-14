@@ -7,18 +7,19 @@ import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * DESIGN-MODS.md's "Mods" section, the shared contract between the per-game Mods UI (play-time: romfs overlay + cheats, this package) and the build-time
- * code-mod pipeline (IPS/exefs, a different agent's work under {@code dev/peanuts/build/} and {@code dm/peanuts/}). A mod lives at
- * {@code <app files>/mods/<TITLEID>/<modName>/}, with any of {@code romfs/}, {@code exefs/}, {@code exefs_patches/**}, {@code cheats/*.txt} and a
+ * code-mod pipeline (IPS/exefs, under {@code dev/peanuts/build/} and {@code dm/peanuts/}). A mod lives at
+ * {@code <game home>/mods/<modName>/} (ModRuntime.modsRoot: the folder is the game's own, so it has no title ID level), with any of {@code romfs/}, {@code exefs/}, {@code exefs_patches/**}, {@code cheats/*.txt} and a
  * {@code mod.json} describing it: {@code {"name":..., "version":..., "enabled":bool, "order":int, "kind":"files"|"code"}}. "files": only romfs and/or
- * cheats, applies at play time on the normal build (no rebuild). "code": the mod also ships exefs or exefs_patches, which needs a modded build (the other
- * agent's path) — the files/cheats part of a "code" mod still applies at play time on the normal build; only the code part waits for a build.
+ * cheats, applies at play time on the normal build (no rebuild). "code": the mod also ships exefs or exefs_patches, which needs a modded build
+ * (dev.peanuts.build.ModBuild) — the files/cheats part of a "code" mod still applies at play time on the normal build; only the code part waits for a build.
  * <p>
  * This class is plain Java (no {@code android.*}, no {@code org.json}) so it can be exercised by a JVM-only test the same way
  * {@code dev.peanuts.build.RuntimeShaderMap} is ({@code peanuts/tests/test_mod_store.py}): javac it alone, run a small driver against a real temp
@@ -33,7 +34,7 @@ public final class ModStore {
 
     /** One installed mod: its manifest fields plus the folder it lives in (so a caller can look at romfs/exefs/cheats directly) */
     public static final class Mod {
-        public final File dir;      // <app files>/mods/<TITLEID>/<modName>/
+        public final File dir;      // <game home>/mods/<modName>/
         public String name;
         public String version;
         public boolean enabled;
@@ -47,27 +48,21 @@ public final class ModStore {
         public File exefsPatches() { return new File(dir, "exefs_patches"); }
         public File cheats() { return new File(dir, "cheats"); }
 
-        public boolean hasRomfs() { return romfs().isDirectory() && romfs().list() != null && romfs().list().length > 0; }
-        public boolean hasCheats() { return cheats().isDirectory() && cheats().list() != null && cheats().list().length > 0; }
+        public boolean hasRomfs() { return nonEmpty(romfs()); }
+        public boolean hasCheats() { return nonEmpty(cheats()); }
         public boolean hasCode() { return KIND_CODE.equals(kind); }
 
         // PEANUTS: build-side helpers (dev.peanuts.build.ModBuild) added alongside the UI/play-time half above; additive only, nothing above this
         // comment is changed by them. A "code" mod's exefs/ (whole replacement or added modules) and exefs_patches/<name>/<build id>.ips(32) (byte
         // patches, dm/tools/patch_ips.py) are independent: a mod may ship either, or both.
-        public boolean hasExefs() { return exefs().isDirectory() && exefs().list() != null && exefs().list().length > 0; }
-        public boolean hasExefsPatches() { return exefsPatches().isDirectory() && exefsPatches().list() != null && exefsPatches().list().length > 0; }
-
-        /** A rough size on disk (romfs is usually the only big part; a mod folder with no romfs is cheap to walk) */
-        public long sizeBytes() { return dirSize(dir); }
+        public boolean hasExefs() { return nonEmpty(exefs()); }
+        public boolean hasExefsPatches() { return nonEmpty(exefsPatches()); }
     }
 
-    private static long dirSize(File f) {
-        if (f == null || !f.exists()) return 0;
-        if (f.isFile()) return f.length();
-        long total = 0;
-        File[] kids = f.listFiles();
-        if (kids != null) for (File k : kids) total += dirSize(k);
-        return total;
+    /** A folder with something in it, in one listing (list() is null for what is not a folder): the Mods section asks this of every mod at every render */
+    private static boolean nonEmpty(File dir) {
+        String[] names = dir.list();
+        return names != null && names.length > 0;
     }
 
     /** The game's own mods folder: modsRoot is already per game (<game home>/mods, ModRuntime.modsRoot), so no title-ID level below it */
@@ -79,7 +74,7 @@ public final class ModStore {
         File dir = gameDir(modsRoot, titleId);
         File[] kids = dir.listFiles();
         if (kids != null) for (File k : kids) {
-            if (!k.isDirectory() || k.getName().startsWith(DELETING)) continue;   // a mod being deleted (remove)
+            if (!k.isDirectory() || k.getName().startsWith(".")) continue;   // a mod being deleted (remove); no mod's own folder has a dot name (sanitizeName)
             File manifest = new File(k, "mod.json");
             if (!manifest.isFile()) continue;
             Mod m = new Mod(k);
@@ -107,26 +102,6 @@ public final class ModStore {
         for (Mod m : list(modsRoot, titleId)) if (m.dir.getName().equals(modFolderName)) { m.enabled = enabled; save(m); return; }
     }
 
-    /** Moves a mod one place earlier (higher priority: wins first) in the enable-order list; a no-op at the top. Renumbers and saves every mod whose
-     *  order actually changed (never the whole list unconditionally, so an import racing a reorder cannot clobber an unrelated mod's manifest) */
-    public static void moveUp(File modsRoot, String titleId, String modFolderName) throws IOException { move(modsRoot, titleId, modFolderName, -1); }
-
-    /** Moves a mod one place later (lower priority) */
-    public static void moveDown(File modsRoot, String titleId, String modFolderName) throws IOException { move(modsRoot, titleId, modFolderName, 1); }
-
-    private static void move(File modsRoot, String titleId, String modFolderName, int delta) throws IOException {
-        List<Mod> mods = list(modsRoot, titleId);
-        int i = -1;
-        for (int j = 0; j < mods.size(); j++) if (mods.get(j).dir.getName().equals(modFolderName)) { i = j; break; }
-        if (i < 0) return;
-        int j = i + delta;
-        if (j < 0 || j >= mods.size()) return;   // already at that end
-        Collections.swap(mods, i, j);
-        normalizeOrder(mods);
-        save(mods.get(i));
-        save(mods.get(j));
-    }
-
     /** Deletes a mod's whole folder (the confirm dialog is the UI's job, not this method's) */
     public static void remove(File modsRoot, String titleId, String modFolderName) throws IOException { remove(modsRoot, titleId, modFolderName, null); }
 
@@ -150,11 +125,19 @@ public final class ModStore {
 
     private static final String DELETING = ".deleting-";
 
-    /** Removes what an interrupted delete left (see remove); quiet, for a background thread */
+    /** The file a mod's folder holds while the mod is being installed (ModImporter.importFrom writes it first and takes it out before the manifest goes in):
+     *  a folder with it is an install that did not end, by an error or by the end of the process */
+    static final String INSTALLING = ".installing";
+
+    /** Removes what an interrupted delete (see remove) or install (INSTALLING: a half-copied mod, GBs that no list shows) left; quiet, for a background thread.
+     *  Not to be started while a mod is being installed in this folder: its folder is such a leftover until it is complete */
     public static void sweepDeleted(File modsRoot, String titleId) {
         File[] kids = gameDir(modsRoot, titleId).listFiles();
-        if (kids != null) for (File k : kids) if (k.isDirectory() && k.getName().startsWith(DELETING)) { try { deleteTree(k); } catch (IOException e) { /* the next sweep */ } }
+        if (kids != null) for (File k : kids) if (k.isDirectory() && (k.getName().startsWith(DELETING) || new File(k, INSTALLING).isFile())) deleteQuietly(k);
     }
+
+    /** A folder and all in it, as far as that goes; what stays is for the next sweep */
+    public static void deleteQuietly(File f) { try { deleteTree(f); } catch (IOException e) { /* the next sweep */ } }
 
     private static long countTree(File f) {
         File[] kids = f.listFiles();
@@ -206,12 +189,18 @@ public final class ModStore {
         return out;
     }
 
-    /** A short, stable id for a set of enabled code mods (their folder name, version and order, in the order they apply): the modded build's own
-     *  variant tag, {@code <TITLEID>-mod-<this>} (dev.peanuts.build.ModBuild), so a different set of enabled code mods always gets its own build and
-     *  the same set reuses one already made. Never a secret or a security boundary — just short and collision-resistant for a handful of mods */
+    /** A short, stable id for a set of enabled code mods (their folder name, version and place among the code mods, in the order they apply): the modded
+     *  build's own variant tag, {@code <TITLEID>-mod-<this>} (dev.peanuts.build.ModBuild), so a different set of enabled code mods always gets its own build
+     *  and the same set reuses one already made. The place is the one in codeMods, not {@code Mod.order}: that counts every mod of the game, so a files mod
+     *  deleted before a code mod (or one installed after a delete) moved the code mod's number, and the same code mods then had another id and no build.
+     *  For a code mod that is the game's first mod the two numbers are the same, so its build keeps its id. Never a secret or a security boundary — just
+     *  short and collision-resistant for a handful of mods */
     public static String codeModsHash(List<Mod> codeMods) {
         StringBuilder in = new StringBuilder();
-        for (Mod m : codeMods) in.append(m.dir.getName()).append('\u0000').append(m.version == null ? "" : m.version).append('\u0000').append(m.order).append('\n');
+        for (int i = 0; i < codeMods.size(); i++) {
+            Mod m = codeMods.get(i);
+            in.append(m.dir.getName()).append('\u0000').append(m.version == null ? "" : m.version).append('\u0000').append(i).append('\n');
+        }
         try {
             byte[] d = MessageDigest.getInstance("SHA-256").digest(in.toString().getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
@@ -224,6 +213,28 @@ public final class ModStore {
      *  build"): {@code <TITLEID>-mod-<codeModsHash>}, or null when codeMods is empty (nothing to build: play the normal pack) */
     public static String variantId(String titleId, List<Mod> codeMods) {
         return codeMods.isEmpty() ? null : titleId.toUpperCase(Locale.ROOT) + "-mod-" + codeModsHash(codeMods);
+    }
+
+    /** The most code mods {@link #reachableVariantIds} goes through the sets of (2^n ids) */
+    private static final int REACHABLE_MAX = 12;
+
+    /**
+     * Every variant id a choice of switches can give with the mods installed now (mods: {@link #list}): one per non-empty set of the code mods that have exefs
+     * files or patches, on or off, in their order. A build with mods under any other id is of a mod that was deleted (or deleted and installed again: the same
+     * name, other files) and no start of the game takes it again: dev.peanuts.build.ModdedBuild.sweepVariants removes those. null with more than REACHABLE_MAX
+     * code mods (nothing is told then, and nothing removed)
+     */
+    public static Set<String> reachableVariantIds(String titleId, List<Mod> mods) {
+        List<Mod> code = new ArrayList<>();
+        for (Mod m : mods) if (m.hasCode() && (m.hasExefs() || m.hasExefsPatches())) code.add(m);
+        if (code.size() > REACHABLE_MAX) return null;
+        Set<String> out = new HashSet<>();
+        for (int set = 1; set < 1 << code.size(); set++) {
+            List<Mod> on = new ArrayList<>();
+            for (int i = 0; i < code.size(); i++) if ((set >> i & 1) != 0) on.add(code.get(i));
+            out.add(variantId(titleId, on));
+        }
+        return out;
     }
 
     /** A free, unused folder name under {@code gameDir} for a new mod called {@code wanted} ("Name", "Name (2)", "Name (3)", …) */
@@ -241,6 +252,7 @@ public final class ModStore {
         String s = name == null ? "" : name.trim();
         s = s.replaceAll("[\\\\/:*?\"<>|]+", " ").trim();
         while (s.endsWith(".")) s = s.substring(0, s.length() - 1).trim();
+        while (s.startsWith(".")) s = s.substring(1).trim();   // a dot name is a folder list() does not read (a mod being deleted)
         return s.isEmpty() ? "Mod" : s;
     }
 

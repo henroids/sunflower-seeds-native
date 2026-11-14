@@ -80,6 +80,14 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   explicit intent at `FrontendLaunch`, never a path; `FrontendLaunch` itself re-validates the title ID against the library. Not yet run on a real
   device or a real frontend (checklist in `peanuts/docs/LAUNCHERS.md`).
 - 2026-11-14 (PC/Mac builder, PR #13 by intermission88, `peanuts/docs/BUILDER.md`): `peanuts/scripts/peanuts_build.py` goes from NSP/XCI (or a `.nup`, or a dump folder) to a `.nup`, the pack and, with `--push`, the phone (`peanuts/scripts/push-pack.py`, default folder `/sdcard/Peanut Roms` in both); `scripts/pack_android.py` takes the phone packer's `DM_SPLIT_DIRECT=1` and `DMSH_VK_ZSTD_LEVEL=6` (the two `PackService` sets for every job); the importer builds on macOS and, written but not yet run, with MinGW-w64 on Windows (`nx_compat.h`). Icons of .nup games: a `.nup` holds no control data, so its library card showed a letter; the builder writes the icon beside the `.nup` as `<name>.png` (`nximport_cli icon`), `push-pack.py` pushes it, and `LibraryScanner.icon()` copies it into `files/icons/<ID>.png` when it is a PNG of at most 4 MiB. Tests: `peanuts/tests/test_peanuts_build.py`. Not yet run: the app build with the `LibraryScanner` change, Linux and Windows end to end.
+- 2026-11-14 (0.1.1, the state for the release; the user-facing words are in `peanuts/docs/FAQ.md`): Mods live in the Game tab of the page a held cover
+  opens (install from a folder or zip, a switch per mod, delete with its own progress row, Build with mods / Rebuild with mods); the build sheet has no
+  Mods row and there is no Play with mods button: every start of a game uses the mods that are on (`ModsSection.packToPlay`). A code mod that hooks the
+  game through an `.ips` and a module of its own builds and loads (`dm/tools/xmod.py`, Luminescent Platinum on Pokémon Brilliant Diamond; its own memory
+  numbers in `dm/peanuts/profile/mod_memory.tsv`). Delete save data on the Saves tab (backed up first). Console mode (`ScreenMode`, `DM_OPMODE`) and
+  Resolution scale (`ResScale`, `DM_RES_SCALE`, a first version) in Settings › Game defaults and each game's Picture settings; Console mode also live in
+  the in-game panel. The app says Firmware, not Firmware fonts. Pokémon Sword and Shield at 60 fps by their profiles; no controller style before the game
+  sets its supported styles (`DM_HID_STYLE_EARLY=1` is the behaviour before). The PC builder runs end to end on Linux (`peanuts/docs/BUILDER.md`).
 - Next: haptics → vibrator; guest calls; a play app id of its own; upstream the `vka_tex.c`, `vka_draw.c` and `hle_audren.c` changes; verify launcher
   support on the Thor and in an actual ES-DE/Daijisho install.
 - Parked: P3 — Pokopia's first real values (memory-diff hunt on the Thor), then the page as DSMod-style widgets; P4 — taps → `nxhost_input_*`.
@@ -94,7 +102,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - 2026-11-13 (Mods, play-time half, `design/platform/DESIGN-MODS.md`): a per-game Mods section (`dev.peanuts.mods`, new package) — local-import only
   (a picked folder or zip, never a catalog), normalizing Atmosphère (`atmosphere/contents/<tid>/{romfs,exefs}` + `exefs_patches`), Yuzu/Eden "load"
   (`<mod>/romfs`, `<mod>/exefs`) and bare (`romfs`/`exefs` at the root) layouts into `<app files>/mods/<TITLEID>/<modName>/` with a `mod.json`
-  (`ModStore`, the shared contract with the build-time code-mod agent). The Mods section of a game's settings (`dev.peanuts.settings.ModsSection`, the Game tab of the page a held cover opens; first a `ModsSheet` opened from `GameSheet`) shows them (list, on / off
+  (`ModStore`, the shared contract with the build-time code-mod pipeline). The Mods section of a game's settings (`dev.peanuts.settings.ModsSection`, the Game tab of the page a held cover opens; first a `ModsSheet` opened from `GameSheet`) shows them (list, on / off
   = priority, remove). At launch, `GameActivity.start()` adds `DM_ROMFS_OVERLAY` (enabled mods' romfs dirs, highest priority first, the scene
   overlay falling back last — hle_fs.c:222-223/375-388/1289-1326, first root to have the file wins, directories union) and `DM_CHEATS` (enabled
   mods' cheat files staged into one folder — hle_cheats.c's flat-folder scan, hle_cheats.c:1316-1322). A "code" mod's romfs/cheats apply the same

@@ -4,7 +4,7 @@ For version 0.1.1. Labels in **bold** are the words the app shows. "Settings" is
 
 ## Quick answers
 
-- **Build is off, or a game stops at startup:** add your keys and firmware in Settings › Library (**Keys**, **Firmware**), then build or play again. See [Keys and firmware](#keys-and-firmware-fonts).
+- **Build is off, or a game stops at startup:** add your keys and firmware in Settings › Library (**Keys**, **Firmware**), then build or play again. See [Keys and firmware](#keys-and-firmware).
 - **Black screen, wrong picture or a crash at start:** pick another GPU driver in Settings › **GPU driver**, then run Settings › **Readiness check**. See [GPU drivers](#gpu-drivers).
 - **A cover says Wrong version:** the update you have is not one this app version supports. See [What does "Wrong version" mean?](#what-does-wrong-version-mean-and-how-do-i-fix-it)
 - **The companion is empty or keeps waiting after an app update:** hold the game's cover, open **Storage**, tap **Build again**, then **Rebuild**.
@@ -110,7 +110,7 @@ What you should see: **Firmware added from** followed by the folder or zip you p
 
 The app keeps only two font files from the firmware. It does not copy or install the rest, and you can delete the firmware dump from the device afterwards.
 
-### What do the firmware font errors mean?
+### What do the firmware errors mean?
 
 The row shows **Firmware not added:** and a reason. The last one in this table comes as a dialog instead.
 
@@ -122,11 +122,11 @@ The row shows **Firmware not added:** and a reason. The last one in this table c
 | **could not copy the zip** | The zip could not be read from where it is. | Copy the zip to the device's storage and pick it there. |
 | **That folder is not on the phone's storage** | You picked a cloud folder. | Pick a folder on the device or its SD card. |
 
-### Can I replace or remove the keys or fonts?
+### Can I replace or remove the keys or the firmware?
 
 Replace: pick again. The new file or firmware takes the place of the old one. The app has no button to remove them. They are stored in the app's private storage, not in your folders.
 
-### When do I need the firmware, and why does the app ask for them?
+### When do I need the firmware, and why does the app ask for it?
 
 Before the first build. **Build** stays off and the sheet shows **Setup needed** until both keys and firmware are added. The line beside it says which is missing, for example **Firmware is needed before building.**
 
@@ -307,7 +307,7 @@ It is quick when the game's code is otherwise current, and long when it is not.
 
 ### Can I build on a PC or a Mac instead?
 
-Yes. A script prepares the game on a computer and pushes it to the device over USB debugging. See [BUILDER.md](BUILDER.md). It is tested end to end on macOS. Linux is partly tested, and Windows is written but not yet tested. Games that make shaders while they run, for example Fire Emblem: Three Houses and Octopath Traveler 0, must be built on the device.
+Yes. A script prepares the game on a computer and pushes it to the device over USB debugging. See [BUILDER.md](BUILDER.md). It is tested end to end on macOS and on Linux. Windows is written but not yet tested. Games that make shaders while they run, for example Fire Emblem: Three Houses and Octopath Traveler 0, must be built on the device.
 
 ### How do updates and DLC work?
 
@@ -328,7 +328,7 @@ Games take the handheld's own buttons and sticks, external controllers and on-sc
 
 ### What frame rate do games run at?
 
-Most supported games run at 60 fps on the Thor. Animal Crossing: New Horizons runs at 30, as on the Switch. A few games that are 30 on the Switch run at 60 here because the app changes the game's frame step, for example Breath of the Wild and Octopath Traveler 0. Some games lower their own rate in heavy scenes. The speed settings are **Frame rate cap**, **Hold 60 fps** and **Full game speed**.
+Most supported games run at 60 fps on the Thor. Animal Crossing: New Horizons runs at 30, as on the Switch. A few games that are 30 on the Switch run at 60 here because the app changes the game's frame step, for example Octopath Traveler 0 and Pokémon Sword. Some games lower their own rate in heavy scenes. The speed settings are **Frame rate cap**, **Hold 60 fps** and **Full game speed**.
 
 ### Is there frame generation or upscaling?
 
@@ -340,7 +340,11 @@ Some of these rows show only with Settings › **Tester settings** on.
 
 ### Can I choose docked or handheld mode?
 
-Yes. **Console mode** is in Settings › Game defaults and in each game's settings (hold the cover › **Performance** › Picture). **Docked** makes the game draw as it does on a TV, up to 1080p. **Handheld** makes it draw as on the Switch's own screen, up to 720p: that is lighter, so it can hold a higher frame rate, and the app's upscaler fills the screen. Handheld also turns on the game's touch screen. The choice applies from the next start. A few games are fixed to Handheld because they need the touch screen there.
+Yes. **Console mode** is in Settings › Game defaults and in each game's settings (hold the cover › **Performance** › Picture). **Docked** makes the game draw as it does on a TV, up to 1080p. **Handheld** makes it draw as on the Switch's own screen, up to 720p: that is lighter, so it can hold a higher frame rate, and the app's upscaler fills the screen. Handheld also turns on the game's touch screen. With nothing chosen, each game uses its own mode, which is Docked for most.
+
+The row applies from the next start. To change it while you play, open the in-game panel: **Console mode** is at the top of its first tab, above **Frame rate cap**. It changes at once, as when a Switch leaves its dock, and is kept for that game. Some games take the new picture size only at their next scene or their next start.
+
+A few games are fixed to Handheld because they need the touch screen or the pointer there. Games that have their own **Resolution** row do not show Console mode: their Resolution sets it.
 
 ### Can I make a game sharper, or lighter, than its own resolution?
 
@@ -483,7 +487,7 @@ The driver could not draw part of the picture. If the message says **Part of the
 - Another **Upscaler**. FSR 1 is too bright on Qualcomm's driver in some games.
 - **Build again**, if the game's page or a message asks for it.
 
-Flickering in Mario Kart 8 Deluxe is a known open report.
+The flickering title screen and black races in Mario Kart 8 Deluxe are fixed in 0.1.1. If you still see them, report it with the log.
 
 ### Objects are black or missing for a few seconds on the first launch after an update. Is that a bug?
 
@@ -624,6 +628,8 @@ Use the switch in the mod's row. A change applies at the game's next start. When
 ### What is a build with mods?
 
 File mods and cheats apply without a build. A mod that carries code reads **Code: needs a build with mods**. Turn it on, then tap **Build with mods** in the same **Mods** section. The row shows the progress, then **Ready**, or **Failed** with the reason (tap the row to read all of it). The build is a separate variant: the normal build is kept as it is.
+
+A mod that hooks the game through an `.ips` patch and a module of its own can work this way: Luminescent Platinum on Pokémon Brilliant Diamond builds and runs. A mod that patches the game's code while the game runs (exlaunch-style hooks) does not work yet. The section then shows **A module's hooks will not run** before you build. If a set of mods cannot be built at all, it shows **Cannot build with these mods** and the reason.
 
 Once it reads **Ready**, every start of the game uses the mods that are on: the page's **Play**, a tap on the cover, a home screen shortcut. Turn a mod off or delete it and the game starts without it. While code mods are on but not built yet, the game starts without them and says so. If you change which code mods are on, the section offers **Build with mods** again for the new set. After you rebuild the game itself, replace a mod's files or update the app, tap **Rebuild with mods**: it redoes the parts that changed and keeps the rest.
 

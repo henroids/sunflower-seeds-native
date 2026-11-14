@@ -191,6 +191,7 @@ static void *g_defres_ev[DEFRES_EV]; static _Atomic int g_defres_n;
 // Operation mode and graphics scale changes, as the console makes them (docking, the system's graphics settings): the whole new state first, then one notification per query
 // whose answer changed (30 and 31 for the mode, 300 for the scale), each only when the game turned it on, so a game that re-queries on the first one already sees all of it.
 // m -1 keeps the mode; scale -2 keeps the setting, 3 follows the mode, 0-2 holds that scale in every mode
+__attribute__((weak)) void dm_hid_opmode_changed(void) {}   // PEANUTS: hle_hid.c; the weak default is for builds without it (the unit tests that include this file)
 static pthread_mutex_t g_state_lock = PTHREAD_MUTEX_INITIALIZER;   // two producers (the panel, an overheat downgrade) do not interleave their read and store
 static void oe_state_set(int m, int scale) {
     pthread_mutex_lock(&g_state_lock);
@@ -204,7 +205,7 @@ static void oe_state_set(int m, int scale) {
         if (g_ntf_opmode) mq_push(MSG_OPMODE);
         if (g_ntf_perfmode && !DM_GAME_PERF_BOOST) mq_push(MSG_PERFMODE);   // the performance mode follows the operation mode (profile perf_mode boost: always Boost, it does not change)
         int n = atomic_load(&g_defres_n); for (int i = 0; i < n; i++) hle_signal_system_event(g_defres_ev[i]);
-        { void dm_hid_opmode_changed(void); dm_hid_opmode_changed(); }   // PEANUTS: player 1's controller moves between No1 and Handheld with the mode: the style events fire, as on the console
+        dm_hid_opmode_changed();   // PEANUTS: player 1's controller moves between No1 and Handheld with the mode: the style events fire, as on the console
     }
     if (scale_changed && g_ntf_gfxscale) mq_push(MSG_GFXSCALE);
 }

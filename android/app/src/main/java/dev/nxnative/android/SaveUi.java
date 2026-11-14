@@ -146,7 +146,9 @@ final class SaveUi {
                     if (!ready(a, g, "delete the save")) return;
                     run(a, g, "Backing up, then deleting " + g.name + "'s save…", () -> {
                         SaveStore.Backup b = SaveStore.backup(save, to, st);
-                        for (File part : SaveStore.parts(save).values()) { File[] kids = part.listFiles(); if (kids != null) for (File k : kids) wipe(k); }
+                        try (SaveStore.Lock l = SaveStore.lock(save)) {   // the save's lock again for the delete (a game started since the backup holds it: nothing is deleted then)
+                            for (File part : SaveStore.parts(save).values()) { File[] kids = part.listFiles(); if (kids != null) for (File k : kids) wipe(k); }
+                        }
                         return b;
                     }, (r, err) -> {
                         if (err != null) {

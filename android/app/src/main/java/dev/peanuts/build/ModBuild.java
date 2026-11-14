@@ -13,10 +13,9 @@ import dev.peanuts.mods.ModStore;
  * free of {@code android.*} and of any native pack-engine call so it is exercised on the JVM alone (the same pattern as {@link RuntimeShaderMap} and
  * {@code dev.peanuts.mods.ModStore}: {@code peanuts/tests/test_mod_build.py}). The actual file work for one module —
  * {@code dm/tools/patch_ips.py} (an enabled mod's {@code exefs_patches/<build id>.ips(32)}, by build ID, before the rewrite) then
- * {@code dm/tools/patch_nso.py --target android} (the usual ARM64 rewrite, exactly as the normal pack's own modules go through it) — is plain file I/O
- * and a subprocess, deliberately left to the caller (today: a PC-side build, {@code scripts/build_ipa_from_nsp.py}'s own pattern of shelling out to the
- * tools under a plain {@code python3}; the on-device build's own packer uses a different, native pack-engine path — {@code android/app/src/ondevice/
- * java/dev/nxnative/android/PackService.java} — that this class does not call into yet, see PEANUTS.md/the mods build report for why).
+ * {@code dm/tools/patch_nso.py --target android} (the usual ARM64 rewrite, exactly as the normal pack's own modules go through it) — is the packer's:
+ * {@code scripts/pack_android.py --modules/--mod-exefs/--mod-patches}, which the phone's PackService runs with the arguments {@link ModdedBuild#rewriteArgv}
+ * makes from a {@link Plan} (the variant's job carries them: Prepare.runModded).
  * <p>
  * The cap below is {@code DM_PROFILE_MODULES_CAP} (dm/peanuts/profile/profile_rt.h): the generic host's runtime profile (-PnxGenericHost=true, which
  * Peanuts builds with by default) has eight fixed module-name slots. The per-title (non-generic) host instead compiles {@code DM_GAME_NMOD} as a fixed

@@ -68,8 +68,10 @@ public final class ModImportUi {
         // The free-space check walks the whole source tree (ModImporter.freeSpaceProblem → estimateSize), which for a multi-GB romfs mod is real
         // disk I/O: off the UI thread, same as the copy that follows it, never a synchronous stat walk on the main thread
         new Thread(() -> {
-            String problem = ModImporter.freeSpaceProblem(staging, modsRoot);
-            if (problem != null) { UI.post(() -> done.onDone(false, problem)); return; }
+            String problem;
+            try { problem = ModImporter.freeSpaceProblem(staging, modsRoot); } catch (RuntimeException e) { problem = "Could not read that folder: " + e; }   // always an end: the section waits for done
+            final String fproblem = problem;
+            if (fproblem != null) { UI.post(() -> done.onDone(false, fproblem)); return; }
             doImport(staging, modsRoot, titleId, displayName, gameBuilds, false, progress, done);
         }, "peanuts-mod-import").start();
     }
@@ -105,13 +107,21 @@ public final class ModImportUi {
             File staging = new File(a.getCacheDir(), "mod_stage_" + System.nanoTime());
             staging.mkdirs();
             try {
-                try (InputStream in = new FileInputStream(zipFile)) {
-                    ModImporter.extractZip(in, staging, zipFile.length(), (done2, total, name) -> UI.post(() -> progress.onProgress(done2, total, name)));
+                // How far: the zip's own bytes read, of its size (the bytes written are the files' full sizes, which went past 100 % of the zip's)
+                long[] read = {0};
+                try (InputStream in = new java.io.FilterInputStream(new FileInputStream(zipFile)) {
+                    @Override public int read() throws IOException { int b = super.read(); if (b >= 0) read[0]++; return b; }
+                    @Override public int read(byte[] b, int off, int len) throws IOException { int n = super.read(b, off, len); if (n > 0) read[0] += n; return n; }
+                }) {
+                    ModImporter.Progress p = throttled(progress);
+                    ModImporter.extractZip(in, staging, zipFile.length(), (done2, total, name) -> p.onProgress(Math.min(read[0], total), total, name));
                 }
                 doImport(staging, modsRoot, titleId, displayName, gameBuilds, true, progress, done);
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException e) {
+                // RuntimeException: ZipInputStream throws IllegalArgumentException at an entry whose name is not UTF-8 (a zip made on Windows with names in
+                // another code page); uncaught it ended this thread without an end, and the section showed "Installing a mod" until the app was closed
                 ModImporter.deleteTree(staging);
-                UI.post(() -> done.onDone(false, "Could not extract the zip: " + e.getMessage()));
+                UI.post(() -> done.onDone(false, "Could not extract the zip: " + (e.getMessage() == null ? e.toString() : e.getMessage())));
             } finally {
                 if (deleteAfter != null) deleteAfter.delete();
             }
@@ -133,14 +143,38 @@ public final class ModImportUi {
     /** Already off the UI thread (called from {@code importFolder}'s or {@code extractAndImport}'s own worker thread): the import itself, plus the
      *  staging cleanup and the result callback, so every import path reports the same "Installed <name>" / "<error>" wording */
     private static void doImport(File staging, File modsRoot, String titleId, String displayName, Map<String, String> gameBuilds, boolean deleteStagingAfter, ProgressUi progress, Callback done) {
-        ModImporter.Result r = ModImporter.importFrom(staging, modsRoot, titleId, displayName, gameBuilds,
-                (bytesDone, total, name) -> UI.post(() -> progress.onProgress(bytesDone, total, name)));
+        ModImporter.Result r = ModImporter.importFrom(staging, modsRoot, titleId, displayName, gameBuilds, throttled(progress));
         if (deleteStagingAfter) ModImporter.deleteTree(staging);
         UI.post(() -> done.onDone(r.ok, r.ok ? "Installed " + r.modName + ". It is off: turn it on in the list."
                 + (ModStore.KIND_CODE.equals(r.kind) ? " Its code needs a build with mods." : "") : r.error));
     }
 
     public interface ProgressUi { void onProgress(long bytesDone, long total, String currentFile); }
+
+    /**
+     * progress on the main thread, at most five times a second. The importer reports every 64 KiB of a zip and every file of a copy: 26,000 messages for a
+     * 1.7 GB mod, each of which made the section read the mods' folders and build its rows again on the main thread. Called from the one worker thread of an import
+     */
+    private static ModImporter.Progress throttled(ProgressUi progress) {
+        long[] last = {0};
+        return (bytesDone, total, name) -> {
+            long now = android.os.SystemClock.uptimeMillis();
+            if (now - last[0] < 200) return;
+            last[0] = now;
+            UI.post(() -> progress.onProgress(bytesDone, total, name));
+        };
+    }
+
+    /**
+     * Takes away what an import that did not end left in the app's cache: a copied zip (mod_import_*.zip) and an extracted one (mod_stage_*), GBs each for a
+     * large mod, which nothing else removes when the process ended in the middle. Lists on the caller's thread and deletes on its own; only to be called while
+     * no import runs (dev.peanuts.settings.ModsSection: once per process, before its first import can start)
+     */
+    public static void sweepStaging(android.content.Context c) {
+        File[] left = c.getCacheDir().listFiles((d, n) -> n.startsWith("mod_stage_") || n.startsWith("mod_import_"));
+        if (left == null || left.length == 0) return;
+        new Thread(() -> { for (File f : left) ModImporter.deleteTree(f); }, "peanuts-mod-sweep").start();
+    }
 
     // ---- the one path-resolution call every picker in this app makes (dev.nxnative.android.PathUtil, package-private upstream), reached the same
     // way dev.peanuts.ui.Upstream does, so this package needs no cross-package access to dev.peanuts.ui.Upstream for just these two calls ----

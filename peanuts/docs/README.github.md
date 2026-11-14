@@ -55,22 +55,40 @@ which update you have and which one a game supports, and asks before building an
 - Android 13 or later, a Snapdragon GPU with Vulkan 1.3, and 12 GB of RAM or more. A Turnip Vulkan driver is
   recommended; the app can download one.
 - Free storage for the game and its build. Plan for the size of the game plus a few GB.
-- Your own `prod.keys` and your own game dump (NSP, XCI or a dump folder), with its update.
+- Your own `prod.keys`, your own firmware dump (a folder or a `.zip`) and your own game dump (NSP, XCI or a dump
+  folder), with its update.
 
 ## Your keys and games
 
 Peanuts Native only runs games you dumped from your own console, with keys from that console. It contains no Nintendo
-code, firmware or keys, never asks you for any, and does not link to places that offer them. Nobody from this project
+code, firmware or keys, never downloads any, and does not link to places that offer them. Nobody from this project
 will ever ask you for money, keys or game files.
 
 ## Getting started
 
 1. Install the APK and allow All files access when asked.
-2. In Settings, choose your game folder, your update folder and your `prod.keys`. A build folder is optional: pick one, on the phone or the microSD
-   card, to keep every build there instead, organized by title ID.
+2. On the first screen, add your **Keys** (`prod.keys`), pick your **Game folder**, and add your **Firmware**. Both
+   keys and firmware are needed before the first build. A build folder is optional (Settings, Library, **Build
+   folder**): pick one, on the phone or the microSD card, to keep every build there, organized by title ID.
 3. Open a game from the library and tap **Build**. The app imports the game, rewrites its code, translates its
    shaders and installs its companion. Most games take 5 to 40 minutes on the Thor.
 4. Tap the game to play. The companion starts on the bottom screen.
+
+Hold a game's cover to open its own page: picture and speed settings, mods, the companion, saves and storage.
+After an app update, rebuilding every game is strongly recommended: hold the cover, open **Storage**, tap
+**Build again**, then **Rebuild**.
+
+## Settings worth knowing
+
+- **Console mode**: Docked or Handheld, for all games in Settings and per game on its page. It can also be changed
+  while the game runs, from the in-game panel.
+- **Resolution scale**: 0.5x to 2x of the size the game draws at. A first version: not every effect follows it.
+- **Mods**: hold the cover, **Game** tab, **Mods**. Install a mod from a folder or a zip, turn it on or off, delete
+  it. Mods that change the game's code need **Build with mods** once; after that the game starts with the mods that
+  are on.
+- **Saves**: back up, restore, import and **Delete save data** on the game's **Saves** tab.
+
+A game can also be built on a PC or a Mac and pushed to the device: see [BUILDER.md](BUILDER.md).
 
 ## Companions
 

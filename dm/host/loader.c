@@ -1138,7 +1138,7 @@ void load_modules(const char *dir, const char **names, int n) {
 void run_module_inits(void) {
     for (int i = 0; i < g_nmod; i++) {
         module_t *m = &g_mod[i];
-        // PEANUTS: DM_MOD_INIT_ARRAY=1 (a test switch, off by default): a module without DT_INIT that has an init_array (a mod's own module built with
+        // PEANUTS begin: DM_MOD_INIT_ARRAY=1 (a test switch, off by default): a module without DT_INIT that has an init_array (a mod's own module built with
         // devkitA64, such as Luminescent Platinum's subsdk1: 5 entries, static constructors) gets its entries called here in order. rtld calls DT_INIT only,
         // so by default they do not run, as far as is known on the console either; the switch is for a mod whose globals read as zero without them
         if (!m->init && !m->nro && m->init_arraysz >= 8 && getenv("DM_MOD_INIT_ARRAY") && *getenv("DM_MOD_INIT_ARRAY") == '1') {

@@ -17,7 +17,7 @@ import java.util.List;
 import dev.peanuts.build.Companions;
 
 /**
- * The Companion section of a game's settings sheet (GameSettings.dialog; the one PEANUTS hook, HOOKS.md): the installed companion and the catalog's version, Install /
+ * The Companion section of a game's page (its Game tab, GameSettings.build; a PEANUTS hook, HOOKS.md): the installed companion and the catalog's version, Install /
  * Update / Remove, and where the companion shows ("Second screen": Physical / Off, kept in the "peanuts" prefs as second_screen_&lt;title ID&gt; for dev.peanuts.Companion
  * to read). Rows are upstream's Ui.Setting and Ui.button, reached through SectionUi.
  */
@@ -180,10 +180,5 @@ public final class CompanionSection {
                         }, "peanuts-companion-remove").start();
                     })).setNegativeButton("Cancel", null).show();
         }
-    }
-
-    /** For a plain Activity caller that wants the section in a dialog of its own (CatalogActivity-style use) */
-    public static void dialog(Activity a, String titleId, String gameName, File companionRoot) {
-        new AlertDialog.Builder(a).setTitle("Companion · " + gameName).setView(view(a, titleId, companionRoot)).setPositiveButton("Done", null).show();
     }
 }

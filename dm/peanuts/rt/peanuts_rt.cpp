@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -44,6 +45,14 @@ struct PnRtAccess {
             return "-";
         }
         return rt.manifest.pages[std::min(rt.current_page, rt.manifest.pages.size() - 1)].id;
+    }
+    /// The end of the heap the runtime found (HeapLow's cached bounds) follows a heap the game opened further; it never moves
+    /// back. Nothing to do before the first ask: that one reads the page table's fields as they are then.
+    static void RaiseHeapHigh(ModRuntime& rt, u64 high) {
+        std::scoped_lock lock{rt.heap_bounds_mutex};
+        if (rt.heap_low.load(std::memory_order_relaxed) != 0 && rt.heap_high.load(std::memory_order_relaxed) < high) {
+            rt.heap_high.store(high, std::memory_order_release);
+        }
     }
     static u64 Ticks(const ModRuntime& rt) {
         return rt.tick_count;
@@ -259,16 +268,24 @@ void pn_rt_tick(PnRt* rt) {
     if (rt == nullptr) {
         return;
     }
-    // The game's heap, once it has one (it opens it after this runtime starts): ModRuntime::HeapLow asks the page table for it
+    // The game's heap, once it has one (it opens it after this runtime starts): ModRuntime::HeapLow asks the page table for it.
+    // A game that opens more of it later (SetHeapSize again) moves the end: a module's sweep to get_heap_end then covers the new part
     if (rt->memory.heap_range != nullptr) {
-        if (auto* const process = rt->system.ApplicationProcess(); process != nullptr && process->GetPageTable().GetHeapRegionStart() == 0) {
+        if (auto* const process = rt->system.ApplicationProcess(); process != nullptr) {
+            constexpr u64 Slack = 0x40000000ULL; // the same margin HeapLow adds
             uint64_t base = 0, open = 0;
             rt->memory.heap_range(rt->memory.user, &base, &open);
-            if (base != 0 && open != 0) {
-                auto& pt = process->GetPageTable();
+            auto& pt = process->GetPageTable();
+            if (base != 0 && open != 0 && pt.GetHeapRegionStart() == 0) {
                 pt.normal_memory_size = open;
-                pt.heap_size = open + 0x40000000ULL; // the game may open more later
+                pt.heap_size = open + Slack;
                 pt.heap_start = base;
+            } else if (base != 0 && base == pt.GetHeapRegionStart() && open > pt.GetNormalMemorySize()) {
+                pt.heap_size = open + Slack;
+                pt.normal_memory_size = open;
+                if (rt->runtime) {
+                    Core::Mods::PnRtAccess::RaiseHeapHigh(*rt->runtime, base + open + Slack);
+                }
             }
         }
     }

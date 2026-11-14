@@ -69,8 +69,9 @@ static int rs_can_locked(vka_img *im) {
     else if (vkrs_dim((uint32_t)d->width, vka_rs_q) > lim || vkrs_dim((uint32_t)d->height, vka_rs_q) > lim) no = 1;
     else if (im->f.kind == 0 && !rs_blit_ok(im->f.vk)) no = 1;                                           // a colour format without blits: no scaled copy into or out of it
     else if (vkrs_deny_find(&g_rs_deny, (uint32_t)d->width, (uint32_t)d->height, (uint32_t)im->f.vk, (uint32_t)d->flags) >= 0) no = 1;
+    if (!no && (im->usage & VK_IMAGE_USAGE_STORAGE_BIT)) no = 1;   // (remade with storage use since: a shader writes it in the texture's pixels; every swap keeps the use, so it is not asked again either)
     if (no) { im->rs_no = 1; return 0; }   // (none of these changes for an image; a shape denied later is found at the next question)
-    return !(im->usage & VK_IMAGE_USAGE_STORAGE_BIT);   // (remade with storage use since: a shader writes it in the texture's pixels)
+    return 1;
 }
 static void rs_event(const vka_img *im, int up, int why, uint32_t ow, uint32_t oh, const char *content) {
     uint64_t *n = up ? &vka_rs_st.up : &vka_rs_st.down[why];
@@ -141,7 +142,8 @@ static int rs_set_locked(vka_img *im, VkCommandBuffer cb, int up, int why, int s
     rs_event(im, up, why, ow, oh, content);
     return 1;
 }
-int vka_tex_rs_can(vka_img *im) { if (!im) return 0; pthread_mutex_lock(&g_tmu); int r = rs_can_locked(im); pthread_mutex_unlock(&g_tmu); return r; }
+int vka_tex_rs_can(vka_img *im) { if (!im || im->rs_no) return 0;   // (rs_no is set on the recording thread only, which is the one asking, as rsc in vka_tex_rs_up: a target that cannot be scaled costs a pass no lock)
+    pthread_mutex_lock(&g_tmu); int r = rs_can_locked(im); pthread_mutex_unlock(&g_tmu); return r; }
 int vka_tex_rs_up(vka_img *im, VkCommandBuffer cb) {
     if (!im || !vka_rs_on()) return 0;
     if (im->rsc) return 1;   // (changes on the recording thread only, which is the one asking)

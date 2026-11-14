@@ -29,15 +29,17 @@ static inline void vkrs_span(int64_t *x0, int64_t *x1, uint32_t q) {
     *x0 = a; *x1 = b;
 }
 // The same for an offset and a size inside a texture side of `side` pixels (a copy or clear region): the result lies inside the image's side (vkrs_dim), so a region
-// valid for the texture is valid for the image. 0 = nothing of it is inside
+// valid for the texture is valid for the image. 0 = nothing of it is inside. The region is cut to the texture before it is scaled: one that starts past the last
+// pixel has nothing inside (it was answered with the image's last pixel), and one that starts before pixel 0 keeps what it covers (below 1x its span rounded to nothing)
 static inline int vkrs_region(int32_t *off, int32_t *len, uint32_t side, uint32_t q) {
     int64_t a = *off, b = (int64_t)*off + *len, lim = vkrs_dim(side, q);
     if (*len <= 0) return 0;
-    vkrs_span(&a, &b, q);
     if (a < 0) a = 0;
+    if (b > (int64_t)side) b = side;
+    if (b <= a) return 0;
+    vkrs_span(&a, &b, q);
     if (b > lim) b = lim;
     if (a >= lim) { a = lim - 1; b = lim; }   // (the forced single pixel of a span at the texture's last pixel)
-    if (b <= a) return 0;
     *off = (int32_t)a; *len = (int32_t)(b - a);
     return 1;
 }

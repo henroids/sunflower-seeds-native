@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <functional>
 #include <map>
 #include <string_view>
 #include <mutex>
@@ -306,13 +307,17 @@ void ModRuntime::InitializeGameModule() {
             static const bool all = [] { const char* e = std::getenv("DM_RT_VALUES"); return e && *e && *e != '0'; }(); // PEANUTS: DM_RT_VALUES=1: every value
             if (all || ends("_failures") || ends("_hidden") || ends("_supported") || ends("_request") || ends("_version")) {
                 static std::mutex mu;
-                static std::map<std::string, s64> last;
+                static std::map<std::string, s64, std::less<>> last; // looked up by the view: no string made per publish
                 static int lines;
                 std::scoped_lock lk{mu};
-                const auto it = last.find(name);
+                const auto it = last.find(n);
                 if ((it == last.end() || it->second != value) && lines < (all ? 3000 : 300)) {
                     ++lines;
-                    last[name] = value;
+                    if (it == last.end()) {
+                        last.emplace(n, value);
+                    } else {
+                        it->second = value;
+                    }
                     LOG_INFO(Core, "DSMod module value {} = {}", name, value);
                 }
             }
@@ -332,11 +337,15 @@ void ModRuntime::InitializeGameModule() {
         // PEANUTS: a module's diagnostic texts (names ending in ".diag": why a reader is not ready) go to the log when they change; nothing shows them on this host
         if (const size_t nl = std::strlen(name); nl > 5 && std::strcmp(name + nl - 5, ".diag") == 0) {
             static std::mutex mu;
-            static std::map<std::string, std::string> last;
+            static std::map<std::string, std::string, std::less<>> last; // looked up by the view: no string made per publish
             std::scoped_lock lk{mu};
-            auto& was = last[name];
-            if (was != value) {
-                was = value;
+            const std::string_view key{name, nl}, text{value};
+            const auto it = last.find(key);
+            if (it == last.end()) {
+                last.emplace(key, text);
+                LOG_INFO(Core, "DSMod module text {} = '{}'", name, value);
+            } else if (it->second != text) {
+                it->second = text;
                 LOG_INFO(Core, "DSMod module text {} = '{}'", name, value);
             }
         }

@@ -70,6 +70,58 @@ public final class ModdedBuild {
         return out;
     }
 
+    /** {@link #variantProblem}'s answer for a variant that has no pack yet */
+    public static final String NOT_BUILT = "not built";
+
+    /**
+     * Whether a start of the game can take a variant's pack: null when it can, else why not, in a few words for "Build with mods" to show. NOT_BUILT: no
+     * pack.tsv there. Else the pack is there and cannot be started as it is: a module of its modules row has no rewritten code or no key, which is a Rebuild
+     * with mods that was stopped or failed part way (scripts/pack_android.py takes a module's key away before it rewrites it and writes it last; the pack.tsv
+     * of the build before stays). The launcher refuses such a pack with "The pack cannot start this game" and offers Prepare again, which makes the normal
+     * build and never this one: the game did not start at all until its mods were turned off. A start with the normal pack that says the mods are not built
+     * is the answer for it too. One small file and two names per module, at each start.
+     */
+    public static String variantProblem(File variantPack) {
+        if (!new File(variantPack, "pack.tsv").isFile()) return NOT_BUILT;
+        List<String> modules = normalModules(variantPack);
+        if (modules == null || modules.isEmpty()) return "its pack has no module list";
+        for (String m : modules)
+            if (!new File(variantPack, m + ".patched.bin").isFile() || !new File(variantPack, m + ".android.key").isFile()) return "its build did not finish (" + m + ")";
+        return null;
+    }
+
+    /**
+     * Removes the builds with mods of a game that no choice of its mods' switches gives any more (keep: dev.peanuts.mods.ModStore.reachableVariantIds, from the
+     * mods installed now; null: unknown, nothing is removed): after a code mod is deleted its builds stayed, a pack of modules and a copy of the shader library
+     * each, with nothing in the app to remove them, and a mod installed again under the same name got the old mod's build as "Ready". A variant
+     * {@code <TITLE ID>-mod-<hash>} has its pack in the app's storage (appPacks/&lt;variant id&gt;, dev.nxnative.android.AppStorage.pack) or in the build folder
+     * (buildGame/mod-&lt;hash&gt;/pack, dev.peanuts.PeanutsPrefs.buildPackDir), and its work folder in the game's home ({@link #workDir}); any of the three folders
+     * may be null or missing. Only names of exactly that shape are touched. Returns how many variants went. Deletes: off the main thread.
+     */
+    public static int sweepVariants(String titleId, java.util.Set<String> keep, File appPacks, File buildGame, File gameHome) {
+        if (keep == null || titleId == null) return 0;
+        String prefix = titleId.toUpperCase(Locale.ROOT) + "-mod-";
+        java.util.Set<String> gone = new java.util.TreeSet<>();
+        for (File dir : new File[] {appPacks, gameHome}) {
+            File[] kids = dir == null ? null : dir.listFiles(File::isDirectory);
+            if (kids != null) for (File k : kids) {
+                String n = k.getName(), id = dir == gameHome ? (n.endsWith("-work") ? n.substring(0, n.length() - 5) : "") : n;
+                if (isVariantId(id, prefix) && !keep.contains(id)) { ModStore.deleteQuietly(k); gone.add(id); }
+            }
+        }
+        File[] kids = buildGame == null ? null : buildGame.listFiles(File::isDirectory);
+        if (kids != null) for (File k : kids) {
+            String id = k.getName().startsWith("mod-") ? prefix + k.getName().substring(4) : "";
+            if (isVariantId(id, prefix) && !keep.contains(id) && (new File(k, "pack").isDirectory() || k.list() == null || k.list().length == 0)) { ModStore.deleteQuietly(k); gone.add(id); }
+        }
+        return gone.size();
+    }
+
+    /** {@code <prefix><lower-case hex>}: a variant id as ModStore.variantId writes it */
+    private static boolean isVariantId(String id, String prefix) {
+        return id.startsWith(prefix) && id.substring(prefix.length()).matches("[0-9a-f]{6,}");
+    }
+
     /**
      * The modded "rewrite" step's extra argv, one token per line (joined by the caller into {@code Job.modArgs}; {@code PackService}'s "rewrite"
      * case splits it back on "\n"). Empty when plan has nothing a mod supplies ({@code plan.source} empty): a plain replace-only mod still produces
@@ -120,12 +172,21 @@ public final class ModdedBuild {
         return out.isEmpty() ? null : String.join("\n\n", out);
     }
 
+    /** containsExlaunchMarker's answers by the file's path, size and time: the Mods section asks at every render (each second of a build), and the answer
+     *  takes a read of the whole module */
+    private static final java.util.Map<String, Boolean> EXLAUNCH = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static boolean containsExlaunchMarker(File f) {
         if (f == null || !f.isFile()) return false;
+        String key = f.getPath() + '|' + f.length() + '|' + f.lastModified();
+        Boolean known = EXLAUNCH.get(key);
+        if (known != null) return known;
         try {
             byte[] b = Files.readAllBytes(f.toPath());
             String s = new String(b, java.nio.charset.StandardCharsets.ISO_8859_1).toLowerCase(Locale.ROOT);
-            return s.contains("exlaunch") || s.contains("exl::");
+            boolean has = s.contains("exlaunch") || s.contains("exl::");
+            EXLAUNCH.put(key, has);
+            return has;
         } catch (IOException e) {
             return false;
         }

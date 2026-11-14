@@ -341,7 +341,7 @@ static void rt_orig_load(uint64_t main_base) {
         if (line[0] == '#') continue;
         char *e; uint64_t off = strtoull(line, &e, 16); if (e == line) continue;
         uint64_t len = strtoull(e, NULL, 16); if (!len || len > (1u << 24)) continue;
-        if (n == cap) { cap = cap ? cap * 2 : 1024; r = realloc(r, (size_t)cap * sizeof *r); if (!r) { fclose(f); return; } }
+        if (n == cap) { cap = cap ? cap * 2 : 1024; orig_run *nr = realloc(r, (size_t)cap * sizeof *r); if (!nr) { free(r); fclose(f); return; } r = nr; }
         r[n++] = (orig_run){main_base + off, (uint32_t)len, pos}; pos += (uint32_t)len;
     }
     fclose(f);

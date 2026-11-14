@@ -13,7 +13,7 @@ The importer needs your own `prod.keys`. Nothing in the repository supplies keys
 | | Packer environment | Importer (for `.nsp` / `.xci`) |
 |---|---|---|
 | macOS | `scripts/bananative.command setup` | `brew install cmake`, Xcode command line tools |
-| Linux | Python 3.14 with the packages of `android/environment.yml` (e.g. a micromamba env from it); set `PEANUTS_PYTHON` to its python | cmake, gcc |
+| Linux | Python 3.14 with the packages of `android/environment.yml`: see [Linux](#linux) below | cmake, gcc |
 | Windows | `scripts\bananative.bat setup` | cmake, MinGW-w64 GCC and zlib with its static library (MSYS2 UCRT64: `mingw-w64-ucrt-x86_64-gcc`, `mingw-w64-ucrt-x86_64-zlib`) on PATH |
 
 On macOS and Linux the importer also needs zlib's headers (part of the Xcode command line tools; `zlib1g-dev` or `zlib-devel` on Linux).
@@ -22,13 +22,31 @@ On macOS and Linux the importer also needs zlib's headers (part of the Xcode com
 
 Set `NX_KEYS` to your `prod.keys`, or pass `--keys`. The default is `~/.switch/prod.keys`.
 
+### Linux
+
+Two ways to get the packer environment. Either way the importer needs cmake, gcc and zlib's headers, and `--push` needs `adb`.
+
+1. The distribution's own Python, when it is 3.14 (the way that was tested). Install Python 3.14, Capstone 5 and lz4 for it, SPIRV-Tools (`spirv-val` on PATH) and the .NET 10 runtime (`dotnet` on PATH) from your distribution. `zbic` is not packaged, so it goes into a venv that sees the system packages:
+
+   ```sh
+   python3.14 -m venv --system-site-packages ~/peanuts-env
+   ~/peanuts-env/bin/pip install zbic==1.0.1.post1
+   PEANUTS_PYTHON=~/peanuts-env/bin/python peanuts/scripts/peanuts-build.sh "Game.nsp" "Game-update.nsp" --keys ~/prod.keys --push
+   ```
+
+   If pip finds no ready-made `zbic` for your system it builds it, which needs gcc and Python's headers.
+
+2. A micromamba environment made from the file (`micromamba create -p <folder>/env -f android/environment.yml`), with `PEANUTS_PYTHON` set to its python. This way was not run on Linux.
+
+Without `PEANUTS_PYTHON` the launcher uses `python3.14`, or `python3` when it is 3.14 or later, from PATH.
+
 ## Examples
 
 ```sh
 # macOS
 peanuts/scripts/peanuts-build.command "Game folder" --keys ~/prod.keys --push
 # Linux
-PEANUTS_PYTHON=~/env/bin/python peanuts/scripts/peanuts-build.sh "Game.nsp" "Game-update.nsp"
+PEANUTS_PYTHON=~/peanuts-env/bin/python peanuts/scripts/peanuts-build.sh "Game.nsp" "Game-update.nsp" "Game-dlc.nsp" --push
 ```
 
 ```bat
@@ -53,7 +71,7 @@ A game whose profile (`dm/games/<titleID>/shader_map.tsv`) has `/glslc_capture/`
 
 ## .NET
 
-The shader translator needs .NET. The builder points the tools it starts at the Python environment's own .NET (`<env>/lib/dotnet`, on Windows `<env>/dotnet` or `<env>/Library/dotnet`) when `DOTNET_ROOT` is not set, so the environment need not be activated. A `DOTNET_ROOT` you set is kept.
+The shader translator needs .NET. The builder points the tools it starts at the Python environment's own .NET (`<env>/lib/dotnet`, on Windows `<env>/dotnet` or `<env>/Library/dotnet`) when `DOTNET_ROOT` is not set, so the environment need not be activated. A `DOTNET_ROOT` you set is kept. On Linux without such an environment the translator is started with the `dotnet` on PATH (the distribution's .NET 10 runtime).
 
 ## Where things go
 
@@ -67,10 +85,10 @@ The shader translator needs .NET. The builder points the tools it starts at the 
 | Platform | State |
 |---|---|
 | macOS | Tested end to end: Link's Awakening 1.1.0 from its `.nsp` files to an AYN Thor in 4 min 17 s (import 14 s, pack 3 min 37 s, push 26 s); the pack is the phone's byte for byte |
-| Linux | The importer builds with cmake and gcc, and the script's tests pass (`python3 peanuts/tests/test_peanuts_build.py`); a real import, pack and push are not yet tested |
+| Linux | Tested end to end: Breath of the Wild 1.9.0 with both DLC from its `.nsp` files to an AYN Thor. Import (28.9 GiB, 87,848 files, `verify` ok) 31 min, rewrite and shader translation (19,592 shaders, all valid) and pack 45 min, push to the Thor's microSD 78 min, and the game boots from the pushed pack. Run on the distribution's Python 3.14 with a venv for `zbic`, gcc, cmake and .NET 10. The pack was not compared byte for byte with a phone-built one |
 | Windows | Written, not yet tested |
 
-A tester on Linux or Windows should run and report:
+A tester on Windows should run and report:
 
 1. The importer build (`peanuts_build.py <nsp files> --dry-run`): does cmake find the compiler, and does `nximport_cli` build?
 2. The probe output for the base and update files.

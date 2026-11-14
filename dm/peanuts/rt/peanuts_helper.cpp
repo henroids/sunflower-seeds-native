@@ -234,7 +234,8 @@ int RewriteX18(std::span<u32> code, const std::vector<u8>& is_code, u64 code_add
             return -1;
         }
         if (static_cast<size_t>(moved + 1) * StubWords > stubs.size() || slot18 % 8 != 0 || slot18 / 8 > 0xFFF) {
-            error = "the helper names x18 in more instructions than the stub page holds";
+            error = slot18 % 8 != 0 || slot18 / 8 > 0xFFF ? "the host's x18 slot is not one a load reaches"
+                                                          : "the helper names x18 in more instructions than the stub page holds";
             return -1;
         }
         u32 t = 0, a = 0; // two registers the instruction does not name
@@ -382,8 +383,8 @@ bool Walk(std::span<const u32> w, size_t entry, std::vector<u8>& mark, bool stri
             }
             seen[i] = 1;
             ++fresh;
-            s64 target = -1;
-            bool falls = true;
+            s64 target = 0;
+            bool branches = true, falls = true;
             if ((x & 0x7C000000) == 0x14000000) { // b, bl
                 target = static_cast<s64>(i) + SignExtend(x & 0x03FFFFFF, 26);
                 falls = (x >> 31) != 0;
@@ -391,12 +392,15 @@ bool Walk(std::span<const u32> w, size_t entry, std::vector<u8>& mark, bool stri
                 target = static_cast<s64>(i) + SignExtend((x >> 5) & 0x7FFFF, 19);
             } else if ((x & 0x7E000000) == 0x36000000) { // tbz / tbnz
                 target = static_cast<s64>(i) + SignExtend((x >> 5) & 0x3FFF, 14);
-            } else if ((x & 0xFFFFFC1F) == 0xD65F0000 || (x & 0xFFFFFC1F) == 0xD61F0000) { // ret, br
-                falls = false;
+            } else {
+                branches = false;
+                if ((x & 0xFFFFFC1F) == 0xD65F0000 || (x & 0xFFFFFC1F) == 0xD61F0000) { // ret, br
+                    falls = false;
+                }
             }
-            if (target >= 0 && static_cast<size_t>(target) < w.size()) {
+            if (branches && target >= 0 && static_cast<size_t>(target) < w.size()) {
                 todo.push_back(static_cast<size_t>(target));
-            } else if (target != -1 && strict) {
+            } else if (branches && strict) {
                 return false; // a branch out of the helper: not code of ours
             }
             if (!falls) {
@@ -470,7 +474,9 @@ std::vector<u8> CodeMap(std::span<const u32> w, const std::vector<size_t>& sure,
             continue;
         }
         const s64 t = static_cast<s64>(i) + SignExtend((w[i] >> 5) & 0x7FFFF, 19);
-        const size_t words = ((w[i] >> 26) & 1) ? (1u << (w[i] >> 30)) : ((w[i] >> 30) == 0 ? 1 : 2);
+        // ldr of a SIMD register: 4, 8 or 16 bytes; else ldr w and ldrsw 4 bytes, ldr x 8, prfm none
+        const u32 opc = w[i] >> 30;
+        const size_t words = ((w[i] >> 26) & 1) ? (opc == 3 ? 0 : (1u << opc)) : (opc == 1 ? 2 : opc == 3 ? 0 : 1);
         for (size_t k = 0; k < words && t >= 0 && static_cast<size_t>(t) + k < w.size(); ++k) {
             code[static_cast<size_t>(t) + k] = 0;
         }

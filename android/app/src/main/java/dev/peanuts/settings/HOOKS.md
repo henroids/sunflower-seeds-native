@@ -2,23 +2,13 @@
 
 One-line additions to upstream files (PEANUTS.md rule 2).
 
-## 1. GameSettings.java — the Companion section (one line)
+## 1. GameSettings.java: the Companion section (one line)
 
-File: `android/app/src/main/java/dev/nxnative/android/GameSettings.java`, in `static void dialog(MainActivity a, Game g)`, directly after the GPU timing row.
-
-Old (the two lines the hook goes between; unchanged):
-
-```java
-        Ui.add(box, new Ui.Setting(a, "⏲️", "GPU timing", v -> gpuTiming(a, g, again)).value(gpuTsLabel(a, id)).chevron(a).view, 0);
-        Ui.add(box, new Ui.Setting(a, "🌐", "Game language", v -> language(a, g, again)).value(GameLanguage.label(Prefs.gameLang(a, id), phoneTag())).chevron(a).view, 0);
-```
-
-New (one line inserted between them):
+File: `android/app/src/main/java/dev/nxnative/android/GameSettings.java`, in `static void build(MainActivity a, LinearLayout content, Game g, Runnable again, Runnable close)`,
+after the Advanced section's Extra environment row and before the `Section[] all = ...` line. It is the last row of the Game tab's Game options card:
 
 ```java
-        Ui.add(box, new Ui.Setting(a, "⏲️", "GPU timing", v -> gpuTiming(a, g, again)).value(gpuTsLabel(a, id)).chevron(a).view, 0);
-        Ui.add(box, dev.peanuts.settings.CompanionSection.view(a, id, dev.peanuts.settings.CompanionSection.root(g.packDir)), 8);   // PEANUTS: the Companion section (install/update/remove, second screen)
-        Ui.add(box, new Ui.Setting(a, "🌐", "Game language", v -> language(a, g, again)).value(GameLanguage.label(Prefs.gameLang(a, id), phoneTag())).chevron(a).view, 0);
+        options.rows.addView(dev.peanuts.settings.CompanionSection.view(a, id, dev.peanuts.settings.CompanionSection.root(g.packDir)));   // PEANUTS: the Companion section (install/update/remove, second screen)
 ```
 
 `CompanionSection.root(g.packDir)` computes the companion root the way `dev.peanuts.Games.Entry.companionRoot` does: `<packDir>/../peanuts`
@@ -30,7 +20,7 @@ Same file, in `static void build(MainActivity a, LinearLayout content, Game g, R
 Mods shows above Companion in the Game tab:
 
 ```java
-        options.rows.addView(dev.peanuts.settings.ModsSection.view(a, id, g.name, g.gameDir, g.packDir, pack -> a.launch(new Game(id, g.name, g.gameDir, pack))));   // PEANUTS: the Mods section, above Companion (...)
+        options.rows.addView(dev.peanuts.settings.ModsSection.view(a, id, g.name, g.gameDir, g.packDir));   // PEANUTS: the Mods section, above Companion (...)
 ```
 
 `ModsSection` lists the game's mods (a switch and a bin each), installs one from a folder or a zip (`dev.peanuts.mods.ModImportUi`; the pickers' results come

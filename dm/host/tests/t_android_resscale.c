@@ -68,7 +68,15 @@ static void t_region(void) {
     }
     int32_t o = 0, l = 0; CHECK(!vkrs_region(&o, &l, 16, 6), "an empty region");
     o = 0; l = -4; CHECK(!vkrs_region(&o, &l, 16, 6), "a negative region");
-    o = 40; l = 8; CHECK(!vkrs_region(&o, &l, 16, 8) || (uint32_t)(o + l) <= vkrs_dim(16, 8), "a region past the texture stays inside the image or is refused");
+    // A region that starts past the texture's last pixel has nothing inside at any factor (it was answered with the image's last pixel); one that starts on the last
+    // pixel reaches the image's last pixel, and one that starts before pixel 0 keeps the part inside (below 1x it rounded to nothing)
+    for (size_t k = 0; k < 6; k++) for (uint32_t side = 1; side <= 40; side++) {
+        o = (int32_t)side; l = 8; CHECK(!vkrs_region(&o, &l, side, QS[k]), "a region at %u of a side of %u is not refused (q %u)", side, side, QS[k]);
+        o = (int32_t)side + 24; l = 1; CHECK(!vkrs_region(&o, &l, side, QS[k]), "a region past a side of %u is not refused (q %u)", side, QS[k]);
+        o = (int32_t)side - 1; l = 8; CHECK(vkrs_region(&o, &l, side, QS[k]) && l >= 1 && o >= 0 && (uint32_t)(o + l) == vkrs_dim(side, QS[k]), "the last pixel of a side of %u is %d+%d of %u (q %u)", side, o, l, vkrs_dim(side, QS[k]), QS[k]);
+        o = -3; l = 4; CHECK(vkrs_region(&o, &l, side, QS[k]) && o == 0 && l >= 1 && (uint32_t)l <= vkrs_dim(side, QS[k]), "a region from before the texture is cut at 0 (side %u, q %u)", side, QS[k]);
+        o = -8; l = 8; CHECK(!vkrs_region(&o, &l, side, QS[k]), "a region that ends at 0 has nothing inside (side %u, q %u)", side, QS[k]);
+    }
     o = 1900; l = 40; { int ok = vkrs_region(&o, &l, 1920, 6); CHECK(!ok || (uint32_t)(o + l) <= 2880, "a region over the texture's edge is cut to the image: %d+%d", o, l); }
     // Two rectangles of one size at different offsets round to within a pixel of each other (vka_exec.c copy_t2t takes the smaller extent for a plain copy)
     for (size_t k = 0; k < 6; k++) for (int32_t w = 1; w < 64; w++) for (int32_t x = 0; x < 16; x++) for (int32_t y = 0; y < 16; y++) {

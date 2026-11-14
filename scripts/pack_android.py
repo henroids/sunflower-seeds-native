@@ -305,6 +305,15 @@ def apply_mod_patches(name, src, patch_dirs, out, changed=None):
     return dest
 
 
+def mod_memory_rows(title_id):
+    """Whether a build with code mods of this title has memory numbers of its own (dm/peanuts/profile/mod_memory.tsv: rows of <title ID> <key> <value>, which
+    gen_runtime_profile.py profile-modules reads). main() then writes the variant its own profile.bin whatever its mods do, a patch as well as an added module"""
+    f = REPO / 'dm/peanuts/profile/mod_memory.tsv'
+    if not f.is_file(): return False
+    rows = (line.split('#', 1)[0].split() for line in f.read_text(encoding='utf-8').splitlines())
+    return any(len(c) == 3 and c[0].upper() == title_id.upper() for c in rows)
+
+
 XMOD_KEY = 'cross-module layout'
 
 
@@ -794,6 +803,10 @@ def main():
             mod_patches_by_name.setdefault(name, []).append(d)
         modules_override = a.modules.split(',') if a.modules else None
         mods, srcs = merge_mod_modules(mods, srcs, modules_override, mod_exefs)
+        # said here in a sentence: the reads below (the patches, the layout) come before the usual check for missing modules, and ended in a traceback
+        if lost := [m for m in mods if m not in srcs]: raise Error(f'--modules names {", ".join(lost)}, which neither the game nor a mod has')
+        if gone := [f'{m} ({p})' for m, p in mod_exefs.items() if not srcs[m].is_file()]:
+            raise Error(f'a mod\'s module is not there: {", ".join(gone)}. The mod was deleted or changed since the build was started: build with mods again')
         patched = {}
         for name, dirs in mod_patches_by_name.items():
             if name not in mods: raise Error(f'--mod-patches {name}=...: {name} is not in the module list ({" ".join(mods)})')
@@ -812,7 +825,12 @@ def main():
         # generic host's per-title data, dm/peanuts/profile/gen_runtime_profile.py) written beside the pack, read instead of the APK asset
         # (dev.peanuts.build.GenericProfile.envLines(Context,String,File) when <packDir>/profile.bin exists). A plain replace-only mod (mods unchanged
         # from the dump's own list) needs none of this: the shipped per-title asset already lists every module the mod replaces.
-        if mods != dump_modules(g, exe):
+        # The same for a variant of a title that has memory numbers for its builds with mods (mod_memory.tsv, which profile-modules reads), whatever its mods
+        # do: only a build that adds a module was given them. A variant that needs no profile of its own keeps none that an earlier build of it left.
+        modded = bool(mod_exefs or mod_patches_by_name)
+        own_profile = mods != dump_modules(g, exe) or modded and mod_memory_rows(f'{app:016X}')
+        if modded and not own_profile: (out / 'profile.bin').unlink(missing_ok=True)
+        if own_profile:
             gen = REPO / 'dm/peanuts/profile/gen_runtime_profile.py'
             profile_bin, gen_log = out / 'profile.bin', out / 'rewrite_profile.log'
             gen_args = ['profile-modules', f'{app:016X}', str(profile_bin), ','.join(mods)]

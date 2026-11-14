@@ -339,7 +339,8 @@ def mod_memory(title_id):
         cells = line.split('#', 1)[0].split()
         if len(cells) != 3 or cells[0].upper() != str(title_id).upper(): continue
         if cells[1] not in MOD_MEMORY_KEYS: sys.exit(f'gen_runtime_profile.py: mod_memory.tsv: {cells[1]} is not one of {sorted(MOD_MEMORY_KEYS)}')
-        as_int(cells[2])   # a number, or this stops here
+        try: as_int(cells[2])   # a number, or this stops here
+        except ValueError: sys.exit(f'gen_runtime_profile.py: mod_memory.tsv: {cells[0]} {cells[1]}: {cells[2]} is not a number')
         out[MOD_MEMORY_KEYS[cells[1]]] = cells[2]
     return out
 

@@ -20,9 +20,8 @@ public final class GameEnv {
     private GameEnv() {}
 
     /**
-     * Peanuts' own per-title defaults, each a line the player can override in the game's settings. The Legend of Zelda: Link's Awakening: handheld mode (DM_OPMODE=0, the
-     * Switch's own 1280x720 for this game) — in console mode its 1920x1080 frame takes the Thor's GPU 7.5 ms median and 15 ms at the 90th percentile for ~830 draws, so
-     * play dipped to 50 fps; handheld holds 60 at 4.3 / 8.6 ms, and the picture is what the Switch shows on its own screen
+     * Peanuts' own per-title defaults ({title ID, key, value}), each a line the player can override in the game's settings. None now: Link's Awakening's handheld
+     * mode, the one there was, is the default of its Console mode row (see RETIRED)
      */
     private static final String[][] DEFAULTS = {};
     /**
@@ -95,17 +94,19 @@ public final class GameEnv {
         }
     }
 
-    /** text with KEY=value added when no line sets KEY */
-    /** text without the line key=value (that exact value: another value is the player's own) */
+    /** text without the line key=value (that exact value: another value is the player's own); text as it is when it has no such line */
     static String without(String text, String key, String value) {
+        String t = text == null ? "" : text;
         List<String> out = new ArrayList<>();
-        for (String l : (text == null ? "" : text).split("\n")) {
-            if (l.trim().isEmpty() || l.trim().equals(key + "=" + value)) continue;
-            out.add(l);
+        boolean found = false;
+        for (String l : t.split("\n")) {
+            if (l.trim().equals(key + "=" + value)) { found = true; continue; }
+            if (!l.trim().isEmpty()) out.add(l);
         }
-        return String.join("\n", out);
+        return found ? String.join("\n", out) : t;
     }
 
+    /** text with KEY=value added when no line sets KEY */
     static String withDefault(String text, String key, String value) {
         List<String> out = new ArrayList<>();
         for (String l : (text == null ? "" : text).split("\n")) {

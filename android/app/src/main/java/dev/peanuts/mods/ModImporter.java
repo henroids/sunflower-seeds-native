@@ -17,7 +17,7 @@ import java.util.Map;
  * The layout normalizer (DESIGN-MODS.md "a Mods section per game", this task's step 1): given a plain folder on disk that already holds a copy of
  * whatever the player picked (a folder tree, or an extracted zip — the Android-side copy/extract into that staging folder is {@code ModImportUi}'s job,
  * not this class's), works out which of the three common mod layouts it is, and moves the right pieces into
- * {@code <modsRoot>/<titleId>/<modName>/} with a fresh {@code mod.json}. Plain Java (no {@code android.*}) so
+ * {@code <modsRoot>/<modName>/} (the game's own mods folder) with a fresh {@code mod.json}. Plain Java (no {@code android.*}) so
  * {@code peanuts/tests/test_mod_importer.py} can drive it directly with javac/java on a real temp directory, the same way
  * {@code dev.peanuts.build.RuntimeShaderMap} is tested.
  * <p>
@@ -69,6 +69,7 @@ public final class ModImporter {
      */
     public static Result importFrom(File staging, File modsRoot, String titleId, String displayName, Map<String, String> gameBuilds, Progress progress) {
         if (progress == null) progress = NONE;
+        File dest = null;   // the mod's folder once it is being written: taken away again when the install does not end well
         try {
             Layout layout = detect(staging, titleId);
             if (layout == null) return Result.fail("No romfs, exefs or cheats folder found. Point to the mod's own folder (with romfs/exefs inside), "
@@ -86,8 +87,12 @@ public final class ModImporter {
             String preferred = layout.suggestedName != null && !layout.suggestedName.isBlank() ? layout.suggestedName
                     : displayName != null && !displayName.isBlank() ? displayName : staging.getName();
             String name = ModStore.freeName(modsRoot, titleId, preferred);
-            File dest = new File(ModStore.gameDir(modsRoot, titleId), name);
-            if (!dest.mkdirs()) throw new IOException("could not create " + dest);
+            File made = new File(ModStore.gameDir(modsRoot, titleId), name);
+            if (!made.mkdirs()) throw new IOException("could not create " + made);
+            dest = made;
+            // Marked until it is complete: a process that ends in the middle of the copy (GBs, minutes) leaves a folder no list shows (it has no mod.json yet),
+            // and ModStore.sweepDeleted knows it by this file
+            Files.write(new File(dest, ModStore.INSTALLING).toPath(), new byte[0]);
             boolean anyCode = false;
             if (layout.romfs != null && layout.romfs.isDirectory()) copyTree(layout.romfs, new File(dest, "romfs"), progress);
             if (layout.exefs != null && layout.exefs.isDirectory() && hasFiles(layout.exefs)) { copyTree(layout.exefs, new File(dest, "exefs"), progress); anyCode = true; }
@@ -106,10 +111,15 @@ public final class ModImporter {
             m.enabled = false;   // imported off; the player turns it on in the Mods section (so an import never silently changes a running game)
             m.order = ModStore.list(modsRoot, titleId).size();
             m.kind = anyCode ? ModStore.KIND_CODE : ModStore.KIND_FILES;
+            Files.deleteIfExists(new File(dest, ModStore.INSTALLING).toPath());   // complete: the manifest below makes it a mod
             ModStore.save(m);
             return Result.ok(name, m.kind);
-        } catch (IOException e) {
-            return Result.fail("Could not import the mod: " + e.getMessage());
+        } catch (IOException | RuntimeException e) {
+            // RuntimeException too: a file name the file system does not take (InvalidPathException) or a walk that fails (UncheckedIOException) ended the
+            // import's thread without a result, and the section showed "Installing a mod" until the app was closed. What was copied goes: a failed copy
+            // (the storage is full, most often) left GBs in a folder without a manifest, which no list shows and no delete reaches
+            if (dest != null) deleteTree(dest);
+            return Result.fail("Could not import the mod: " + (e.getMessage() == null ? e.toString() : e.getMessage()));
         }
     }
 
@@ -141,9 +151,17 @@ public final class ModImporter {
                 if (firstOther != null) { l.mismatchedTitleId = firstOther.getName().toUpperCase(Locale.ROOT); return l; }
             }
         }
-        // Bare: romfs/ and/or exefs/ directly at the staging root
+        // Atmosphère with patches only (atmosphere/exefs_patches/<set>/<build id>.ips and no contents/: the usual shape of a frame rate or resolution patch).
+        // No title ID folder names its game: the patches' build IDs do (buildIdProblem)
+        File atmospherePatches = new File(atmosphere, "exefs_patches");
+        if (hasIps(atmospherePatches)) {
+            Layout l = new Layout();
+            l.exefsPatches = atmospherePatches;
+            return l;
+        }
+        // Bare: romfs/ and/or exefs/ directly at the staging root (or exefs_patches/ alone, as above)
         File romfs = new File(staging, "romfs"), exefs = new File(staging, "exefs"), cheats = new File(staging, "cheats");
-        if (romfs.isDirectory() || (exefs.isDirectory() && hasFiles(exefs)) || (cheats.isDirectory() && hasFiles(cheats))) {
+        if (romfs.isDirectory() || (exefs.isDirectory() && hasFiles(exefs)) || (cheats.isDirectory() && hasFiles(cheats)) || hasIps(new File(staging, "exefs_patches"))) {
             Layout l = new Layout();
             l.romfs = romfs; l.exefs = exefs; l.cheats = cheats;
             l.exefsPatches = new File(staging, "exefs_patches");
@@ -158,7 +176,7 @@ public final class ModImporter {
                 String n = k.getName();
                 if (n.equalsIgnoreCase("atmosphere") || n.startsWith(".") || n.equalsIgnoreCase("__MACOSX")) continue;
                 File r = new File(k, "romfs"), e = new File(k, "exefs"), ch = new File(k, "cheats");
-                if (r.isDirectory() || (e.isDirectory() && hasFiles(e)) || (ch.isDirectory() && hasFiles(ch))) { candidate = k; nCandidates++; }
+                if (r.isDirectory() || (e.isDirectory() && hasFiles(e)) || (ch.isDirectory() && hasFiles(ch)) || hasIps(new File(k, "exefs_patches"))) { candidate = k; nCandidates++; }
             }
             if (nCandidates == 1) {
                 Layout l = new Layout();
@@ -210,9 +228,14 @@ public final class ModImporter {
         File[] sets = l.exefsPatches == null ? null : l.exefsPatches.listFiles(File::isDirectory);
         if (sets != null) for (File s : sets) addIpsBuilds(s, named);
         if (named.isEmpty()) return null;
-        for (String id : gameBuilds.values()) if (named.contains(build32(id))) return null;
+        for (String id : gameBuilds.values()) {
+            String game = build32(id);
+            // a name of exactly 16 digits is the ID's first 8 bytes whatever follows them (dm/tools/patch_ips.py stem_matches takes it so; padded with zeros
+            // it fitted no game whose ID goes on, and a mod the build would have applied was refused here)
+            for (String n : named) if (n.length() == 16 ? game.startsWith(n) : build32(n).equals(game)) return null;
+        }
         String main = gameBuilds.containsKey("main") ? gameBuilds.get("main") : gameBuilds.values().iterator().next();
-        return "This mod is for another game or another version of this game: its patches are for build " + named.get(0).substring(0, 16)
+        return "This mod is for another game or another version of this game: its patches are for build " + build32(named.get(0)).substring(0, 16)
                 + ", and this game's build is " + build32(main).substring(0, 16) + ". Not installed. Use the mod made for this game and version.";
     }
 
@@ -220,10 +243,17 @@ public final class ModImporter {
         String[] names = dir == null ? null : dir.list();
         if (names == null) return;
         for (String n : names) {
-            if (!n.toLowerCase(Locale.ROOT).endsWith(".ips")) continue;
-            String stem = n.substring(0, n.length() - 4);
-            if (stem.matches("[0-9A-Fa-f]{8,}")) out.add(build32(stem));   // any other name is not a build ID: nothing to tell from it
+            if (!isIps(n)) continue;
+            String stem = n.substring(0, n.lastIndexOf('.'));
+            if (stem.matches("[0-9A-Fa-f]{8,}")) out.add(stem.toUpperCase(Locale.ROOT));   // any other name is not a build ID: nothing to tell from it
         }
+    }
+
+    /** A patch file's name: .ips or .ips32 (Atmosphère's own format for a module past 16 MiB, which most games' main is), in either letter case; as
+     *  dev.peanuts.build.ModBuild.isIpsName and dm/tools/patch_ips.py find_patches. With .ips alone a mod of .ips32 files lost its patches at the install */
+    private static boolean isIps(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        return n.endsWith(".ips") || n.endsWith(".ips32");
     }
 
     /** A build ID's first 32 hex digits in upper case, padded with zeros when shorter */
@@ -242,7 +272,7 @@ public final class ModImporter {
         File[] subs = exefsPatches.listFiles(File::isDirectory);
         if (subs == null) return false;
         for (File s : subs) {
-            File[] kids = s.listFiles((d, n) -> n.toLowerCase(Locale.ROOT).endsWith(".ips"));
+            File[] kids = s.listFiles((d, n) -> isIps(n));
             if (kids != null && kids.length > 0) return true;
         }
         return false;
@@ -312,18 +342,23 @@ public final class ModImporter {
     }
 
     /** Extracts a zip (already copied to local disk, or read straight off a content-provider stream) into {@code staging}, rejecting path traversal
-     *  entries ({@code ../}) outright. Pure java.util.zip; no Android. {@code totalBytesHint} (0 if unknown) only feeds progress, never a size check. */
+     *  entries (a {@code ..} part, or a name that resolves outside staging) outright. A name that starts with a slash lands inside staging (File(parent,
+     *  child)); a link in a zip comes out as a small file holding its target, never as a link. Pure java.util.zip; no Android. {@code totalBytesHint}
+     *  (0 if unknown) only feeds progress, never a size check. */
     public static void extractZip(java.io.InputStream in, File staging, long totalBytesHint, Progress progress) throws IOException {
         if (progress == null) progress = NONE;
         long done = 0;
+        String root = staging.getCanonicalPath() + File.separator;
         try (java.util.zip.ZipInputStream zin = new java.util.zip.ZipInputStream(in)) {
             java.util.zip.ZipEntry e;
             byte[] buf = new byte[1 << 16];
             while ((e = zin.getNextEntry()) != null) {
-                String name = e.getName();
-                if (name.contains("..")) throw new IOException("the zip has an unsafe entry name: " + name);
+                String name = e.getName().replace('\\', '/');   // a zip written with Windows' separators: folders here too, not one file named "romfs\Data\…"
+                // by part: a file such as "notes..txt" is no traversal (any ".." in the name refused the whole mod)
+                for (String part : name.split("/")) if (part.equals("..")) throw new IOException("the zip has an unsafe entry name: " + e.getName());
                 File out = new File(staging, name);
-                if (e.isDirectory()) { out.mkdirs(); continue; }
+                if (!(out.getCanonicalPath() + File.separator).startsWith(root)) throw new IOException("the zip has an unsafe entry name: " + e.getName());
+                if (e.isDirectory() || name.endsWith("/")) { out.mkdirs(); continue; }   // name: a folder entry written with a backslash
                 File parent = out.getParentFile();
                 if (parent != null) parent.mkdirs();
                 try (java.io.OutputStream os = Files.newOutputStream(out.toPath())) {

@@ -1242,7 +1242,19 @@ public final class MainActivity extends Activity {
         // PEANUTS: code mods that are on play from their own build's pack (dev.peanuts.settings.ModsSection), whatever started the game; off, deleted or not built yet: the normal pack
         String modPack = dev.peanuts.settings.ModsSection.packToPlay(this, g0.titleId, g0.gameDir, g0.packDir,
                 () -> Toast.makeText(this, "Code mods are on but not built: the game starts without them (hold the cover › Game › Mods › Build with mods)", Toast.LENGTH_LONG).show());
-        Game g = modPack == null || modPack.equals(g0.packDir) ? g0 : new Game(g0.titleId, g0.name, g0.gameDir, modPack, g0.used);   // PEANUTS
+        // PEANUTS begin: ...unless the launcher's own check would refuse that pack (a variant built before the game was updated or rebuilt): then the normal pack
+        // plays and a line says why, in place of the "pack cannot start" dialog, whose Prepare again makes the normal pack and never the variant
+        Game gm = modPack == null || modPack.equals(g0.packDir) ? g0 : new Game(g0.titleId, g0.name, g0.gameDir, modPack, g0.used);
+        if (gm != g0) {
+            boolean refuse;
+            try { refuse = PackCheck.blocking(this, Pack.read(new File(gm.packDir)), new File(gm.gameDir)) != null; } catch (IOException e) { refuse = true; }
+            if (refuse) {
+                gm = g0;
+                Toast.makeText(this, "The build with mods no longer fits this game: it starts without its code mods (hold the cover › Game › Mods › Rebuild with mods)", Toast.LENGTH_LONG).show();
+            }
+        }
+        final Game g = gm;
+        // PEANUTS end
         File saveGone = Folders.goneSave(this, g);
         if (saveGone != null) { Folders.saveGoneDialog(this, g, saveGone); return; }
         String gone = gone(g);

@@ -106,12 +106,41 @@ public final class ModsSection {
             String variantId = ModStore.variantId(titleId, codeMods);
             if (variantId == null) return packDir;
             File variantPack = dev.nxnative.android.AppStorage.pack(c, variantId);
-            if (new File(variantPack, "pack.tsv").isFile()) return variantPack.getPath();
+            if (variantProblem(c, titleId, variantPack) == null) return variantPack.getPath();
             if (notBuilt != null) notBuilt.run();
         } catch (RuntimeException e) {
             android.util.Log.w("peanuts", "mods: the pack to play: " + e);
         }
         return packDir;
+    }
+
+    /**
+     * Why a start cannot take the variant's pack, null when it can: there is none, its build did not finish (ModdedBuild.variantProblem), or its own profile
+     * is of another version of the app ({@link #staleProfile}). Play then starts the normal pack and says the mods are not built; "Build with mods" says why
+     */
+    private static String variantProblem(android.content.Context c, String titleId, File variantPack) {
+        String why = ModdedBuild.variantProblem(variantPack);
+        return why == null && staleProfile(c, titleId, variantPack) ? "it was made by another version of the app" : why;
+    }
+
+    /**
+     * Whether the variant's own profile (profile.bin beside its pack: scripts/pack_android.py writes one for a build that adds a module or has its own memory
+     * numbers, and the host reads it in place of the app's, dev.peanuts.build.GenericProfile) is of another schema than this app's profile of the game: their
+     * first eight bytes, the magic and the schema version. An update of the app that changes the schema left the variant with a profile the host refuses at
+     * the game's start ("schema version does not match"), until its mods were built again. Without a profile of its own, or without the app's to compare: no
+     */
+    private static boolean staleProfile(android.content.Context c, String titleId, File variantPack) {
+        File own = new File(variantPack, "profile.bin");
+        if (!own.isFile()) return false;
+        byte[] a = new byte[8], b = new byte[8];
+        try (java.io.DataInputStream x = new java.io.DataInputStream(new java.io.FileInputStream(own));
+             java.io.DataInputStream y = new java.io.DataInputStream(c.getAssets().open("profiles/" + titleId + ".profile.bin"))) {
+            x.readFully(a);
+            y.readFully(b);
+            return !java.util.Arrays.equals(a, b);
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private static void renderCurrent() { if (current != null) current.render(); }
@@ -128,7 +157,9 @@ public final class ModsSection {
         }
         List<ModStore.Mod> mods = ModRuntime.mods(home, titleId);
         boolean deleting = titleId.equals(deleteTitle), importing = titleId.equals(importTitle) || deleting;   // either: the list's switches and bins wait
-        if (deleteTitle == null && SWEPT.add(home.getPath())) new Thread(() -> ModStore.sweepDeleted(ModRuntime.modsRoot(home), titleId), "peanuts-mod-sweep").start();
+        // what an install or a delete left when the app ended in the middle of it: once per run, and never while one goes on (its folders are what a sweep looks for)
+        if (deleteTitle == null && importTitle == null && SWEPT.add(home.getPath())) new Thread(() -> ModStore.sweepDeleted(ModRuntime.modsRoot(home), titleId), "peanuts-mod-sweep").start();
+        if (importTitle == null && SWEPT.add("the app's cache")) ModImportUi.sweepStaging(a);
         if (mods.isEmpty() && !importing) body.addView(ui.setting("🧩", "No mods installed", "Files, cheats and code mods from this device", null), SectionUi.lp(0, 0));
         for (ModStore.Mod m : mods) body.addView(modRow(m, !importing), SectionUi.lp(0, 0));
         if (titleId.equals(importTitle)) body.addView(ui.setting("📥", "Installing a mod", importText, null), SectionUi.lp(0, 0));
@@ -189,7 +220,8 @@ public final class ModsSection {
     }
 
     private void confirmDelete(ModStore.Mod m) {
-        new AlertDialog.Builder(a).setTitle("Delete this mod?").setMessage(m.name + " and its files are deleted from this device. The game and its saves are not changed.")
+        new AlertDialog.Builder(a).setTitle("Delete this mod?").setMessage(m.name + " and its files are deleted from this device" + (m.hasCode() ? ", and the builds with mods made with it" : "")
+                        + ". The game and its saves are not changed.")
                 .setPositiveButton("Delete", dev.peanuts.ui.Feel.confirm((d, w) -> startDelete(m))).setNegativeButton("Cancel", null).show();
     }
 
@@ -201,10 +233,14 @@ public final class ModsSection {
      */
     private void startDelete(ModStore.Mod m) {
         if (deleteTitle != null || importTitle != null) return;
+        boolean code = m.hasCode();
+        // the build reads the mod's files, and the delete below takes the builds made with it away
+        if (code && titleId.equals(buildTitle)) { message("Delete this mod", gameName + " is being built with its mods now. Delete " + m.name + " when the build has ended."); return; }
         deleteTitle = titleId; deleteName = m.name; deleteText = "Counting its files…"; deletePct = -1;
         renderCurrent();
-        File root = ModRuntime.modsRoot(home);
+        File root = ModRuntime.modsRoot(home), gameHome = home;
         String id = titleId, folder = m.dir.getName(), name = m.name;
+        android.content.Context app = a.getApplicationContext();
         new Thread(() -> {
             String err = null;
             try {
@@ -214,9 +250,11 @@ public final class ModsSection {
                     MAIN.post(() -> { deletePct = pct; deleteText = pct < 0 ? "Counting its files…" : pct + " %."; renderCurrent(); });
                 });
             } catch (IOException e) { err = e.getMessage(); }
+            if (code) sweepVariants(app, id, gameHome);   // the mod is out of the list by now, also when not all of its files went
             final String ferr = err;
             MAIN.post(() -> {
                 deleteTitle = null; deleteName = null; deleteText = null; deletePct = -1;
+                if (ferr != null) SWEPT.remove(gameHome.getPath());   // so that the page's next opening looks for what is left, as the message below says
                 if (ferr != null) android.util.Log.w("peanuts", "mods: delete of " + name + ": " + ferr);
                 if (current != null && ferr != null) dev.peanuts.ui.Feel.refused(current.a);
                 if (current != null && ferr != null) current.message("Delete failed", name + ": " + ferr + "\n\nWhat is left of it is removed the next time this page is opened.");
@@ -225,6 +263,23 @@ public final class ModsSection {
         }, "peanuts-mod-delete").start();
     }
     private static final java.util.Set<String> SWEPT = java.util.Collections.synchronizedSet(new java.util.HashSet<>());   // game folders whose interrupted deletes were looked for in this run
+
+    /**
+     * After a code mod is deleted: the builds with mods no choice of the switches gives any more go with it (ModStore.reachableVariantIds from the mods that
+     * are left, ModdedBuild.sweepVariants). Each is a pack of its own, the modules and a copy of the shader library, which nothing else in the app removes; and
+     * a mod installed again under the same name had the deleted one's build as "Ready". On the delete's thread. Nothing goes when the mods cannot be listed
+     */
+    private static void sweepVariants(android.content.Context c, String titleId, File home) {
+        try {
+            if (!ModRuntime.modsRoot(home).isDirectory()) return;
+            java.util.Set<String> keep = ModStore.reachableVariantIds(titleId, ModRuntime.mods(home, titleId));
+            File files = c.getExternalFilesDir(null);   // the app's packs/<id>, as dev.nxnative.android.AppStorage.pack (its root and packs are not public)
+            int n = ModdedBuild.sweepVariants(titleId, keep, new File(files != null ? files : c.getFilesDir(), "packs"), dev.peanuts.PeanutsPrefs.buildGameDir(c, titleId), home);
+            if (n > 0) android.util.Log.i("peanuts", "mods: " + titleId + ": " + n + " build(s) with mods of a deleted mod removed");
+        } catch (RuntimeException e) {
+            android.util.Log.w("peanuts", "mods: removing the builds of a deleted mod: " + e);
+        }
+    }
 
     // ---- Install mod…: the pickers' results come back through MainActivity.onActivityResult → dev.peanuts.ui.LibrarySettings.result ----
 
@@ -280,19 +335,26 @@ public final class ModsSection {
         String exl = ModdedBuild.exlaunchWarning(profileModules, plan);
         if (exl != null) explain("⚠️", "A module's hooks will not run", exl);
         String variantId = ModStore.variantId(titleId, codeMods);
-        if (variantId == null) { explain("⚠️", "Nothing to build", "The code mods that are on have no exefs files or IPS patches in them. Turn them off, or install them again."); return; }
+        // No module and no patch file in them (an exefs/ with a .pchtxt or a main.npdm alone): the build's extra arguments would be empty, and a job without
+        // them is a build of the game itself, into the variant's folder and remembered as the game's own job (PackService)
+        if (variantId == null || plan.source.isEmpty() && plan.patchSets.isEmpty()) {
+            explain("⚠️", "Nothing to build", "The code mods that are on have no module (main, subsdk…) and no IPS patch in them. A .pchtxt patch is not one the app can build. Turn them off, or install them again.");
+            return;
+        }
         File variantPack = dev.nxnative.android.AppStorage.pack(a, variantId);
-        boolean ready = new File(variantPack, "pack.tsv").isFile(), building = buildTitle != null, mine = titleId.equals(buildTitle);
+        String problem = variantProblem(a, titleId, variantPack);   // as packToPlay asks: the row says what Play does
+        boolean ready = problem == null, built = !ModdedBuild.NOT_BUILT.equals(problem), building = buildTitle != null, mine = titleId.equals(buildTitle);
         String failed = FAILED.get(variantId);
         String value = mine ? "Building: " + buildText
                 : building ? "Another game is being built with mods. Wait for it to finish."
                 : failed != null ? "Failed: " + failed
                 : ready ? "Ready. Play starts the game with its code mods."
+                : built ? "The build with mods must be made again: " + problem + ". Until then Play starts the game without its code mods."
                 : "Code mods need a build of their own: until it is made, Play starts the game without them. The normal build is kept as it is.";
         body.addView(ui.setting("🔨", "Build with mods", value, failed == null || mine ? null : v -> message("Build with mods failed", failed)), SectionUi.lp(0, 0));
         if (mine) return;
         LinearLayout buttons = SectionUi.buttons(a);
-        SectionUi.add(buttons, ui.button(ready ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, dev.peanuts.ui.Feel.heavy(v -> startBuild(variantId, variantPack, plan))), !building && deleteTitle == null);
+        SectionUi.add(buttons, ui.button(built ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, dev.peanuts.ui.Feel.heavy(v -> startBuild(variantId, variantPack, plan))), !building && deleteTitle == null);
         body.addView(buttons, SectionUi.lp(0, 0));
     }
 
