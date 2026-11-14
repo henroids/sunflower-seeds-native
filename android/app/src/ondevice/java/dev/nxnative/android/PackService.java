@@ -167,8 +167,15 @@ public final class PackService extends Service {
             return START_NOT_STICKY;
         }
         if ("running".equals(j.state())) {   // PEANUTS: still "running" at a start: the process before this one was ended (Android's low-memory killer, most likely): fewer workers from now on
-            j.memLevelUp();
-            stepLog(j, "the build's process ended before its step finished (most often Android freeing memory); resuming with fewer workers (level " + j.memLevel() + "; " + memLine() + ")");
+            // PEANUTS: ...unless the app was installed again after the job's last note: an update ends every process of the app, and that is no sign of low memory.
+            // Three installs during one build left Mario Kart 8 Deluxe's on one worker with 10 GB free
+            long installed = 0;
+            try { installed = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime; } catch (android.content.pm.PackageManager.NameNotFoundException e) { /* 0: counted as a kill */ }
+            if (installed > j.updated()) stepLog(j, "the build's process ended when the app was updated; resuming with the same workers (level " + j.memLevel() + "; " + memLine() + ")");
+            else {
+                j.memLevelUp();
+                stepLog(j, "the build's process ended before its step finished (most often Android freeing memory); resuming with fewer workers (level " + j.memLevel() + "; " + memLine() + ")");
+            }
         }
         stopReason = null;
         heatOverride = false;   // asked again for each run of the job

@@ -200,10 +200,13 @@ bool Fields(u32 w, u32& mask, bool& plain) {
 
 /// Takes the uses of x18 out of `code` (at `code_address`), with stubs at `stub_address`. The count of instructions moved, or -1
 /// with `error` when one cannot be.
-int RewriteX18(std::span<u32> code, u64 code_address, std::span<u32> stubs, u64 stub_address, u32 slot18,
-               std::string& error) {
+int RewriteX18(std::span<u32> code, const std::vector<u8>& is_code, u64 code_address, std::span<u32> stubs, u64 stub_address,
+               u32 slot18, std::string& error) {
     int moved = 0;
     for (size_t i = 0; i < code.size(); ++i) {
+        if (!is_code[i]) {
+            continue; // the helper's own data (strings, tables): left as it is
+        }
         const u32 w = code[i];
         u32 mask{};
         bool plain{};
@@ -344,9 +347,185 @@ bool Link(std::vector<u8>& bytes, u64 address, const std::vector<Core::Mods::Mod
     return true;
 }
 
+constexpr s64 SignExtend(u64 v, int bits) {
+    return static_cast<s64>(v << (64 - bits)) >> (64 - bits);
+}
+
+/// Marks the instructions reached from word `entry` by following fall-through and direct branches. `strict`: for an address that
+/// only may be code (an adr target, a relocated address): false, with nothing marked, unless every word on the way is a known
+/// instruction, stays inside the helper and each path ends in ret, br or b.
+bool Walk(std::span<const u32> w, size_t entry, std::vector<u8>& mark, bool strict) {
+    std::vector<u8> seen = mark;
+    std::vector<size_t> todo{entry};
+    size_t fresh = 0;
+    while (!todo.empty()) {
+        size_t i = todo.back();
+        todo.pop_back();
+        for (;;) {
+            if (i >= w.size()) {
+                if (strict) {
+                    return false;
+                }
+                break;
+            }
+            if (seen[i]) {
+                break;
+            }
+            const u32 x = w[i];
+            u32 mask{};
+            bool plain{};
+            if (x == 0 || !Fields(x, mask, plain)) {
+                if (strict) {
+                    return false;
+                }
+                break;
+            }
+            seen[i] = 1;
+            ++fresh;
+            s64 target = -1;
+            bool falls = true;
+            if ((x & 0x7C000000) == 0x14000000) { // b, bl
+                target = static_cast<s64>(i) + SignExtend(x & 0x03FFFFFF, 26);
+                falls = (x >> 31) != 0;
+            } else if ((x & 0xFF000010) == 0x54000000 || (x & 0x7E000000) == 0x34000000) { // b.cond, cbz / cbnz
+                target = static_cast<s64>(i) + SignExtend((x >> 5) & 0x7FFFF, 19);
+            } else if ((x & 0x7E000000) == 0x36000000) { // tbz / tbnz
+                target = static_cast<s64>(i) + SignExtend((x >> 5) & 0x3FFF, 14);
+            } else if ((x & 0xFFFFFC1F) == 0xD65F0000 || (x & 0xFFFFFC1F) == 0xD61F0000) { // ret, br
+                falls = false;
+            }
+            if (target >= 0 && static_cast<size_t>(target) < w.size()) {
+                todo.push_back(static_cast<size_t>(target));
+            } else if (target != -1 && strict) {
+                return false; // a branch out of the helper: not code of ours
+            }
+            if (!falls) {
+                break;
+            }
+            ++i;
+        }
+    }
+    if (strict && fresh < 2) {
+        return false;
+    }
+    mark = std::move(seen);
+    return true;
+}
+
+/// Which words of the helper are instructions. A helper is one flat block, code first and its strings and tables after, and a
+/// word of data may look like an instruction that names x18 (the characters "r1", "R…", "2…" have 18 in bits 4:0): rewritten, it
+/// would be a branch into a stub in the middle of a string, and refused, the whole helper would be for a table entry. The code is
+/// what is reached from the helper's start, from every branch the plan links into it and from the addresses its own code takes
+/// (adr, relocated addresses) when what is there reads as code to the end; everything up to the last such instruction counts as
+/// code (functions only called through pointers lie between the others), except the literals its code loads.
+std::vector<u8> CodeMap(std::span<const u32> w, const std::vector<size_t>& sure, const std::vector<size_t>& maybe) {
+    std::vector<u8> mark(w.size(), 0);
+    for (const size_t e : sure) {
+        if (e < w.size()) {
+            Walk(w, e, mark, false);
+        }
+    }
+    for (const size_t e : maybe) {
+        if (e < w.size() && !mark[e]) {
+            Walk(w, e, mark, true);
+        }
+    }
+    for (bool more = true; more;) { // addresses the code takes with adr
+        more = false;
+        for (size_t i = 0; i < w.size(); ++i) {
+            if (!mark[i] || (w[i] & 0x9F000000) != 0x10000000) {
+                continue;
+            }
+            const s64 off = SignExtend((((w[i] >> 5) & 0x7FFFF) << 2) | ((w[i] >> 29) & 3), 21);
+            const s64 t = static_cast<s64>(i) * 4 + off;
+            if (t >= 0 && t % 4 == 0 && static_cast<size_t>(t / 4) < w.size() && !mark[static_cast<size_t>(t / 4)] &&
+                Walk(w, static_cast<size_t>(t / 4), mark, true)) {
+                more = true;
+            }
+        }
+    }
+    size_t end = 0;
+    for (size_t i = 0; i < w.size(); ++i) {
+        if (mark[i]) {
+            end = i + 1;
+        }
+    }
+    std::vector<u8> code(w.size(), 0);
+    std::fill(code.begin(), code.begin() + static_cast<std::ptrdiff_t>(end), u8{1});
+    for (size_t i = 0; i < end; ++i) { // literals: data inside the code
+        if (!mark[i] || (w[i] & 0x3B000000) != 0x18000000) {
+            continue;
+        }
+        const s64 t = static_cast<s64>(i) + SignExtend((w[i] >> 5) & 0x7FFFF, 19);
+        const size_t words = ((w[i] >> 26) & 1) ? (1u << (w[i] >> 30)) : ((w[i] >> 30) == 0 ? 1 : 2);
+        for (size_t k = 0; k < words && t >= 0 && static_cast<size_t>(t) + k < w.size(); ++k) {
+            if (!mark[static_cast<size_t>(t) + k]) {
+                code[static_cast<size_t>(t) + k] = 0;
+            }
+        }
+    }
+    return code;
+}
+
+/// Bytes the plan writes into main run as they are (only the helper's own code goes through RewriteX18): a word that names x18,
+/// calls the supervisor or touches a system register is refused. Barriers and hints are let through.
+bool MainWordAllowed(u32 w) {
+    if ((w & 0xFF000000) == 0xD4000000) {
+        return false;
+    }
+    if ((w & 0xFF000000) == 0xD5000000) {
+        return (w & 0xFFFFF000) == 0xD5033000 || (w & 0xFFFFF01F) == 0xD503201F; // dsb / dmb / isb, hints (nop)
+    }
+    u32 mask{};
+    bool plain{};
+    const bool raw18 = Field(w, FD) == 18 || Field(w, FN) == 18 || Field(w, FM) == 18 || Field(w, FA) == 18;
+    if (!Fields(w, mask, plain)) {
+        return !raw18;
+    }
+    for (const u32 f : {FD, FN, FM, FA}) {
+        if ((mask & f) && Field(w, f) == 18) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// "min_runtime" of a manifest or package.json: a number, or digits in a string (the runtime's own reader takes both). 0 when absent.
+u32 MinRuntime(const nlohmann::json& j) {
+    if (!j.is_object() || !j.contains("min_runtime")) {
+        return 0;
+    }
+    const auto& v = j.at("min_runtime");
+    if (v.is_number_unsigned()) {
+        return v.get<u32>();
+    }
+    if (v.is_string()) {
+        const auto t = v.get<std::string>();
+        if (!t.empty() && t.size() < 6 && t.find_first_not_of("0123456789") == std::string::npos) {
+            return static_cast<u32>(std::stoul(t));
+        }
+    }
+    return 0;
+}
+
+Result InstallChecked(Core::System& system, const PnRtConfig& config, const std::array<u8, 0x20>& build_id);
+
 } // namespace
 
+/// Nothing a package's files hold may end the game: an exception from the readers below is a refused plan.
 Result Install(Core::System& system, const PnRtConfig& config, const std::array<u8, 0x20>& build_id) {
+    try {
+        return InstallChecked(system, config, build_id);
+    } catch (const std::exception& e) {
+        Result out;
+        out.error = std::string{"the load plan could not be read: "} + e.what();
+        return out;
+    }
+}
+
+namespace {
+
+Result InstallChecked(Core::System& system, const PnRtConfig& config, const std::array<u8, 0x20>& build_id) {
     Result out;
     const auto fail = [&](std::string why) {
         out.error = std::move(why);
@@ -388,7 +567,13 @@ Result Install(Core::System& system, const PnRtConfig& config, const std::array<
     } catch (const nlohmann::json::exception&) {
         return fail("load plan layout missing");
     }
-    u32 required = manifest.value("min_runtime", 0u);
+    u32 required = MinRuntime(manifest); // the larger of the manifest's and package.json's, as the runtime takes it
+    if (std::ifstream pkg{std::string{config.package_dir} + "/package.json"}; pkg) {
+        const auto pj = nlohmann::json::parse(pkg, nullptr, false, true);
+        if (!pj.is_discarded()) {
+            required = std::max(required, MinRuntime(pj));
+        }
+    }
     const auto assets = FileSys::OpenHostDirectory(dir);
     if (!assets) {
         return fail("the package's dualscreen folder cannot be opened");
@@ -407,6 +592,12 @@ Result Install(Core::System& system, const PnRtConfig& config, const std::array<
     }
     const u64 base = config.main_base;
     const u64 image_size = u64{layout.segments[2].location} + layout.segments[2].size + layout.bss_size;
+    // What the plan writes must be in main's code as this host mapped it (its text to the end of its 16 KiB page), not in what the
+    // plan's own layout calls the image: a write past it would leave a page of the game's data read-only and executable
+    const u64 text_limit = config.helper.text_end ? (config.helper.text_end + 0x3FFF) & ~u64{0x3FFF} : 0;
+    if (!text_limit || text_limit > config.main_size) {
+        return fail("this host did not say where main's code ends");
+    }
     const u64 code_size = plan.GuestCodeSize(), mailbox_size = (plan.MailboxSize() + Page - 1) & ~(Page - 1);
     const auto* const guest = plan.GuestCodeData();
     const u64 code_len = guest ? guest->bytes.size() : 0;
@@ -427,8 +618,14 @@ Result Install(Core::System& system, const PnRtConfig& config, const std::array<
     std::vector<std::vector<u8>> staged;
     for (const auto& w : plan.Writes()) {
         const u64 n = w.expected.size();
-        if (n == 0 || n != w.replacement.size() || w.offset % 4 != 0 || n % 4 != 0 || w.offset > image_size || n > image_size - w.offset) {
-            return fail("a load plan patch is not whole instructions inside main");
+        if (n == 0 || n != w.replacement.size() || w.offset % 4 != 0 || n % 4 != 0 || w.offset > image_size || n > image_size - w.offset ||
+            w.offset > text_limit || n > text_limit - w.offset) {
+            return fail("a load plan patch is not whole instructions inside main's code");
+        }
+        for (const auto& o : plan.Writes()) {
+            if (&o != &w && w.offset < o.offset + o.expected.size() && o.offset < w.offset + n) {
+                return fail("two load plan patches overlap");
+            }
         }
         if (config.helper.code_rewritten(config.helper.user, base + w.offset, n) != 0) {
             return fail(fmt::format("the load plan patches main+{:#x}, which this host's rewriter changed or moved (or its list is missing: build the game again)",
@@ -442,6 +639,14 @@ Result Install(Core::System& system, const PnRtConfig& config, const std::array<
         if (!Link(bytes, base + w.offset, w.relocations, mailbox, plan.MailboxSize(), base, image_size, code, code_len)) {
             return fail(fmt::format("the patch of main+{:#x} cannot be linked (a branch that does not reach the helper?)", w.offset));
         }
+        for (u64 k = 0; k < n; k += 4) {
+            u32 word{};
+            std::memcpy(&word, bytes.data() + k, 4);
+            if (!MainWordAllowed(word)) {
+                return fail(fmt::format("the load plan writes {:08x} to main+{:#x}: a word that names x18 or is a supervisor call or system instruction",
+                                        word, w.offset + k));
+            }
+        }
         staged.push_back(std::move(bytes));
     }
     int moved = 0;
@@ -454,7 +659,22 @@ Result Install(Core::System& system, const PnRtConfig& config, const std::array<
         std::vector<u32> words(code_size / 4), stub_words(stub_size / 4);
         std::memcpy(words.data(), bytes.data(), code_size);
         std::string why;
-        moved = RewriteX18(words, code, stub_words, stubs, config.helper.slot18_offset, why);
+        using Kind = Core::Mods::ModLoadPlan::RelocationKind;
+        using Target = Core::Mods::ModLoadPlan::RelocationTarget;
+        std::vector<size_t> sure{0}, maybe;
+        const auto entries = [&](const std::vector<Core::Mods::ModLoadPlan::Relocation>& relocs) {
+            for (const auto& r : relocs) {
+                if (r.target == Target::Code && r.addend >= 0 && r.addend % 4 == 0) {
+                    (r.kind == Kind::AArch64Branch26 ? sure : maybe).push_back(static_cast<size_t>(r.addend / 4));
+                }
+            }
+        };
+        entries(guest->relocations);
+        for (const auto& w : plan.Writes()) {
+            entries(w.relocations);
+        }
+        const auto is_code = CodeMap(words, sure, maybe);
+        moved = RewriteX18(words, is_code, code, stub_words, stubs, config.helper.slot18_offset, why);
         if (moved < 0) {
             return fail(why);
         }
@@ -471,7 +691,28 @@ Result Install(Core::System& system, const PnRtConfig& config, const std::array<
     }
     // main's patches last, a word at a time: the game runs, and from the first word on its threads may enter the helper
     const u64 ps = static_cast<u64>(sysconf(_SC_PAGESIZE));
+    // The bytes other patches branch into (a format 1 plan's payloads, in main's padding) are written before the branches: a game
+    // thread that took a patched call first found the padding still empty
+    std::vector<size_t> order, late;
     for (size_t i = 0; i < staged.size(); ++i) {
+        const u64 at = base + plan.Writes()[i].offset;
+        bool into = false;
+        for (u64 k = 0; k < staged[i].size() && !into; k += 4) {
+            u32 word{};
+            std::memcpy(&word, staged[i].data() + k, 4);
+            if ((word & 0x7C000000) != 0x14000000) {
+                continue;
+            }
+            const u64 target = at + k + static_cast<u64>(SignExtend(word & 0x03FFFFFF, 26) * 4);
+            for (size_t j = 0; j < staged.size(); ++j) {
+                const u64 o = base + plan.Writes()[j].offset;
+                into = into || (j != i && target >= o && target < o + staged[j].size());
+            }
+        }
+        (into ? late : order).push_back(i);
+    }
+    order.insert(order.end(), late.begin(), late.end());
+    for (const size_t i : order) {
         const auto& w = plan.Writes()[i];
         const u64 at = base + w.offset, n = staged[i].size(), pg = at & ~(ps - 1), len = ((at + n + ps - 1) & ~(ps - 1)) - pg;
         if (mprotect(reinterpret_cast<void*>(pg), len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
@@ -492,5 +733,7 @@ Result Install(Core::System& system, const PnRtConfig& config, const std::array<
              mailbox, plan.MailboxSize(), code, code_len, moved, staged.size());
     return out;
 }
+
+} // namespace
 
 } // namespace PeanutsHelper

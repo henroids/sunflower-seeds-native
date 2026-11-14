@@ -96,6 +96,8 @@ typedef struct PnRtCode {
     /// `size` bytes (a multiple of 16 KiB) of zeroed, writable memory within a branch's reach of all of main's code, which the
     /// caller may make executable and keeps for the life of the process. 0 when the host has none.
     uint64_t (*code_block)(void* user, size_t size);
+    /// The length of main's code (text) from its base: a load plan may write only below its 16 KiB page end.
+    uint64_t text_end;
 } PnRtCode;
 
 typedef struct PnRtConfig {

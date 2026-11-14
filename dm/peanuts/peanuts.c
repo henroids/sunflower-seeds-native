@@ -633,7 +633,7 @@ static void rt_start(void) {
     c.pad.set_button = rt_pad_button; c.pad.set_stick = rt_pad_stick;
     c.ui.publish_ui = rt_ui_publish; c.ui.publish_ui_partial = rt_ui_publish_partial;
     c.haptics.pulse = rt_haptic;
-    c.helper.code_rewritten = rt_code_rewritten; c.helper.slot18_offset = (uint32_t)plat_slot_key_entry(PLAT_SLOT_K18); c.helper.code_block = rt_code_block;   // a package's load plan: rt/peanuts_helper.cpp
+    c.helper.code_rewritten = rt_code_rewritten; c.helper.slot18_offset = (uint32_t)plat_slot_key_entry(PLAT_SLOT_K18); c.helper.code_block = rt_code_block; c.helper.text_end = m->text_end;   // a package's load plan: rt/peanuts_helper.cpp
     c.log = rt_log; c.log_level = 2;
     g_rt = pn_rt_create(&c);
     atomic_store(&g_rt_state, g_rt ? 1 : 3);
