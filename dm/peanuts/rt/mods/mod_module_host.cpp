@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <map>
+#include <string_view>
 #include <mutex>
 #include <string>
 #include <algorithm>
@@ -296,6 +297,24 @@ void ModRuntime::InitializeGameModule() {
         auto& rt = *static_cast<ModRuntime*>(p);
         if (rt.module_snapshot && ValidString(name, MaxName)) {
             rt.module_snapshot->ints[name] = value;
+        }
+        // PEANUTS: a module's state counters (names ending in _failures, _hidden, _supported, _request or _version: whether its guest
+        // writes and its helper took) go to the log when they change, at most 300 lines a run; nothing shows them on this host
+        if (ValidString(name, MaxName)) {
+            const std::string_view n{name};
+            const auto ends = [&](std::string_view tail) { return n.size() >= tail.size() && n.substr(n.size() - tail.size()) == tail; };
+            if (ends("_failures") || ends("_hidden") || ends("_supported") || ends("_request") || ends("_version")) {
+                static std::mutex mu;
+                static std::map<std::string, s64> last;
+                static int lines;
+                std::scoped_lock lk{mu};
+                const auto it = last.find(name);
+                if ((it == last.end() || it->second != value) && lines < 300) {
+                    ++lines;
+                    last[name] = value;
+                    LOG_INFO(Core, "DSMod module value {} = {}", name, value);
+                }
+            }
         }
     };
     module_host.publish_f64 = [](void* p, const char* name, double value) {
