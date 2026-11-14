@@ -2586,6 +2586,8 @@ void mtl_reg_samp(int id, const samp_par *p) {
     if (id >= g_nsreg) { int n = g_nsreg ? g_nsreg : 256; while (n <= id) n *= 2; g_sreg = realloc(g_sreg, (size_t)n * sizeof *g_sreg); memset(g_sreg + g_nsreg, 0, (size_t)(n - g_nsreg) * sizeof *g_sreg); g_nsreg = n; }
     if (id < g_nsres) g_sres[id] = VK_NULL_HANDLE;
     g_sreg[id] = *p; dirty(&g_sdirty, &g_nsd, &g_sdcap, &g_sdflag, 4096 * 4, id);
+    // PEANUTS: DM_VK_SAMP_LOG=1 (diagnostic, live): every sampler registration (ID with its pool's base, NVN wrap modes, filters, lod range), to tell a slot the game registers again from one it never changes
+    if (VKA_ENV("DM_VK_SAMP_LOG", 0)) VLOG("sampler registered: ID %d wrap %d,%d,%d filter min %d mag %d lod %g..%g aniso %g compare %d", id, p->ws, p->wt, p->wr, p->minf, p->magf, p->lod_min, p->lod_max, p->aniso, p->cmp_mode);
     if (!g_sver) g_sver = calloc(4096 * 4, sizeof *g_sver);
     if (g_sver) atomic_fetch_add_explicit(&g_sver[id], 1, memory_order_release);
     pthread_mutex_unlock(&g_tmu);
