@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import dev.peanuts.build.BuildListener;
 import dev.peanuts.build.ModBuild;
@@ -36,9 +35,9 @@ import dev.peanuts.ui.LibrarySettings;
  * code mod is built from the pack. Local files only, never a catalog and never a download (DESIGN-MODS.md: a mod is someone else's edit of the game).
  * <p>
  * Files and cheats apply on the normal build (dev.peanuts.mods.ModRuntime, at the game's start). Code (exefs, IPS patches) needs a build of its own, a variant
- * pack beside the normal one (ModStore.variantId: one per set of enabled code mods), which the section's "Build with mods" makes and its "Play with mods"
- * starts. The normal build and the page's own Play are never changed: Play reads the pack through upstream's checks (the pack's build IDs against the game's),
- * and every other way to start a game (Home, a shortcut, a frontend) is upstream's too, so a variant is started from here, where it is made.
+ * pack beside the normal one (ModStore.variantId: one per set of enabled code mods), which the section's "Build with mods" makes. The normal build is never
+ * changed. Every start of the game (the page's Play, Home, a shortcut, a frontend: all go through MainActivity.launch) asks {@link #packToPlay} for the pack:
+ * the variant's while code mods are on and their build is ready, else the normal one. So a mod that is on plays, and one that is off or deleted does not.
  * <p>
  * The page is built again after a choice of another row, and a pick, an import or a build outlives that: what is in progress is kept per process (PICK, IMPORT,
  * BUILD, FAILED), and whichever section shows now ({@link #current}) is the one told to render again.
@@ -58,19 +57,17 @@ public final class ModsSection {
     private final SectionUi ui;
     private final String titleId, gameName;
     private final File game, pack, home;   // the dump folder or .nup, its pack (null: not built), and the game's folder the mods are in (ModRuntime.home, as GameActivity finds it)
-    private final Consumer<String> playPack;
     private final LinearLayout body;
 
     /**
-     * The section. gameDir and packDir are the game's entry in upstream's list (Game.gameDir, Game.packDir); playPack starts this game with another pack
-     * folder (the variant's), through upstream's own Play.
+     * The section. gameDir and packDir are the game's entry in upstream's list (Game.gameDir, Game.packDir).
      */
-    public static View view(Activity a, String titleId, String gameName, String gameDir, String packDir, Consumer<String> playPack) {
+    public static View view(Activity a, String titleId, String gameName, String gameDir, String packDir) {
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
         SectionUi ui = new SectionUi(a);
         box.addView(ui.section("Mods"), SectionUi.lp(0, 12));
-        ModsSection s = new ModsSection(a, ui, titleId, gameName, gameDir, packDir, playPack);
+        ModsSection s = new ModsSection(a, ui, titleId, gameName, gameDir, packDir);
         box.addView(s.body, SectionUi.lp(0, 0));
         current = s;
         // the page left, or built again: this section's views are gone, so nothing more is rendered into them (a newer section has taken current by then)
@@ -82,14 +79,37 @@ public final class ModsSection {
         return box;
     }
 
-    private ModsSection(Activity a, SectionUi ui, String titleId, String gameName, String gameDir, String packDir, Consumer<String> playPack) {
-        this.a = a; this.ui = ui; this.titleId = titleId; this.gameName = gameName; this.playPack = playPack;
+    private ModsSection(Activity a, SectionUi ui, String titleId, String gameName, String gameDir, String packDir) {
+        this.a = a; this.ui = ui; this.titleId = titleId; this.gameName = gameName;
         game = gameDir == null || gameDir.isEmpty() ? null : new File(gameDir);
         File p = packDir == null || packDir.isEmpty() ? null : new File(packDir);
         pack = p != null && new File(p, "pack.tsv").isFile() ? p : null;
         home = pack == null ? null : ModRuntime.home(a, titleId, game, p.getParentFile());
         body = new LinearLayout(a);
         body.setOrientation(LinearLayout.VERTICAL);
+    }
+
+    /**
+     * The pack a start of this game uses (MainActivity.launch's PEANUTS hook): the variant's when code mods are on and their build is ready, else packDir as it
+     * is. With code mods on and no build of them yet the game starts without them, and notBuilt (may be null) is run to say so. Anything unreadable: packDir
+     */
+    public static String packToPlay(android.content.Context c, String titleId, String gameDir, String packDir, Runnable notBuilt) {
+        try {
+            File p = packDir == null || packDir.isEmpty() ? null : new File(packDir);
+            if (p == null || !new File(p, "pack.tsv").isFile()) return packDir;
+            File game = gameDir == null || gameDir.isEmpty() ? null : new File(gameDir);
+            File home = ModRuntime.home(c, titleId, game, p.getParentFile());
+            List<ModStore.Mod> codeMods = ModStore.enabledCodeMods(ModRuntime.mods(home, titleId));
+            if (codeMods.isEmpty()) return packDir;
+            String variantId = ModStore.variantId(titleId, codeMods);
+            if (variantId == null) return packDir;
+            File variantPack = dev.nxnative.android.AppStorage.pack(c, variantId);
+            if (new File(variantPack, "pack.tsv").isFile()) return variantPack.getPath();
+            if (notBuilt != null) notBuilt.run();
+        } catch (RuntimeException e) {
+            android.util.Log.w("peanuts", "mods: the pack to play: " + e);
+        }
+        return packDir;
     }
 
     private static void renderCurrent() { if (current != null) current.render(); }
@@ -219,7 +239,7 @@ public final class ModsSection {
 
     // ---- Code mods: the build with mods (dev.peanuts.build.ModBuild / ModdedBuild / ModBuildPipeline) and its Play ----
 
-    /** The rows under the list while a code mod is on: what stops a build, or its state (building, failed and why, ready) with Build with mods / Play with mods */
+    /** The rows under the list while a code mod is on: what stops a build, or its state (building, failed and why, ready) with Build with mods */
     private void buildRows(List<ModStore.Mod> mods) {
         List<String> profileModules = ModdedBuild.normalModules(pack);
         if (profileModules == null) { explain("⚠️", "Cannot build with mods", "This game's pack has no module list (pack.tsv). Rebuild the game, then build with mods."); return; }
@@ -236,12 +256,11 @@ public final class ModsSection {
         String value = mine ? "Building: " + buildText
                 : building ? "Another game is being built with mods. Wait for it to finish."
                 : failed != null ? "Failed: " + failed
-                : ready ? "Ready. Play with mods starts the game with its code mods; Play starts it without them."
-                : "Code mods need a build of their own. The normal build is kept as it is.";
+                : ready ? "Ready. Play starts the game with its code mods."
+                : "Code mods need a build of their own: until it is made, Play starts the game without them. The normal build is kept as it is.";
         body.addView(ui.setting("🔨", "Build with mods", value, failed == null || mine ? null : v -> message("Build with mods failed", failed)), SectionUi.lp(0, 0));
         if (mine) return;
         LinearLayout buttons = SectionUi.buttons(a);
-        if (ready) SectionUi.add(buttons, ui.button("Play with mods", SectionUi.PRIMARY, v -> playPack.accept(variantPack.getPath())), !building);
         SectionUi.add(buttons, ui.button(ready ? "Rebuild with mods" : "Build with mods", ready ? SectionUi.QUIET : SectionUi.PRIMARY, v -> startBuild(variantId, variantPack, plan)), !building);
         body.addView(buttons, SectionUi.lp(0, 0));
     }

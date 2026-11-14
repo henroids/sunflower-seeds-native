@@ -1233,7 +1233,11 @@ public final class MainActivity extends Activity {
 
     void launch(Game card) {
         if (needAccess(new File(card.gameDir))) return;
-        Game g = Folders.repack(this, card);   // a remembered pack folder that is gone: the usual search instead
+        Game g0 = Folders.repack(this, card);   // a remembered pack folder that is gone: the usual search instead
+        // PEANUTS: code mods that are on play from their own build's pack (dev.peanuts.settings.ModsSection), whatever started the game; off, deleted or not built yet: the normal pack
+        String modPack = dev.peanuts.settings.ModsSection.packToPlay(this, g0.titleId, g0.gameDir, g0.packDir,
+                () -> Toast.makeText(this, "Code mods are on but not built: the game starts without them (hold the cover › Game › Mods › Build with mods)", Toast.LENGTH_LONG).show());
+        Game g = modPack == null || modPack.equals(g0.packDir) ? g0 : new Game(g0.titleId, g0.name, g0.gameDir, modPack, g0.used);   // PEANUTS
         File saveGone = Folders.goneSave(this, g);
         if (saveGone != null) { Folders.saveGoneDialog(this, g, saveGone); return; }
         String gone = gone(g);
