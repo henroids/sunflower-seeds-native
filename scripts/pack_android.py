@@ -369,7 +369,9 @@ def rewrite(py, srcs, out, jobs, g, in_process=False):
     todo = {}
     for m, src in srcs.items():
         keys = rewrite_keys(src, g, out); key = keys[0]; kf = out / f'{m}.android.key'
-        if (out / f'{m}.patched.bin').is_file() and kf.is_file() and (have := kf.read_text().strip()) in keys:   # the current rewriter's key, an equivalent one's (EQUIV), an earlier formula's
+        # PEANUTS: a main with a main.changed.tsv is kept only with its main.orig.bin (the file's own bytes of the rewritten runs, which a companion package's module reads: dm/peanuts/peanuts.c
+        # rt_orig). A pack of the rewriter before it counts as up to date (EQUIV: nothing rebuilds on its own), and gets the file when the game is built again
+        if (m != 'main' or (out / 'main.orig.bin').is_file() or not (out / 'main.changed.tsv').is_file()) and (out / f'{m}.patched.bin').is_file() and kf.is_file() and (have := kf.read_text().strip()) in keys:   # the current rewriter's key, an equivalent one's (EQUIV), an earlier formula's
             if have != key: tmp = out / f'{m}.android.key.tmp'; write_lf(tmp, key + '\n'); os.replace(tmp, kf)   # the same rewrite: its key as rewrite_key's (upgrade_keys)
             print(f'  {m}: unchanged, kept'); continue
         todo[m] = (src, key)
