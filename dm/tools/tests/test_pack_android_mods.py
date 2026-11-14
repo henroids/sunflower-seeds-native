@@ -63,13 +63,13 @@ class MergeModModules(unittest.TestCase):
 
     def test_modules_override_with_an_added_name_and_its_source(self):
         mods, srcs = pa.merge_mod_modules(self.mods, self.srcs, ['main', 'subsdk0', 'sdk', 'subsdk9'], {'subsdk9': '/mods/Lumi/exefs/subsdk9'})
-        self.assertEqual(mods, ['main', 'subsdk0', 'sdk', 'subsdk9'])
+        self.assertEqual(mods, ['main', 'subsdk0', 'sdk', 'subsdk9'])   # the override's own order is kept
         self.assertEqual(srcs['subsdk9'], Path('/mods/Lumi/exefs/subsdk9'))
 
     def test_mod_exefs_alone_appends_a_name_not_in_the_override(self):
         # a caller that forgets --modules for an added module still gets it in the list (mod_exefs is the source of truth for "does this module exist")
         mods, srcs = pa.merge_mod_modules(self.mods, self.srcs, None, {'subsdk9': '/mods/Lumi/exefs/subsdk9'})
-        self.assertEqual(mods, ['main', 'subsdk0', 'sdk', 'subsdk9'])
+        self.assertEqual(mods, ['main', 'subsdk0', 'subsdk9', 'sdk'])   # where the console loads it (dm/tools/xmod.py insert)
 
 
 class ApplyModPatches(unittest.TestCase):
@@ -89,7 +89,7 @@ class ApplyModPatches(unittest.TestCase):
             src = d / 'main'
             src.write_bytes(make_nso(build_id=BUILD_ID))
             patches = d / 'LumiPatches'; patches.mkdir()
-            (patches / (BUILD_ID16 + '.ips')).write_bytes(ips.build([(0, b'\x7f')]))
+            (patches / (BUILD_ID16 + '.ips')).write_bytes(ips.build([(0x100, b'\x7f')]))
             out = d / 'out'; out.mkdir()
             got = pa.apply_mod_patches('main', src, [patches], out)
             self.assertEqual(got, out / '.mod-src' / 'main' / 'main')

@@ -60,6 +60,25 @@ class FindPatches(unittest.TestCase):
             got = patch_ips.find_patches(d, BUILD_ID16)
             self.assertEqual([os.path.basename(p) for p in got], [BUILD_ID16.upper() + '.ips'])
 
+    def test_a_name_of_the_whole_build_id_matches(self):
+        # Luminescent Platinum's patch is named by the 32 digits of a 16-byte ID (the bytes after them are zero); Atmosphère also takes 40 and 64
+        bid = bytes.fromhex('94ceae325c205c4b9d6f7235552f28fd') + bytes(16)
+        for stem in ('94CEAE325C205C4B9D6F7235552F28FD', '94ceae325c205c4b9d6f7235552f28fd' + '00' * 4, bid.hex(), '94ceae325c205c4b'):
+            with tempfile.TemporaryDirectory() as d:
+                (Path(d) / (stem + '.ips')).write_bytes(b'x')
+                self.assertEqual([os.path.basename(p) for p in patch_ips.find_patches(d, bid)], [stem + '.ips'], stem)
+
+    def test_a_name_that_is_not_the_build_id_does_not_match(self):
+        bid = bytes.fromhex('94ceae325c205c4b9d6f7235552f28fd') + bytes(16)
+        for stem in ('94ceae325c205c4b9d6f7235552f28', '94ceae325c205c4b9d6f7235552f28fe', '94ceae325c205c4b9d6f', '94ceae325c205c4', '94ceae325c205c4b9d6f7235552f28fd' + '01',
+                     '94ceae325c205c4bzz', bid.hex() + '00'):
+            with tempfile.TemporaryDirectory() as d:
+                (Path(d) / (stem + '.ips')).write_bytes(b'x')
+                self.assertEqual(patch_ips.find_patches(d, bid), [], stem)
+        # the short name is the ID's first 8 bytes whatever follows them (20-byte IDs)
+        self.assertTrue(patch_ips.stem_matches('0123456789abcdef', bytes.fromhex('0123456789abcdef') + b'\x55' * 12 + bytes(12)))
+        self.assertFalse(patch_ips.stem_matches('0123456789abcdef55', bytes.fromhex('0123456789abcdef') + b'\x55' * 12 + bytes(12)))
+
     def test_no_match_is_empty(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(patch_ips.find_patches(d, BUILD_ID16), [])
@@ -77,8 +96,8 @@ class FindPatches(unittest.TestCase):
 class ApplyPatches(unittest.TestCase):
     def test_applies_in_order_and_stays_in_bounds(self):
         mod = nso.load(make_nso())
-        p1 = ips.build([(4, b'\xAA\xBB')])
-        p2 = ips.build([(4, b'\xCC')])   # overlaps p1's edit; applied second, wins at offset 4
+        p1 = ips.build([(0x104, b'\xAA\xBB')])   # a patch's offsets count the NSO's 0x100-byte header: image offset 4
+        p2 = ips.build([(0x104, b'\xCC')])   # overlaps p1's edit; applied second, wins at offset 4
         with tempfile.TemporaryDirectory() as d:
             f1, f2 = Path(d) / 'a.ips', Path(d) / 'b.ips'
             f1.write_bytes(p1); f2.write_bytes(p2)
@@ -89,12 +108,24 @@ class ApplyPatches(unittest.TestCase):
 
     def test_patch_cannot_grow_past_the_original_image(self):
         mod = nso.load(make_nso())
-        past = ips.build([(len(mod.image) + 4, b'\x01')])
+        past = ips.build([(0x100 + len(mod.image) + 4, b'\x01')])
         with tempfile.TemporaryDirectory() as d:
             f = Path(d) / 'a.ips'
             f.write_bytes(past)
             with self.assertRaises(ips.Error):
                 patch_ips.apply_patches(mod.image, [str(f)])
+
+    def test_offsets_count_the_nso_header(self):
+        # Atmosphère takes sizeof(NsoHeader) off every record: 0x100 is the image's first byte, and what a record has inside the header is left out
+        mod = nso.load(make_nso())
+        p = ips.build([(0x100, b'\x11'), (0x10, b'\x22\x22'), (0xFE, b'\x33\x34\x35\x36'), (0x100 + mod.text_end - 1, b'\x44')])
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / 'a.ips'; f.write_bytes(p)
+            out = patch_ips.apply_patches(mod.image, [str(f)])
+        self.assertEqual(bytes(out[:2]), b'\x35\x36')   # the record across the header's end: its last two bytes, over the first record's
+        self.assertEqual(out[mod.text_end - 1], 0x44)
+        self.assertEqual(bytes(out[2:mod.text_end - 1]), bytes(mod.image[2:mod.text_end - 1]))   # the record inside the header wrote nothing
+        self.assertEqual(len(out), len(mod.image))
 
     def test_bad_ips_file_name_in_error(self):
         mod = nso.load(make_nso())
@@ -169,7 +200,7 @@ class MainCli(unittest.TestCase):
             src.write_bytes(make_nso(build_id=BUILD_ID))
             empty = d / 'empty'; empty.mkdir()
             patches = d / 'LumiPatches'; patches.mkdir()
-            (patches / (BUILD_ID16 + '.ips')).write_bytes(ips.build([(0, b'\x7f')]))
+            (patches / (BUILD_ID16 + '.ips')).write_bytes(ips.build([(0x100, b'\x7f')]))
             out = d / 'out.nso'
             r = subprocess.run([sys.executable, str(REPO / 'dm/tools/patch_ips.py'), str(src), str(empty), str(patches), str(out)],
                                 capture_output=True, text=True)

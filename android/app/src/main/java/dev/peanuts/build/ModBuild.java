@@ -43,13 +43,14 @@ public final class ModBuild {
 
     /** The result of {@link #compose}: either {@link #modules}/{@link #source} (success), or {@link #refusal} (a clear reason, nothing to build) */
     public static final class Plan {
-        /** The modded build's full module list, profile order first then any added module in mod priority order; null on refusal */
+        /** The modded build's full module list: the profile's, with each added module where the console loads it ({@link #insertInConsoleOrder}); null on refusal */
         public final List<String> modules;
         /** module name → the mod supplying its exefs bytes, absent (not present as a key) for a module the normal pack supplies unchanged; null on refusal */
         public final Map<String, ModStore.Mod> source;
-        /** Every enabled code mod's exefs_patches/&lt;set&gt;/ folder, in priority order. Atmosphère names these folders after the patch set, not a module
-         *  (exefs_patches/&lt;set&gt;/&lt;build id&gt;.ips), and matches each file to a module by build ID: pack_android.py --mod-patches does the same, so every
-         *  set is offered to every module and only the files named for that module's build ID apply. Empty on refusal */
+        /** Every enabled code mod's exefs_patches/&lt;set&gt;/ folder, in priority order, and its exefs/ folder when that holds .ips files (the emulators'
+         *  layout: Luminescent Platinum ships exefs/&lt;build id&gt;.ips beside the subsdk1 it adds). Atmosphère names the set folders after the patch set, not
+         *  a module (exefs_patches/&lt;set&gt;/&lt;build id&gt;.ips), and matches each file to a module by build ID: pack_android.py --mod-patches does the same, so
+         *  every set is offered to every module and only the files named for that module's build ID apply. Empty on refusal */
         public final List<java.io.File> patchSets;
         /** Why nothing can be built; null on success */
         public final String refusal;
@@ -68,7 +69,7 @@ public final class ModBuild {
      * is already in profileModules, or adds, when it is not): the first mod in priority order to name a given module wins it (replace or add), later
      * mods naming the same module are ignored for it — the same first-enabled-wins rule as the romfs overlay and {@code ModStore.enabledRomfsDirs}, so
      * a player whose mods are in another order gets one consistent rule everywhere, not a different one for code than for files. An added module (not
-     * already in profileModules) is appended in the order its mod was first seen. genericHost: Peanuts' own default build (-PnxGenericHost=true);
+     * already in profileModules) goes where the console loads it ({@link #insertInConsoleOrder}). genericHost: Peanuts' own default build (-PnxGenericHost=true);
      * false refuses outright as soon as any mod would add a module, since the per-title host has no spare module slot to give it (see the class doc).
      */
     public static Plan compose(List<String> profileModules, List<ModStore.Mod> codeMods, boolean genericHost) {
@@ -80,6 +81,7 @@ public final class ModBuild {
             if (sets != null) { java.util.Arrays.sort(sets); java.util.Collections.addAll(patchSets, sets); }
             String[] names = mod.exefs().list();
             if (names == null) continue;   // no exefs/ (an exefs_patches-only mod never changes the module list, only a module's own bytes)
+            for (String name : names) if (isIpsName(name)) { patchSets.add(mod.exefs()); break; }   // exefs/<build id>.ips: the folder is a patch set too
             for (String name : names) {
                 if (!isKnownModuleName(name)) continue;   // exefs/ may also hold main.npdm, not a module name the loader takes
                 if (source.containsKey(name)) continue;   // an earlier (higher-priority) mod already claimed this module
@@ -88,7 +90,7 @@ public final class ModBuild {
                     if (!genericHost) return refuse(mod.name + " adds " + name + ", which this title's build has no module slot for (not built with "
                             + "the generic host): a self-service mod build needs the generic host; ask a developer to rebuild the app with it, or drop "
                             + name + " from " + mod.name + "'s exefs/.");
-                    modules.add(name);
+                    insertInConsoleOrder(modules, name);
                 }
                 source.put(name, mod);
             }
@@ -97,6 +99,33 @@ public final class ModBuild {
             return refuse("the modded build would load " + modules.size() + " modules (" + String.join(" ", modules) + "), more than the generic host's "
                     + MODULES_CAP + "-slot limit (dm/peanuts/profile/profile_rt.h DM_PROFILE_MODULES_CAP): drop a mod, or ask a developer to raise the cap.");
         return new Plan(modules, source, patchSets, null);
+    }
+
+    /** A patch file's name: .ips or .ips32, in either letter case (dm/tools/patch_ips.py find_patches looks for the two) */
+    static boolean isIpsName(String name) {
+        String n = name.toLowerCase(java.util.Locale.ROOT);
+        return n.endsWith(".ips") || n.endsWith(".ips32");
+    }
+
+    /** The order Horizon's loader maps a process's modules in (dm/tools/xmod.py CONSOLE_ORDER): each right after the one before it */
+    private static final String[] CONSOLE_ORDER = {"rtld", "main", "subsdk0", "subsdk1", "subsdk2", "subsdk3", "subsdk4", "subsdk5", "subsdk6", "subsdk7", "subsdk8",
+            "subsdk9", "sdk"};
+
+    private static int consoleRank(String name) {
+        for (int i = 0; i < CONSOLE_ORDER.length; i++) if (CONSOLE_ORDER[i].equals(name)) return i;
+        return CONSOLE_ORDER.length;
+    }
+
+    /**
+     * name added to modules where the console loads it: before the first module that comes later in the console's order, at the end when there is none
+     * (dm/tools/xmod.py insert, the same rule). An added subsdk1 then stands between subsdk0 and sdk here as there: its symbols take the same precedence
+     * (a lookup goes through the modules in load order), and the module is as near to main as the mod's own branches into it expect. The profile's
+     * modules keep their order.
+     */
+    static void insertInConsoleOrder(List<String> modules, String name) {
+        int at = modules.size();
+        for (int i = 0; i < modules.size(); i++) if (consoleRank(modules.get(i)) > consoleRank(name)) { at = i; break; }
+        modules.add(at, name);
     }
 
     /**

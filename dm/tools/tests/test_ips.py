@@ -89,6 +89,15 @@ class Apply(unittest.TestCase):
         out = ips.apply(b'\x00\x00\x00\x00', ips.build([(2, b'\x01\x02')]), max_size=4)   # fits exactly: allowed
         self.assertEqual(bytes(out), b'\x00\x00\x01\x02')
 
+    def test_header_bytes_are_taken_off_and_never_written(self):
+        # an exefs patch counts the NSO's 0x100-byte header (ips.NSO_HEADER): a record at 0x100 is the image's first byte
+        self.assertEqual(ips.NSO_HEADER, 0x100)
+        out = ips.apply(b'\x00' * 8, ips.build([(0x104, b'\xaa\xbb')]), header=0x100)
+        self.assertEqual(bytes(out), b'\x00\x00\x00\x00\xaa\xbb\x00\x00')
+        out = ips.apply(b'\x00' * 4, ips.build([(0x40, b'\x01\x02'), (0xFF, b'\x03\x04\x05')]), header=0x100)   # inside the header: left out; across its end: the rest
+        self.assertEqual(bytes(out), b'\x04\x05\x00\x00')
+        with self.assertRaises(ips.Error): ips.apply(b'\x00' * 4, ips.build([(0x103, b'\x01\x02')]), header=0x100, max_size=4)
+
     def test_apply_accepts_a_pre_parsed_record_list(self):
         out = ips.apply(b'\x00\x00', [ips.Record(0, b'\x9f')])
         self.assertEqual(bytes(out), b'\x9f\x00')

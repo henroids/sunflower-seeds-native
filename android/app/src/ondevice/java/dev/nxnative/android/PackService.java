@@ -568,6 +568,17 @@ public final class PackService extends Service {
                 tool = "scripts/pack_android.py";
                 argv = new String[] {dump.getPath(), "--version", v, "--out", pack.getPath(), "--shader-cache", j.shaderCache().getPath(), "--keep-code", "-j", "1", "--in-process",
                         "--made-by", "app " + BuildConfig.VERSION_NAME};   // the pack's own marker: the launcher updates its code by itself when only the tools change (Ondevice.ownPack)
+                // PEANUTS begin: a build with code mods packs with the same extra argv as its rewrite step (Job.modArgs): pack.tsv's modules row is then the
+                // variant's (the host loads the modules that row names, main.c pack_modules), where it listed the game's own and the added module of
+                // Luminescent Platinum for Pokemon Brilliant Diamond (subsdk1, rewritten and in the pack) was never loaded. --keep-code rewrites nothing
+                String packModArgs = j.modArgs();
+                if (!packModArgs.isEmpty()) {
+                    String[] extra = packModArgs.split("\n");
+                    String[] withMods = java.util.Arrays.copyOf(argv, argv.length + extra.length);
+                    System.arraycopy(extra, 0, withMods, argv.length, extra.length);
+                    argv = withMods;
+                }
+                // PEANUTS end
                 break;
             }
             default:

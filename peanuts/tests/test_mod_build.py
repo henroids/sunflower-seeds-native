@@ -64,6 +64,19 @@ public final class ModBuildTest {
                 System.out.println("source=" + src);
                 break;
             }
+            case "patch_sets": {
+                // patch_sets <root> <mod1Name:files...> ...: each patch set as <mod folder>/<folder under it>
+                List<ModStore.Mod> mods = new ArrayList<>();
+                for (int i = 2; i < args.length; i++) {
+                    String[] p = args[i].split(":");
+                    mods.add(makeMod(root, p[0], p.length > 1 ? p[1].split(",") : new String[0]));
+                }
+                ModBuild.Plan plan = ModBuild.compose(List.of("main", "subsdk0", "sdk"), mods, true);
+                List<String> out = new ArrayList<>();
+                for (File f : plan.patchSets) out.add(root.toPath().relativize(f.toPath()).toString());
+                System.out.println(String.join(",", out));
+                break;
+            }
             case "build_id": {
                 // build_id <moddedId> <registeredId1,registeredId2,...>
                 List<String> reg = List.of(args[3].split(","));
@@ -95,9 +108,23 @@ public final class ModBuildTest {
         out = self.run_cmd('compose_add', 'true', 'Lumi:main')
         self.assertEqual(out, 'modules=main,subsdk0,sdk\nsource=main=Lumi;')
 
-    def test_a_mod_that_adds_a_new_module_appends_it_in_priority_order(self):
+    def test_a_mod_that_adds_a_new_module_puts_it_where_the_console_loads_it(self):
+        # the console's order is main, subsdk0..9, sdk: an added subsdk stands before sdk (its symbols' precedence, and the distance its branches expect)
         out = self.run_cmd('compose_add', 'true', 'Lumi:main,subsdk9')
-        self.assertEqual(out, 'modules=main,subsdk0,sdk,subsdk9\nsource=main=Lumi;subsdk9=Lumi;')
+        self.assertEqual(out, 'modules=main,subsdk0,subsdk9,sdk\nsource=main=Lumi;subsdk9=Lumi;')
+        out = self.run_cmd('compose_add', 'true', 'Lumi2:subsdk1')   # Luminescent Platinum for Pokemon Brilliant Diamond
+        self.assertEqual(out, 'modules=main,subsdk0,subsdk1,sdk\nsource=subsdk1=Lumi2;')
+        out = self.run_cmd('compose_add', 'true', 'A:subsdk3', 'B:subsdk1,subsdk2')
+        self.assertEqual(out, 'modules=main,subsdk0,subsdk1,subsdk2,subsdk3,sdk\nsource=subsdk1=B;subsdk2=B;subsdk3=A;')
+
+    def test_an_exefs_folder_with_ips_files_is_a_patch_set(self):
+        # the emulators' layout: exefs/<build id>.ips beside the module the mod adds (Luminescent Platinum); exefs_patches/<set>/ comes first
+        out = self.run_cmd('patch_sets', 'Lumi:subsdk1,94CEAE325C205C4B9D6F7235552F28FD.ips')
+        self.assertEqual(out, 'Lumi/exefs')
+        out = self.run_cmd('patch_sets', 'Plain:subsdk1,main.npdm', 'Other:a.IPS32')
+        self.assertEqual(out, 'Other/exefs')
+        out = self.run_cmd('patch_sets', 'Plain2:subsdk1')
+        self.assertEqual(out, '')
 
     def test_adding_a_module_on_a_non_generic_host_is_refused(self):
         out = self.run_cmd('compose_add', 'false', 'Lumi:main,subsdk9')

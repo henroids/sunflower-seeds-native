@@ -220,3 +220,22 @@ and all of `dev.peanuts.build.ModdedBuild`/`ModBuildService`/`ModBuildPipeline`/
 of scope for this file. `dev.peanuts.settings.ModsSection`'s and `dev.peanuts.ui.GameSheet`'s edits are
 Peanuts-owned files too. Full detail, the variant's on-disk layout and the device-test recipe: the mods
 build report (owner's session log) and `PEANUTS.md`'s 2026-11-13 "build-time half" status entry.
+
+## Round 6 (2026-11-14) — code mods whose modules branch into each other
+
+A mod made for the console may branch straight from one module into another (Luminescent Platinum for
+Pokemon Brilliant Diamond 1.3.0: 106 `b`/`bl` patched into main that go to the `subsdk1` it adds, and 1,228
+from that module into main), at the distances the modules have on the console. The packer works those out
+(`dm/tools/xmod.py`, new), the rewriter checks and lists them, the loader aims them again. Upstream hunks,
+all behind "a build without code mods takes none of this":
+
+| File | Hunk | Marker |
+|---|---|---|
+| `dm/tools/patch_nso.py` | `--xmod <layout file>` parsed with the other arguments; `xmod_table()` before the final summary line writes `<module>.xmod.tsv` or refuses the build. Without `--xmod` the output is byte for byte what it was (main and subsdk0 of Pokemon Brilliant Diamond 1.3.0 rewritten before and after: 16 of 16 output files the same, `build_src.sha256` apart, which records the rewriter's own hash), so the file before the change is kept as `dm/tools/rewriter_equiv/patch_nso.py.125819eecaa9` and existing packs stay up to date | a `PEANUTS:` comment and a `PEANUTS begin`/`PEANUTS end` block |
+| `dm/host/loader.c` | `xmod_apply()`/`xmod_apply_all()` and its one call in `load_modules()`, after every module is mapped and before relocation: each row's `imm26` set for the bases the modules got here | `PEANUTS begin`/`PEANUTS end` block, a `PEANUTS:` comment on the call |
+| `scripts/pack_android.py` | `cross_module()`, `xmod_keys()`, the `xmod` argument of `rewrite()`/`upgrade_keys()` (a module rewritten with a layout is keyed with it), an added module placed in the console's order (`merge_mod_modules`), `mod_build` rows in `pack.tsv` for the modules a mod supplies (a `build` row is compared with the game's own file, `BuildCheck.build`) | inside the existing `PEANUTS begin`/`PEANUTS end` blocks, `PEANUTS` comments on the single lines |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | the "pack" case appends `Job.modArgs()`'s tokens too: `pack.tsv` listed the game's own modules and the host never loaded the added one | `PEANUTS begin`/`PEANUTS end` block |
+
+No upstream-candidate general fix here either. `dm/tools/ips.py`, `dm/tools/patch_ips.py` (a patch's offsets
+count the NSO's 0x100-byte header, as Atmosphère applies them; a patch file named by the whole build ID),
+`dm/tools/xmod.py` and `dev.peanuts.build.ModBuild`/`ModdedBuild`/`Prepare` are Peanuts-owned files.

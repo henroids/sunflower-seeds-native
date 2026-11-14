@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # PEANUTS: new file (code mods: IPS/IPS32 before the rewrite, DESIGN-MODS.md)
-"""Applies a code mod's exefs_patches (ips.py: IPS/IPS32, Atmosphère's own format and offset convention) to one
+"""Applies a code mod's exefs_patches (ips.py: IPS/IPS32, Atmosphère's own format and offset convention: offsets count the NSO's 0x100-byte header) to one
 NSO module, *before* dm/tools/patch_nso.py's ARM64 rewrite — the rewrite's own registered CUTS and MATCH_CUTS
 assert the module's original bytes one at a time and would otherwise abort on a mod's own edits, or silently
 rewrite around them.
 
 Where this sits in a mod build (design/platform/DESIGN-MODS.md "ExeFS binary patch (IPS/IPS32)"): a code mod
 (dev.peanuts.mods.ModStore) may ship exefs_patches/<name>/<buildid>.ips(32) files, named by the module's own NSO
-build ID (its first 8 bytes, 16 lowercase hex characters) exactly as Atmosphère's loader looks them up, so a mod
-author's existing Atmosphère-layout package needs no renaming to be used here.
+build ID (all of it without its trailing zero bytes, or more, in either letter case, as Atmosphère's loader looks
+them up; or its first 8 bytes alone: stem_matches), so a mod author's existing Atmosphère-layout package needs no
+renaming to be used here. An emulator-layout mod keeps the same files in its exefs/ folder, beside the modules it
+adds; that folder is then given as a patches dir too (dev.peanuts.build.ModBuild).
 
 Usage: patch_ips.py <module NSO/NRO> <patches dir> <output NSO> [<patches dir> ...]
   <module>        a stock module (main, subsdk0, ...), read with dm/tools/nso.py exactly as patch_nso.py reads it
@@ -36,45 +38,57 @@ import nso
 
 
 def build_id_hex16(build_id):
-    """Atmosphère's own module key: the first 8 bytes of the 0x20-byte NSO build ID, as 16 lowercase hex digits
-    (the filename it expects under exefs_patches/<name>/ and atmosphere/contents/<tid>/cheats/)"""
+    """The module key in messages and in the profile's build rows' short form: the first 8 bytes of the 0x20-byte NSO build ID, as 16 lowercase hex digits"""
     return build_id[:8].hex()
 
 
-def find_patches(patch_dir, build_id16):
-    """Every .ips/.ips32 file directly under patch_dir whose stem matches build_id16, case-insensitively, sorted
-    for a deterministic order when both extensions are present (an '.ips32' sorts after '.ips' — a mod should
-    never ship both for the same build, but if it does, the one meant for a build this large wins)"""
+def stem_matches(stem, build_id):
+    """Whether a patch file named <stem>.ips is for the module with this build ID (bytes, the NSO header's 0x20). Atmosphère's rule (ldr_patcher.cpp
+    MatchesModuleId): the stem is an even number of hex digits, at most 64, and equals the build ID when the bytes it leaves out are zero, in either
+    letter case - Luminescent Platinum names its patch by the 32 digits of the game's 16-byte ID, others by all 40 of a 20-byte one or the whole 64.
+    A stem of exactly 16 digits also counts when it is the ID's first 8 bytes whatever follows them: the short name this tool took from the start
+    (the cheat files' convention), kept so a mod laid out for it still applies."""
+    s = stem.lower()
+    if len(s) < 16 or len(s) > 64 or len(s) % 2 or any(c not in '0123456789abcdef' for c in s): return False
+    full = bytes(build_id).ljust(0x20, b'\0')[:0x20].hex()
+    return full.startswith(s) and (len(s) == 16 or not full[len(s):].strip('0'))
+
+
+def find_patches(patch_dir, build_id):
+    """Every .ips/.ips32 file directly under patch_dir whose stem names build_id (stem_matches; build_id as bytes, or the 16-digit short form
+    as a string, which a longer file name then cannot match), sorted for a deterministic order when both extensions are present (an '.ips32' sorts
+    after '.ips' — a mod should never ship both for the same build, but if it does, the one meant for a build this large wins)"""
     out = []
+    bid = bytes.fromhex(build_id) if isinstance(build_id, str) else build_id
     for ext in ('.ips', '.ips32'):
         for path in sorted(glob.glob(os.path.join(glob.escape(patch_dir), '*' + ext))):
             stem = os.path.splitext(os.path.basename(path))[0]
-            if stem.lower() == build_id16.lower():
-                out.append(path)
+            if stem_matches(stem, bid): out.append(path)
     return out
 
 
-def patches_for(patch_dirs, build_id16):
+def patches_for(patch_dirs, build_id):
     """find_patches() over every directory in patch_dirs, in order (a mod's priority order: the earliest
     directory's patches apply first)"""
     out = []
     for d in patch_dirs:
-        out += find_patches(d, build_id16)
+        out += find_patches(d, build_id)
     return out
 
 
 def apply_patches(image, patch_paths):
     """mod.image (dm/tools/nso.py's Module.image: text+ro+data at their memory offsets, bss excluded) with every
-    patch file in patch_paths applied in order; Atmosphère's own offset convention (0 = the first byte of .text)
-    is nso.py's Module.image convention exactly, with no translation needed. Refuses to grow the image (a code
-    mod replacing or editing existing bytes, never one that appends new ones past the module's own layout — that
-    would move every segment after it and is not representable by an in-place IPS/IPS32 patch here)."""
+    patch file in patch_paths applied in order. A record's offset counts the NSO file's 0x100-byte header before the
+    image (ips.py's header comment), so image offset = record offset - 0x100, and what a record has inside the header
+    is left out, as Atmosphère does. Refuses to grow the image (a code mod replacing or editing existing bytes, never
+    one that appends new ones past the module's own layout — that would move every segment after it and is not
+    representable by an in-place IPS/IPS32 patch here)."""
     out = bytearray(image)
     for path in patch_paths:
         with open(path, 'rb') as f:
             data = f.read()
         try:
-            out = ips.apply(out, data, max_size=len(image))
+            out = ips.apply(out, data, max_size=len(image), header=ips.NSO_HEADER)
         except ips.Error as e:
             raise ips.Error(f'{path}: {e}') from None
     return out
@@ -115,7 +129,7 @@ def main(argv):
     patch_dirs = argv[2:-1]
     mod = nso.cli_read(src)
     build_id16 = build_id_hex16(mod.build_id)
-    paths = patches_for(patch_dirs, build_id16)
+    paths = patches_for(patch_dirs, mod.build_id)
     if not paths:
         print(f'patch_ips: no exefs_patches for build {build_id16} in {", ".join(patch_dirs) or "(no directories given)"}: {out} is an unmodified copy')
         write_nso(mod, mod.image, out)

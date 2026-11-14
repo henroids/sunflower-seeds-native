@@ -980,6 +980,76 @@ static void map_image(module_t *m, const char *dir) {
 }
 #endif
 
+// PEANUTS begin: cross-module branches of a build with code mods (dm/tools/xmod.py, patch_nso.py --xmod). A mod made for the console may branch straight from one
+// module into another at the distance the two have there, each right after the one before it: Luminescent Platinum for Pokemon Brilliant Diamond 1.3.0 patches 106
+// b / bl into main that go to the subsdk1 it adds (at main+0x5708000 on the console), and that module calls main 1,228 times the same way. Here every module carries
+// its key page and patch area, so the distances differ, and each such branch ran into whatever stood there. <module>.xmod.tsv lists them: the instruction's offset in
+// the image, b or bl, the module it goes to and the offset there; once every module has its base, each instruction's imm26 is set to reach that place. A row that
+// cannot be kept stops the start with its reason (a module that is not loaded, a table of another build, a distance beyond the 128 MB a branch reaches: the modules
+// must stand in the arena). The text is sealed by then (map_image): its pages are opened for the writes and sealed again. Not on iOS, whose code is signed in the
+// executable and which loads no pack
+#if !PLAT_IOS
+static unsigned xmod_apply(module_t *m, const char *dir, unsigned *into) {
+    char path[1024]; snprintf(path, sizeof path, "%s/%s.xmod.tsv", dir, m->name);
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    typedef struct { uint64_t off, toff; module_t *to; int bl; } row_t;
+    row_t *rows = NULL; size_t n = 0, cap = 0;
+    char line[256], kind[8], to[32]; unsigned long off, toff;
+    uint64_t lo = ~0ull, hi = 0;
+    while (fgets(line, sizeof line, f)) {
+        if (line[0] == '#') {
+            char id[40] = "";
+            if (sscanf(line, "# BUILD_ID %39s", id) == 1 && *m->build_id && strcmp(id, m->build_id)) die("%s is of build %s, %s is %s: build the game with its mods again", path, id, m->name, m->build_id);
+            continue;
+        }
+        if (sscanf(line, "%lx %7s %31s %lx", &off, kind, to, &toff) != 4 || (strcmp(kind, "b") && strcmp(kind, "bl"))) die("%s: not a row of offset, b or bl, module, offset: %s", path, line);
+        module_t *t = NULL;
+        for (int i = 0; i < g_nmod; i++) if (!strcmp(g_mod[i].name, to)) t = &g_mod[i];
+        if (!t || t == m) die("%s: %s+%#lx branches into %s, which is not loaded (the modules come from pack.tsv's modules row): build the game with its mods again", path, m->name, off, to);
+        if ((off & 3) || off + 4 > m->text_end || (toff & 3) || toff >= t->text_end) die("%s: %s+%#lx to %s+%#lx is outside the code", path, m->name, off, to, toff);
+        if (n == cap && !(rows = realloc(rows, (cap = cap ? cap * 2 : 256) * sizeof *rows))) die("%s: out of memory", path);
+        rows[n++] = (row_t){off, toff, t, !strcmp(kind, "bl")};
+        if (off < lo) lo = off;
+        if (off + 4 > hi) hi = off + 4;
+    }
+    fclose(f);
+    if (!n) { free(rows); return 0; }
+    lo &= ~0x3FFFull; hi = (hi + 0x3FFF) & ~0x3FFFull;
+    if (mprotect(m->base + lo, hi - lo, PROT_READ | PROT_WRITE)) die("%s mprotect text for its cross-module branches", m->name);
+    for (size_t i = 0; i < n; i++) {
+        uint32_t *w = (uint32_t *)(m->base + rows[i].off);
+        if ((*w & 0x7C000000) != 0x14000000 || (int)(*w >> 31) != rows[i].bl) die("%s: %s+%#llx holds %08x, not the %s the table names: the table is not this image's", path, m->name, (unsigned long long)rows[i].off, *w, rows[i].bl ? "bl" : "b");
+        int64_t d = (int64_t)(uintptr_t)(rows[i].to->base + rows[i].toff) - (int64_t)(uintptr_t)w;
+        if (d < -((int64_t)1 << 27) || d >= ((int64_t)1 << 27))
+            die("%s+%#llx %s to %s+%#llx: %lld MB apart here, more than the 128 MB a branch reaches (the mod's modules must stand back to back: the module arena, DM_MODULE_ARENA)",
+                m->name, (unsigned long long)rows[i].off, rows[i].bl ? "bl" : "b", rows[i].to->name, (unsigned long long)rows[i].toff, (long long)(d / (1 << 20)));
+        *w = (*w & 0xFC000000) | ((uint32_t)(d >> 2) & 0x3FFFFFF);
+        into[rows[i].to - g_mod]++;
+    }
+    if (mprotect(m->base + lo, hi - lo, PROT_READ | PROT_EXEC)) die("%s mprotect text", m->name);
+    plat_icache_invalidate(m->base + lo, hi - lo);
+    free(rows);
+    return (unsigned)n;
+}
+#endif
+// Every module's table, after all are mapped and before anything is relocated or run; one log line: xmod: main 106 branches into subsdk1; subsdk1 1228 branches into main
+static void xmod_apply_all(const char **mdir) {
+#if !PLAT_IOS
+    char log[1024] = ""; size_t at = 0;
+    for (int i = 0; i < g_nmod; i++) {
+        unsigned into[64] = {0};
+        if (!xmod_apply(&g_mod[i], mdir[i], into)) continue;
+        for (int k = 0; k < g_nmod; k++) if (into[k] && at < sizeof log - 1)
+            at += (size_t)snprintf(log + at, sizeof log - at, "%s%s %u branches into %s", at ? "; " : "", g_mod[i].name, into[k], g_mod[k].name);
+    }
+    if (at) LOG("xmod: %s", log);
+#else
+    (void)mdir;
+#endif
+}
+// PEANUTS end
+
 static char g_module_dir[1024];   // the folder the modules were loaded from (dm_module_dir)
 const char *dm_module_dir(void) { return g_module_dir; }
 static char g_main_dir[1024];   // the folder main was loaded from: the pack's, or its variant's (DM_PATCH_VARIANT)
@@ -1030,6 +1100,7 @@ void load_modules(const char *dir, const char **names, int n) {
         LOG("%s: base %p size %#zx", names[i], m->base, m->size);
         m->loaded = 1; g_loaded[g_nloaded++] = m; g_nmod++;
     }
+    xmod_apply_all(mdir);   // PEANUTS: a code mod's branches between modules (see xmod_apply)
     force_init();
     t = now_ns(); for (int i = 0; i < g_nmod; i++) relocate(&g_mod[i]); tr = now_ns() - t;
     force_check();

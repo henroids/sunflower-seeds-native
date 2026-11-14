@@ -283,8 +283,11 @@ final class Prepare {
             try {
                 Object existing = Upstream.jobRead(jf);
                 String s = Upstream.jobState(existing);
-                if (!s.equals("done")) job = existing;   // resume this exact variant's own job where it stopped
-                else if (Upstream.jobPack(existing).isDirectory()) { p.on(100, "Already built with these mods"); return Upstream.jobPack(existing); }
+                // resume this exact variant's own job where it stopped. A finished one is not the answer to Build / Rebuild with mods: the mod's files or the
+                // app's tools may have changed since (the variant's id is only the mods' names, versions and order), so a new job runs, and its rewrite step
+                // keeps every module whose key still fits (pack_android.py rewrite: "unchanged, kept") and redoes the others. Returning the finished pack here
+                // left a pack an earlier app built wrong as it was, whatever was tapped
+                if (!s.equals("done")) job = existing;
             } catch (ReflectiveOperationException | RuntimeException e) { /* damaged: a fresh job replaces it */ }
         }
         if (job == null) {

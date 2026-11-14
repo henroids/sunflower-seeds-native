@@ -592,7 +592,7 @@ The catalog is read from the internet each time. Offline:
 
 ### What kinds of mods work?
 
-Local mods only: `romfs` file replacements, cheats, `exefs` code and IPS patches (`exefs_patches`). The app downloads nothing and has no mod catalog.
+Local mods only: `romfs` file replacements, cheats, `exefs` code and IPS patches (in `exefs_patches`, or beside the code in `exefs`). The app downloads nothing and has no mod catalog.
 
 ### How do I add or remove a mod?
 
@@ -615,7 +615,7 @@ Use the switch in the mod's row. A change applies at the game's next start. When
 
 File mods and cheats apply without a build. A mod that carries code reads **Code: needs a build with mods**. Turn it on, then tap **Build with mods** in the same **Mods** section. The row shows the progress, then **Ready**, or **Failed** with the reason (tap the row to read all of it). The build is a separate variant: the normal build is kept as it is.
 
-Once it reads **Ready**, every start of the game uses the mods that are on: the page's **Play**, a tap on the cover, a home screen shortcut. Turn a mod off or delete it and the game starts without it. While code mods are on but not built yet, the game starts without them and says so. If you change which code mods are on, the section offers **Build with mods** again for the new set. After you rebuild the game itself, tap **Rebuild with mods**.
+Once it reads **Ready**, every start of the game uses the mods that are on: the page's **Play**, a tap on the cover, a home screen shortcut. Turn a mod off or delete it and the game starts without it. While code mods are on but not built yet, the game starts without them and says so. If you change which code mods are on, the section offers **Build with mods** again for the new set. After you rebuild the game itself, replace a mod's files or update the app, tap **Rebuild with mods**: it redoes the parts that changed and keeps the rest.
 
 ## Troubleshooting
 

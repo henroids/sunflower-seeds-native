@@ -13,8 +13,9 @@ import dev.peanuts.mods.ModStore;
 /**
  * Plain-Java glue between {@link ModBuild}'s module-list plan and the on-device build (DESIGN-MODS.md "Code injection"/"ExeFS binary patch"): the
  * variant's own folder layout, the extra argv a modded "rewrite" step needs ({@code scripts/pack_android.py --modules/--mod-exefs/--mod-patches}),
- * and the exlaunch-style-hook warning (point 4 of the mods build task: a {@code subsdk9} added module's runtime hooks never take effect on this
- * host — main is read-only once rewritten and {@code svcSetProcessMemoryPermission} is not implemented). Kept free of {@code android.*} so it is
+ * and the exlaunch-style-hook warning (point 4 of the mods build task: the hooks a module such as exlaunch's {@code subsdk9} writes into main while
+ * the game runs never take effect on this host — main is read-only once rewritten and {@code svcSetProcessMemoryPermission} is not implemented;
+ * a mod whose branches are in its files already, an IPS patch of main and a module they go to, is another matter and works: dm/tools/xmod.py). Kept free of {@code android.*} so it is
  * exercised on the JVM alone, the same pattern as {@link ModBuild} and {@code dev.peanuts.mods.ModStore} (javac/java tests, {@code
  * peanuts/tests/test_modded_build.py}). The actual job wiring (creating/resuming the variant's {@code Job}, starting {@code PackService}) is
  * {@code Prepare.runModded}, which this class's static methods feed.
@@ -95,23 +96,28 @@ public final class ModdedBuild {
     public static String rewriteArgvJoined(ModBuild.Plan plan) { return String.join("\n", rewriteArgv(plan)); }
 
     /**
-     * Point 4 of the mods build task: a warning when plan's winning module for {@code subsdk9} looks like an exlaunch-style hook module, whose
-     * runtime hooks never take effect on this host (main is read-only once rewritten, {@code svcSetProcessMemoryPermission} is unimplemented) -
-     * never a build refusal, just a clear sentence for the build log/UI. Detected by name {@code subsdk9} plus either: the profile did not already
-     * have a {@code subsdk9} (an ADDED module, the shape exlaunch itself always takes - it is never a replacement), or the module's own bytes
-     * contain an ASCII "exlaunch" marker (its own loader strings it almost always embeds). Null when {@code subsdk9} is not in the plan at all, or
-     * neither signal fires (a plain replacement subsdk9 that is not exlaunch-shaped, e.g. a different SDK module entirely).
+     * Point 4 of the mods build task: a warning for each module a mod supplies (added or replaced; never main) that looks like an exlaunch-style hook
+     * module, whose runtime hooks never take effect on this host (main is read-only once rewritten, {@code svcSetProcessMemoryPermission} is
+     * unimplemented) - never a build refusal, just a clear sentence for the build log/UI, one per such module, joined by a blank line. A module counts
+     * when its own bytes hold an ASCII "exlaunch" or "exl::" marker (the framework's loader strings and its namespace in the names it exports), under
+     * any name: a mod may ship its hook module as subsdk1 as well. {@code subsdk9} also counts when the profile did not already have one (an ADDED
+     * subsdk9 is the shape exlaunch itself takes by default). Null when no supplied module gives a signal: a plain replacement, or an added module
+     * whose branches into main are in its code already (Luminescent Platinum's subsdk1, which dm/tools/xmod.py handles).
      */
     public static String exlaunchWarning(List<String> profileModules, ModBuild.Plan plan) {
         if (plan == null || plan.refusal != null || plan.source == null) return null;
-        ModStore.Mod mod = plan.source.get("subsdk9");
-        if (mod == null) return null;
-        boolean added = profileModules == null || !profileModules.contains("subsdk9");
-        boolean markerFound = containsExlaunchMarker(new File(mod.exefs(), "subsdk9"));
-        if (!added && !markerFound) return null;
-        return "subsdk9 (from " + mod.name + ") looks like an exlaunch-style hook module. Its runtime hooks will not take effect on this host: "
-                + "the main module is read-only once rewritten, and svcSetProcessMemoryPermission (the SVC exlaunch's hooking depends on) is not "
-                + "implemented. The module will load and run on its own, but whatever it meant to patch into main at run time will not happen.";
+        List<String> out = new ArrayList<>();
+        for (java.util.Map.Entry<String, ModStore.Mod> e : plan.source.entrySet()) {
+            String name = e.getKey();
+            ModStore.Mod mod = e.getValue();
+            if (name.equals("main") || mod == null) continue;
+            boolean added = name.equals("subsdk9") && (profileModules == null || !profileModules.contains(name));
+            if (!added && !containsExlaunchMarker(new File(mod.exefs(), name))) continue;
+            out.add(name + " (from " + mod.name + ") looks like an exlaunch-style hook module. Its runtime hooks will not take effect on this host: "
+                    + "the main module is read-only once rewritten, and svcSetProcessMemoryPermission (the SVC exlaunch's hooking depends on) is not "
+                    + "implemented. The module will load and run on its own, but whatever it meant to patch into main at run time will not happen.");
+        }
+        return out.isEmpty() ? null : String.join("\n\n", out);
     }
 
     private static boolean containsExlaunchMarker(File f) {
@@ -119,7 +125,7 @@ public final class ModdedBuild {
         try {
             byte[] b = Files.readAllBytes(f.toPath());
             String s = new String(b, java.nio.charset.StandardCharsets.ISO_8859_1).toLowerCase(Locale.ROOT);
-            return s.contains("exlaunch");
+            return s.contains("exlaunch") || s.contains("exl::");
         } catch (IOException e) {
             return false;
         }

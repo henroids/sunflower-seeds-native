@@ -89,12 +89,16 @@ public final class ModdedBuildTest {
                 break;
             }
             case "exlaunch_added": {
-                // exlaunch_added <root> <modName> <addsSubsdk9:true|false> <exlaunchMarker:true|false>
+                // exlaunch_added <root> <modName> <addsSubsdk9:true|false> <exlaunchMarker:true|false> [<module>=<its bytes as text> ...]
                 String modName = args[2];
                 boolean adds = Boolean.parseBoolean(args[3]);
                 boolean marker = Boolean.parseBoolean(args[4]);
-                ModStore.Mod mod = makeMod(root, modName, ModStore.KIND_CODE, "subsdk9");
+                String[] files = new String[args.length - 4];
+                files[0] = "subsdk9";
+                for (int i = 5; i < args.length; i++) files[i - 4] = args[i].substring(0, args[i].indexOf('='));
+                ModStore.Mod mod = makeMod(root, modName, ModStore.KIND_CODE, files);
                 if (marker) Files.write(new File(mod.exefs(), "subsdk9").toPath(), "hello exlaunch world".getBytes());
+                for (int i = 5; i < args.length; i++) Files.write(new File(mod.exefs(), files[i - 4]).toPath(), args[i].substring(args[i].indexOf('=') + 1).getBytes());
                 List<String> profile = adds ? List.of("main", "subsdk0", "sdk") : List.of("main", "subsdk0", "sdk", "subsdk9");
                 List<ModStore.Mod> mods = List.of(mod);
                 ModBuild.Plan plan = ModBuild.compose(profile, mods, true);
@@ -149,7 +153,7 @@ public final class ModdedBuildTest {
         out = self.run_cmd('rewrite_argv', 'true', 'Lumi:main,subsdk9')
         tokens = out.split('|')
         self.assertEqual(tokens[0], '--modules')
-        self.assertEqual(tokens[1], 'main,subsdk0,sdk,subsdk9')
+        self.assertEqual(tokens[1], 'main,subsdk0,subsdk9,sdk')   # where the console loads it, not after sdk
         self.assertIn('--mod-exefs', tokens)
         self.assertIn('main=' + str(self.work / 'Lumi' / 'exefs' / 'main'), tokens)
         self.assertIn('subsdk9=' + str(self.work / 'Lumi' / 'exefs' / 'subsdk9'), tokens)
@@ -179,6 +183,22 @@ public final class ModdedBuildTest {
 
     def test_no_exlaunch_warning_for_a_plain_replacement_with_no_marker(self):
         out = self.run_cmd('exlaunch_added', 'Lumi', 'false', 'false')
+        self.assertEqual(out, 'NONE')
+
+    def test_exlaunch_warning_names_every_module_with_a_marker_and_never_main(self):
+        # a hook module under another name (subsdk1, with exlaunch's namespace in its symbols), and a main that happens to hold the word
+        out = self.run_cmd('exlaunch_added', 'Lumi', 'false', 'false', 'subsdk1=_ZN3exl4hook::exl::hook', 'main=exlaunch', 'subsdk2=plain code')
+        self.assertIn('subsdk1 (from Lumi) looks like an exlaunch-style hook module', out)
+        self.assertNotIn('subsdk9 (from', out)
+        self.assertNotIn('subsdk2 (from', out)
+        self.assertNotIn('main (from', out)
+        out = self.run_cmd('exlaunch_added', 'Lumi', 'true', 'false', 'subsdk1=uses exl::patch')
+        self.assertEqual(out.count('looks like an exlaunch-style hook module'), 2)   # the added subsdk9 and the marked subsdk1, one sentence each
+        self.assertIn('\n\n', out)
+
+    def test_no_exlaunch_warning_for_an_added_module_that_is_not_subsdk9_and_has_no_marker(self):
+        # Luminescent Platinum's subsdk1: its branches into main are in its code, nothing is written at run time
+        out = self.run_cmd('exlaunch_added', 'Lumi', 'false', 'false', 'subsdk1=static hooks only')
         self.assertEqual(out, 'NONE')
 
 

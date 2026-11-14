@@ -55,6 +55,12 @@ if '--target' in ARGS:
     ti = ARGS.index('--target')
     if ti + 1 >= len(ARGS) or ARGS[ti + 1] not in ('apple', 'android'): sys.exit('[RED] --target takes apple or android')
     TARGET = ARGS[ti + 1]; del ARGS[ti:ti + 2]
+# PEANUTS: --xmod <file> (scripts/pack_android.py, for a module of a build with code mods; "Cross-module branches" near the end of this file). Without it nothing below differs
+XMOD = None
+if '--xmod' in ARGS:
+    xi = ARGS.index('--xmod')
+    if xi + 1 >= len(ARGS): sys.exit('[RED] --xmod takes the layout file')
+    XMOD = ARGS[xi + 1]; del ARGS[xi:xi + 2]
 if len(ARGS) != 3: sys.exit('usage: patch_nso.py <NSO file> <output dir> <module name> [--target apple|android]')
 src, outdir, NAME = ARGS
 # An NSO, or an NRO (a module the game loads at run time with nn::ro, Super Smash Bros. Ultimate's fighter code), rewritten as an NSO of the same layout would be. nso.py checks the file
@@ -1880,5 +1886,63 @@ with open(P('orig.bin'), 'wb') as f:
 with open(P('obs.tsv'), 'w', encoding='utf-8', newline='\n') as f:
     f.write(f'# BUILD_ID\t{BUILD_ID}\n')
     for off, oid, ow, why in obs: f.write(f'{off:#x}\t{oid}\t{ow}\t{why}\n')
+# PEANUTS begin: cross-module branches (--xmod). A code mod made for the console may branch straight from one module into another: Luminescent Platinum for Pokemon
+# Brilliant Diamond 1.3.0 patches 106 b / bl into main that go to its own subsdk1, and that module calls main 1,228 times the same way, each at the distance the two have on
+# the console, where rtld puts every module right after the one before it. The host's modules stand farther apart (each carries its key page and patch area), so the loader
+# aims each such branch again once it knows the bases (dm/host/loader.c xmod_apply), from <name>.xmod.tsv: the instruction's offset in this image, b or bl, the module it
+# goes to and the offset there. The layout file (dm/tools/xmod.py write_layout) has tab-separated rows:
+#   module <name> <offset from main on the console> <text length> <size on the console>   every module of the build, in the console's order
+#   scan all | scan sites, then site <offset> rows   where to look: all the code (a module the mod supplies), or only the words a patch changed (the game's own module:
+#                                                    a word of its data that reads as a far branch is never one)
+#   in <offset> <from>                               an offset of this module that another module branches to
+# A branch that leaves this module and lands in no other module's code stops the rewrite, and so does one this rewriter moved (a site, a window, a spin wait's copy:
+# the loader patches the word where the file has it) and one that comes in at the middle of a window or a retry block, whose instructions run from their copy
+def xmod_table():
+    mods, sites, scan, incoming = {}, [], None, []
+    with open(XMOD, encoding='utf-8') as f:
+        for line in f.read().splitlines():
+            c = line.split('\t')
+            if c[0] == 'module': mods[c[1]] = (int(c[2], 16), int(c[3], 16), int(c[4], 16))
+            elif c[0] == 'scan': scan = c[1]
+            elif c[0] == 'site': sites.append(int(c[1], 16))
+            elif c[0] == 'in': incoming.append((int(c[1], 16), c[2]))
+    if NAME not in mods or scan not in ('all', 'sites'): sys.exit(f'[RED] {NAME}: {XMOD} is not a cross-module layout of this module')
+    own, _, size = mods[NAME]
+    moved = {w for off, n in changed_runs() for w in range(off, off + n, 4)} | done
+    rows, far, other = [], [], 0
+    for o in sorted(sites) if scan == 'sites' else (o for s, e in CODE_RANGES for o in range(s, e & ~3, 4)):
+        if o < 0 or o + 4 > TEXT_END or o & 3: continue
+        w = struct.unpack_from('<I', ORIG_TEXT, o)[0]
+        if w & 0x7C000000 != 0x14000000:   # not b / bl: count what else points out of the module by its own position
+            if w & 0x1F000000 == 0x10000000:   # adr, adrp
+                d = ((w >> 5) & 0x7FFFF) << 2 | (w >> 29) & 3; d -= (d & 0x100000) << 1
+                t = (o & ~0xFFF) + (d << 12) if w >> 31 else o + d
+            elif w & 0x3B000000 == 0x18000000: d = (w >> 5) & 0x7FFFF; t = o + 4 * (d - ((d & 0x40000) << 1))   # ldr literal
+            else: continue
+            other += not 0 <= t < size
+            continue
+        d = w & 0x3FFFFFF; t = o + 4 * (d - ((d & 0x2000000) << 1))
+        if 0 <= t < size: continue
+        kind = 'bl' if w >> 31 else 'b'
+        to = next((m for m, (at, text, _) in mods.items() if m != NAME and at <= own + t < at + text), None)
+        if to is None: far.append(f'{NAME}+{o:#x} {kind} to {NAME}{t:+#x} (main{own + t:+#x} on the console): in no module\'s code'); continue
+        if o in moved: far.append(f'{NAME}+{o:#x} {kind} to {to}+{own + t - mods[to][0]:#x}: the rewriter moved this instruction (a rewrite site, a window or a spin wait)'); continue
+        assert bytes(IMG[o:o + 4]) == ORIG_TEXT[o:o + 4], f'{o:#x}'
+        rows.append((o, kind, to, own + t - mods[to][0]))
+    win_mid = {x.address for wseg in windows for x in wseg[1:]}
+    for t, frm in incoming:
+        if t in win_mid or t in rmid_all: far.append(f'{frm} branches to {NAME}+{t:#x}: the middle of a window or retry block, which runs from its copy')
+    if far:
+        for line in far[:20]: print(f'[RED] cross-module branch: {line}')
+        sys.exit(f'[RED] {NAME}: {len(far)} cross-module branches cannot be kept ({len(rows)} can): the build with this mod is refused')
+    with open(P('xmod.tsv'), 'w', encoding='utf-8', newline='\n') as f:
+        f.write(f'# BUILD_ID\t{BUILD_ID}\n')
+        for o, kind, to, t in rows: f.write(f'{o:#x}\t{kind}\t{to}\t{t:#x}\n')   # Columns: offset in this image, b or bl, the module it goes to, offset there
+    into = {m: sum(1 for r in rows if r[2] == m) for m in mods}
+    n_site = sum(1 for t, _ in incoming if t < TEXT_END and bytes(IMG[t:t + 4]) != ORIG_TEXT[t:t + 4])
+    print(f'{NAME}: xmod: {len(rows)} branches out' + ''.join(f', {n} into {m}' for m, n in into.items() if n) + f'; {len(incoming)} come in, {n_site} of them at a rewritten instruction (its stub runs)')
+    if other: print(f'[RED] {NAME}: {other} adr / adrp / ldr literal words point outside the module by their own position: not re-aimed (data in the code, or the mod reads another module that way)')
+if XMOD: xmod_table()
+# PEANUTS end
 print(NAME, stats, 'cuts', len(cuts), 'obs', len(obs), 'patch', len(patch_front) + len(patch_back), 'PATCH_OFF', hex(PATCH_OFF), *(('BACK_OFF', hex(BACK_OFF), 'back', len(patch_back)) if TWO else ()), 'slot_refs', len(fix), 'gates', len(gates))
 if DATA_BLOCKS: print(NAME, 'data blocks left alone:', ', '.join(f'{s:#x}..{e:#x}' for s, e in DATA_BLOCKS))
