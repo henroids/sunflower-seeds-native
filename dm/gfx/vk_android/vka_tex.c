@@ -2240,6 +2240,50 @@ static int reg_write_overlap(const tex_region_write_t *a, const tex_region_write
 }
 static tex_region_write_t *g_reg_writes;
 static int g_nreg_writes, g_reg_writes_cap;
+// PEANUTS begin: the overlap check of a prepare's region copies without the scan of every earlier copy. Metroid Dread redraws its map after Game Over → Continue with one
+// WriteTexels per texel (main+0x160e80), tens of thousands of disjoint 1×1 copies in one prepare; checking each against all before it (O(n²), never an early exit, g_tmu
+// held) kept the replay thread there for minutes while the game thread waited for g_tmu: no frames, the music on (issue #8). Only copies since the last barrier can
+// overlap a new one; small copies (RW_SMALL texels or fewer) are kept as texels in a hash set, larger ones in a list scanned exactly, and a barrier empties both
+enum { RW_SMALL = 16 };
+static uint64_t *g_rw_set; static uint32_t g_rw_cap, g_rw_n;   // texel keys of the small copies since the last barrier (open addressing, 0 = empty)
+static int *g_rw_large, g_rw_nlarge, g_rw_large_cap;            // indices of the larger copies since the last barrier
+static uint64_t rw_key(const vka_img *im, uint32_t level, uint32_t layer, int32_t x, int32_t y) {
+    uint64_t k = (uint64_t)(uintptr_t)im * 0x9E3779B97F4A7C15ull ^ ((uint64_t)level << 56) ^ ((uint64_t)layer << 44) ^ ((uint64_t)(uint32_t)y << 22) ^ (uint64_t)(uint32_t)x;
+    return k ? k : 1;
+}
+static int rw_set_has(uint64_t k) {
+    if (!g_rw_cap) return 0;
+    for (uint32_t i = (uint32_t)(k >> 7) & (g_rw_cap - 1);; i = (i + 1) & (g_rw_cap - 1)) { if (g_rw_set[i] == k) return 1; if (!g_rw_set[i]) return 0; }
+}
+static void rw_set_add(uint64_t k) {
+    if ((g_rw_n + 1) * 2 > g_rw_cap) {   // grow at half full
+        uint32_t nc = g_rw_cap ? g_rw_cap * 2 : 4096; uint64_t *ns = calloc(nc, sizeof *ns); if (!ns) return;
+        for (uint32_t i = 0; i < g_rw_cap; i++) if (g_rw_set[i]) { uint32_t j = (uint32_t)(g_rw_set[i] >> 7) & (nc - 1); while (ns[j]) j = (j + 1) & (nc - 1); ns[j] = g_rw_set[i]; }
+        free(g_rw_set); g_rw_set = ns; g_rw_cap = nc;
+    }
+    uint32_t i = (uint32_t)(k >> 7) & (g_rw_cap - 1);
+    while (g_rw_set[i]) { if (g_rw_set[i] == k) return; i = (i + 1) & (g_rw_cap - 1); }
+    g_rw_set[i] = k; g_rw_n++;
+}
+static void rw_reset(void) { if (g_rw_n) memset(g_rw_set, 0, (size_t)g_rw_cap * sizeof *g_rw_set); g_rw_n = 0; g_rw_nlarge = 0; }
+static int rw_small(const tex_region_write_t *w) { return (uint64_t)w->w * w->h <= RW_SMALL; }
+// whether w writes texels a copy since the last barrier wrote (same answer as reg_write_overlap over those copies)
+static int rw_overlaps(const tex_region_write_t *w, int since) {
+    if (rw_small(w)) {
+        for (uint32_t y = 0; y < w->h; y++) for (uint32_t x = 0; x < w->w; x++) if (rw_set_has(rw_key(w->im, w->level, w->layer, w->x + (int32_t)x, w->y + (int32_t)y))) return 1;
+        for (int k = 0; k < g_rw_nlarge; k++) if (reg_write_overlap(&g_reg_writes[g_rw_large[k]], w)) return 1;
+        return 0;
+    }
+    for (int j = since; j < (int)(w - g_reg_writes); j++) if (reg_write_overlap(&g_reg_writes[j], w)) return 1;   // a large copy: every copy since the barrier
+    return 0;
+}
+static void rw_note(int i) {   // copy i recorded
+    const tex_region_write_t *w = &g_reg_writes[i];
+    if (rw_small(w)) { for (uint32_t y = 0; y < w->h; y++) for (uint32_t x = 0; x < w->w; x++) rw_set_add(rw_key(w->im, w->level, w->layer, w->x + (int32_t)x, w->y + (int32_t)y)); return; }
+    if (g_rw_nlarge == g_rw_large_cap) { int nc = g_rw_large_cap ? g_rw_large_cap * 2 : 64; int *nl = realloc(g_rw_large, (size_t)nc * sizeof *nl); if (!nl) return; g_rw_large = nl; g_rw_large_cap = nc; }
+    g_rw_large[g_rw_nlarge++] = i;
+}
+// PEANUTS end
 
 void mtl_tex_write_region(const tex_t *t, unsigned level, unsigned layer0, const NVNcopyRegion *r, const uint8_t *src, size_t row, size_t img) {
     if (!t || !r || !src) return;
@@ -3086,13 +3130,14 @@ void vka_tex_prepare(VkCommandBuffer cb) {
     g_nredo = 0;
     int any_rw = 0;
     if (n_up && g_nreg_writes) vka_barrier(cb);   // the whole-image uploads above before the region copies below, which may write the same texels
+    rw_reset(); int rw_since = 0;   // PEANUTS: copies since the last barrier (rw_overlaps)
     for (int i = 0; i < g_nreg_writes; i++) {
         tex_region_write_t *w = &g_reg_writes[i];
         vka_img *im = w->im;
         if (!im->gpu_owned && !img_pool_dead(im)) {
             vka_span s;
             if (vka_scratch(w->size, 16, &s)) {
-                for (int j = 0; j < i; j++) if (reg_write_overlap(&g_reg_writes[j], w)) { vka_barrier(cb); break; }
+                if (rw_overlaps(w, rw_since)) { vka_barrier(cb); rw_reset(); rw_since = i; }   // PEANUTS: only copies since the last barrier, small ones by texel (rw_overlaps)
                 memcpy(s.ptr, w->data, w->size);
                 VkBufferImageCopy c = {
                     .bufferOffset = s.off,
@@ -3109,6 +3154,7 @@ void vka_tex_prepare(VkCommandBuffer cb) {
                 };
                 vk.vkCmdCopyBufferToImage(cb, s.buf, im->img, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
                 w->copied = 1;
+                rw_note(i);   // PEANUTS: (rw_overlaps)
                 any_rw = 1;
                 atomic_fetch_add_explicit(&g_up_bytes, w->size, memory_order_relaxed);
                 g_reup++;
