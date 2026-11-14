@@ -361,6 +361,25 @@ def rewriter_src(src, out, m):
     f = d / src.name; f.write_bytes(src.read_bytes()); return f
 
 
+def write_orig(src, out, m):   # PEANUTS
+    """<m>.orig.bin for a pack that has none: the bytes the module's file has at the runs of <m>.changed.tsv, in the table's order, as patch_nso.py writes them with a
+    rewrite (the companion host reads them: dm/peanuts/peanuts.c rt_orig). The table must be of this file's build. Returns the bytes written"""
+    sys.path.insert(0, str(REPO / 'dm/tools'))
+    import nso
+    mod = nso.read(str(rewriter_src(src, out, m)))
+    text = bytes(mod.image[:mod.text_end]); bid = mod.build_id[:0x10].hex(); buf = bytearray()
+    for line in (out / f'{m}.changed.tsv').read_text().splitlines():
+        if line.startswith('# BUILD_ID'):
+            if line.split('\t')[1].strip() != bid: raise Error(f'{m}.changed.tsv is of build {line.split(chr(9))[1].strip()}, the file is {bid}')
+            continue
+        if not line or line.startswith('#'): continue
+        off, n = (int(x, 16) for x in line.split('\t')[:2])
+        if off + n > len(text): raise Error(f'{m}.changed.tsv names {off:#x}+{n:#x}, past the code')
+        buf += text[off:off + n]
+    tmp = out / f'{m}.orig.bin.tmp'; tmp.write_bytes(buf); os.replace(tmp, out / f'{m}.orig.bin')
+    return len(buf)
+
+
 def rewrite(py, srcs, out, jobs, g, in_process=False):
     """patch_nso.py --target android on each module into out (each its own <module>.* files); a module whose key file matches is kept. Each module is
     rewritten into a staging folder and swapped in when it is complete (swap_in), so a run stopped part way never leaves new code with old tables.
@@ -369,11 +388,16 @@ def rewrite(py, srcs, out, jobs, g, in_process=False):
     todo = {}
     for m, src in srcs.items():
         keys = rewrite_keys(src, g, out); key = keys[0]; kf = out / f'{m}.android.key'
-        # PEANUTS: a main with a main.changed.tsv is kept only with its main.orig.bin (the file's own bytes of the rewritten runs, which a companion package's module reads: dm/peanuts/peanuts.c
-        # rt_orig). A pack of the rewriter before it counts as up to date (EQUIV: nothing rebuilds on its own), and gets the file when the game is built again
-        if (m != 'main' or (out / 'main.orig.bin').is_file() or not (out / 'main.changed.tsv').is_file()) and (out / f'{m}.patched.bin').is_file() and kf.is_file() and (have := kf.read_text().strip()) in keys:   # the current rewriter's key, an equivalent one's (EQUIV), an earlier formula's
-            if have != key: tmp = out / f'{m}.android.key.tmp'; write_lf(tmp, key + '\n'); os.replace(tmp, kf)   # the same rewrite: its key as rewrite_key's (upgrade_keys)
-            print(f'  {m}: unchanged, kept'); continue
+        if (out / f'{m}.patched.bin').is_file() and kf.is_file() and (have := kf.read_text().strip()) in keys:   # the current rewriter's key, an equivalent one's (EQUIV), an earlier formula's
+            # PEANUTS: a main kept from the rewriter before main.orig.bin (EQUIV: its pack counts as up to date) gets the file here, from the game's own file and the
+            # pack's main.changed.tsv (write_orig: seconds, where a rewrite of Octopath Traveler 0's 111 MB of code for it took the phone 25 minutes); rewritten only if that fails
+            ok = True
+            if m == 'main' and (out / 'main.changed.tsv').is_file() and not (out / 'main.orig.bin').is_file():
+                try: n = write_orig(src, out, m); print(f'  {m}: main.orig.bin made from the game\'s file ({n} bytes of the rewritten runs)')
+                except Exception as e: ok = False; print(f'  {m}: main.orig.bin could not be made ({e}): rewriting')
+            if ok:
+                if have != key: tmp = out / f'{m}.android.key.tmp'; write_lf(tmp, key + '\n'); os.replace(tmp, kf)   # the same rewrite: its key as rewrite_key's (upgrade_keys)
+                print(f'  {m}: unchanged, kept'); continue
         todo[m] = (src, key)
     for m in todo: (out / f'{m}.android.key').unlink(missing_ok=True)   # every module to rewrite is unfinished from here on: no mix of old and new modules passes
     if in_process:
