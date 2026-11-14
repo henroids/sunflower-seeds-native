@@ -1868,6 +1868,11 @@ def changed_runs():
 with open(P('changed.tsv'), 'w', encoding='utf-8', newline='\n') as f:
     f.write(f'# BUILD_ID\t{BUILD_ID}\n')
     for off, n in changed_runs(): f.write(f'{off:#x}\t{n:#x}\n')   # Columns: offset, length in bytes
+# PEANUTS: <name>.orig.bin: the file's own bytes of those runs, one after the other in the table's order. A companion package's module reads the game's code to check
+# that it is the build it knows (a hash of a function's bytes) and to take addresses from its instructions; the Peanuts companion host gives it these bytes in place of the
+# rewritten ones (dm/peanuts/peanuts.c rt_orig). Fire Emblem: Three Houses' companion found 2 of its 42 map functions changed (x18 sites) and showed no monastery map
+with open(P('orig.bin'), 'wb') as f:
+    for off, n in changed_runs(): f.write(ORIG_TEXT[off:off + n])
 with open(P('obs.tsv'), 'w', encoding='utf-8', newline='\n') as f:
     f.write(f'# BUILD_ID\t{BUILD_ID}\n')
     for off, oid, ow, why in obs: f.write(f'{off:#x}\t{oid}\t{ow}\t{why}\n')

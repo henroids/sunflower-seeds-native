@@ -324,6 +324,47 @@ static void rt_ranges_refresh(void) {
     qsort(r, n, sizeof r[0], range_cmp);
     pthread_mutex_lock(&g_rd_mu); memcpy(g_rd, r, n * sizeof r[0]); g_nrd = n; g_rd_at = time(NULL); pthread_mutex_unlock(&g_rd_mu);
 }
+// The game's code as its file has it. The process runs main rewritten (dm/tools/patch_nso.py: x18 sites, cuts, patches), so the bytes in memory differ from the file's at
+// the runs of main.changed.tsv; a package's module that hashes a function to know the build, or decodes its instructions for an address, then fails on every function
+// with such a run (Fire Emblem: Three Houses: 2 of the 42 its monastery map needs, so the page waited for ever). main.orig.bin has the file's bytes of those runs, in the
+// table's order: a read by the runtime gets them in place of the rewritten ones, and a direct pointer into that part of main is refused (the caller then reads).
+// A pack made before the rewriter wrote main.orig.bin has none: the runtime reads the rewritten code, as before, until the game is built again
+typedef struct { uint64_t a; uint32_t len, pos; } orig_run;
+static orig_run *g_or; static int g_nor; static uint8_t *g_orig; static uint64_t g_or_lo, g_or_hi;
+static void rt_orig_load(uint64_t main_base) {
+    const char *d = dm_main_dir(); if (!d || g_nor) return;
+    char p[900]; snprintf(p, sizeof p, "%s/main.changed.tsv", d);
+    FILE *f = fopen(p, "r"); if (!f) return;
+    int cap = 0, n = 0; orig_run *r = NULL; uint32_t pos = 0; char line[128];
+    while (fgets(line, sizeof line, f)) {
+        if (line[0] == '#') continue;
+        char *e; uint64_t off = strtoull(line, &e, 16); if (e == line) continue;
+        uint64_t len = strtoull(e, NULL, 16); if (!len || len > (1u << 24)) continue;
+        if (n == cap) { cap = cap ? cap * 2 : 1024; r = realloc(r, (size_t)cap * sizeof *r); if (!r) { fclose(f); return; } }
+        r[n++] = (orig_run){main_base + off, (uint32_t)len, pos}; pos += (uint32_t)len;
+    }
+    fclose(f);
+    snprintf(p, sizeof p, "%s/main.orig.bin", d);
+    int fd = n ? open(p, O_RDONLY) : -1; uint8_t *b = fd >= 0 ? malloc(pos) : NULL;
+    ssize_t got = b ? read(fd, b, pos) : -1; char one; int more = b && read(fd, &one, 1) == 1;
+    if (fd >= 0) close(fd);
+    if (got != (ssize_t)pos || more) {
+        __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion: %s (%d changed runs of main, %u bytes): the runtime reads main's code as rewritten; build the game again for the file's own bytes",
+                            fd < 0 ? "no main.orig.bin in the pack" : "main.orig.bin is not the size main.changed.tsv says", n, pos);
+        free(b); free(r); return;
+    }
+    g_or = r; g_orig = b; g_or_lo = r[0].a; g_or_hi = r[n - 1].a + r[n - 1].len; g_nor = n;
+    __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion: main's code is read as its file has it (%d rewritten runs, %u bytes from main.orig.bin)", n, pos);
+}
+static void rt_orig_apply(uint64_t addr, uint8_t *buf, size_t len) {
+    if (!g_nor || addr >= g_or_hi || addr + len <= g_or_lo) return;
+    int lo = 0, hi = g_nor;   // the first run that ends after addr
+    while (lo < hi) { int mid = (lo + hi) / 2; if (g_or[mid].a + g_or[mid].len <= addr) lo = mid + 1; else hi = mid; }
+    for (int i = lo; i < g_nor && g_or[i].a < addr + len; i++) {
+        uint64_t a = g_or[i].a > addr ? g_or[i].a : addr, b = g_or[i].a + g_or[i].len < addr + len ? g_or[i].a + g_or[i].len : addr + len;
+        memcpy(buf + (a - addr), g_orig + g_or[i].pos + (a - g_or[i].a), (size_t)(b - a));
+    }
+}
 static int rt_range_has(uint64_t addr, size_t len) {   // [addr, addr+len) inside one cached readable range
     pthread_mutex_lock(&g_rd_mu);
     int lo = 0, hi = g_nrd - 1, ok = 0;
@@ -334,8 +375,9 @@ static int rt_range_has(uint64_t addr, size_t len) {   // [addr, addr+len) insid
 static int rt_mem_read(void *u, uint64_t addr, void *buf, size_t len) {
     (void)u;
     if (time(NULL) - g_rd_at > 2) rt_ranges_refresh();
-    if (rt_range_has(addr, len)) { memcpy(buf, (const void *)(uintptr_t)addr, len); return 1; }
+    if (rt_range_has(addr, len)) { memcpy(buf, (const void *)(uintptr_t)addr, len); rt_orig_apply(addr, buf, len); return 1; }
     if (plat_mem_read(addr, buf, len)) return 0;
+    rt_orig_apply(addr, buf, len);
     // Readable but not in the cache: maybe a new mapping, so refresh, but at most every 500 ms. Some pages read memory that stays outside the cached ranges
     // (Animal Crossing's, every tick), and a /proc/self/maps parse per such read held the tick thread at 100 % (~140 ms a tick, the page at ~7 Hz).
     struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m);
@@ -374,6 +416,7 @@ static int rt_mem_write(void *u, uint64_t addr, const void *buf, size_t len) {
 static uint8_t *rt_mem_pointer(void *u, uint64_t addr, size_t len) {
     (void)u; uint8_t b;
     if (!len) return NULL;
+    if (g_nor && addr < g_or_hi && addr + len > (g_or_lo & ~(uint64_t)0xfff)) return NULL;   // main's rewritten part: read through rt_mem_read (rt_orig_apply)
     if (time(NULL) - g_rd_at > 2) rt_ranges_refresh();
     if (rt_range_has(addr, len)) return (uint8_t *)(uintptr_t)addr;
     if (addr + (len - 1) < addr) return NULL;   // the span wraps
@@ -541,6 +584,7 @@ static void rt_start(void) {
     const char *full = getenv("PN_BUILD_ID");
     c.build_id_hex = full && strlen(full) >= strlen(m->build_id) && !strncasecmp(full, m->build_id, strlen(m->build_id)) ? full : m->build_id;
     c.main_base = (uint64_t)(uintptr_t)m->base;
+    rt_orig_load(c.main_base);
     c.main_size = m->size;
     c.panel_w = 1240; c.panel_h = 1080;
     // R5: the runtime's own data (persisted flags, "user:" assets, and the staging folder a package's native module is copied to before dlopen) lives in the app's
