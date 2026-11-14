@@ -375,8 +375,10 @@ static int rt_code_rewritten(void *u, uint64_t addr, size_t len) {
     while (lo < hi) { int mid = (lo + hi) / 2; if (g_or[mid].a + g_or[mid].len <= addr) lo = mid + 1; else hi = mid; }
     return lo < g_nor && g_or[lo].a < addr + len;
 }
+// The game's heap for a module's get_heap_begin (Pokemon Sword's companion reads everything from the heap's start)
+static void rt_heap_range(void *u, uint64_t *base, uint64_t *open_len) { (void)u; size_t n = 0; dm_guest_heap_range(base, &n); *open_len = n; }
 // Room for a package's guest helper (rt/peanuts_helper.cpp): the end of the gap the loader leaves inaccessible between main's patch area and its base (a main with the patch
-// area before the base, loader.c map_image: 16 or 32 MB, of which the patches take a few), else free pages just past main. A branch in main reaches either
+// area before the base, loader.c map_image: 16 or 32 MB, of which the patches take a few), else free pages just past the last module. A branch in main reaches either
 static uint64_t rt_code_block(void *u, size_t size) {
     (void)u;
     module_t *m = module_named("main");
@@ -387,7 +389,15 @@ static uint64_t rt_code_block(void *u, size_t size) {
         memset(a, 0, size);
         return (uint64_t)(uintptr_t)a;
     }
-    for (uint64_t at = ((uint64_t)(uintptr_t)m->base + m->size + 0xFFFF) & ~0xFFFFull, end = at + (8u << 20); at < end; at += 0x10000) {
+    // Past the last module, not past main: the modules stand back to back (loader.c's module arena), so with main first and others after it there is no free page
+    // behind main (Pokemon Sword: main, subsdk0, subsdk1, sdk; its companion's helper found no room). A branch reaches 128 MB either way: the search ends 120 MB from
+    // main's base, and the helper's own linking refuses a branch that does not reach
+    { extern void *dm_module_arena_tail(size_t size);   // loader.c: the pages it keeps after the last module, where nothing else can be in the way
+      void *t = dm_module_arena_tail(size);
+      if (t) { if ((uint64_t)(uintptr_t)t + size - (uint64_t)(uintptr_t)m->base <= (120u << 20)) return (uint64_t)(uintptr_t)t; } }
+    uint64_t top = (uint64_t)(uintptr_t)m->base + m->size, lim = (uint64_t)(uintptr_t)m->base + (120u << 20);
+    for (int i = 0; i < g_nmod; i++) if (!g_mod[i].nro && (uint64_t)(uintptr_t)g_mod[i].base + g_mod[i].size > top) top = (uint64_t)(uintptr_t)g_mod[i].base + g_mod[i].size;
+    for (uint64_t at = (top + 0xFFFF) & ~0xFFFFull; at + size <= lim; at += 0x10000) {
         void *p = mmap((void *)(uintptr_t)at, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p == (void *)(uintptr_t)at) return at;
         if (p != MAP_FAILED) munmap(p, size);
@@ -629,7 +639,7 @@ static void rt_start(void) {
     mkdir(data_dir, 0700);
     c.data_dir = data_dir;
     c.save_dir = getenv("DM_SAVE");
-    c.memory.read = rt_mem_read; c.memory.write = rt_mem_write; c.memory.pointer_at = rt_mem_pointer;
+    c.memory.read = rt_mem_read; c.memory.write = rt_mem_write; c.memory.pointer_at = rt_mem_pointer; c.memory.heap_range = rt_heap_range;
     c.pad.set_button = rt_pad_button; c.pad.set_stick = rt_pad_stick;
     c.ui.publish_ui = rt_ui_publish; c.ui.publish_ui_partial = rt_ui_publish_partial;
     c.haptics.pulse = rt_haptic;

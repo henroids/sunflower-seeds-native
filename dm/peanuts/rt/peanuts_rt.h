@@ -25,6 +25,9 @@ typedef struct PnRtMemory {
     int (*read)(void* user, uint64_t addr, void* buf, size_t len);
     int (*write)(void* user, uint64_t addr, const void* buf, size_t len);
     uint8_t* (*pointer_at)(void* user, uint64_t addr, size_t len);
+    /// Optional: the game's heap, its base and the length the game has opened (0 / 0 until it opens one). Without it a module's
+    /// get_heap_begin is a fixed address of another host, and every read a module makes from the heap's start fails.
+    void (*heap_range)(void* user, uint64_t* base, uint64_t* open_len);
 } PnRtMemory;
 
 /// Optional UI sink: each publish is forwarded as it happens (the host may instead poll

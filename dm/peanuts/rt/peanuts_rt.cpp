@@ -240,6 +240,19 @@ void pn_rt_tick(PnRt* rt) {
     if (rt == nullptr) {
         return;
     }
+    // The game's heap, once it has one (it opens it after this runtime starts): ModRuntime::HeapLow asks the page table for it
+    if (rt->memory.heap_range != nullptr) {
+        if (auto* const process = rt->system.ApplicationProcess(); process != nullptr && process->GetPageTable().GetHeapRegionStart() == 0) {
+            uint64_t base = 0, open = 0;
+            rt->memory.heap_range(rt->memory.user, &base, &open);
+            if (base != 0 && open != 0) {
+                auto& pt = process->GetPageTable();
+                pt.normal_memory_size = open;
+                pt.heap_size = open + 0x40000000ULL; // the game may open more later
+                pt.heap_start = base;
+            }
+        }
+    }
     rt->system.core_timing.FireAll();
 }
 

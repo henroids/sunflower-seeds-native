@@ -303,13 +303,14 @@ void ModRuntime::InitializeGameModule() {
         if (ValidString(name, MaxName)) {
             const std::string_view n{name};
             const auto ends = [&](std::string_view tail) { return n.size() >= tail.size() && n.substr(n.size() - tail.size()) == tail; };
-            if (ends("_failures") || ends("_hidden") || ends("_supported") || ends("_request") || ends("_version")) {
+            static const bool all = [] { const char* e = std::getenv("DM_RT_VALUES"); return e && *e && *e != '0'; }(); // PEANUTS: DM_RT_VALUES=1: every value
+            if (all || ends("_failures") || ends("_hidden") || ends("_supported") || ends("_request") || ends("_version")) {
                 static std::mutex mu;
                 static std::map<std::string, s64> last;
                 static int lines;
                 std::scoped_lock lk{mu};
                 const auto it = last.find(name);
-                if ((it == last.end() || it->second != value) && lines < 300) {
+                if ((it == last.end() || it->second != value) && lines < (all ? 3000 : 300)) {
                     ++lines;
                     last[name] = value;
                     LOG_INFO(Core, "DSMod module value {} = {}", name, value);

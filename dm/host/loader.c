@@ -913,6 +913,15 @@ static void pac_patch_text(module_t *m) {
 // the modules' spans (the sizes map_image computes) and each image is placed at the next cursor, so the layout is the console's up to the patch area each module carries.
 // DM_MODULE_ARENA=0: separate mappings, as before
 static uint8_t *g_arena, *g_arena_cur, *g_arena_end;
+#define ARENA_TAIL ((size_t)1 << 20)   // PEANUTS
+static uint8_t *g_tail, *g_tail_end;   // PEANUTS: the arena's pages after the last module
+// PEANUTS: the next size bytes (whole 16 KiB pages) after the last module, readable, writable and zero, or NULL (no arena, or its tail is used up)
+void *dm_module_arena_tail(size_t size) {
+    if (!g_tail || !size || (size & 0x3FFF) || size > (size_t)(g_tail_end - g_tail)) return NULL;
+    uint8_t *p = mmap(g_tail, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+    if (p == MAP_FAILED) return NULL;
+    g_tail += size; return p;
+}
 static size_t module_span(module_t *m, const char *dir) {   // what map_image maps for m, before it runs
     char path[1024]; snprintf(path, sizeof path, "%s/%s.patched.bin", dir, m->name);
     struct stat st; if (stat(path, &st)) die("stat %s", path);
@@ -921,9 +930,11 @@ static size_t module_span(module_t *m, const char *dir) {   // what map_image ma
 static void arena_reserve(module_t *mods, int n, const char *dir) {
     const char *e = getenv("DM_MODULE_ARENA"); if (e && !strcmp(e, "0")) return;
     size_t total = 0; for (int i = 0; i < n; i++) total += module_span(&mods[i], dir);
-    uint8_t *a = mmap(NULL, total, PROT_NONE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+    // PEANUTS: 1 MiB more after the last module, for a companion's helper code (dm_module_arena_tail): with the modules back to back and other mappings
+    // on both sides of the arena, no other page within a branch's reach of main is free (Pokemon Sword: main first, three modules after it)
+    uint8_t *a = mmap(NULL, total + ARENA_TAIL, PROT_NONE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
     if (a == MAP_FAILED) { LOG("[RED] module arena of %#zx bytes not reserved: modules mapped apart", total); return; }
-    g_arena = g_arena_cur = a; g_arena_end = a + total;
+    g_arena = g_arena_cur = a; g_arena_end = a + total; g_tail = g_arena_end; g_tail_end = g_tail + ARENA_TAIL;
     LOG("module arena %p +%#zx: %d modules back to back in load order", a, total, n);
 }
 static uint8_t *module_mmap(const char *name, size_t len) {   // the next len bytes of the arena, or a mapping of their own without one

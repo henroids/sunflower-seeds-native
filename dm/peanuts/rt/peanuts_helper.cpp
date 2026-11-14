@@ -416,8 +416,8 @@ bool Walk(std::span<const u32> w, size_t entry, std::vector<u8>& mark, bool stri
 /// word of data may look like an instruction that names x18 (the characters "r1", "R…", "2…" have 18 in bits 4:0): rewritten, it
 /// would be a branch into a stub in the middle of a string, and refused, the whole helper would be for a table entry. The code is
 /// what is reached from the helper's start, from every branch the plan links into it and from the addresses its own code takes
-/// (adr, relocated addresses) when what is there reads as code to the end; everything up to the last such instruction counts as
-/// code (functions only called through pointers lie between the others), except the literals its code loads.
+/// (adr, relocated addresses) when what is there reads as code to the end, and from the start of each run between those when it
+/// reads as code to the end too (a function only called through a pointer); the rest, and the literals its code loads, is data.
 std::vector<u8> CodeMap(std::span<const u32> w, const std::vector<size_t>& sure, const std::vector<size_t>& maybe) {
     std::vector<u8> mark(w.size(), 0);
     for (const size_t e : sure) {
@@ -450,8 +450,21 @@ std::vector<u8> CodeMap(std::span<const u32> w, const std::vector<size_t>& sure,
             end = i + 1;
         }
     }
-    std::vector<u8> code(w.size(), 0);
-    std::fill(code.begin(), code.begin() + static_cast<std::ptrdiff_t>(end), u8{1});
+    // Between the instructions reached: a function only called through a pointer, or strings and tables that a compiler puts between functions
+    // (Pokemon Sword's helper has "L_near1", "L_far1"... after its first functions: "r1\0\0" read as an instruction names x18 and is of no known
+    // group, and the whole helper was refused for it). Where such a run starts, what reads as code to its end is code; the rest is data
+    for (size_t i = 0; i < end; ++i) {
+        if (!mark[i] && (i == 0 || mark[i - 1])) {
+            size_t k = i;
+            while (k < end && !mark[k] && (w[k] == 0 || w[k] == 0xD503201F)) { // padding before a function
+                ++k;
+            }
+            if (k < end && !mark[k]) {
+                Walk(w, k, mark, true);
+            }
+        }
+    }
+    std::vector<u8> code(mark.begin(), mark.end());
     for (size_t i = 0; i < end; ++i) { // literals: data inside the code
         if (!mark[i] || (w[i] & 0x3B000000) != 0x18000000) {
             continue;
@@ -459,9 +472,7 @@ std::vector<u8> CodeMap(std::span<const u32> w, const std::vector<size_t>& sure,
         const s64 t = static_cast<s64>(i) + SignExtend((w[i] >> 5) & 0x7FFFF, 19);
         const size_t words = ((w[i] >> 26) & 1) ? (1u << (w[i] >> 30)) : ((w[i] >> 30) == 0 ? 1 : 2);
         for (size_t k = 0; k < words && t >= 0 && static_cast<size_t>(t) + k < w.size(); ++k) {
-            if (!mark[static_cast<size_t>(t) + k]) {
-                code[static_cast<size_t>(t) + k] = 0;
-            }
+            code[static_cast<size_t>(t) + k] = 0;
         }
     }
     return code;

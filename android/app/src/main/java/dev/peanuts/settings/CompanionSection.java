@@ -53,6 +53,24 @@ public final class CompanionSection {
 
     private static SharedPreferences prefs(Context c) { return c.getSharedPreferences(PREFS, Context.MODE_MULTI_PROCESS); }
 
+    /** The Mods section of the same sheet, above Companion: one row that opens the game's Mods sheet (dev.peanuts.mods.ModsSheet, the one the cover's own sheet
+     * opens), with how many mods are on. The mods live in the game's folder, as dev.peanuts.ui.GameSheet finds it */
+    public static View modsView(android.app.Activity a, String titleId, String gameName, String packDir) {
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        Ui ui = new Ui(a);
+        box.addView(ui.section("Mods"), lp(0, 12));
+        File pack = packDir == null || packDir.isEmpty() ? null : new File(packDir);
+        File home = dev.peanuts.mods.ModRuntime.home(a, titleId, null, pack == null ? null : pack.getParentFile());
+        List<dev.peanuts.mods.ModStore.Mod> mods = dev.peanuts.mods.ModRuntime.mods(home, titleId);
+        int on = 0;
+        for (dev.peanuts.mods.ModStore.Mod m : mods) if (m.enabled) on++;
+        String value = home == null ? "Build the game first" : mods.isEmpty() ? "None imported"
+                : on + " of " + mods.size() + " on" + (dev.peanuts.mods.ModStore.needsBuild(mods) ? " · needs a build with mods" : "");
+        box.addView(ui.setting("🧩", "Mods", value, home == null ? null : v -> dev.peanuts.mods.ModsSheet.open(a, titleId, gameName, home, pack, null)));
+        return box;
+    }
+
     /** The section: a label, the companion row with its buttons, the second-screen row. companionRoot null (no pack yet): Install is off and the row says so */
     public static View view(Context ctx, String titleId, File companionRoot) {
         LinearLayout box = new LinearLayout(ctx);
