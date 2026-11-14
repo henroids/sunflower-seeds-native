@@ -769,7 +769,10 @@ void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
     // is ATTEMPTED; the dirty-flag/signature check right below still drops idle ticks to 0 Hz
     // regardless of this rate.
     const bool animating_now = page_anim.active || page_anim_request.has_value() || group_moving;
-    const bool publish_tick = (tick_count % 2) == 0;
+    // PNRT: every tick. The host already paces the tick at ~30 Hz (one per 25+ ms of presents), so
+    // the original "every second tick" gate (made for a 60 Hz tick whose republish forced a GPU
+    // present) held a page to ~15 Hz at best and ~10 Hz when a tick ran long.
+    const bool publish_tick = true;
     if (!publish_tick && !(animating_now && manifest.anim_hz >= 60)) {
         return; // ~30 Hz republish (composite too): presenting the aux every frame halves fps.
     }
@@ -796,6 +799,7 @@ void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
     // is written before BuildRenderExtras, so a skip leaves no half-updated baseline.
     MapStateLock map_lock{map_state_mutex, std::defer_lock};
     if (!LockMapStateUnlessRaster(map_lock)) {
+        map_publish_skipped.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     const u64 sig = UiSignature(snapshot, target_w, target_h);
@@ -816,6 +820,7 @@ void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
         return; // this tick's transition frame is published
     }
     if (!LockMapStateUnlessRaster(map_lock)) {
+        map_publish_skipped.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     // The dirty scan re-baselines (and reports nothing) on a new page or a reloaded manifest: that

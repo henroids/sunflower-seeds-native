@@ -811,10 +811,15 @@ void ModRuntime::Tick() {
             return it != snapshot.ints.end() ? it->second : s64{-1};
         };
         summary += std::format("[gates map_ready={} cutscene={} module_ready={} build_match={} "
-                               "map_lock_forced={} ui_frames={}] ",
+                               "map_lock_forced={} ui_frames={} map_base_rasters={} base_ms={} "
+                               "map_composites={} incremental={} composite_ms={} "
+                               "publish_skipped={}] ",
                                gate("map_ready"), gate("cutscene"), gate("module_ready"),
                                gate("build_match"), map_lock_forced_waits,
-                               system.GPU().DSModAux().UiSerial());
+                               system.GPU().DSModAux().UiSerial(), map_base_rasters.load(),
+                               map_base_last_ms.load(), map_composites.load(),
+                               map_composites_incremental.load(), map_last_composite_ms.load(),
+                               map_publish_skipped.load());
         LOG_INFO(Core, "DSMod snapshot: {}", summary);
     }
 

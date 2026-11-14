@@ -1995,6 +1995,8 @@ void ParseManifestJson(const nlohmann::json& json, Manifest& manifest) {
             s.hazard_tint = static_cast<int>(st.value("hazard_tint", s.hazard_tint));
             s.water_tint = static_cast<int>(st.value("water_tint", s.water_tint));
             s.fade_ticks = static_cast<u32>(st.value("fade_ticks", s.fade_ticks));
+            // PNRT: a reveal shows at once (see StampFor): the fade needs a full-size raster per step.
+            s.fade_ticks = 1;
             s.item_icon = static_cast<s32>(st.value("item_icon", s.item_icon));
             s.door_icon = static_cast<s32>(st.value("door_icon", s.door_icon));
             s.marker_icon = static_cast<s32>(st.value("marker_icon", s.marker_icon));

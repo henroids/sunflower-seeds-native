@@ -29,6 +29,7 @@
 #include <format>
 #include "common/stb.h"
 
+#include <chrono>
 #include <cstdlib>
 #include "common/logging.h"
 #include "core/core.h"
@@ -518,7 +519,8 @@ bool ModRuntime::RoomExplored(const std::string& area, const std::array<float, 4
 
 void ModRuntime::MaskUnvisited(std::vector<u32>& pixels, const std::string& area, int width,
                                int height, const std::vector<u8>* border_weight,
-                               const std::vector<u8>* solid_color, MapFadeEndpoint endpoint) const {
+                               const std::vector<u8>* solid_color, MapFadeEndpoint endpoint,
+                               const std::array<int, 4>* rect) const {
     // The caller must already hold map_state_mutex -- today that is always GetImage's "map:"
     // span, which locks for its whole duration (see map_state_mutex's declaration comment for
     // why). Not re-locked here: this is real per-pixel work, and the only call site already holds
@@ -669,11 +671,15 @@ void ModRuntime::MaskUnvisited(std::vector<u32>& pixels, const std::string& area
     const u8* const scp = (solid_color != nullptr && solid_color->size() == pixels.size())
                               ? solid_color->data()
                               : nullptr;
-    for (int py = 0; py < height; ++py) {
+    const int ry0 = rect != nullptr ? std::clamp((*rect)[1], 0, height) : 0;
+    const int ry1 = rect != nullptr ? std::clamp((*rect)[3], 0, height) : height;
+    const int rx0 = rect != nullptr ? std::clamp((*rect)[0], 0, width) : 0;
+    const int rx1 = rect != nullptr ? std::clamp((*rect)[2], 0, width) : width;
+    for (int py = ry0; py < ry1; ++py) {
         const size_t crow =
             static_cast<size_t>(tables.row_of_py[static_cast<size_t>(py)]) * VisitedGrid::Cols;
         const size_t rowbase = static_cast<size_t>(py) * width;
-        for (int px = 0; px < width; ++px) {
+        for (int px = rx0; px < rx1; ++px) {
             const size_t ci = crow + tables.col_of_px[static_cast<size_t>(px)];
             const u8 c = grid.cells[ci];
             u32& pix = pixels[rowbase + px];
@@ -929,6 +935,7 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         // stay valid even if something erases/rehashes image_cache meanwhile.
         std::shared_ptr<const Image> base = CacheFindImage(base_key);
         if (!base) {
+            const auto base_started = std::chrono::steady_clock::now();
             static thread_local RuntimeStageStats base_stats;
             const RuntimeStageTimer base_timer{base_stats, "map-base-rebuild"};
             // Keep only the current silhouette's active/inactive zone variants for this raster.
@@ -1107,7 +1114,14 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                     }
                 }
             }
-            LOG_INFO(Core, "DSMod: rasterised base '{}' at {}x{}", area_name, width, height);
+            map_base_last_ms.store(
+                static_cast<u32>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - base_started)
+                                     .count()),
+                std::memory_order_relaxed);
+            map_base_rasters.fetch_add(1, std::memory_order_relaxed);
+            LOG_INFO(Core, "DSMod: rasterised base '{}' at {}x{} ({} ms)", area_name, width, height,
+                     map_base_last_ms.load(std::memory_order_relaxed));
             base = CachePutImage(base_key, std::move(b));
         }
         // PRE-FOG (cached per water+wall state): base + live water + intact walls, NO fog. During a
@@ -1313,16 +1327,75 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
             }
             prefog = CachePutImage(prefog_key, std::move(pf));
         }
-        // FOG (cheap, per reveal/fade state): copy the pre-fog image and mask + fade it.
+        // FOG (cheap, per reveal state): copy the pre-fog image and mask it.
+        const auto composite_started = std::chrono::steady_clock::now();
         Image image;
         image.w = static_cast<u32>(width);
         image.h = static_cast<u32>(height);
-        image.pixels = prefog->pixels; // copy before any cache mutation below
         const auto bwl = map_border.find(border_key);
         const auto swl = map_water_solid.find(prefog_key);
-        MaskUnvisited(image.pixels, area_name, width, height, // fog mask + reveal/colour fade
+        // PNRT: a reveal-only change rebuilds just the pixels of the cells that changed, on a copy
+        // of the area's last complete composite (which stays valid for whoever still draws it).
+        // `rect` is the pixel box to recompute (x0, y0, x1, y1), the whole image when not incremental.
+        std::array<int, 4> rect{0, 0, width, height};
+        bool incremental = false;
+        const PixelCellTables& cell_map = CellTables(width, height);
+        if (endpoint == MapFadeEndpoint::Animated) {
+            const auto mit = map_composite_memo.find(area_name);
+            const auto vit = map_visited.find(area_name);
+            if (mit != map_composite_memo.end() && vit != map_visited.end()) {
+                const MapCompositeMemo& m = mit->second;
+                const auto& cells = vit->second.cells;
+                if (m.w == width && m.h == height && m.prefog == prefog &&
+                    m.border_key == border_key && m.state_suffix == state_suffix &&
+                    m.unlocked == map_unlocked && m.image && m.cells.size() == cells.size() &&
+                    m.image->pixels.size() == prefog->pixels.size()) {
+                    int c0 = VisitedGrid::Cols, c1 = -1, r0 = VisitedGrid::Rows, r1 = -1;
+                    for (size_t i = 0; i < cells.size(); ++i) {
+                        if (cells[i] != m.cells[i]) {
+                            const int c = static_cast<int>(i % VisitedGrid::Cols);
+                            const int r = static_cast<int>(i / VisitedGrid::Cols);
+                            c0 = std::min(c0, c);
+                            c1 = std::max(c1, c);
+                            r0 = std::min(r0, r);
+                            r1 = std::max(r1, r);
+                        }
+                    }
+                    if (c1 >= c0 && r1 >= r0) {
+                        // Pixel columns/rows whose cell is inside the changed cell box.
+                        const auto& cols = cell_map.col_of_px;
+                        const auto& rows = cell_map.row_of_py;
+                        const int x0 = static_cast<int>(
+                            std::lower_bound(cols.begin(), cols.end(), c0) - cols.begin());
+                        const int x1 = static_cast<int>(
+                            std::upper_bound(cols.begin(), cols.end(), c1) - cols.begin());
+                        const int y0 = static_cast<int>(
+                            std::lower_bound(rows.begin(), rows.end(), r0) - rows.begin());
+                        const int y1 = static_cast<int>(
+                            std::upper_bound(rows.begin(), rows.end(), r1) - rows.begin());
+                        const s64 area_px = static_cast<s64>(x1 - x0) * (y1 - y0);
+                        if (area_px * 100 < static_cast<s64>(width) * height * 60) {
+                            rect = {x0, y0, x1, y1};
+                            incremental = true;
+                            image.pixels = m.image->pixels; // the last composite
+                            for (int py = y0; py < y1; ++py) { // the changed box restarts from pre-fog
+                                const size_t o = static_cast<size_t>(py) * width;
+                                std::copy(prefog->pixels.begin() + static_cast<std::ptrdiff_t>(o) + x0,
+                                          prefog->pixels.begin() + static_cast<std::ptrdiff_t>(o) + x1,
+                                          image.pixels.begin() + static_cast<std::ptrdiff_t>(o) + x0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!incremental) {
+            image.pixels = prefog->pixels; // copy before any cache mutation below
+        }
+        MaskUnvisited(image.pixels, area_name, width, height, // fog mask
                       bwl != map_border.end() ? &bwl->second.weight : nullptr,
-                      swl != map_water_solid.end() ? &swl->second : nullptr, endpoint);
+                      swl != map_water_solid.end() ? &swl->second : nullptr, endpoint,
+                      incremental ? &rect : nullptr);
         // Breakable tiles are alpha-1 items in the game's colour layer: the compositing shader
         // forces visited = visible for them, so a tile in a merely seen cell keeps its full
         // weapon colour. Re-stamp them over the fogged image wherever the cell is visible.
@@ -1355,9 +1428,11 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                         const int px0 = qcol(wx0), px1 = qcol(wx0 + tile_size);
                         const int py0 = qrow(wy0 + tile_size), py1 = qrow(wy0);
                         const u32 col = t.color != 0 ? t.color : manifest.map_style.wall_color;
-                        for (int py = std::max(0, py0); py <= std::min(height - 1, py1); ++py) {
+                        for (int py = std::max(rect[1], py0); py <= std::min(rect[3] - 1, py1);
+                             ++py) {
                             const int r = tables.row_of_py[static_cast<size_t>(py)];
-                            for (int px = std::max(0, px0); px <= std::min(width - 1, px1); ++px) {
+                            for (int px = std::max(rect[0], px0); px <= std::min(rect[2] - 1, px1);
+                                 ++px) {
                                 const size_t i = static_cast<size_t>(py) * width + px;
                                 const int c = tables.col_of_px[static_cast<size_t>(px)];
                                 if (c < 0 || c >= VisitedGrid::Cols || r < 0 ||
@@ -1411,9 +1486,9 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                 // magnet line shows only in a revealed cell and takes that cell's intensity
                 // (0.4x seen, 1.0x walked -- main+0xE95194); nothing spills into unexplored cells.
                 const auto& mp = magnet->pixels;
-                for (int y = 0; y < height; ++y) {
+                for (int y = rect[1]; y < rect[3]; ++y) {
                     const int r = tables.row_of_py[static_cast<size_t>(y)];
-                    for (int x = 0; x < width; ++x) {
+                    for (int x = rect[0]; x < rect[2]; ++x) {
                         const size_t i = static_cast<size_t>(y) * width + x;
                         if ((mp[i] & 0xFF000000u) == 0) {
                             continue;
@@ -1593,7 +1668,7 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                                          RasterizeMapOverview(area->second, manifest.map_style,
                                                               width, height, overview_colors));
             }
-            CompositeMapOverview(image, *overview);
+            CompositeMapOverview(image, *overview, incremental ? &rect : nullptr);
         }
         // Keep only the newest composite per area+size (never evicts the base/pre-fog).
         const std::string prefix = std::format("map:{}@{}x{}#", area_name, width, height);
@@ -1610,7 +1685,30 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                 endpoint == MapFadeEndpoint::Animated ? !endpoint_key : endpoint_key;
             return candidate && same_family && key != src && key != sibling;
         });
-        return CachePutImage(src, std::move(image));
+        const auto built = CachePutImage(src, std::move(image));
+        if (endpoint == MapFadeEndpoint::Animated) {
+            if (const auto vit = map_visited.find(area_name); vit != map_visited.end()) {
+                MapCompositeMemo& m = map_composite_memo[area_name];
+                m.w = width;
+                m.h = height;
+                m.prefog = prefog;
+                m.border_key = border_key;
+                m.state_suffix = state_suffix;
+                m.unlocked = map_unlocked;
+                m.cells = vit->second.cells;
+                m.image = built;
+            }
+        }
+        map_composites.fetch_add(1, std::memory_order_relaxed);
+        if (incremental) {
+            map_composites_incremental.fetch_add(1, std::memory_order_relaxed);
+        }
+        map_last_composite_ms.store(
+            static_cast<u32>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now() - composite_started)
+                                 .count()),
+            std::memory_order_relaxed);
+        return built;
     }
     if (image_failed.contains(src)) {
         return nullptr;
@@ -1790,12 +1888,12 @@ ModRuntime::MapStamp ModRuntime::StampFor(const std::string& area) const {
     std::scoped_lock lk{map_state_mutex};
     // Everything a rasterised area image depends on. The fade term steps at ~15 Hz only while a
     // reveal is fading, so the colour transition animates and then the stamp settles.
-    u64 fade = 0;
-    if (const auto it = map_visited.find(area);
-        it != map_visited.end() && tick_count - it->second.last_reveal_tick <
-                                       std::max<u64>(1, manifest.map_style.fade_ticks)) {
-        fade = tick_count / 4;
-    }
+    // PNRT: no fade term. A rebuilt composite is a full-size raster on the CPU (hundreds of ms on a
+    // handheld); stepping the key at ~15 Hz through a reveal's fade window rebuilt it for every step
+    // (and again for the pulse companion, whose own lookup landed on the next step), so a reveal
+    // took seconds to show and the page held the map lock for most of them. A reveal now shows at
+    // once, in one (incremental) build.
+    const u64 fade = 0;
     return {VisitedGen(area), water_gen, fade, wall_gen, zone_gen};
 }
 
