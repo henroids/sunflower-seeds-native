@@ -89,7 +89,8 @@ public final class ModsSection {
     private ModsSection(Activity a, SectionUi ui, String titleId, String gameName, String gameDir, String packDir) {
         this.a = a; this.ui = ui; this.titleId = titleId; this.gameName = gameName;
         game = gameDir == null || gameDir.isEmpty() ? null : new File(gameDir);
-        File p = packDir == null || packDir.isEmpty() ? null : new File(packDir);
+        File listed = packDir == null || packDir.isEmpty() ? null : new File(packDir), p = normalPack(a, titleId, listed);
+        if (p != null && !p.equals(listed)) repairEntry(a.getApplicationContext(), titleId, gameName, gameDir, p);
         pack = p != null && new File(p, "pack.tsv").isFile() ? p : null;
         home = pack == null ? null : ModRuntime.home(a, titleId, game, p.getParentFile());
         body = new LinearLayout(a);
@@ -102,8 +103,9 @@ public final class ModsSection {
      */
     public static String packToPlay(android.content.Context c, String titleId, String gameDir, String packDir, Runnable notBuilt) {
         try {
-            File p = packDir == null || packDir.isEmpty() ? null : new File(packDir);
+            File p = normalPack(c, titleId, packDir == null || packDir.isEmpty() ? null : new File(packDir));
             if (p == null || !new File(p, "pack.tsv").isFile()) return packDir;
+            packDir = p.getPath();   // the game's own pack, also when the list's entry named a variant's (normalPack)
             File game = gameDir == null || gameDir.isEmpty() ? null : new File(gameDir);
             File home = ModRuntime.home(c, titleId, game, p.getParentFile());
             List<ModStore.Mod> codeMods = ModStore.enabledCodeMods(ModRuntime.mods(home, titleId));
@@ -111,7 +113,7 @@ public final class ModsSection {
             String variantId = ModStore.variantId(titleId, codeMods);
             if (variantId == null) return packDir;
             File variantPack = dev.nxnative.android.AppStorage.pack(c, variantId);
-            if (variantProblem(c, titleId, variantPack) == null) return variantPack.getPath();
+            if (variantProblem(c, titleId, p, variantPack) == null) return variantPack.getPath();
             if (notBuilt != null) notBuilt.run();
         } catch (RuntimeException e) {
             android.util.Log.w("peanuts", "mods: the pack to play: " + e);
@@ -123,9 +125,51 @@ public final class ModsSection {
      * Why a start cannot take the variant's pack, null when it can: there is none, its build did not finish (ModdedBuild.variantProblem), or its own profile
      * is of another version of the app ({@link #staleProfile}). Play then starts the normal pack and says the mods are not built; "Build with mods" says why
      */
-    private static String variantProblem(android.content.Context c, String titleId, File variantPack) {
+    private static String variantProblem(android.content.Context c, String titleId, File normalPack, File variantPack) {
         String why = ModdedBuild.variantProblem(variantPack);
-        return why == null && staleProfile(c, titleId, variantPack) ? "it was made by another version of the app" : why;
+        if (why == null && staleProfile(c, titleId, variantPack)) why = "it was made by another version of the app";
+        // The shader library this app's host loads (Pack.libraryOf): the game's own pack has it and the variant, which copies the game's at its build, has not.
+        // The launcher then starts its shader update for the pack it is about to play, a job of the game itself on the variant's folder
+        String lib = "shaders/v-" + dev.nxnative.android.BuildConfig.NX_DMSH_VK_CHAIN + "/dmsh_vk.lib";
+        if (why == null && normalPack != null && new File(normalPack, lib).isFile() && !new File(variantPack, lib).isFile()) why = "its shaders are of another version of the app";
+        return why;
+    }
+
+    /**
+     * The game's own pack for the pack folder the launcher's list has for it. That is the same folder, except when the list's entry names a build with mods
+     * (ModdedBuild.isVariantPack): the launcher's panel once put a finished variant's pack into the list as the game's (Ondevice.Panel.onMessage, which no
+     * longer does), and this section then planned from the variant's pack.tsv and, once the mod was deleted and the variant with it, read "Cannot build with
+     * mods: no module list" with the game's own pack in its place all along. Then: the pack beside the variant (ModdedBuild.normalPackBeside), else where the
+     * app keeps the game's (AppStorage.pack); null when neither is a pack (the game is to be built first)
+     */
+    private static File normalPack(android.content.Context c, String titleId, File listed) {
+        if (listed == null || !ModdedBuild.isVariantPack(listed)) return listed;
+        for (File f : new File[] {ModdedBuild.normalPackBeside(listed), dev.nxnative.android.AppStorage.pack(c, titleId)})
+            if (f != null && new File(f, "pack.tsv").isFile() && !ModdedBuild.isVariantPack(f)) {
+                android.util.Log.w("peanuts", "mods: " + titleId + ": the game list names a build with mods as the game's pack (" + listed + "); the game's own is " + f);
+                return f;
+            }
+        android.util.Log.w("peanuts", "mods: " + titleId + ": the game list names a build with mods as the game's pack (" + listed + "), and the game's own pack was not found");
+        return null;
+    }
+
+    /** Puts the game's own pack back into the launcher's list (upstream's Game.put, which replaces the game's entry and keeps its place; not public: reflection,
+     *  as dev.peanuts.ui.Upstream.addToList). Off the main thread: it reads the dumps' build keys. Quiet: the section works from the right pack either way */
+    private static void repairEntry(android.content.Context c, String titleId, String name, String gameDir, File pack) {
+        if (gameDir == null || gameDir.isEmpty()) return;
+        new Thread(() -> {
+            try {
+                Class<?> k = Class.forName("dev.nxnative.android.Game");
+                java.lang.reflect.Constructor<?> ctor = k.getDeclaredConstructor(String.class, String.class, String.class, String.class);
+                ctor.setAccessible(true);
+                java.lang.reflect.Method put = k.getDeclaredMethod("put", android.content.Context.class, k);
+                put.setAccessible(true);
+                put.invoke(null, c, ctor.newInstance(titleId, name, gameDir, pack.getPath()));
+                android.util.Log.i("peanuts", "mods: " + titleId + ": the game list has the game's own pack again (" + pack + ")");
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                android.util.Log.w("peanuts", "mods: " + titleId + ": the game list could not be put right: " + e);
+            }
+        }, "peanuts-mod-list").start();
     }
 
     /**
@@ -403,7 +447,7 @@ public final class ModsSection {
     private Variant variant(List<ModStore.Mod> mods) {
         Variant v = new Variant();
         List<String> profileModules = ModdedBuild.normalModules(pack);
-        if (profileModules == null) { v.stopTitle = "Cannot build with mods"; v.stopText = "This game's pack has no module list (pack.tsv). Rebuild the game, then build with mods."; return v; }
+        if (profileModules == null) { v.stopTitle = "Cannot build with mods"; v.stopText = "The game's build cannot be read: " + new File(pack, "pack.tsv") + " is missing or has no modules row. Leave this page and open it again; if it still says so, build the game again (its mods are then built by themselves)."; return v; }
         List<ModStore.Mod> codeMods = ModStore.enabledCodeMods(mods);
         v.plan = ModBuild.compose(profileModules, codeMods, dev.nxnative.android.BuildConfig.NX_GENERIC_HOST);
         if (v.plan.refusal != null) { v.stopTitle = "Cannot build with these mods"; v.stopText = v.plan.refusal; return v; }
@@ -417,7 +461,7 @@ public final class ModsSection {
             return v;
         }
         v.pack = dev.nxnative.android.AppStorage.pack(a, v.id);
-        v.problem = variantProblem(a, titleId, v.pack);   // as packToPlay asks: the row says what Play does
+        v.problem = variantProblem(a, titleId, pack, v.pack);   // as packToPlay asks: the row says what Play does
         return v;
     }
 
@@ -462,13 +506,16 @@ public final class ModsSection {
         r.modArgs = ModdedBuild.rewriteArgvJoined(plan);
         FAILED.remove(variantId);
         buildTitle = titleId; buildVariant = variantId; buildText = "starting…";
-        String name = gameName;
+        String name = gameName, id = titleId;
+        File normal = pack;
         Activity act = a;
         ModBuildPipeline.start(a, r, new BuildListener() {   // a request that cannot be built comes back through done() too, with why
             @Override public void progress(String step, int percent, String detail) { buildText = detail + " (" + percent + " %)"; renderCurrent(); }
             @Override public void done(boolean ok, String message, String code) {
                 buildTitle = null; buildVariant = null; buildText = null;
                 if (!ok) FAILED.put(variantId, message);   // also what keeps a failed or stopped build from starting again by itself (autoBuild)
+                String still = ok ? variantProblem(act, id, normal, variantPack) : null;   // ended well and cannot be played: said, and not built again and again
+                if (still != null) FAILED.put(variantId, "The build ended, but " + still + ".");
                 if (ok) dev.peanuts.ui.Feel.done(act); else if (!BuildListener.CANCELLED.equals(code)) dev.peanuts.ui.Feel.refused(act);   // felt only while the app shows; a stop the user asked for is quiet
                 Toast.makeText(act.getApplicationContext(), ok ? name + " with mods is ready." : "Build with mods failed: " + message, Toast.LENGTH_LONG).show();
                 renderCurrent();

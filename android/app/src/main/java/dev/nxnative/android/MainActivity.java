@@ -1247,8 +1247,10 @@ public final class MainActivity extends Activity {
         Game gm = modPack == null || modPack.equals(g0.packDir) ? g0 : new Game(g0.titleId, g0.name, g0.gameDir, modPack, g0.used);
         if (gm != g0) {
             boolean refuse;
+            boolean toVariant = dev.peanuts.build.ModdedBuild.isVariantPack(new File(gm.packDir));   // (not: the list named a variant and the Mods code gave the game's own pack back)
             try { refuse = PackCheck.blocking(this, Pack.read(new File(gm.packDir)), new File(gm.gameDir)) != null; } catch (IOException e) { refuse = true; }
-            if (refuse) {
+            if (!refuse && toVariant && Pack.libraryProblem(new File(gm.packDir), gm.titleId) != null) refuse = true;   // no shader update of the game on a variant's folder (Ondevice.autoUpdate below): the Mods section rebuilds it
+            if (refuse && toVariant) {
                 gm = g0;
                 Toast.makeText(this, "The build with mods no longer fits this game: it starts without its code mods (hold the cover › Game › Mods › Rebuild with mods)", Toast.LENGTH_LONG).show();
             }

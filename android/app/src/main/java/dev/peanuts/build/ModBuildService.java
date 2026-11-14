@@ -112,6 +112,7 @@ public final class ModBuildService extends Service {
                 prepare = null;
             }
             ok = true;
+            ModdedBuild.markVariant(pack, r.variantId);   // known as a variant wherever it lies: never taken for the game's own pack (ModdedBuild.isVariantPack)
             message = name + " is ready to play with mods (" + pack.getName() + ").";
             progress(100, message);
         } catch (IOException e) {

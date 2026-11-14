@@ -53,9 +53,21 @@ public final class ModRuntime {
      * {@code DM_ROMFS_OVERLAY} line, so it wins (the host's env is built with {@code setenv(..., overwrite=1)}; the last line for a given key wins —
      * see the scene code's own comment, "a DM_ROMFS_OVERLAY line of the user's comes later and wins").
      */
-    public static String romfsOverlayEnv(Context c, File gameHome, String titleId, File sceneOverlayDirOrNull) {
+    public static String romfsOverlayEnv(Context c, File gameHome, String titleId, File sceneOverlayDirOrNull) { return romfsOverlayEnv(c, gameHome, titleId, sceneOverlayDirOrNull, null); }
+
+    /**
+     * The mods this start takes files and cheats from (ModStore.contributing): packDir is the pack being started, and a code mod counts only when that is
+     * the build made for the code mods that are on (ModStore.playsVariant). With the game's own pack (their build missing, not ready, refused by the
+     * launcher, still running), or without a pack to tell by (null), a code mod gives nothing: its files on the game's own code crashed the game
+     */
+    static List<ModStore.Mod> forStart(File gameHome, String titleId, File packDir) {
         List<ModStore.Mod> mods = mods(gameHome, titleId);
-        List<File> dirs = ModStore.enabledRomfsDirs(mods);
+        return ModStore.contributing(mods, ModStore.playsVariant(titleId, ModStore.enabledCodeMods(mods), packDir));
+    }
+
+    /** As above for a start of packDir (GameActivity.start's pack folder): see {@link #forStart} */
+    public static String romfsOverlayEnv(Context c, File gameHome, String titleId, File sceneOverlayDirOrNull, File packDir) {
+        List<File> dirs = ModStore.enabledRomfsDirs(forStart(gameHome, titleId, packDir));
         if (dirs.isEmpty() && sceneOverlayDirOrNull == null) return null;
         StringBuilder b = new StringBuilder();
         for (File d : dirs) { if (b.length() > 0) b.append(':'); b.append(d.getPath()); }
@@ -68,9 +80,11 @@ public final class ModRuntime {
      * mod wins a same-named file); null when no enabled mod ships any cheats, leaving the host's own default ({@code <DM_ROOT>/cheats}) in force.
      * The staging folder is small (plain text cheat files), so this runs synchronously on the launch path, same as the DLC-link setup beside it.
      */
-    public static String cheatsEnv(Context c, File gameHome, String titleId) {
-        List<ModStore.Mod> mods = mods(gameHome, titleId);
-        List<File> dirs = ModStore.enabledCheatsDirs(mods);
+    public static String cheatsEnv(Context c, File gameHome, String titleId) { return cheatsEnv(c, gameHome, titleId, null); }
+
+    /** As above for a start of packDir: a code mod's cheats only with its build ({@link #forStart}) */
+    public static String cheatsEnv(Context c, File gameHome, String titleId, File packDir) {
+        List<File> dirs = ModStore.enabledCheatsDirs(forStart(gameHome, titleId, packDir));
         if (dirs.isEmpty()) return null;
         File stage = new File(new File(c.getFilesDir(), "mods_stage"), titleId.toUpperCase(java.util.Locale.ROOT) + "/cheats");
         try {

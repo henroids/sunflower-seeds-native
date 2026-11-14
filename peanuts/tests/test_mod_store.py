@@ -105,7 +105,7 @@ public final class ModStoreTest {
         self.assertFalse((self.mods_root / self.title / 'Beta').exists())
         self.assertEqual(self.run_cmd('list').splitlines(), ['Alpha 0 true files', 'Gamma 1 true files'])
 
-    def test_code_mod_needs_build_but_its_romfs_still_overlays(self):
+    def test_code_mod_needs_build_and_lists_its_romfs(self):
         self.run_cmd('make', 'CodeMod', 'code', 'true')
         self.assertEqual(self.run_cmd('needsBuild'), 'true')
         self.assertEqual(self.run_cmd('overlay'), 'CodeMod')

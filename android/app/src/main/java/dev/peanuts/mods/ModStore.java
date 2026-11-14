@@ -19,7 +19,7 @@ import java.util.Set;
  * {@code <game home>/mods/<modName>/} (ModRuntime.modsRoot: the folder is the game's own, so it has no title ID level), with any of {@code romfs/}, {@code exefs/}, {@code exefs_patches/**}, {@code cheats/*.txt} and a
  * {@code mod.json} describing it: {@code {"name":..., "version":..., "enabled":bool, "order":int, "kind":"files"|"code"}}. "files": only romfs and/or
  * cheats, applies at play time on the normal build (no rebuild). "code": the mod also ships exefs or exefs_patches, which needs a modded build
- * (dev.peanuts.build.ModBuild) — the files/cheats part of a "code" mod still applies at play time on the normal build; only the code part waits for a build.
+ * (dev.peanuts.build.ModBuild) — and all of a "code" mod, its files and cheats too, applies only to a start that plays that build ({@link #contributing}).
  * <p>
  * This class is plain Java (no {@code android.*}, no {@code org.json}) so it can be exercised by a JVM-only test the same way
  * {@code dev.peanuts.build.RuntimeShaderMap} is ({@code peanuts/tests/test_mod_store.py}): javac it alone, run a small driver against a real temp
@@ -166,8 +166,38 @@ public final class ModStore {
         return false;
     }
 
+    /**
+     * Whether packDir, the pack a start of the game loads, is the build with mods of exactly the code mods that are on (codeMods: {@link #enabledCodeMods}):
+     * the folder the app gives that variant, packs/&lt;variant id&gt; in its storage or &lt;title ID&gt;/mod-&lt;hash&gt;/pack in the build folder
+     * (dev.nxnative.android.AppStorage.pack), or one that holds the variant's mark with that id (".variant", dev.peanuts.build.ModdedBuild.markVariant).
+     * Any other pack, the game's own first of all, runs the game's own code. No code mods on: false
+     */
+    public static boolean playsVariant(String titleId, List<Mod> codeMods, File packDir) {
+        String id = packDir == null ? null : variantId(titleId, codeMods);
+        if (id == null) return false;
+        if (packDir.getName().equals(id)) return true;
+        File parent = packDir.getParentFile();
+        if (packDir.getName().equals("pack") && parent != null && parent.getName().equals("mod-" + codeModsHash(codeMods))) return true;
+        try {
+            File mark = new File(packDir, ".variant");
+            return mark.isFile() && new String(Files.readAllBytes(mark.toPath()), StandardCharsets.UTF_8).trim().equals(id);
+        } catch (IOException e) { return false; }
+    }
+
+    /**
+     * The mods a start of the game takes its files and cheats from. variant: the start plays the build made for the code mods that are on
+     * ({@link #playsVariant}). A code mod's files belong to its code: Luminescent Platinum's romfs on the game's own code (its variant not built yet, not ready,
+     * refused, or still being built) ran a mix that neither is, with the mod's memory needs and without its memory numbers, and crashed at the starter. So a
+     * mod of kind code gives a start nothing at all unless the start plays that variant; mods of files and cheats alone apply to every start. In list order
+     */
+    public static List<Mod> contributing(List<Mod> mods, boolean variant) {
+        List<Mod> out = new ArrayList<>();
+        for (Mod m : mods) if (m.enabled && (variant || !m.hasCode())) out.add(m);
+        return out;
+    }
+
     /** The enabled mods' romfs directories, in priority order (first wins — {@code DM_ROMFS_OVERLAY}'s own order), for every enabled mod that actually
-     *  ships a romfs (a "code"-kind mod's files parts still apply this way; only its exefs half waits for a build) */
+     *  ships a romfs (the caller gives the mods of this start, {@link #contributing}: a code mod only with its build) */
     public static List<File> enabledRomfsDirs(List<Mod> mods) {
         List<File> out = new ArrayList<>();
         for (Mod m : mods) if (m.enabled && m.hasRomfs()) out.add(m.romfs());

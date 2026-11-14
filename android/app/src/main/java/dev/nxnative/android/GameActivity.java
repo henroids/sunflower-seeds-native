@@ -706,9 +706,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             // only when a mod actually has a romfs (env is applied setenv-overwrite style, so the last DM_ROMFS_OVERLAY line here wins \u2014 same rule
             // the scene comment above already relies on for the user's own env.txt). DM_CHEATS stages the enabled mods' cheats into one folder
             // (hle_cheats.c reads a single flat folder by build ID); a "code" mod's exefs/exefs_patches never reach this process at all.
-            String modOverlay = dev.peanuts.mods.ModRuntime.romfsOverlayEnv(this, game.isDirectory() ? game : game.getParentFile(), id, sceneOverlay);   // PEANUTS: mods beside the game
+            String modOverlay = dev.peanuts.mods.ModRuntime.romfsOverlayEnv(this, game.isDirectory() ? game : game.getParentFile(), id, sceneOverlay, packDir);   // PEANUTS: mods beside the game; packDir: a code mod's files only with its build
             if (modOverlay != null) env.add(modOverlay);
-            String modCheats = dev.peanuts.mods.ModRuntime.cheatsEnv(this, game.isDirectory() ? game : game.getParentFile(), id);   // PEANUTS: mods beside the game
+            String modCheats = dev.peanuts.mods.ModRuntime.cheatsEnv(this, game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: mods beside the game; a code mod's cheats only with its build
             if (modCheats != null) env.add(modCheats);
             String resNote = resPresets.isEmpty() ? null   // the choice in force, for the log: which preset (or Advanced), and the window and scene it gave
                     : "[nxlaunch] resolution " + Prefs.resolutionChoice(this, id) + (Prefs.resPreset(this, id).isEmpty() ? " (nothing chosen: the earlier settings' match or the default)" : "")

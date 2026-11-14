@@ -70,6 +70,39 @@ public final class ModdedBuild {
         return out;
     }
 
+    /** The file a variant's pack folder holds besides the pack ({@link #markVariant}): its variant id */
+    public static final String VARIANT_MARK = ".variant";
+
+    private static final java.util.regex.Pattern IN_APP = java.util.regex.Pattern.compile("([0-9A-Fa-f]{16})-mod-[0-9a-f]{6,}"), IN_BUILD_FOLDER = java.util.regex.Pattern.compile("mod-[0-9a-f]{6,}");
+
+    /** Marks a finished variant's pack folder as one ({@link #isVariantPack}); quiet when it cannot be written (the folder's place still says what it is) */
+    public static void markVariant(File variantPack, String variantId) {
+        try { Files.write(new File(variantPack, VARIANT_MARK).toPath(), (variantId + "\n").getBytes(StandardCharsets.UTF_8)); } catch (IOException | RuntimeException e) { /* by its place */ }
+    }
+
+    /**
+     * Whether a pack folder is a build with mods' and not a game's own: it holds the mark, or it lies where the app puts a variant, packs/&lt;title ID&gt;-mod-&lt;hash&gt;
+     * in the app's storage or &lt;title ID&gt;/mod-&lt;hash&gt;/pack in the build folder (dev.nxnative.android.AppStorage.pack; the variants made before the mark).
+     * A variant's pack is a complete pack of the same game, which the launcher's list once took for the game's own (Ondevice.Panel.onMessage): whoever is
+     * handed "the game's pack" asks this first, since the Mods section plans its builds from the game's pack and deletes variants' folders
+     */
+    public static boolean isVariantPack(File pack) {
+        if (pack == null) return false;
+        if (new File(pack, VARIANT_MARK).isFile() || IN_APP.matcher(pack.getName()).matches()) return true;
+        File parent = pack.getParentFile();
+        return pack.getName().equals("pack") && parent != null && IN_BUILD_FOLDER.matcher(parent.getName()).matches();
+    }
+
+    /** Where the game's own pack is when variantPack lies in one of the app's two places for a variant: packs/&lt;title ID&gt;, or &lt;title ID&gt;/pack; else null */
+    public static File normalPackBeside(File variantPack) {
+        if (variantPack == null) return null;
+        java.util.regex.Matcher m = IN_APP.matcher(variantPack.getName());
+        if (m.matches()) return new File(variantPack.getParentFile(), m.group(1));
+        File parent = variantPack.getParentFile();
+        if (variantPack.getName().equals("pack") && parent != null && IN_BUILD_FOLDER.matcher(parent.getName()).matches() && parent.getParentFile() != null) return new File(parent.getParentFile(), "pack");
+        return null;
+    }
+
     /** {@link #autoBuild}'s answers: nothing to do by itself, start the build with mods now, or start it when what is going on has ended */
     public static final String AUTO_NONE = "none", AUTO_START = "start", AUTO_WAIT = "wait";
 

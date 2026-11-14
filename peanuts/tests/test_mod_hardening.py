@@ -59,6 +59,16 @@ public final class ModHardeningTest {
             }
             case "sweepUnknown": System.out.println(ModdedBuild.sweepVariants(a[2], null, new File(a[3]), new File(a[4]), new File(a[5]))); break;
             case "variantProblem": System.out.println(ModdedBuild.variantProblem(root)); break;
+            case "contributing": {   // contributing <modsRoot> <title> <the pack being started>
+                List<ModStore.Mod> mods = ModStore.list(root, a[2]);
+                boolean variant = ModStore.playsVariant(a[2], ModStore.enabledCodeMods(mods), new File(a[3]));
+                StringBuilder b = new StringBuilder(variant ? "variant:" : "normal:");
+                for (ModStore.Mod m : ModStore.contributing(mods, variant)) b.append(m.dir.getName()).append(';');
+                System.out.println(b);
+                break;
+            }
+            case "isVariant": System.out.println(ModdedBuild.isVariantPack(root) + " " + ModdedBuild.normalPackBeside(root)); break;
+            case "mark": ModdedBuild.markVariant(root, a[2]); break;
             case "auto": {   // auto <unused> <buildable> <ready> <failed> <building> <busy>
                 boolean[] b = new boolean[5];
                 for (int i = 0; i < 5; i++) b[i] = a[2 + i].equals("1");
@@ -209,6 +219,47 @@ class ModHardeningTest(unittest.TestCase):
         self.assertEqual(self.run_cmd('import', staging, self.mods, TITLE, 'Code Mod'), 'ok: Code Mod code')
         self.assertIn('"enabled": true', (self.mods / 'Code Mod' / 'mod.json').read_text())
         self.assertRegex(self.run_cmd('variant', self.mods, TITLE), TITLE + '-mod-[0-9a-f]{12}')   # on: its variant is the one a start of the game asks for
+
+    # ---- a code mod's files and cheats only with its build ----
+    def test_a_code_mod_gives_a_start_of_the_games_own_pack_nothing(self):
+        self.make('Textures', 'files', order=0)
+        self.make('Lumi', 'code', order=1)
+        self.make('Off', 'files', enabled=False, order=2)
+        vid = self.run_cmd('variant', self.mods, TITLE)
+        h = vid.split('-mod-')[1]
+        build = self.dir / 'build' / TITLE
+        for normal in (build / 'pack', self.dir / 'packs' / TITLE, build / 'mod-0123456789ab' / 'pack', self.dir / 'packs' / f'{TITLE}-mod-0123456789ab'):
+            normal.mkdir(parents=True)   # the game's own pack, and the variant of another set of mods: neither runs this mod's code
+            self.assertEqual(self.run_cmd('contributing', self.mods, TITLE, normal), 'normal:Textures;', normal)
+        for variant in (build / f'mod-{h}' / 'pack', self.dir / 'packs' / vid):
+            variant.mkdir(parents=True)
+            self.assertEqual(self.run_cmd('contributing', self.mods, TITLE, variant), 'variant:Textures;Lumi;', variant)
+        moved = self.dir / 'elsewhere'
+        moved.mkdir()
+        self.assertEqual(self.run_cmd('contributing', self.mods, TITLE, moved), 'normal:Textures;')
+        self.run_cmd('mark', moved, vid)   # known by its mark wherever it lies
+        self.assertEqual(self.run_cmd('contributing', self.mods, TITLE, moved), 'variant:Textures;Lumi;')
+
+    def test_no_code_mod_on_is_never_a_variant_start(self):
+        self.make('Textures', 'files', order=0)
+        self.make('Lumi', 'code', enabled=False, order=1)
+        p = self.dir / 'packs' / f'{TITLE}-mod-0123456789ab'
+        p.mkdir(parents=True)
+        self.assertEqual(self.run_cmd('contributing', self.mods, TITLE, p), 'normal:Textures;')
+
+    # ---- a variant's pack is never the game's own ----
+    def test_a_variant_pack_is_known_by_its_place_or_its_mark_and_the_games_pack_is_beside_it(self):
+        build, packs = self.dir / 'build' / TITLE, self.dir / 'packs'
+        for d in (build / 'pack', packs / TITLE, build / 'mod-notes' / 'pack', self.dir / 'pack'):
+            d.mkdir(parents=True)
+            self.assertEqual(self.run_cmd('isVariant', d).split()[0], 'false', d)
+        v1, v2 = build / 'mod-2f47dc620ed9' / 'pack', packs / f'{TITLE}-mod-2f47dc620ed9'
+        v1.mkdir(parents=True); v2.mkdir(parents=True)
+        self.assertEqual(self.run_cmd('isVariant', v1), f'true {build / "pack"}')
+        self.assertEqual(self.run_cmd('isVariant', v2), f'true {packs / TITLE}')
+        moved = self.dir / 'pack'
+        self.run_cmd('mark', moved, f'{TITLE}-mod-2f47dc620ed9')
+        self.assertEqual(self.run_cmd('isVariant', moved), 'true null')
 
     # ---- what an interrupted install or delete leaves ----
     def test_a_half_installed_mod_and_a_half_deleted_one_are_swept_and_a_mod_is_not(self):
