@@ -103,7 +103,11 @@ static void cq_popped(void) { pthread_mutex_lock(&g_cq_mu); pthread_cond_broadca
 // blocks swapped, a click
 static pthread_mutex_t g_render_mu; static pthread_once_t g_render_mu_once = PTHREAD_ONCE_INIT;
 static void render_mu_init(void) { pthread_mutexattr_t a; pthread_mutexattr_init(&a); pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE); pthread_mutex_init(&g_render_mu, &a); pthread_mutexattr_destroy(&a); }
-static void render_lock(void) { pthread_once(&g_render_mu_once, render_mu_init); pthread_mutex_lock(&g_render_mu); }
+// PEANUTS: a guest thread that waits for this lock counts as blocked (dm_host_mutex_lock, hle_thread.c's same-core wake handoff): the render thread holds it through the SDK's signal of
+// the game's renderer event, the signal wakes the game's sound thread (a higher priority on the same core), and the handoff waits until that thread blocks. The sound thread's update
+// then waited for this lock for its catch-up render (a timer-driven update just before the event's own, nothing rendered since the one before), a wait the host counted as running:
+// neither side ever went on, the renderer stopped for good and the game's cutscene clock with it (Metroid Dread, issue #8: the game's 45,692nd render)
+static void render_lock(void) { pthread_once(&g_render_mu_once, render_mu_init); dm_host_mutex_lock(&g_render_mu); }
 static void render_unlock(void) { pthread_mutex_unlock(&g_render_mu); }
 
 typedef struct { void *ptr; uint64_t cap, size; } gbuf;       // same as the front of hle_audio.c's AudioOutBuffer
@@ -544,7 +548,9 @@ HLE_FORCE("_ZN2nn5audio6server17AudioRenderSystem6UpdateEPvmS3_mPKvm", "renderer
         if (t - atomic_load(&g_cq_head) >= CQ) {   // queue full: wait for the render thread to play one (every 5 ms), so catch-up frames keep real time; at most 50 ms (an output that stopped)
             struct timespec dl; clock_gettime(CLOCK_REALTIME, &dl); dl.tv_nsec += 50000000; if (dl.tv_nsec >= 1000000000) { dl.tv_sec++; dl.tv_nsec -= 1000000000; }
             pthread_mutex_lock(&g_cq_mu);
+            dm_host_work++;   // PEANUTS: a wait for the render thread is not a thread running on its core (same-core handoff, see render_lock)
             while (atomic_load(&g_open) && t - atomic_load(&g_cq_head) >= CQ && !pthread_cond_timedwait(&g_cq_cv, &g_cq_mu, &dl)) {}
+            dm_host_work--;   // PEANUTS
             pthread_mutex_unlock(&g_cq_mu);
         }
         // PEANUTS: render lock around the catch-up render too (see above), so it cannot cross a render-thread render
@@ -556,6 +562,12 @@ HLE_FORCE("_ZN2nn5audio6server17AudioRenderSystem6UpdateEPvmS3_mPKvm", "renderer
     Result res = orig(sys, o, on, p, pn, in, inn);
     last_r = atomic_load(&g_renders);
     return res;
+}
+
+// PEANUTS: the renderer's state for the thread dump (hle_thread.c svc_thread_dump): a stalled audio clock shows as a render count that stops while the updates go on
+void dm_audren_dump(void) {
+    LOG("audren: %s, %llu renders, %llu updates (%llu catch-up), catch-up queue %u of %d", atomic_load(&g_open) ? "open" : "closed", (unsigned long long)atomic_load(&g_renders),
+        (unsigned long long)atomic_load(&g_updates), (unsigned long long)atomic_load(&g_catchups), (unsigned)(atomic_load(&g_cq_tail) - atomic_load(&g_cq_head)), CQ);
 }
 
 // Output device: one built-in speaker, stereo (the audio device service still goes through IPC; the host answers directly)
