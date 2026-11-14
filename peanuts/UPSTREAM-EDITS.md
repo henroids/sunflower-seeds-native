@@ -53,10 +53,11 @@ brief, these are listed here rather than marked:
 |---|---|---|---|
 | `dm/gfx/tools/vk_android_build.py` | `vk_android_build.py` changes referenced across several Peanuts commits (worker pool, zstd level plumbing read by `PackService`/`ue_ondevice.py`'s callers) | feeds `DMSH_VK_CHAIN` | Yes — the worker-pool and zstd-level changes are general perf wins (per CRITIQUE-phase1.md §2 must-fix 4), not Peanuts-specific; should go upstream as a PR so this cost stops recurring on every sync |
 | `dm/gfx/tools/vk_android_same.tsv` | two added rows mapping our tool digests onto the current chain version | feeds `DMSH_VK_CHAIN` (comparison table, byte-sensitive) | No — these rows are proof-of-no-change evidence for *our* specific chain state; they need to be re-proven against each new upstream chain version, not sent upstream as-is |
+| `dm/gfx/tools/vk_android_spv.py` | `_remap_operands`: OpImageWrite and OpAtomicStore (instructions with no result id) get their own branches, so a promoted local's load is replaced in the image write's coordinate too (2026-11-14, OCTOPATH TRAVELER 0, issue #9: 2,142 of its 2,521 compute shaders failed spirv-val with "ID has not been defined"); `OP_ATOMIC_STORE` constant | feeds `DMSH_VK_CHAIN`; the change moves the chain version (`dmsh_chain_vk.h` 4b1886941d10 → 4ccbdc391b15) | Yes — a plain correctness fix in a translator post-pass; it changes the output only of modules that failed validation before |
 
-No igawa6 commit touches `dm/gfx/tools/vk_android_spv.py`, `dm/gfx/tools/vk_android_delta.py`, or
-`dm/gfx/nvn/dmsh_abi_vk.h`, so there is nothing to log for those three beyond noting they are
-exceptions by the same rule if a future change ever touches them.
+No igawa6 commit touches `dm/gfx/tools/vk_android_delta.py` or `dm/gfx/nvn/dmsh_abi_vk.h`, so there is
+nothing to log for those two beyond noting they are exceptions by the same rule if a future change
+ever touches them.
 
 ## Marker status of every upstream file we touch
 

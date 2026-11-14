@@ -864,6 +864,7 @@ HMMA_KEEP = 2   # converted A/B tiles hmma_lds keeps between the calls of a bloc
 OP_MEMORY_BARRIER, OP_COMPOSITE_CONSTRUCT, OP_TYPE_FUNCTION_ = 225, 80, 33
 OP_VECTOR_SHUFFLE, OP_ATOMIC_COMPARE_EXCHANGE, OP_LOOP_MERGE, OP_SELECTION_MERGE, OP_BRANCH, OP_BRANCH_CONDITIONAL, OP_SWITCH = 79, 230, 246, 247, 249, 250, 251
 GLSL_FMA, GLSL_PACK_HALF_2X16, GLSL_UNPACK_HALF_2X16 = 50, 58, 62
+OP_ATOMIC_STORE = 228
 NO_RESULT_OPS = {OP_STORE, OP_CONTROL_BARRIER, OP_MEMORY_BARRIER, OP_RETURN, OP_RETURN_VALUE, 246, 247, 249, 250, 251, 252, OP_FUNCTION_END}
 
 
@@ -878,6 +879,12 @@ def _remap_operands(x, remap):
         if x[3] in remap: x[3] = remap[x[3]]
         if x[4] in remap: x[4] = remap[x[4]]
     elif op in (OP_LOOP_MERGE, OP_SELECTION_MERGE): pass
+    elif op == OP_IMAGE_WRITE:   # no result: image, coordinate, texel (words 1-3), then the image operands mask (a literal) and its ids. The generic branch below starts at word 3 and left the coordinate alone
+        for i in (1, 2, 3, *range(5, len(x))):
+            if x[i] in remap: x[i] = remap[x[i]]
+    elif op == OP_ATOMIC_STORE:   # no result: pointer, scope, semantics, value
+        for i in range(1, len(x)):
+            if x[i] in remap: x[i] = remap[x[i]]
     elif op == OP_SWITCH:
         if x[1] in remap: x[1] = remap[x[1]]
     elif op in NO_RESULT_OPS:
