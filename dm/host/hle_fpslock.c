@@ -92,6 +92,15 @@ static const lock_t k_locks[] = {
     // "performance... mostly the same", consistent with Persona 5 Royal's engine stepping by real time rather than by the frame, unlike
     // Animal Crossing: New Horizons (see dm/games/01006F8002326000/README.md and IMPL-FPS60.md, which found the opposite for that game).
     { "d4b150b29a931cd381e2a30318fc299f", "Persona 5 Royal present interval", 0x2327b90, 0xf14, VSYNCS_I32, 1, 0, 3, {0x10, 0x60, 0x8} },
+    // PEANUTS: per-game lock rows (Pokemon Sword / Shield 1.3.2, TICKS_U32)
+    // Game Freak's engine keeps a table of frame times in ns by present interval at main+0x203eeb0 (u64: 16666667, 33333334, 50000000, 66666667,
+    // 83333334; the same offset in both mains). The game runs in mode 1 (interval 2, 33333334 ns) and divides the measured frame time by its
+    // entry (Sword main+0x680fc4, main+0x687fc8). The community's 60 fps patch for 1.3.2 passes 1 to the present interval call (Sword
+    // main+0x18a2c88, Shield main+0x18a2d18) and makes the interval-2 entry 16666667; here the row writes the entry's low word (the high word
+    // is 0) and, being an engine row, makes presentation follow the cap instead of the game's interval 2 (hle_nvn.c fps_present_cap)
+    { "a3b75bcd3311385aeed67fbeeb79cbb7", "Game Freak frame time of interval 2", 0, 0x203eeb8, TICKS_U32, 1, 1000000000 },
+    { "a16802625e7826bf83b6f9708e475b91", "Game Freak frame time of interval 2", 0, 0x203eeb8, TICKS_U32, 1, 1000000000 },
+    // PEANUTS end
     // Pokemon Brilliant Diamond 1.3.0: Unity's Application.targetFrameRate. Its icall registration (main+0xe34e60) resolves to main+0xdc8e70 -> +0x5fa640,
     // which stores w0 at main+0x4afc868; the getter at +0x5fa630 reads the same int32. The game sets 30 when entering the field; display pacing alone does not remove that cap.
     { "94ceae325c205c4b9d6f7235552f28fd", "Unity targetFrameRate", 0, 0x4afc868, FPS_I32, 1 },
