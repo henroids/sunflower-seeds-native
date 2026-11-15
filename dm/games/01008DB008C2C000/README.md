@@ -6,7 +6,7 @@ Update 1.3.2 (`v458752`) over the base game, SDK 7.3.2. Pokémon Sword's twin ([
 
 The same keys as Sword's profile, for the same reasons ([Sword, What it needs](../0100ABF008968000/README.md#what-it-needs)): the 4 GB layout with a 3.13 GB heap (`main.npdm` declares no system resource either), `mem_used 0x4c00000`, `pad_layout full`. The node area cut and the alignment of large regions come with the `sdk` build (`fcf93a41…`, `dm/tools/sdk_patches.py`). No host code is keyed to either game's `main`.
 
-No `patches.py`.
+`patches.py`: four cuts in the dress-up function for the title screen's null read when an outfit part has not loaded yet (nx2android's, measured there on Pokémon Sword on another Android device; not seen on the AYN Thor).
 
 ## Files and shaders
 

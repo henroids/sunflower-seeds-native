@@ -35,7 +35,10 @@ enum { BLK_SHIFT = 10, BLK = 1 << BLK_SHIFT, NBLK = 256, MAX_RANGE = BLK * NBLK 
 // Ranges are rounded to host pages (16 KB) but guest memory pools are only 4 KB aligned: adjacent pools share their first / last pages, so one address can fall in several registered ranges.
 // So: "is this texture tracked" looks for a range that holds its whole span; a fault / host pre-write unprotects and stamps every range covering that page; pool destruction identifies its range by the pool's exact start mem.
 // (Previously the first range containing the address was always taken: two SMBW ASTC 6x5 textures whose pool's first page is shared with a small preceding pool were judged untracked and re-uploaded on every use, about 6 MB per frame)
-typedef struct { uintptr_t base, end, mem; _Atomic uint8_t *state; _Atomic uint64_t *gen; uint8_t *ever; size_t cap; _Atomic int live, red; } range_t;   // red: a write protection in it failed (logged once)
+// PEANUTS (upstream nxnative's fix, "A pool registered over memory an earlier pool held counts older stamps as written"): born is the clock when the range was registered.
+// A page's generation starts at 0 then, so a stamp taken before that (content checked in a pool this memory held before, or while no pool held it) saw no newer generation
+// although the game wrote there in between without a fault: a stamp older than born counts as written (nvn_dirty_since_span, nvn_dirty_bounds_since)
+typedef struct { uintptr_t base, end, mem; _Atomic uint8_t *state; _Atomic uint64_t *gen; uint8_t *ever; size_t cap; _Atomic int live, red; _Atomic uint64_t born; } range_t;   // red: a write protection in it failed (logged once)
 static _Atomic(range_t *) g_blk[NBLK];
 static inline range_t *rg(int i) { return &atomic_load_explicit(&g_blk[i >> BLK_SHIFT], memory_order_acquire)[i & (BLK - 1)]; }
 static _Atomic int g_nr;
@@ -216,6 +219,7 @@ void nvn_dirty_add_range(const void *mem, size_t size) {
         memset((void *)state, 0, np); memset((void *)gen, 0, np * sizeof *gen); memset(ever, 0, np);
     }
     r->base = base; r->end = end; r->mem = (uintptr_t)mem; r->state = state; r->gen = gen; r->ever = ever; atomic_store(&r->red, 0);
+    atomic_store_explicit(&r->born, atomic_fetch_add(&g_now, 1) + 1, memory_order_relaxed); atomic_fetch_add(&g_now, 1);   // PEANUTS: published by the release store of live below; stamps taken from now on are past it
     if (slot == n) atomic_store(&g_nr, n + 1);
     atomic_store_explicit(&r->live, 1, memory_order_release);
     pthread_mutex_unlock(&g_slot_mu);
@@ -329,6 +333,7 @@ int nvn_dirty_since_span(const void *span, const void *addr, size_t len, uint64_
     range_t *r = (range_t *)span; uintptr_t a0 = (uintptr_t)addr;   // the kept handle still holds the span (a slot reused by another pool over the same memory is as good): no scan
     if (!r || !atomic_load_explicit(&r->live, memory_order_acquire) || a0 < r->base || a0 + len > r->end) r = find_span(a0, len);
     if (!r) return 1;   // When untracked, conservatively treat as dirty: better to upload more than to show stale content
+    if (stamp < atomic_load_explicit(&r->born, memory_order_relaxed)) return 1;   // PEANUTS: checked before this pool was registered over the memory (born)
     uintptr_t a = (uintptr_t)addr, p = (a - r->base) >> g_shift, q = (a + len - 1 - r->base) >> g_shift;
     for (uintptr_t i = p; i <= q; i++) if (atomic_load(&r->gen[i]) > stamp) return 1;   // The generation of the last write before upload is <= the stamp; any later write must be > the stamp
     return 0;
@@ -340,6 +345,7 @@ int nvn_dirty_bounds_since(const void *span, const void *addr, size_t len, uint6
     range_t *r = (range_t *)span; uintptr_t a = (uintptr_t)addr;
     if (!r || !atomic_load_explicit(&r->live, memory_order_acquire) || a < r->base || a + len > r->end) r = find_span(a, len);
     if (!r) return 1;
+    if (stamp < atomic_load_explicit(&r->born, memory_order_relaxed)) return 1;   // PEANUTS: every page counts (born); *lo, *hi are the whole of it already
     uintptr_t p = (a - r->base) >> g_shift, q = (a + len - 1 - r->base) >> g_shift, f = UINTPTR_MAX, l = 0;
     for (uintptr_t i = p; i <= q; i++) if (atomic_load(&r->gen[i]) > stamp) { if (f == UINTPTR_MAX) f = i; l = i; }
     if (f == UINTPTR_MAX) return 0;

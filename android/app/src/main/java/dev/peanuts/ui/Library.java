@@ -679,6 +679,7 @@ public final class Library {
         boolean bare = setup && rows.isEmpty() && pc == null;   // the first-run card alone
 
         Build b = build;
+        if (b != null && b.failed && b.step.equals("prepare")) pc = null;   // a build that stopped in Prepare: one card, this build's (its Retry builds again), not upstream's failed card beside it
         boolean buildCard = b != null && !(b.step.equals("prepare") && pc != null && !b.failed);   // during Prepare upstream's own card is the card
         int building = (pc != null ? 1 : 0) + (buildCard ? 1 : 0);
         if (building == 0 && filter == BUILDING) filter = ALL;   // the last job finished: the filter goes away
@@ -731,7 +732,7 @@ public final class Library {
         tiles.clear(); keyed.clear();
         lostKey = null; restoreKey = null;   // the removal above is not a focus lost to restore at the next rebuild
         buildStatus = null; buildBody = null; buildPct = null; buildBar = null; coverChip = null; coverStrip = null; firstCover = null;
-        if (pc != null && pc.getParent() instanceof ViewGroup) ((ViewGroup) pc.getParent()).removeView(pc);
+        if (ondeviceCard != null && ondeviceCard.getParent() instanceof ViewGroup) ((ViewGroup) ondeviceCard.getParent()).removeView(ondeviceCard);
         shown = sig;
         if (setup) PUi.add(box, setupCard(), 0);
         if (bare) { lastCells = 0; hadNote = false; return; }
@@ -907,8 +908,9 @@ public final class Library {
 
     private void stepFilter(int d) {
         Build b = build;
-        boolean buildCard = b != null && !(b.step.equals("prepare") && ondeviceCard != null && !b.failed);
-        boolean hasBuilding = ondeviceCard != null || buildCard;
+        boolean pcShows = ondeviceCard != null && !(b != null && b.failed && b.step.equals("prepare"));   // as render(): a build stopped in Prepare shows its own card only
+        boolean buildCard = b != null && !(b.step.equals("prepare") && pcShows && !b.failed);
+        boolean hasBuilding = pcShows || buildCard;
         List<Integer> avail = new ArrayList<>();
         for (int f : FILTERS) if (f != BUILDING || hasBuilding) avail.add(f);
         int i = Math.max(0, avail.indexOf(filter));

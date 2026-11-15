@@ -43,3 +43,10 @@ General changes first needed here; each applies to every game:
 - **The node area and 32 MB region alignment cuts of `sdk` `b39add63…`, and the SDK 11.4.0 implementation of the SDK-wide alignment patch** (`sdk_patches.py` `MATCH_CUTS`; the build's row was removed on 2026-10-29, as the rules give the same cuts): [1 GB alignment of regions of 1 GB and more](../../../docs/reference/memory.md#1-gb-alignment-of-regions-of-1-gb-and-more).
 - **Dual-source blending for NVN shaders** (`dmsh_build.py` `fs_dual`, `main0_d`, the profile's `dual_want.tsv`, `DM_NVN_DUAL_WANT`; `pso_desc` `pso_reads_src1`): [A written secondary blend source (NVN dual-source blending)](../../../docs/reference/rendering.md#a-written-secondary-blend-source-nvn-dual-source-blending).
 - **The NSP script's rewrite key always covers `sdk_patches.py`** (`patch_files`): [The packing script in detail](../../../docs/development.md#the-packing-script-in-detail).
+
+## Android (Peanuts Native)
+
+PEANUTS: built on the device and played on an AYN Thor (Adreno 740, Turnip) through the opening to the first field, 30 fps as on the Switch. Two things were missing for it:
+
+- The device's shader split could not decode the 678 GFPAK archives (Oodle Kraken): it now runs the game's own decoder in the app's host library, as it does for an Unreal game's shader archives (`shader_split.py` `oodle`, `ue_ondevice.py`).
+- People and Pokémon were not drawn: the game skins them with transform feedback (vertex shader `3374449f919e50db` captures three outputs into buffers of stride 12 / 4 / 4), which the Vulkan replay skipped. It captures now (`dm/gfx/vk_android/vka_tf.c`, `VK_EXT_transform_feedback`; `DM_VK_XFB=0` turns it off).

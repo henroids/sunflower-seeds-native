@@ -2058,16 +2058,24 @@ def oodle(comp, n):
     if _OODLE is None:
         import tempfile
         host, mods = os.environ.get('DM_OODLE_HOST'), os.environ.get('DM_OODLE_MODULES')
-        if not host or not mods: red('Oodle- or LZ5-compressed game files: set DM_OODLE_HOST (the Mac host, make -C dm/host GAME=<id> dmhost) and DM_OODLE_MODULES (the rewritten modules) to decode them with the game\'s own decoder')
+        # PEANUTS begin: on the phone there is no host executable: the title's host library in a worker process, as for an Unreal game's shader archives (ue_ondevice.py DeviceOodle;
+        # PackService sets DM_UE_HOST, DM_UE_HOST_LIB and DM_UE_MODULES for the split step). Pokemon Legends: Arceus's 678 GFPAK archives stopped the build there without it
+        dev, lib, dmods = os.environ.get('DM_UE_HOST', ''), os.environ.get('DM_UE_HOST_LIB', ''), os.environ.get('DM_UE_MODULES', '')
+        if (not host or not mods) and dev and lib and dmods:
+            import shlex, ue_ondevice
+            argv = shlex.split(dev) + ['-I', '-c', ue_ondevice.HOST_CODE, lib, dmods]
+        # PEANUTS end
+        elif not host or not mods: red('Oodle- or LZ5-compressed game files: set DM_OODLE_HOST (the Mac host, make -C dm/host GAME=<id> dmhost) and DM_OODLE_MODULES (the rewritten modules) to decode them with the game\'s own decoder')
+        else: argv = [host, mods]
         err = tempfile.TemporaryFile()
-        _OODLE = (subprocess.Popen([host, mods], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, env=dict(os.environ, DM_OODLE_SERVE='1')), err)
+        _OODLE = (subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, env=dict(os.environ, DM_OODLE_SERVE='1')), err)
     p, err = _OODLE
     try:
         p.stdin.write(struct.pack('<QQ', len(comp), n)); p.stdin.write(comp); p.stdin.flush()
         got = struct.unpack('<Q', p.stdout.read(8))[0]
     except (BrokenPipeError, struct.error): got = None
     if got != n:
-        err.seek(0); red(f'the game\'s decoder in the Mac host failed on a {len(comp)} → {n} byte stream; ---- host output ----\n' + err.read().decode(errors='replace')[-3000:])
+        err.seek(0); red(f'the game\'s decoder in the host failed on a {len(comp)} → {n} byte stream; ---- host output ----\n' + err.read().decode(errors='replace')[-3000:])
     return p.stdout.read(n)
 
 def trinity_shaders(path, rel, packs, out):

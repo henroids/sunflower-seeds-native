@@ -479,6 +479,15 @@ $(B)/t_android_resscale: t_android_resscale.c $(VKA)/vka_resscale.h | $(B)
 .PHONY: android-resscale
 android-resscale: $(B)/t_android_resscale
 	$(B)/t_android_resscale
+# PEANUTS begin: transform feedback on the Vulkan replay, the part with no Vulkan (vka_tf_spv.c): the capture layout of a control section and the module rewrite,
+# validated by spirv-val when it is on the PATH; DM_VK_SPV_DIR=<.spv folder> adds those modules. Built with run; android-tf builds and runs it
+run: $(B)/t_android_tf
+$(B)/t_android_tf: t_android_tf.c $(VKA)/vka_tf_spv.c $(VKA)/vka_tf.h $(VKA)/vka_selftest_spv.h | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_tf.c $(VKA)/vka_tf_spv.c
+.PHONY: android-tf
+android-tf: $(B)/t_android_tf
+	$(B)/t_android_tf
+# PEANUTS end
 # A model of the texture cache's image lifetimes under random operations (references, holds, the old image of an in-place swap, lingering, eviction, pool drops,
 # queued region writes; vka_tex.c): the sanitizer stops at the first image used or freed after it was freed. `build/t_android_imglife old` shows the fault of the
 # first device run of the resolution scale. Built with run; android-imglife builds and runs it

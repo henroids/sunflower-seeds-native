@@ -132,12 +132,14 @@ One row per profile; the notes are each profile's `README.md`.
 | [Pokémon Legends: Z-A](0100F43008C44000/README.md) | `0100F43008C44000` | 2.0.2 | 19.3.11 | Game Freak's Trinity engine | NVN |
 | [Pokémon Pokopia](0400A3A01EE4C000/README.md) | `0400A3A01EE4C000` | v655360 (Switch 2) | 20.5.25 (Ounce) | Koei Tecmo's KTGL | NVN2 |
 | [Pokémon Scarlet](0100A3D008C5C000/README.md) | `0100A3D008C5C000` | 1.0.0 | 13.3.5 | Game Freak's Trinity engine | NVN |
+| [Pokémon Shining Pearl](010018E011D92000/README.md) | `010018E011D92000` | 1.3.0 | 11.4.3 | Unity 2019.4.27f1 IL2CPP | NVN |
 | [Pokémon Shield](01008DB008C2C000/README.md) | `01008DB008C2C000` | 1.3.2 | 7.3.2 | Game Freak's engine (before Trinity) | NVN |
 | [Pokémon Sword](0100ABF008968000/README.md) | `0100ABF008968000` | 1.3.2 | 7.3.2 | Game Freak's engine (before Trinity) | NVN |
 | [Pokémon Violet](01008F6008C5E000/README.md) | `01008F6008C5E000` | 1.0.0 | 13.3.5 | Game Freak's Trinity engine | NVN |
 | [Portal](01007BB017812000/README.md) | `01007BB017812000` | 1.0.3 | 13.3.0 | Valve's Source engine (28 NROs) | NVN |
 | [Portal 2](0100ABD01785C000/README.md) | `0100ABD01785C000` | 1.0.3 | 13.3.0 | Valve's Source engine (21 NROs) | NVN |
 | [Raging Loop](010020400E1C2000/README.md) | `010020400E1C2000` | 1.0.0 (base) | 7.3.2 | Unity 2018.3.10f1 IL2CPP | NVN |
+| [Resident Evil 4](010099A00BC1E000/README.md) | `010099A00BC1E000` | v131072 | 5.4.0 | Capcom's RE4 HD code on nn::gfx (CRI Atom / Mana) | NVN |
 | [Return of the Obra Dinn](010032E00E6E2000/README.md) | `010032E00E6E2000` | 1.0.1 | 8.2.0 | Unity 2017.4.28f1 IL2CPP | NVN |
 | [Rhythm Heaven Groove](0100D9F01D474000/README.md) | `0100D9F01D474000` | 1.0.0 (base) | 21.4.0 | Nintendo's own 2D engine | NVN |
 | [ROMANCE OF THE THREE KINGDOMS 8 REMAKE](0100C2A01A730000/README.md) | `0100C2A01A730000` | 1.1.3 | 17.5.3 | Koei Tecmo's KTGL | NVN |
@@ -171,6 +173,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [The Legend of Zelda: Echoes of Wisdom](01008CF01BAAC000/README.md) | `01008CF01BAAC000` | 1.1.0 | 20.5.1 | NintendoWare (G3d / Ui2d / Vfx) | NVN |
 | [The Legend of Zelda: Link's Awakening](01006BB00C6F0000/README.md) | `01006BB00C6F0000` | 1.1.0 | 8.2.0 | Grezzo's engine on NintendoWare | NVN |
 | [The Legend of Zelda: Ocarina of Time](0400486024DEC000/README.md) | `0400486024DEC000` | v0 (Switch 2) | 22.2.8 (Ounce) | Nintendo EPD (sead / agl / gsys) | NVN2 |
+| [The Legend of Zelda: Skyward Sword HD](01002DA013484000/README.md) | `01002DA013484000` | 1.0.1 | 11.4.0 | Nintendo's Wii-era engine, ported by Tantalus | NVN |
 | [The Legend of Zelda: Tears of the Kingdom](0100F2C0115B6000/README.md) | `0100F2C0115B6000` | 1.4.3 | 20.5.22 | Nintendo EPD (sead / agl / gsys) | NVN |
 | [TRIANGLE STRATEGY](0100CC80140F8000/README.md) | `0100CC80140F8000` | 1.1.1 | 12.3.2 | Unreal Engine 4.27 | NVN |
 | [Unicorn Overlord](010069401ADB8000/README.md) | `010069401ADB8000` | 1.05 | 16.2.4 | Vanillaware's engine | NVN |

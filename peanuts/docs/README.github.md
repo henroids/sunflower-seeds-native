@@ -44,8 +44,13 @@ asks before building any other.
 | Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes | 60 fps |
 | OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes | 60 fps |
 | Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes | 60 fps |
+| Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Not checked | 60 fps; new, little tested |
 | Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes | 60 fps (30 on Switch) |
 | The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.9.0 | Yes | 60 fps (30 on Switch); new, little tested |
+| FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No | 45 to 60 fps; new, little tested |
+| The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Not checked | 60 fps; new, little tested |
+| Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No | 30 fps, as on Switch; new, little tested |
+| Resident Evil 4 | `010099A00BC1E000` | v131072 | Not checked | 60 fps; new, first scenes only |
 | Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested |
 | Super Mario Bros. Wonder | `010015100B514000` | 1.0.0, 1.0.1, 1.2.1 | Not checked | Not tested on a device yet |
 | DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Not tested on a device yet |

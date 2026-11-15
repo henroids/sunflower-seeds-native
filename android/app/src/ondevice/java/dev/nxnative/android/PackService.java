@@ -772,6 +772,17 @@ public final class PackService extends Service {
             failure = new PrepareText.Failure("The phone ran out of memory while finding the shaders. Close other apps, then tap Retry.", "Left out: " + mem + "\n" + log, PrepareText.FIX_RETRY);
             return "the phone ran out of memory while finding the shaders in " + mem.replaceFirst(":.*", "") + " (its shaders were left out). Close other apps, then Retry";
         }
+        // PEANUTS begin: files compressed with the game's own decoder that the app could not run are the app's limit, not a damaged dump (Pokemon Legends: Arceus's 678 GFPAK archives)
+        String dec = null;
+        for (String w : skipped) if (w.contains("own decoder") || w.contains("decoder in the host failed")) { dec = w; break; }
+        if (dec != null) {
+            failure = new PrepareText.Failure("The app could not decode " + skipped.size() + (skipped.size() == 1 ? " compressed file" : " compressed files") + " of this game. "
+                    + "Your dump is not the cause: this app version cannot build this game on the device yet. Share the log (Details).",
+                    "Not decoded: " + String.join("\n", skipped) + "\n" + log, PrepareText.FIX_RETRY);
+            return "the split could not decode " + skipped.size() + (skipped.size() == 1 ? " compressed file" : " compressed files") + " of " + j.name() + " (" + dec
+                    + "): the app's limit, not the dump's";
+        }
+        // PEANUTS end
         if (!skipped.isEmpty()) {
             failure = new PrepareText.Failure("The app could not read " + skipped.size() + (skipped.size() == 1 ? " file" : " files") + " of your dump. The file may be damaged: "
                     + "dump the game again, then tap Retry.", "Not read: " + String.join("\n", skipped) + "\n" + log, PrepareText.FIX_RETRY);
