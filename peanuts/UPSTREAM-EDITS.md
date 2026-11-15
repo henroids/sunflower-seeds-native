@@ -320,3 +320,19 @@ same stray release lands on a new image of the cache. This is the cause as far a
 
 Upstream candidate: yes, the `rw_pend` part (eviction and pool drops against queued region writes) is a general fix, independent of the resolution scale.
 In `vka_resscale.inc` (Peanuts-owned): no prune inside a change of scale any more, and the old image's holder gets a count no stray release can bring to zero.
+
+## Round 10 (2026-11-15): six more games
+
+A shader-chain change, on purpose: `DMSH_CHAIN` 9b2613d5216b → 9474b20069ad, `DMSH_VK_CHAIN` c3959e8b8f88 → 80271a5f763d (`DMSH_VK_ABI` unchanged, so a library of the older version still plays until its game is prepared again). No `vk_delta.tsv` was published for the new version, so that update is a full translation per game.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/third_party/ryujinx/src/Ryujinx.Graphics.Shader/StructuredIr/AstOptimizer.cs` | 2 | `ReadsWritableMemory`: a load of memory the shader can write is not propagated to its use (nx2android's rule; Final Fantasy Resonance's radix sort, blinking fog and fire) | `// PEANUTS ...` |
+| `dm/gfx/tools/dmsh_xlate_bin/*.dll`, `dm/gfx/tools/dmsh_chain.lock`, `dm/gfx/nvn/dmsh_chain.h`, `dm/gfx/nvn/dmsh_chain_vk.h` | generated | the PC translator rebuilt on Linux (.NET 10.0.114) and the versions that follow; the lock's two Apple lines are as they were (not measurable on Linux: a Mac release measures them again) | generated |
+| `dm/gfx/tools/shader_split.py` | 1 | `oodle`: on the phone the game's decoder runs in the app's host library (Pokémon Legends: Arceus's GFPAK archives) | `# PEANUTS begin`/`end` |
+| `dm/gfx/nvn/hle_nvn.c`, `dm/gfx/vk_android/vka.h`, `vka_dev.c`, `vka_draw.c`, `vka_exec.c`, `vka_shader.c`, `vka_ctl.c`, `dm/host/tests/Makefile`, `docs/env_switches.tsv` | several | transform feedback on the Vulkan replay (`vka_tf.c`, `vka_tf_spv.c`, `vka_tf.h` are Peanuts-owned): `VK_EXT_transform_feedback`, the Xfb decorations patched into the vertex module when it is made; `DM_VK_XFB=0` turns it off | `// PEANUTS ...` |
+| `dm/gfx/nvn/nvn_dirty.c` | 5 | `born`: a pool made over memory an earlier pool held counts older stamps as written (nxnative's fix, which Skyward Sword HD's profile depends on) | `// PEANUTS ...` |
+| `dm/host/hle_fpslock.c` | 1 | the Unity targetFrameRate row for Pokémon Shining Pearl's `main` | `// PEANUTS ...` |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | 1 | files the split could not decode get their own failure text (not "the dump may be damaged") | `// PEANUTS begin`/`end` |
+
+Upstream candidates: the `ReadsWritableMemory` rule and `born` are upstream's own already (nxnative has both).

@@ -774,7 +774,7 @@ public final class PackService extends Service {
         }
         // PEANUTS begin: files compressed with the game's own decoder that the app could not run are the app's limit, not a damaged dump (Pokemon Legends: Arceus's 678 GFPAK archives)
         String dec = null;
-        for (String w : skipped) if (w.contains("own decoder") || w.contains("decoder in the host failed")) { dec = w; break; }
+        for (String w : skipped) if (w.contains("own decoder") || w.contains("host failed on a")) { dec = w; break; }
         if (dec != null) {
             failure = new PrepareText.Failure("The app could not decode " + skipped.size() + (skipped.size() == 1 ? " compressed file" : " compressed files") + " of this game. "
                     + "Your dump is not the cause: this app version cannot build this game on the device yet. Share the log (Details).",

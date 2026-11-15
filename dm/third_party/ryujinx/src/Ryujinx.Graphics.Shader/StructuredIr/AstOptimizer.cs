@@ -27,7 +27,11 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
 
                         // Banana Native: a source with side effects is never propagated: its assignment stays (below), so a copy at the use ran it twice
                         // (nx2android c6b211c: Pokémon Legends: Z-A's culling compute shaders did each warp's atomic add twice, and the GPU time grew every frame)
-                        if (propVar.Defs.Count == 1 && isWorthPropagating && !HasSideEffects(assignment.Source))
+                        // PEANUTS (nx2android's rule): nor a load of memory the shader can write (shared, local, storage, global, images): moved to its use, it read
+                        // the memory after the stores between them. Final Fantasy Resonance's radix sort scatter (98dee7b8a8eb9f9f) and scan (5854663e6002c250)
+                        // store a row's exclusive prefix over the counts they read, then read the last count back from the word just stored: keys of the same
+                        // digit took one slot and others none, and the fog and fire drawn from the sorted list blinked on the first road (AYN Thor, Turnip)
+                        if (propVar.Defs.Count == 1 && isWorthPropagating && !HasSideEffects(assignment.Source) && !ReadsWritableMemory(assignment.Source))
                         {
                             PropagateExpression(propVar, assignment.Source);
                         }
@@ -45,6 +49,26 @@ namespace Ryujinx.Graphics.Shader.StructuredIr
             }
 
             RemoveEmptyBlocks(mainBlock, targetLanguage);
+        }
+
+        // PEANUTS: a load the shader's own stores can change (above)
+        private static bool ReadsWritableMemory(IAstNode source)
+        {
+            if (source is not AstOperation operation)
+            {
+                return false;
+            }
+
+            Instruction inst = operation.Inst & Instruction.Mask;
+
+            if (inst == Instruction.ImageLoad)
+            {
+                return true;
+            }
+
+            return inst == Instruction.Load && operation.StorageKind is StorageKind.LocalMemory or StorageKind.SharedMemory or StorageKind.SharedMemory8 or
+                StorageKind.SharedMemory16 or StorageKind.StorageBuffer or StorageKind.GlobalMemory or StorageKind.GlobalMemoryS8 or StorageKind.GlobalMemoryS16 or
+                StorageKind.GlobalMemoryU8 or StorageKind.GlobalMemoryU16;
         }
 
         private static bool HasSideEffects(IAstNode source)
