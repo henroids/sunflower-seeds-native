@@ -323,7 +323,7 @@ In `vka_resscale.inc` (Peanuts-owned): no prune inside a change of scale any mor
 
 ## Round 10 (2026-11-15): six more games
 
-A shader-chain change, on purpose: `DMSH_CHAIN` 9b2613d5216b → 9474b20069ad, `DMSH_VK_CHAIN` c3959e8b8f88 → 80271a5f763d (`DMSH_VK_ABI` unchanged, so a library of the older version still plays until its game is prepared again). No `vk_delta.tsv` was published for the new version, so that update is a full translation per game.
+A shader-chain change, on purpose: `DMSH_CHAIN` 9b2613d5216b → 9474b20069ad, `DMSH_VK_CHAIN` c3959e8b8f88 → 80271a5f763d → 4d3a924dcd04 (the second step, before anything was published on the first: the two spirv-val rewrites in the table; `DMSH_VK_ABI` unchanged, so a library of the older version still plays until its game is prepared again). No `vk_delta.tsv` was published for the new version, so that update is a full translation per game.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
@@ -334,5 +334,6 @@ A shader-chain change, on purpose: `DMSH_CHAIN` 9b2613d5216b → 9474b20069ad, `
 | `dm/gfx/nvn/nvn_dirty.c` | 5 | `born`: a pool made over memory an earlier pool held counts older stamps as written (nxnative's fix, which Skyward Sword HD's profile depends on) | `// PEANUTS ...` |
 | `dm/host/hle_fpslock.c` | 1 | the Unity targetFrameRate row for Pokémon Shining Pearl's `main` | `// PEANUTS ...` |
 | `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | 1 | files the split could not decode get their own failure text (not "the dump may be damaged") | `// PEANUTS begin`/`end` |
+| `dm/gfx/tools/vk_android_spv.py`, `dm/gfx/tools/vk_android_build.py`, `dm/gfx/nvn/dmsh_chain_vk.h` | 1 + 1, generated | `extended_format_caps`: a module with an image type of a format outside the base set (Rg32ui) declares `StorageImageExtendedFormats`; `workgroup_plain_arrays`: a Workgroup variable whose array type carries `ArrayStride` (shared memory of 8 words has the type of the support block's `uint[8]` member) gets an undecorated array type of its own. Final Fantasy Resonance: 105 + 10 of its 73,496 shaders failed spirv-val, all 115 build now. Python only: no translator rebuild, `DMSH_CHAIN` stays 9474b20069ad; `DMSH_VK_CHAIN` 80271a5f763d → 4d3a924dcd04 (`DMSH_VK_ABI` unchanged). Control: 5,324 other shaders of the game (its other 2,819 compute shaders, 2,001 pixel, 500 vertex, 4 geometry) built with the tools before and after have the same library entry hash, every one | `# PEANUTS begin`/`end`, `# PEANUTS` |
 
 Upstream candidates: the `ReadsWritableMemory` rule and `born` are upstream's own already (nxnative has both).
