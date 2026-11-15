@@ -1,3 +1,4 @@
+// PEANUTS: a test of the fork's own classes (which companion package belongs to a title, the return-to-game decision, the job command's words); upstream has no dev.peanuts tests
 package dev.peanuts;
 
 import dev.peanuts.build.Reimport;
