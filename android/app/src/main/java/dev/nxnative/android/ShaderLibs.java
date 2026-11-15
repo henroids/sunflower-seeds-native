@@ -376,6 +376,40 @@ final class ShaderLibs {
         return !absent.isEmpty() && optional.containsAll(absent) ? new ArrayList<>(absent) : null;
     }
 
+    // PEANUTS begin: the three rules of scripts/pack_android.py that the phone's Prepare keeps too (PackService): may_lack, lacking_shaders' one case that names
+    // add-on content, and no_nvn_shaders
+    /** The keys a dump of this version may lack with no failure: shader_optional.tsv's, and those only another listed version has (pack_android.py may_lack) */
+    static Set<String> mayLack(File profile, long version) throws IOException {
+        Set<String> keys = otherVersionKeys(profile, version);
+        File opt = new File(profile, OPTIONAL);
+        if (opt.isFile()) for (String l : Files.readAllLines(opt.toPath(), StandardCharsets.UTF_8)) if (!l.isEmpty() && !l.startsWith("#")) keys.add(l.split("\t", 2)[0]);
+        return keys;
+    }
+
+    /**
+     * Whether add-on content (DLC) that was not imported is named as a possible reason for the shaders a split lacks: only when nothing else is known to explain
+     * them. missing: the shaders it lacks beyond mayLack; absent: those of them whose file the dump does not have (every one of them, or the dump differs for
+     * another reason); addons: the add-on packages the dump holds (none); listed: game.tsv's shader_versions, which must be the dump's version alone (a union
+     * of versions, a profile that names none, or a dump of another version: a missing file is then more likely another version's)
+     */
+    static boolean addonCase(int missing, int absent, int addons, List<String> listed, long version) {
+        return missing > 0 && absent == missing && addons == 0 && listed.size() == 1 && listed.get(0).equals("v" + version);
+    }
+
+    /** Whether the profile says its game has no NVN shaders for a split to find: game.tsv's shader_note says "no NVN shaders", or the profile lists the shaders
+     *  captured from a run instead (vk_capture.tsv, gl_capture.tsv). A split that reads no shader of any other game is a failure (PackService.emptySplit) */
+    static boolean noNvnShaders(File profile) {
+        if (new File(profile, "vk_capture.tsv").isFile() || new File(profile, "gl_capture.tsv").isFile()) return true;
+        try {
+            for (String l : Files.readAllLines(new File(profile, "game.tsv").toPath(), StandardCharsets.UTF_8)) {
+                String[] c = l.split("\t", 2);
+                if (c.length == 2 && c[0].trim().equals("shader_note") && c[1].toLowerCase(java.util.Locale.ROOT).contains("no nvn shaders")) return true;
+            }
+        } catch (IOException e) { /* no game.tsv to say so */ }
+        return false;
+    }
+    // PEANUTS end
+
     // PEANUTS begin: where the shaders a split lacks come from, so a failed comparison can tell files the import does not have (add-on content that was not
     // imported) from files that are there with other shaders (PackService.splitMatchesProfile, PrepareText.addonNotImported)
     /**

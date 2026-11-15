@@ -12,7 +12,7 @@ import os, shlex, struct, subprocess, sys, tempfile, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '../../tools')); sys.path.insert(0, HERE)
 import uepak
-from romfs import os as ros, open as ropen
+from romfs import os as ros
 
 HOST_CODE = ("import ctypes, sys\n"
              "h = ctypes.CDLL(sys.argv[1])\n"

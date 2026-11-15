@@ -1884,6 +1884,7 @@ static double g_pres_exp[TWIN], g_pres_exp_last;   // how long that frame should
 // The hold (60 Hz vsyncs) each present was given, by present number. On-screen intervals are read 8 presents late, so each is judged against the holds of its own presents:
 // with the frame step at 2 vsyncs every frame stays 33.3 ms, which is not a dropped frame
 static uint8_t g_hold_ring[16];
+static uint64_t g_pres_tk[16];   // PEANUTS: the ticket (mtl_present) of each of the last 16 presents, by the window's count of presents; 0 = that present showed nothing
 static double pres_expect_ms(uint64_t n) {   // the interval between presents n - 1 and n shows frame n - 1: the display link holds it for its own present's hold, the Mac pacer spaces present n by n's, so the larger of the two
     int k = g_hold_ring[n % 16] > g_hold_ring[(n - 1) % 16] ? g_hold_ring[n % 16] : g_hold_ring[(n - 1) % 16];
     double held = (k ? k : 1) * 1000.0 / 60, tgt = 1000.0 / mtl_fps_target();   // at least one frame period of the target (33.3 ms when the game itself asks for 30)
@@ -2388,7 +2389,8 @@ NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
         nvn_cap_present(t, crop);   // DM_NVN_CAPTURE (nvn_capture.inc)
         o->ticket[idx] = mtl_present(t, present_period(o) / 1e9, crop);
         o->pfence[idx] = mtl_last_fence();
-    }
+        g_pres_tk[o->presents % 16] = o->ticket[idx];   // PEANUTS: this present's ticket, for the on-screen statistics (below)
+    } else g_pres_tk[o->presents % 16] = 0;   // PEANUTS
     gfx_leave();
     atomic_fetch_add(&g_nvn_ns, now_ns() - t0);
     uint64_t f = g_frame, ps, dr; mtl_stats(&ps, &dr);
@@ -2519,7 +2521,10 @@ NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
     if (idx >= 0 && idx < 4) o->avail[idx] = period ? slot + period : 0;
     static uint64_t prev_slot; if (prev_slot && period) trow(f, "@display_ms", (slot - prev_slot) / 1e6); prev_slot = slot;   // display interval between two adjacent frames on screen (this is the one to look at for dropped frames)
     // Actual presentation interval (windowed mode): taken 8 presents late (the presented callback has arrived by then), as the difference between the n-th and the (n−1)-th; −1 = discarded
-    if (o->presents > 9) { uint64_t n = o->presents - 8; double a_ = mtl_presented_time(n), b_ = mtl_presented_time(n - 1);
+    // PEANUTS: the two times are asked for by the presents' tickets (g_pres_tk), not by the window's count of presents. The graphics layer keeps a present's time under
+    // its ticket, which counts for the whole run, and the count starts again at 1 when the game makes its window again (Final Fantasy Resonance when the operation
+    // mode changes, AYN Thor 2026-11-15): from then on every frame read as "no reading", the on-screen line stopped and the panel line said "no timing 300"
+    if (o->presents > 9) { uint64_t n = o->presents - 8; double a_ = mtl_presented_time(g_pres_tk[n % 16]), b_ = mtl_presented_time(g_pres_tk[(n - 1) % 16]);
         if (a_ < 0) trow(f - 8, "@presented_ms", -1); else if (a_ > 0 && b_ > 0) trow(f - 8, "@presented_ms", (a_ - b_) * 1e3);
         g_pres_exp[g_presn % TWIN] = g_pres_exp_last = pres_expect_ms(n);
         g_pres_iv[g_presn++ % TWIN] = a_ < 0 ? -1 : (a_ > 0 && b_ > 0 ? (a_ - b_) * 1e3 : 0);

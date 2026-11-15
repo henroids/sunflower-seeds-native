@@ -22,6 +22,9 @@ typedef struct pn_nup pn_nup;
 int pn_nup_is_spec(const char *spec);
 // Opens the RomFS layers spec names; NULL with the reason in why (the first layer must open; a missing base layer is not an error)
 pn_nup *pn_nup_open(const char *spec, char *why, size_t wn);
+// The same; dumps are opened only when they are the running game's: title_id its application ID (0: not checked), main_build the first 16 bytes of its main
+// module's build ID as hex (NULL or "": not checked), as the host's mount checks them (peanuts_nsp.h pn_nsp_open). A .nup is not checked (it never was)
+pn_nup *pn_nup_open_for(const char *spec, uint64_t title_id, const char *main_build, char *why, size_t wn);
 void pn_nup_close(pn_nup *n);
 // One line for logs: "<file> update/655360 (53 entries) + base (none)"
 const char *pn_nup_describe(const pn_nup *n);

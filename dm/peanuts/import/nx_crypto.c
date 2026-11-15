@@ -36,7 +36,9 @@ static const uint8_t SBOX[256] = {
     0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16 };
 static uint8_t INV_SBOX[256];
 static int tables_ready, backend, sha_backend;   // backend: 0 portable, 1 aesni, 2 armv8; sha_backend: 0 portable, 1 sha-ni, 2 armv8 sha2
+#ifdef NX_TEST_HOOKS
 static int backend_found;   // what the detection chose (nx_aes_test_portable goes back to it)
+#endif
 static void sha_selftest(void);
 
 static uint8_t xtime(uint8_t x) { return (uint8_t)((x << 1) ^ ((x & 0x80) ? 0x1b : 0)); }
@@ -57,12 +59,16 @@ static void tables_init(void) {
 #endif
     { const char *e = getenv("NX_AES_PORTABLE"); if (e && *e && *e != '0') backend = 0; }   // tests: force the portable cipher
     { const char *e = getenv("NX_SHA_PORTABLE"); if (e && *e && *e != '0') sha_backend = 0; }   // tests: force the portable hash
+#ifdef NX_TEST_HOOKS
     backend_found = backend;
+#endif
     tables_ready = 1;
     sha_selftest();   // a hardware hash that fails the known answer falls back to the portable one (the .nup must not depend on the CPU)
 }
 
+#ifdef NX_TEST_HOOKS
 void nx_aes_test_portable(int on) { tables_init(); backend = on ? 0 : backend_found; }
+#endif
 const char *nx_aes_backend(void) { tables_init(); return backend == 1 ? "aesni" : backend == 2 ? "armv8" : "portable"; }
 const char *nx_sha_backend(void) { tables_init(); return sha_backend == 1 ? "sha-ni" : sha_backend == 2 ? "armv8" : "portable"; }
 

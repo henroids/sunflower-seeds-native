@@ -23,7 +23,7 @@ import java.util.Map;
 
 /**
  * Peanuts Native: the screens black while a build runs. A build takes from minutes to over an hour and its card hardly changes, which marks an OLED panel:
- * the Building view's "Screens off" covers every display (the AYN Thor's two) with a black window at the lowest brightness, which an OLED panel shows with
+ * "Screens off" in Home's header covers every display (the AYN Thor's two) with a black window at the lowest brightness, which an OLED panel shows with
  * its pixels off. The device stays awake (an app cannot turn a screen off itself, and a sleeping device slows the build), a tap on either screen brings the
  * app back, and the cover goes by itself when no build is left ({@link Library}'s render).
  */

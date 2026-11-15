@@ -86,8 +86,10 @@ int nx_sec_prepare(NxNca *n, int sec);
 // section write nothing of its state and may run on any number of threads at once (a plain section's reads always may).
 #define NX_SHCACHE_BYTES (16u << 20)
 int nx_sec_share(NxNca *n, int sec);
-void nx_shcache_budget(size_t bytes);   // the tests: another size (entries held beyond it go as their shards are next written)
+#ifdef NX_TEST_HOOKS   // the tests only (defined for the test programs in CMakeLists.txt): not in the importer's library nor in the host
+void nx_shcache_budget(size_t bytes);   // another size (entries held beyond it go as their shards are next written)
 void nx_shcache_stats(uint64_t *hits, uint64_t *misses, uint64_t *held, uint64_t *entries);   // any pointer may be NULL
+#endif
 // Chunking a read of [off, want_end) of a section (want_end <= limit): an end at or after want_end that does not split an LZ4 entry when one can be found
 // before limit (so parallel readers never decompress one entry twice), else want_end. A plain section: want_end.
 uint64_t nx_sec_chunk_end(NxNca *n, int sec, uint64_t off, uint64_t want_end, uint64_t limit);

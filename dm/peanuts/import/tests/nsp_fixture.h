@@ -129,6 +129,7 @@ typedef struct FxSeg { uint64_t v, len, b; } FxSeg;
 
 // ---- a compressed data level: img cut into entries (LZ4 blocks of literals, stored, zeros), then the bucket-tree table (16 KiB nodes: the root, then sets of
 // 682 entries of 0x18: virtual offset, physical offset, type, physical size). A base run is one stored entry, so the patch can still map its bytes.
+static int fx_bad_psize;   // set: the first LZ4 entry's table row claims one byte more than LZ4 can make of the entry (a damaged table)
 static void fx_compress(const FxBuf *img, const FxSeg *seg, int nseg, FxBuf *phys, FxSeg *pseg, int *npseg, uint64_t *toff, uint64_t *tsize, uint32_t *cnt) {
     typedef struct { uint64_t virt, phys; uint8_t type; uint32_t psize; } E;
     E *e = NULL; uint32_t n = 0, cap = 0; uint64_t v = 0; int si = 0; *npseg = 0;
@@ -159,6 +160,7 @@ static void fx_compress(const FxBuf *img, const FxSeg *seg, int nseg, FxBuf *phy
     *toff = phys->n - org; *tsize = (uint64_t)0x4000 * (1 + sets); *cnt = n;
     size_t t0 = fx_put(phys, NULL, (size_t)*tsize);
     fx_w32(phys->p + t0 + 4, sets); fx_w64(phys->p + t0 + 8, img->n);
+    for (uint32_t i = 0; fx_bad_psize && i < n; i++) if (e[i].type == 3) { uint64_t vs = (i + 1 < n ? e[i + 1].virt : img->n) - e[i].virt; e[i].psize = (uint32_t)(vs + vs / 255 + 17); break; }
     for (uint32_t s = 0; s < sets; s++) {
         uint8_t *bk = phys->p + t0 + 0x4000 * (size_t)(s + 1); uint32_t ne = s + 1 < sets ? per : n - per * s;
         fx_w32(bk, s); fx_w32(bk + 4, ne); fx_w64(bk + 8, s + 1 < sets ? e[per * (s + 1)].virt : img->n);

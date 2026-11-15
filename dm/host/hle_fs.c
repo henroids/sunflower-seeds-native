@@ -477,9 +477,14 @@ static Result err_res(const char *op, const char *path) {
 HLE_FORCE("_ZN2nn2fs22QueryMountRomCacheSizeEPm", "fsp-srv; rom reads the host directory directly, the cache gets only the minimum size", Result, h_fs_QueryRomCache, size_t *out) { *out = 0x1000; return RES_OK; }
 HLE_FORCE("_ZN2nn2fs8MountRomEPKcPvm", "fsp-srv; rom → host RomFS directory", Result, h_fs_MountRom, const char *name, void *cache, size_t sz) { dm_thread_service_request();
     (void)cache; (void)sz; char b[1024];
-    // PEANUTS: DM_NSP_ROMFS=<base dump>[|<update dump>] mounts rom from the dumps (peanuts_nsp.h, "nsp:" before the value) in place of what DM_ROMFS names: the
-    // way to try a game from its dumps before the launcher sets DM_ROMFS=nsp:... itself (its env files do not take DM_ROMFS, a path only the launcher sets)
-    char nb[1100]; const char *nd = getenv("DM_NSP_ROMFS"); if (nd && *nd) snprintf(nb, sizeof nb, "nsp:%s", nd);
+    // PEANUTS: DM_NSP_ROMFS=<base dump>[|<update dump>], a diagnostic, mounts rom from the dumps (peanuts_nsp.h, "nsp:" before the value) in place of what DM_ROMFS
+    // names: the one way to run a game from its dumps, as the launcher sets no DM_ROMFS=nsp:... (and its env files do not take DM_ROMFS, a path only it sets)
+    // A value too long for the spec is refused, not cut (a cut path could name another file)
+    char nb[1100]; const char *nd = getenv("DM_NSP_ROMFS");
+    if (nd && *nd && snprintf(nb, sizeof nb, "nsp:%s", nd) >= (int)sizeof nb) {
+        LOG("[RED] fs mount %s: DM_NSP_ROMFS is %zu characters, more than the %zu a dump spec holds: nothing is mounted", name, strlen(nd), sizeof nb - 5);
+        return RES_TARGET_NOT_FOUND;
+    }
     Result r = mount(name, nd && *nd ? nb : envdir("DM_ROMFS", "romfs", b, sizeof b), 1);
     if (r == RES_OK && getenv("DM_ROMFS_OVERLAY")) {
         PATH_LOCK();

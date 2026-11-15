@@ -526,6 +526,11 @@ public final class PackService extends Service {
                 }
                 // Try anyway: the split need not be the profile's list byte for byte; vk_android_build.py still finds each shader by its key, and with DMSH_VK_REQUIRE_ALL=0 (below)
                 // writes the library without the shaders this build of the game lacks, counted in one [RED] line of shaders.log
+                // PEANUTS begin: a split that read no shader makes an empty library, and a pack that cannot draw: stopped here, with or without Try anyway, unless
+                // the profile says the game has no NVN shaders (scripts/pack_android.py empty_split is the same stop on the PC)
+                String empty = emptySplit(j, split);
+                if (empty != null) return empty;
+                // PEANUTS end
                 String bad = j.tryAnyway() ? null : splitMatchesProfile(j, split);
                 if (bad != null) return bad;
                 tool = "dm/gfx/tools/vk_android_build.py";
@@ -803,24 +808,27 @@ public final class PackService extends Service {
             return "the split could not read " + skipped.size() + (skipped.size() == 1 ? " file" : " files") + " of the dump (" + skipped.get(0)
                     + "), so its shaders are not the ones this app knows for " + j.name() + ". The file may be damaged: dump the game again, then Retry";
         }
-        // PEANUTS begin: say how many shaders are missing and name one; missing with their files, in an import without add-on content, is DLC that was not imported
-        // (set the DLC folder and import again), not a dump to make again; an import that could not be asked gets the old words and the DLC as a possible cause
+        // PEANUTS begin: say how many shaders are missing and name one; when every one of them comes from a file the import does not have, the import has no
+        // add-on content and the tables are of this one version, DLC that was not imported is named as one possible reason (ShaderLibs.addonCase, the rule of
+        // scripts/pack_android.py lacking_shaders); an import that could not be asked gets the old words and the DLC as a possible reason
         String ver = Profile.versionName(j.version()), differs = "The split's " + have.getName() + " differs from the app's dm/games/" + j.titleId() + "/shader_map.tsv";
         if (lack == null) {
             failure = PrepareText.shadersDifferUnread(j.name(), ver, differs + ".\n" + log);
             return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + ver + ", " + have.getName() + " differs). The dump may be incomplete or "
-                    + "modified: dump the game again, then Retry. This also happens when the game's add-on content (DLC) was not part of the import";
+                    + "modified: dump the game again, then Retry. When the game has add-on content (DLC), it may not have been part of the import";
         }
-        // PEANUTS: said only for a profile whose tables are of one version. With a union of versions (shader_versions) a missing file is more likely another
-        // version's, and no game is known that needs this message: the case it was written for was another version's shaders, not DLC
-        if (lack.absent > 0 && lack.addons == 0 && lack.versions <= 1) {
+        // PEANUTS: said only when nothing else is known to explain the missing shaders. With a union of versions (shader_versions), or a dump of a version the
+        // tables were not made from, a missing file is more likely another version's; a missing shader whose file is there differs for another reason. No game
+        // is known that needs this message: the case it was written for was another version's shaders, not DLC
+        if (ShaderLibs.addonCase(lack.missing, lack.absent, lack.addons, lack.versions, j.version())) {
             boolean nup = Nup.isNup(j.dump());
             failure = PrepareText.addonNotImported(j.name(), lack.absent, lack.total, lack.absentFile, nup, differs + ": " + lack.missing + " of its " + lack.total
-                    + " shaders are missing, " + lack.absent + " of them from files that are not in " + j.dump() + " (" + lack.absentFile + "), which has no add-on content.\n" + log);
-            return "the dump's shaders lack " + lack.absent + " of the " + lack.total + " this app knows for " + j.name() + " (" + ver + ") that come from files the "
-                    + (nup ? "import" : "dump") + " does not have (e.g. " + lack.absentFile + "), and it has no add-on content. This usually means the game's add-on content "
-                    + "(DLC) was not part of the " + (nup ? "import: set the DLC folder in Settings, then Import again in the game's sheet (" + j.dump() + " is made again)" : "dump: dump the game again "
-                    + "with its DLC, then Retry") + ". Try anyway builds without them";
+                    + " shaders are missing, all of them from files that are not in " + j.dump() + " (" + lack.absentFile + "), which has no add-on content.\n" + log);
+            String what = nup ? "import" : "dump";
+            return "the dump's shaders lack " + lack.absent + " of the " + lack.total + " this app knows for " + j.name() + " (" + ver + "): all of them come from files the "
+                    + what + " does not have (e.g. " + lack.absentFile + "), and it has no add-on content. The " + what + " is incomplete; one possible reason is that the game's "
+                    + "add-on content (DLC) was not part of the " + what + ". If you have DLC for this game: " + (nup ? "set the DLC folder in Settings, then Import again in the "
+                    + "game's sheet (" + j.dump() + " is made again)" : "dump the game again with its DLC, then Retry") + ". Try anyway builds without them";
         }
         if (lack.missing > 0) {
             String from = lack.file.isEmpty() ? "" : " from " + lack.file;
@@ -837,11 +845,37 @@ public final class PackService extends Service {
                 + " differs). The dump may be incomplete or modified: dump the game again, then Retry";
     }
 
+    // PEANUTS begin: a split that read no shader
+    /** null when the split's map has a shader, or the profile says the game has none (ShaderLibs.noNvnShaders); else why the job stops, with the split taken away so
+     *  that a Retry (or the next app version) splits again */
+    private String emptySplit(Job j, File split) {
+        if (engine.simulated()) return null;
+        try {
+            if (!ShaderLibs.mapKeys(new File(split, "shader_map.tsv")).isEmpty() || ShaderLibs.noNvnShaders(new File(PackNative.repo(), "dm/games/" + j.titleId()))) return null;
+        } catch (IOException | RuntimeException | UnsatisfiedLinkError e) {
+            return null;   // the split's map does not read: splitMatchesProfile says so
+        }
+        try {
+            Outputs.delete(split);
+        } catch (IOException e) {
+            Log.w(TAG, "split: " + e.getMessage());
+        }
+        Job.deleteTree(j.splitScan(this));
+        j.stepState("split", "pending");
+        failure = PrepareText.noShadersRead(j.name(), "The split read no shader from " + j.dump() + ": the pack would have an empty shader library. A game that draws "
+                + "through the Vulkan or OpenGL layer says \"no NVN shaders\" in its profile's shader_note (dm/games/" + j.titleId() + "/game.tsv).\nLog: "
+                + new File(new File(j.dir(), "logs"), "split.log"));
+        return "the split read no shader from the dump of " + j.name() + ": the pack would have an empty shader library and the game could not draw. The dump is "
+                + "incomplete, or this app version does not read this game's shaders yet";
+    }
+    // PEANUTS end
+
     // PEANUTS begin: the evidence for splitMatchesProfile's message (ShaderLibs.missingSources, the dump's own file list and its add-on packages)
     /** What a split lacks of the profile's map: missing of total keys (key, file: the first one and its RomFS path, "" when it has none), absent of them from files the
      *  dump's RomFS does not have (absentFile: one), and how many add-on packages (DLC) the dump holds */
     private static final class Lack {
-        int missing, total, absent, addons, versions;   // versions: how many the profile's tables are the union of (game.tsv shader_versions)
+        int missing, total, absent, addons;   // missing: beyond what a dump of this version may lack (ShaderLibs.mayLack), as the PC counts them
+        List<String> versions;   // the versions the profile's tables are the union of (game.tsv shader_versions)
         String key = "", file = "", absentFile = "";
     }
 
@@ -851,10 +885,12 @@ public final class PackService extends Service {
             File want = new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv");
             Lack l = new Lack();
             l.total = ShaderLibs.mapKeys(want).size();
-            l.versions = ShaderLibs.shaderVersions(want.getParentFile()).size();
+            l.versions = ShaderLibs.shaderVersions(want.getParentFile());
+            java.util.Set<String> may = ShaderLibs.mayLack(want.getParentFile(), j.version());
             java.util.Map<String, Boolean> there = new java.util.HashMap<>();   // each file is looked up once
             for (java.util.Map.Entry<String, String> e : ShaderLibs.missingSources(want, splitMap).entrySet()) {
                 String f = e.getValue();
+                if (may.contains(e.getKey())) continue;
                 if (l.missing++ == 0) { l.key = e.getKey(); l.file = f; }
                 if (f.isEmpty()) continue;
                 Boolean has = there.get(f);

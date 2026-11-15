@@ -36,7 +36,8 @@ import dev.peanuts.Bridge;
  * game's Companion section ({@link #notice}), until the pack has the file.
  */
 public final class PackUpgrade {
-    private static final String TAG = "peanuts", PREFS = "peanuts", KEY = "origfill_", UPSTREAM = "dev.nxnative.android.";
+    // PREFS: a file of its own. The game's process writes it, and the launcher keeps "peanuts" (its folders and choices) in memory and writes it whole
+    private static final String TAG = "peanuts", PREFS = "peanuts_pack", KEY = "origfill_", UPSTREAM = "dev.nxnative.android.";
     private static final AtomicBoolean ran = new AtomicBoolean();
 
     private PackUpgrade() {}

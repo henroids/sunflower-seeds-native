@@ -118,24 +118,27 @@ final class PrepareText {
     // PEANUTS begin: a split that lacks some of the profile's shaders says how many and names one, and tells add-on content (DLC) that was not imported from a dump
     // of another version (2026-11-15). PackService.splitMatchesProfile gathers the evidence. No game is known that needs the add-on words: the case they were
     // written for (Mario Kart 8 Deluxe, 135 of 29,785) was the shaders of another version in the profile's shader_versions, which is no failure at all now
-    // (ShaderLibs.otherVersionKeys, checked first). They are said only for a profile whose tables are of one version, and are untested against a real game
+    // (ShaderLibs.otherVersionKeys, checked first). They are said only when nothing else is known to explain the missing shaders (ShaderLibs.addonCase, the rule of
+    // scripts/pack_android.py lacking_shaders), as one possible reason and no more, and are untested against a real game
     private static String count(long n) { return String.format(Locale.getDefault(), "%,d", n); }
 
     /** A RomFS path for the card's main text, which carries no slash: "/Course/Gu_Cloud/course.ptcl" → "Course › Gu_Cloud › course.ptcl" */
     static String shown(String romfsPath) { return romfsPath.replaceFirst("^/+", "").replace("/", " › "); }
 
     /**
-     * absent of the profile's total shaders come from files (file: one of them, a RomFS path) that the import does not have, and the import has no add-on content.
-     * nup: the game is a .nup file (the app's own import, or the PC builder's), which has to be made again with the DLC (the game sheet's Import again); else a
-     * dump folder. No profile says whether its game has add-on content, so the cause is named as the usual one, not as a fact. The failure carries its cause and
-     * counts (CAUSE_ADDON): the build stops with this card and lets the player choose, where it presses Try anyway by itself for the other failures
+     * absent of the profile's total shaders are missing, every one of them from a file (file: one of them, a RomFS path) that the import does not have, and the
+     * import has no add-on content. nup: the game is a .nup file (the app's own import, or the PC builder's), which has to be made again with the DLC (the game
+     * sheet's Import again); else a dump folder. No profile says whether its game has add-on content, so it is named as one possible reason, not as a fact. The
+     * failure carries its cause and counts (CAUSE_ADDON): the build stops with this card and lets the player choose, where it presses Try anyway by itself for
+     * the other failures
      */
     static Failure addonNotImported(String name, long absent, long total, String file, boolean nup, String detail) {
-        return new Failure(count(absent) + " of the " + count(total) + " shaders this app knows for " + name + " come from files your " + (nup ? "import" : "dump")
-                + " does not have (for example " + shown(file) + "). This usually means the game's add-on content (DLC) was not part of the " + (nup ? "import: set the DLC "
-                + "folder in Settings (Library), then tap Import again in the game's sheet, which makes the .nup again with the DLC" : "dump: dump the game again "
-                + "with its DLC and tap Retry") + ". Try anyway builds without them: the base game runs, and what the add-on adds is drawn without those materials.",
-                detail, FIX_ANYWAY, CAUSE_ADDON, absent, total);
+        String what = nup ? "import" : "dump";
+        return new Failure(count(absent) + " of the " + count(total) + " shaders this app knows for " + name + " are missing, all of them from files your " + what
+                + " does not have (for example " + shown(file) + "). The " + what + " is incomplete; one possible reason is that the game's add-on content (DLC) was not "
+                + "part of the " + what + ": if you have DLC for this game, " + (nup ? "set the DLC folder in Settings (Library), then tap Import again in the game's sheet"
+                : "dump the game again with its DLC and tap Retry") + ". Try anyway builds without them: the game runs, and what those files hold is drawn without "
+                + "its materials.", detail, FIX_ANYWAY, CAUSE_ADDON, absent, total);
     }
 
     /** shadersDiffer with what is missing: missing of the profile's total shaders, example: a RomFS path of one, or its key */
@@ -145,9 +148,15 @@ final class PrepareText {
                 + "again and tap Retry, or Try anyway.", detail, FIX_ANYWAY);
     }
 
-    /** shadersDiffer when the dump could not be asked what it lacks: the same words, and the add-on content named as a possible cause */
+    /** shadersDiffer when the dump could not be asked what it lacks: the same words, and the add-on content named as a possible reason */
     static Failure shadersDifferUnread(String name, String version, String detail) {
-        return new Failure(shadersDiffer(name, version, detail).text + " This also happens when the game's add-on content (DLC) was not part of the import.", detail, FIX_ANYWAY);
+        return new Failure(shadersDiffer(name, version, detail).text + " When the game has add-on content (DLC), it may not have been part of the import.", detail, FIX_ANYWAY);
+    }
+
+    /** The split read no shader at all, of a game whose profile does not say it has none (ShaderLibs.noNvnShaders): no pack is made, since it could not draw */
+    static Failure noShadersRead(String name, String detail) {
+        return new Failure("The app found no shaders in your dump of " + name + ", so the game could not draw and no pack was made. Either the dump is incomplete, or "
+                + "this app version cannot read this game's shaders yet: dump the game again and tap Retry, or share the log (Details).", detail, FIX_RETRY);
     }
     // PEANUTS end
 

@@ -313,6 +313,7 @@ def pc_decode(app, name=None):
     ue = profile_has(app, '/ue_shaders/')
     env = {}
     if given:
+        if str(Path(given).expanduser()) != given: env['DM_OODLE_OOZ'] = given = str(Path(given).expanduser())   # the tools start it as it is written: no ~ for them
         say(f'{label}: Oodle streams go to the worker DM_OODLE_OOZ names ({given}); the pack is made only if every shader key is the profile\'s')
     elif PC_DECODE[app]:
         if not ue and os.environ.get('DM_OODLE_HOST') and os.environ.get('DM_OODLE_MODULES'): return {}   # the game's own decoder is set: nothing to add

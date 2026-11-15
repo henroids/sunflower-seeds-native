@@ -20,6 +20,9 @@ import java.util.List;
  * absent &lt;profile dir&gt; &lt;split's shader_map.tsv&gt;         → "absent &lt;keys, comma-separated&gt;" or "absent none" (ShaderLibs.absentOptional)
  * missing &lt;profile's shader_map.tsv&gt; &lt;split's shader_map.tsv&gt; → "missing &lt;key=RomFS path, comma-separated&gt;" (ShaderLibs.missingSources; PEANUTS)
  * versions &lt;profile dir&gt; &lt;split's shader_map.tsv&gt; &lt;dump version&gt; → "versions &lt;absent keys or none&gt; | &lt;other listed versions&gt; | &lt;their keys&gt; | &lt;the log line or none&gt;" (PEANUTS)
+ * addon &lt;missing&gt; &lt;absent&gt; &lt;add-ons&gt; &lt;listed versions, comma-separated or -&gt; &lt;dump version&gt; → "addon true|false" (ShaderLibs.addonCase; PEANUTS)
+ * maylack &lt;profile dir&gt; &lt;dump version&gt;                 → "maylack &lt;keys, sorted, comma-separated&gt;" (ShaderLibs.mayLack; PEANUTS)
+ * nonvn &lt;profile dir&gt;                                   → "nonvn true|false" (ShaderLibs.noNvnShaders; PEANUTS)
  * </pre>
  */
 public final class ShaderLibsJvmTest {
@@ -85,6 +88,19 @@ public final class ShaderLibsJvmTest {
                 System.out.println("absent " + (k == null ? "none" : String.join(",", k)));
                 break;
             }
+            // PEANUTS begin: the PC's rules on the phone (scripts/pack_android.py lacking_shaders, may_lack, no_nvn_shaders)
+            case "addon":
+                System.out.println("addon " + ShaderLibs.addonCase(Integer.parseInt(a[1]), Integer.parseInt(a[2]), Integer.parseInt(a[3]),
+                        a[4].equals("-") ? Collections.<String>emptyList() : Arrays.asList(a[4].split(",")), Long.parseLong(a[5])));
+                break;
+            case "maylack":
+                try { System.out.println("maylack " + String.join(",", new java.util.TreeSet<>(ShaderLibs.mayLack(new File(a[1]), Long.parseLong(a[2]))))); }
+                catch (java.io.IOException e) { System.out.println("maylack error " + e.getMessage()); }
+                break;
+            case "nonvn":
+                System.out.println("nonvn " + ShaderLibs.noNvnShaders(new File(a[1])));
+                break;
+            // PEANUTS end
             case "missing": {   // PEANUTS: the keys a split lacks and the files they come from
                 java.util.Map<String, String> m;
                 try {

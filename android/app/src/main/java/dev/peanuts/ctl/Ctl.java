@@ -16,6 +16,7 @@ import android.widget.Button;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import dev.peanuts.GameReturn;
 import dev.peanuts.PeanutsPrefs;
 import dev.peanuts.build.BuildPipeline;
 import dev.peanuts.ui.CtlPort;
@@ -277,7 +278,7 @@ public final class Ctl {
     }
 
     /**
-     * job, do=pause: the button of the card that shows. While the library's build imports or installs the companion that is its own card's Stop (what is
+     * job, do=pause (or stop): the button of the card that shows. While the library's build imports or installs the companion that is its own card's Stop (what is
      * written stays, resume builds on); while it prepares, and for a Prepare job of upstream's own, it is the Prepare card's Pause.
      */
     private static void pause(Request r, Result res) throws Request.Bad, ReflectiveOperationException {
@@ -299,7 +300,7 @@ public final class Ctl {
     /** The pid of the running game as its own record names it, -1 when none runs */
     private static int gamePid() {
         int pid = ExitRecord.pid(Status.record(app));
-        return pid > 0 && Status.processAlive(app, ":game", pid) ? pid : -1;
+        return pid > 0 && GameReturn.processAlive(app, ":game", pid) ? pid : -1;
     }
 
     /**
@@ -310,7 +311,7 @@ public final class Ctl {
     private static void stopGame(Result res) throws Request.Bad {
         int pid = gamePid();
         if (pid < 0) {
-            if (Status.processAlive(app, ":game", -1)) throw new Request.Bad("no_record", "A game process runs but its run record does not name it, so it is not ended from here. Stop it in the game's own panel.");
+            if (GameReturn.processAlive(app, ":game", -1)) throw new Request.Bad("no_record", "A game process runs but its run record does not name it, so it is not ended from here. Stop it in the game's own panel.");
             throw new Request.Bad("not_running", "No game runs.");
         }
         try {
@@ -438,7 +439,7 @@ public final class Ctl {
     private static void build(Activity a, Result res, String id, boolean anyway) throws Request.Bad, ReflectiveOperationException {
         home(a);
         Object job = Up.job(app);
-        if (job != null && "running".equals(Up.jobText(job, "state")) && Status.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
+        if (job != null && "running".equals(Up.jobText(job, "state")) && GameReturn.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
         String[] no = CtlPort.build(a, id, anyway);
         if (no != null) throw new Request.Bad(no[0], no[1]);
         if (CtlPort.building(a, id)) { res.ok("The build started. Its progress is under \"build\" and, while it prepares, under \"job\"."); return; }
@@ -455,7 +456,7 @@ public final class Ctl {
         String id = r.titleId(true);
         home(a);
         Object job = Up.job(app);
-        if (job != null && "running".equals(Up.jobText(job, "state")) && Status.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
+        if (job != null && "running".equals(Up.jobText(job, "state")) && GameReturn.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
         Map<String, Object> data = new LinkedHashMap<>();
         String[] no = CtlPort.reimport(a, id, r.on("confirm"), r.on("delete_first"), data);
         for (Map.Entry<String, Object> e : data.entrySet()) res.put(e.getKey(), e.getValue());

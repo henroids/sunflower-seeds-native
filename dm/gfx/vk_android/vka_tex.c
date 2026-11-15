@@ -750,13 +750,14 @@ static uint64_t mem_hash(const uint8_t *p, uint64_t n) { uint64_t h = 1469598103
 enum { GW_COPY, GW_FILL, GW_UPDATE, GW_OPAQUE };
 typedef struct { uint64_t lo, hi, src, seq, fence; uint32_t kind, value; uint8_t *data; } gw_t;
 static gw_t *g_gw; static int g_ngw, g_gwcap; static uint64_t g_gwseq = 1, g_gw_over, g_gw_late;
+static _Atomic int g_gw_tb;   // PEANUTS: the entries of g_gw that are a storage texel buffer's stores (GW_OPAQUE with value 1: vka_tex_gw_tbuf), so vka_tex_gw_tbuf_pending need not look when there is none. Changed under g_tmu
 static void gw_add(int kind, uint64_t dst, uint64_t n, uint64_t src, uint32_t value, const void *data) {
     if (!n) return;
     pthread_mutex_lock(&g_tmu);
     if (g_ngw == g_gwcap) { g_gwcap = g_gwcap ? 2 * g_gwcap : 256; g_gw = realloc(g_gw, (size_t)g_gwcap * sizeof *g_gw); }
     if (kind == GW_OPAQUE)   // the same range again in this submission (a storage buffer bound by draw after draw): one entry, at the newest place
         for (int i = g_ngw - 1; i >= 0 && i >= g_ngw - 16 && !g_gw[i].fence; i--) if (g_gw[i].kind == GW_OPAQUE && g_gw[i].lo == dst && g_gw[i].hi == dst + n) {
-            gw_t w = g_gw[i]; memmove(&g_gw[i], &g_gw[i + 1], (size_t)(g_ngw - 1 - i) * sizeof *g_gw); w.seq = g_gwseq++; w.value |= value; /* PEANUTS: a storage texel buffer's flag stays (vka_tex_gw_tbuf) */ g_gw[g_ngw - 1] = w; pthread_mutex_unlock(&g_tmu); return; }
+            gw_t w = g_gw[i]; memmove(&g_gw[i], &g_gw[i + 1], (size_t)(g_ngw - 1 - i) * sizeof *g_gw); w.seq = g_gwseq++; if (value && !w.value) atomic_fetch_add_explicit(&g_gw_tb, 1, memory_order_relaxed); w.value |= value; /* PEANUTS: a storage texel buffer's flag stays (vka_tex_gw_tbuf), counted in g_gw_tb */ g_gw[g_ngw - 1] = w; pthread_mutex_unlock(&g_tmu); return; }
     if (kind == GW_UPDATE)   // the same inline update range again in this submission (Splatoon Raiders' 1,550 occlusion queries: 11,010 updates to 7 ranges): overwrite in place
         for (int i = g_ngw - 1; i >= 0 && i >= g_ngw - 16 && !g_gw[i].fence; i--) {
             if (g_gw[i].kind == GW_COPY) break;
@@ -769,6 +770,7 @@ static void gw_add(int kind, uint64_t dst, uint64_t n, uint64_t src, uint32_t va
         }
     uint8_t *cp = NULL; if (kind == GW_UPDATE && (cp = malloc(n))) memcpy(cp, data, n); else if (kind == GW_UPDATE) kind = GW_OPAQUE;
     g_gw[g_ngw++] = (gw_t){dst, dst + n, src, g_gwseq++, 0, (uint32_t)kind, value, cp};
+    if (kind == GW_OPAQUE && value) atomic_fetch_add_explicit(&g_gw_tb, 1, memory_order_relaxed);   // PEANUTS: (g_gw_tb)
     pthread_mutex_unlock(&g_tmu);
 }
 void vka_tex_gw_copy(uint64_t src, uint64_t dst, uint64_t n) { gw_add(GW_COPY, dst, n, src, 0, NULL); }
@@ -781,6 +783,9 @@ void vka_tex_gw_opaque(uint64_t dst, uint64_t n) { gw_add(GW_OPAQUE, dst, n, 0, 
 void vka_tex_gw_tbuf(uint64_t dst, uint64_t n) { gw_add(GW_OPAQUE, dst, n, 0, 1, NULL); }
 int vka_tex_gw_tbuf_pending(uint64_t addr, uint64_t n) {
     int r = 0;
+    // (none kept: nothing to look for. Most games never store through a texel buffer, and this is asked for every read-only texel buffer of every draw. The stores
+    // are recorded by the thread that asks, so a count read as 0 here is 0)
+    if (!atomic_load_explicit(&g_gw_tb, memory_order_relaxed)) return 0;
     pthread_mutex_lock(&g_tmu);
     uint64_t done = vka_done();
     for (int i = g_ngw - 1; i >= 0 && !r; i--) r = vka_tbuf_gw_pending(g_gw[i].lo, g_gw[i].hi, g_gw[i].fence, g_gw[i].kind == GW_OPAQUE && g_gw[i].value, addr, addr + n, done);
@@ -3349,6 +3354,7 @@ void vka_tex_prepare(VkCommandBuffer cb) {
                 if (g_gw_late <= 8) VLOG("texture serial %llu %ux%u format %#x: a GPU write into its storage (%s %#llx+%#llx) is done, re-uploaded", (unsigned long long)im->serial, im->w, im->h, im->d.format,
                                           w->kind == GW_COPY ? "copy" : w->kind == GW_FILL ? "fill" : w->kind == GW_UPDATE ? "inline update" : "store", (unsigned long long)w->lo, (unsigned long long)(w->hi - w->lo));
             }
+            if (w->kind == GW_OPAQUE && w->value) atomic_fetch_sub_explicit(&g_gw_tb, 1, memory_order_relaxed);   // PEANUTS: (g_gw_tb)
             free(w->data);
         }
         #undef GW_TAKES

@@ -143,7 +143,10 @@ romfs_img *pn_nsp_open(const char *spec, uint64_t title_id, const char *main_bui
     strcpy(parts, spec + 4);
     for (char *p = parts, *next; p; p = next) {
         if ((next = strchr(p, '|'))) *next++ = 0;
-        if (!strncmp(p, "aoc/", 4) && p[4] && strspn(p + 4, "0123456789") == strlen(p + 4) && !next) { aoc = atoi(p + 4); break; }
+        if (!strncmp(p, "aoc/", 4) && p[4] && strspn(p + 4, "0123456789") == strlen(p + 4) && !next) {
+            if (strlen(p + 4) > 4) BAD("no add-on content %s in the dump", p + 4);   // an index is the low 12 bits of a title ID; a longer number is not left to atoi, where one that does not fit an int could come out negative and read as "no add-on asked for"
+            aoc = atoi(p + 4); break;
+        }
         if (!*p) BAD("an empty file name in the dump spec");
         if (a->nc == PN_NSP_FILES) BAD("more than %d files in the dump spec", PN_NSP_FILES);
         int fd = -1, isfd = fd_part(p, &fd); NxContainer *c = &a->c[a->nc];

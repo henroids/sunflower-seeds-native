@@ -79,9 +79,13 @@ public final class Request {
 
     public boolean on(String key) throws Bad { return Boolean.TRUE.equals(flag(key)); }
 
-    /** What the job and game commands are asked to do; null for the other commands */
+    /** What the job and game commands are asked to do (job's stop is given back as pause); null for the other commands */
     public String action() throws Bad {
-        if (cmd.equals("job")) { need("do"); return word("do", Arrays.asList("pause", "resume", "retry", "try_anyway")); }
+        if (cmd.equals("job")) {
+            need("do");
+            String a = word("do", Arrays.asList("pause", "stop", "resume", "retry", "try_anyway"));
+            return "stop".equals(a) ? "pause" : a;   // one button: the build card calls it Stop, the Prepare card Pause
+        }
         if (cmd.equals("game")) { need("do"); return word("do", Arrays.asList("stop", "ctl")); }
         return null;
     }

@@ -45,7 +45,7 @@ class Wiring(unittest.TestCase):
         src = (ONDEVICE / 'PackService.java').read_text(encoding='utf-8')
         m = src[src.index('private String splitMatchesProfile'):src.index('static List<String> splitSkipped')]
         self.assertLess(m.index('Lack lack = lack(j, have);'), m.index('Outputs.delete(split);'), 'the split\'s map is read before it is deleted')
-        self.assertIn('if (lack.absent > 0 && lack.addons == 0 && lack.versions <= 1) {', m, 'files the dump does not have and no add-on content: the DLC was not imported; only for tables of one version')
+        self.assertIn('if (ShaderLibs.addonCase(lack.missing, lack.absent, lack.addons, lack.versions, j.version())) {', m, 'every missing shader from a file the dump does not have, no add-on content, tables of exactly this version: one possible reason is DLC that was not imported')
         self.assertLess(m.index('ShaderLibs.absentOptional(want.getParentFile(), have, j.version()) != null) return null;'), m.index('Lack lack = lack(j, have);'),
                         'the shaders of other listed versions are no failure, and are checked before any message')
         self.assertIn('ShaderLibs.absentOptional(new File(PackNative.repo(), "dm/games/" + j.titleId()), new File(split, "shader_map.tsv"), j.version())', src,

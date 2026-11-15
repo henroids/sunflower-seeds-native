@@ -57,7 +57,7 @@ static vka_shader *variant(vka_shader *s, const vka_tf_layout **L) {
     for (int i = 0; i < nv; i++) if (g_var[i].s == s) { *L = &g_var[i].L; return g_var[i].v; }
     if (nv == NVAR) { VRED_ONCE("transform feedback: more than %d capturing vertex shaders: the rest are not captured", NVAR); return NULL; }
     caps();
-    vka_shader *v = NULL; vka_tf_layout lay; int st = 0; char err[256] = "";
+    vka_shader *v = NULL; vka_tf_layout lay = {0}; int st = 0; char err[256] = "";   // (lay is kept with a refused shader too: never left unset)
     pthread_mutex_lock(&g_mu);
     for (int i = 0; i < g_nlay; i++) if (g_lay[i].key == s->key) { st = g_lay[i].st; lay = g_lay[i].L; break; }
     pthread_mutex_unlock(&g_mu);

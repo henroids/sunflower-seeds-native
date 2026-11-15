@@ -1054,9 +1054,10 @@ static void copy_bt(const p_copy_b2t *c, int to_tex) {
 // at most SCONV_N, then the conversion is refused and the plain blit runs). Every transfer op is ordered after the previous one by the replay's barriers, so one image serves every copy
 enum { SCONV_N = 8 };   // PEANUTS: 8 (was 4): copy_t2t's copies through a shared image of another format use them too
 static struct { VkImage img; VkDeviceMemory dm; VkFormat f; uint32_t w, h; } g_sconv[SCONV_N]; static int g_sconv_n;
-static VkImage sconv_image(VkFormat f, uint32_t w, uint32_t h) {
-    for (int i = 0; i < g_sconv_n; i++) if (g_sconv[i].f == f && g_sconv[i].w >= w && g_sconv[i].h >= h) return g_sconv[i].img;
-    if (g_sconv_n == SCONV_N) { VRED_ONCE("sRGB conversion copy: no scratch image left for %u (%ux%u): copied without the sRGB step", f, w, h); return VK_NULL_HANDLE; }
+// not: an image the caller already uses in this copy (a source and a destination scratch of one format must be two images: a blit cannot read and write one)
+static VkImage sconv_image_not(VkFormat f, uint32_t w, uint32_t h, VkImage not) {
+    for (int i = 0; i < g_sconv_n; i++) if (g_sconv[i].f == f && g_sconv[i].w >= w && g_sconv[i].h >= h && g_sconv[i].img != not) return g_sconv[i].img;
+    if (g_sconv_n == SCONV_N) { VRED_ONCE("converting texture copy: no scratch image left for Vulkan format %u (%ux%u): copied without the conversion", f, w, h); return VK_NULL_HANDLE; }
     VkImageCreateInfo ci = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f, .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
     VkImage img = VK_NULL_HANDLE; VkDeviceMemory dm = VK_NULL_HANDLE;
@@ -1066,12 +1067,13 @@ static VkImage sconv_image(VkFormat f, uint32_t w, uint32_t h) {
     if (!r && ai.memoryTypeIndex == UINT32_MAX) r = VK_ERROR_OUT_OF_DEVICE_MEMORY;
     if (!r) r = vk.vkAllocateMemory(V.dev, &ai, NULL, &dm);
     if (!r) r = vk.vkBindImageMemory(V.dev, img, dm, 0);
-    if (r) { VRED_ONCE("sRGB conversion copy: scratch image %u %ux%u not made (%d): copied without the sRGB step", f, w, h, r); if (img) vk.vkDestroyImage(V.dev, img, NULL); if (dm) vk.vkFreeMemory(V.dev, dm, NULL); return VK_NULL_HANDLE; }
+    if (r) { VRED_ONCE("converting texture copy: scratch image of Vulkan format %u %ux%u not made (%d): copied without the conversion", f, w, h, r); if (img) vk.vkDestroyImage(V.dev, img, NULL); if (dm) vk.vkFreeMemory(V.dev, dm, NULL); return VK_NULL_HANDLE; }
     vka_img_barrier(g_cb, img, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
     g_sconv[g_sconv_n++] = (typeof(g_sconv[0])){img, dm, f, w, h};
-    VLOG("sRGB conversion copy: scratch image %u %ux%u (%.1f MiB)", f, w, h, mr.size / 1048576.0);
+    VLOG("converting texture copy: scratch image of Vulkan format %u %ux%u (%.1f MiB)", f, w, h, mr.size / 1048576.0);
     return img;
 }
+static VkImage sconv_image(VkFormat f, uint32_t w, uint32_t h) { return sconv_image_not(f, w, h, VK_NULL_HANDLE); }
 
 static void copy_t2t(const p_copy_t2t *c) {
     if (!c->src || !c->dst) return;
@@ -1148,19 +1150,22 @@ static void copy_t2t(const p_copy_t2t *c) {
         if (fs || fd) {
             static _Atomic int note_; VkImage t1 = VK_NULL_HANDLE, t2 = VK_NULL_HANDLE; VkImageSubresourceLayers ts = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             int ok = sa == VK_IMAGE_ASPECT_COLOR_BIT && !s3 && !d3 && nz == 1;
-            if (ok && fs) ok = (t1 = sconv_image(tsf.vk, (uint32_t)c->sr.width, (uint32_t)c->sr.height)) != VK_NULL_HANDLE;
-            if (ok && fd) ok = (t2 = sconv_image(tdf.vk, (uint32_t)c->dr.width, (uint32_t)c->dr.height)) != VK_NULL_HANDLE && t2 != t1;
+            // One texture sRGB and the other linear: an sRGB texture's image holds its UNORM twin, so the blit decodes and encodes only between scratch images of the
+            // real sRGB formats (as the block below does for images of the textures' own formats): that side goes through a scratch too, whatever its image
+            int us = fs || (tsf.srgb != tdf.srgb && tsf.srgb), ud = fd || (tsf.srgb != tdf.srgb && tdf.srgb);
+            if (ok && us) ok = (t1 = sconv_image(tsf.srgb ? tsf.view : tsf.vk, (uint32_t)c->sr.width, (uint32_t)c->sr.height)) != VK_NULL_HANDLE;
+            if (ok && ud) ok = (t2 = sconv_image_not(tdf.srgb ? tdf.view : tdf.vk, (uint32_t)c->dr.width, (uint32_t)c->dr.height, t1)) != VK_NULL_HANDLE;
             if (!atomic_exchange(&note_, 1)) VLOG("texture copy %#x → %#x between textures whose images have other formats (Vulkan %u in a %u image → %u in a %u image): %s", c->src->d.format, c->dst->d.format,
                                                   tsf.vk, s->f.vk, tdf.vk, d->f.vk, ok ? "converted through scratch images of the textures' formats" : "no scratch image for it: blitted between the images as they are");
             if (ok) {
                 VkImage si = s->img; VkImageSubresourceLayers sx = ss; int bx0 = x0, bx1 = x1, by0 = y0, by1 = y1;
-                if (fs) {
+                if (us) {
                     VkImageCopy cp = {ss, {c->sr.xoffset, c->sr.yoffset, 0}, ts, {0, 0, 0}, {(uint32_t)c->sr.width, (uint32_t)c->sr.height, 1}};
                     vk.vkCmdCopyImage(g_cb, s->img, VK_IMAGE_LAYOUT_GENERAL, t1, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
                     vka_barrier(g_cb);
                     si = t1; sx = ts; bx0 -= c->sr.xoffset; bx1 -= c->sr.xoffset; by0 -= c->sr.yoffset; by1 -= c->sr.yoffset;
                 }
-                if (fd) {
+                if (ud) {
                     VkImageBlit b = {sx, {{bx0, by0, 0}, {bx1, by1, 1}}, ts, {{0, 0, 0}, {c->dr.width, c->dr.height, 1}}};
                     vk.vkCmdBlitImage(g_cb, si, VK_IMAGE_LAYOUT_GENERAL, t2, VK_IMAGE_LAYOUT_GENERAL, 1, &b, fl);
                     vka_barrier(g_cb);

@@ -164,6 +164,20 @@ static void test_importer(const FxGame *g, const char *what) {
       for (uint64_t at = 0; at + 200 < g->uimg.n; at += g->uimg.n / 97 + 1) for (int in = 0; in < 17; in++) for (int len = 1; len < 50; len += (len < 34 ? 1 : 7))
           if (nx_sec_read_tc(&s.upd, s.sec, FX_HASH + at + (uint64_t)in, buf, (size_t)len, NULL) || memcmp(buf, g->uimg.p + at + in, (size_t)len)) bad++;
       CHECK(!bad, "reads of 1 to 49 bytes at every offset inside a 16-byte block"); }
+    { NxNca t; char nm[48]; snprintf(nm, sizeof nm, "%s.nca", s.bt[0].program); const NxEntry *whole = nx_container_find(&s.bc, nm); NxEntry e = *whole;   // an NCA cut short, and one past its file's end
+      e.size = whole->size / 2; int cut = nx_nca_open(&t, &s.bc, &e); if (!cut) nx_nca_close(&t);
+      CHECK(cut && strstr(nximport_last_error(), "lies outside the NCA"), "an NCA whose section ends past the NCA's own end does not open (%s)", nximport_last_error());
+      e = *whole; e.size += 1ull << 40; int past = nx_nca_open(&t, &s.bc, &e); if (!past) nx_nca_close(&t);
+      CHECK(past && strstr(nximport_last_error(), "lies outside its file"), "nor one that ends past its file's end (%s)", nximport_last_error()); }
+    { uint8_t buf[64]; NxSection *S = &s.upd.sec[s.sec]; NxBktr *b = S->bktr; int bsec = nx_nca_find_section(&s.base, NX_FS_ROMFS);   // offsets no section has
+      CHECK(nx_sec_read_tc(&s.upd, s.sec, UINT64_MAX - 7, buf, 16, NULL) && nx_sec_read_raw(&s.base, bsec, UINT64_MAX - 7, buf, 16) &&
+            nx_sec_read_raw(&s.base, bsec, s.base.sec[bsec].size - 8, buf, 16), "a read that ends past its section, or whose end wraps around 2^64, fails");
+      // a damaged relocation table: a range of the patch's own data placed at the section's end, past it, and where its end wraps (the table is put back after)
+      NxReloc *r = NULL; for (uint32_t i = 0; b && i < b->nr; i++) if (b->r[i].patch) { r = &b->r[i]; break; }
+      if (r) { const uint64_t phys = r->phys, at[3] = { S->size, S->size + 0x4000, UINT64_MAX - 3 }; int bad = 0;
+          for (int i = 0; i < 3; i++) { r->phys = at[i]; bad += !nx_sec_read_raw(&s.upd, s.sec, r->virt, buf, 16); }
+          r->phys = phys;
+          CHECK(!bad && !nx_sec_read_raw(&s.upd, s.sec, r->virt, buf, 1), "a relocation that points at or past the patch section's end is a failed read, not an endless or an overlong one"); } }
     CHECK(!sect_threads(&s, &g->uimg, 1, 4000, 0), "4000 random ranges, one thread");
     CHECK(!sect_threads(&s, &g->uimg, THREADS, 3000, 0), "%d threads, 3000 random ranges each, at once", THREADS);
     nx_shcache_stats(&hits, &misses, &held, &entries);
@@ -299,6 +313,12 @@ static void test_refused(const FxKeys *k, const FxGame *g, const char *dir, cons
     fx_addon(k, dir, "dlc8", TID, 8, 0, 2, &xts);
     snprintf(spec, sizeof spec, "nsp:%s|aoc/8", xts.path); CHECK(refused(spec, TID, NULL, "encryption type 2 (AES-XTS)", why, sizeof why), "an AES-XTS section: \"%s\"", why);
     snprintf(spec, sizeof spec, "nsp:%s|aoc/9", xts.path); CHECK(refused(spec, TID, NULL, "no add-on content 9", why, sizeof why), "an add-on the dump does not hold: \"%s\"", why);
+    snprintf(spec, sizeof spec, "nsp:%s|aoc/99999999999999999999", g->base);   // a number no int holds: not the game's RomFS in the add-on's place
+    CHECK(refused(spec, TID, NULL, "no add-on content 99999999999999999999", why, sizeof why), "an add-on index that is no index: \"%s\"", why);
+    { FxGame badz; fx_bad_psize = 1; fx_game(k, dir, "badlz4", TID, 1, 0, &badz); fx_bad_psize = 0;   // a compression table that claims more compressed bytes than LZ4 can make
+      snprintf(spec, sizeof spec, "nsp:%s", badz.base); CHECK(refused(spec, TID, NULL, "bad compression entry", why, sizeof why), "an LZ4 entry larger than its worst case: \"%s\"", why); }
+    { char *lng = malloc(1300); memset(lng, 'x', 1299); lng[1299] = 0; lng[0] = '/'; setenv("DM_NSP_ROMFS", lng, 1); free(lng);   // too long for a spec: refused whole, not cut
+      CHECK(h_fs_MountRom("dlong", NULL, 0) != RES_OK && !img_of("dlong"), "a DM_NSP_ROMFS too long for a dump spec mounts nothing"); unsetenv("DM_NSP_ROMFS"); }
     fx_game(k, dir, "other", TID + 0x10000, 0, 0, &other);
     snprintf(spec, sizeof spec, "nsp:%s|%s", g->base, other.upd); CHECK(refused(spec, TID, NULL, "holds the update of title", why, sizeof why), "another game's update beside the base: \"%s\"", why);
 }
@@ -312,8 +332,9 @@ static void test_provider(const FxGame *g) {
     printf("6 the companion runtime's RomFS provider\n");
     snprintf(spec, sizeof spec, "nsp:%s|%s", g->base, g->upd);
     CHECK(pn_nup_is_spec(spec) && pn_nup_is_spec("x.nup:base") && !pn_nup_is_spec("/a/folder"), "a dump spec is one of the provider's");
-    pn_nup *n = pn_nup_open(spec, why, sizeof why);
-    CHECK(n != NULL, "it opens the dumps (%s)", n ? pn_nup_describe(n) : why);
+    CHECK(!pn_nup_open_for(spec, g->tid + 0x10000, g->ubuild, why, sizeof why) && !pn_nup_open_for(spec, g->tid, g->bbuild, why, sizeof why), "dumps of another title, or of another version, are not the companion's either (%s)", why);
+    pn_nup *n = pn_nup_open_for(spec, g->tid, g->ubuild, why, sizeof why);
+    CHECK(n != NULL, "it opens the dumps of the running game (%s)", n ? pn_nup_describe(n) : why);
     if (!n) return;
     int h = pn_nup_romfs_open(n, f->path, &size); size_t want = f->size > 1000 ? 1000 : (size_t)f->size, at = f->size > 1000 ? (size_t)f->size / 3 : 0;
     CHECK(h >= 0 && size == f->size, "a file opens with its size");

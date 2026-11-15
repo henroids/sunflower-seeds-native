@@ -54,13 +54,15 @@ static int64_t find(const romfs_img *m, const char *rest) {
     return (int64_t)k;
 }
 
-pn_nup *pn_nup_open(const char *spec, char *why, size_t wn) {
+pn_nup *pn_nup_open(const char *spec, char *why, size_t wn) { return pn_nup_open_for(spec, 0, NULL, why, wn); }
+
+pn_nup *pn_nup_open_for(const char *spec, uint64_t title_id, const char *main_build, char *why, size_t wn) {
     char file[1100], sel[128];
-    if (pn_nsp_is_spec(spec)) {   // the host's rom: mount has checked the dumps against the running game (hle_fs.c img_open): no check here
+    if (pn_nsp_is_spec(spec)) {   // this is a second open of the files the host's rom: mount opened (hle_fs.c img_open): checked against the running game the same way
         pn_nup *n = calloc(1, sizeof *n);
         if (!n) { snprintf(why, wn, "out of memory"); return NULL; }
         pthread_mutex_init(&n->lock, NULL);
-        if (!(n->layer[0] = pn_nsp_open(spec, 0, NULL, why, wn))) { pn_nup_close(n); return NULL; }
+        if (!(n->layer[0] = pn_nsp_open(spec, title_id, main_build, why, wn))) { pn_nup_close(n); return NULL; }
         n->nlayers = 1;
         snprintf(n->what, sizeof n->what, "dumps: %.240s (%llu entries)", pn_nsp_describe(n->layer[0]), (unsigned long long)n->layer[0]->n);
         return n;

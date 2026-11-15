@@ -120,6 +120,7 @@ class CtlTest(unittest.TestCase):
         self.assertEqual(self.request('cmd=nav', 'to=settings', 'section=System'), 'ok nav null true null')
         self.assertEqual(self.request('cmd=nav', 'to=game', 'title_id=' + TITLE, 'tab=storage'), 'ok nav null true ' + TITLE)
         self.assertEqual(self.request('cmd=job', 'do=pause'), 'ok job null false null')   # a service intent: no screen
+        self.assertEqual(self.request('cmd=job', 'do=stop'), 'ok job null false null')    # the build card's word for the same button
         self.assertEqual(self.request('cmd=job', 'do=resume', 'title_id=' + TITLE), 'ok job null true ' + TITLE)
         self.assertEqual(self.request('cmd=job', 'do=try_anyway'), 'ok job null true null')
         self.assertEqual(self.request('cmd=game', 'do=ctl', 'line=A+B~0.5'), 'ok game null false null')

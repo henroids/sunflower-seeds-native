@@ -28,9 +28,11 @@
 
 static _Thread_local char nx_errbuf[512];
 void nx_err(const char *fmt, ...) {
+    int saved = errno;   // a caller may tell errors apart by errno (the run-time reader: EFAULT from a read into a protected page), which the printing below must not change
     va_list ap; va_start(ap, fmt); vsnprintf(nx_errbuf, sizeof nx_errbuf, fmt, ap); va_end(ap);
     static _Atomic int dbg = -1; if (dbg < 0) { const char *e = getenv("NX_DEBUG"); dbg = e && *e && *e != '0'; }
     if (dbg) fprintf(stderr, "nximport: %s\n", nx_errbuf);   // NX_DEBUG=1: every error as it is set, even ones a caller goes on from
+    errno = saved;
 }
 const char *nximport_last_error(void) { return nx_errbuf; }
 
@@ -313,7 +315,7 @@ fail:
 
 static int sec_read_plain(NxNca *n, int s, uint64_t off, uint8_t *buf, size_t len) {   // non-BKTR section bytes
     NxSection *S = &n->sec[s];
-    if (off + len > S->size) { nx_err("%s: read past section %d (%llu + %zu > %llu)", n->id, s, (unsigned long long)off, len, (unsigned long long)S->size); return -1; }
+    if (off > S->size || len > S->size - off) { nx_err("%s: read past section %d (%llu + %zu > %llu)", n->id, s, (unsigned long long)off, len, (unsigned long long)S->size); return -1; }
     if (S->sparse) return sparse_read(n, s, off, buf, len);   // PEANUTS
     if (S->crypt_type == 1) return nx_pread_all(n->fd, buf, len, n->base_off + S->off + off);
     if (S->crypt_type == 3 || S->crypt_type == 4) { if (!n->key_ok) { nx_err("%s: %s", n->id, n->key_why); return -1; } return ctr_read(n, S->ctr, S->off + off, buf, len); }
@@ -392,7 +394,7 @@ static int bktr_read(NxNca *n, int s, uint64_t off, uint8_t *buf, size_t len) {
             size_t done = 0;
             while (done < k) {
                 const NxSubsec *ss = find_sub(b, phys + done);
-                if (!ss) { nx_err("%s: offset outside the subsection table", n->id); return -1; }
+                if (!ss || phys + done >= ss->end) { nx_err("%s: offset outside the subsection table", n->id); return -1; }   // at or past the section's end (a damaged relocation table): no bytes there, and the length below would be zero or negative
                 size_t m = k - done; if (phys + done + m > ss->end) m = (size_t)(ss->end - (phys + done));
                 uint8_t tmpl[16]; memcpy(tmpl, S->ctr, 16); uint32_t cv = ss->ctr_val; for (int j = 0; j < 4; j++) { tmpl[7 - j] = (uint8_t)cv; cv >>= 8; }
                 if (ctr_read(n, tmpl, S->off + phys + done, buf + done, m)) return -1;
@@ -448,7 +450,9 @@ static int comp_load(NxNca *n, int s) {
         // 766 MiB with physical size -1); a zeros entry has no bytes; an LZ4 block is decompressed whole, so it is bounded
         int bad = x->end <= x->virt || (i == 0 && x->virt);
         if (x->type == 0) bad |= x->phys > toff || vs > toff - x->phys;
-        else if (x->type == 3) bad |= vs > (64u << 20) || x->phys > toff || x->psize > toff - x->phys;
+        // (its compressed bytes lie before the table, and are no more than LZ4 can make of vs bytes: vs + vs / 255 + 16, LZ4_compressBound, so a damaged
+        // table cannot ask for gigabytes of scratch)
+        else if (x->type == 3) bad |= vs > (64u << 20) || x->phys > toff || x->psize > toff - x->phys || x->psize > vs + vs / 255 + 16;
         else if (x->type != 1) bad = 1;
         if (bad) NX_FAIL("%s: section %d: bad compression entry %u (virtual %#llx..%#llx, physical %#llx+%#x, type %d)", n->id, s, i, (unsigned long long)x->virt, (unsigned long long)x->end, (unsigned long long)x->phys, x->psize, x->type);
     }
@@ -471,7 +475,9 @@ static struct ShcShard { pthread_mutex_t lock; ShcSlot slot[SHC_SLOTS]; size_t h
     { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER },
     { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER } };
 static _Atomic size_t shc_budget = NX_SHCACHE_BYTES;
+#ifdef NX_TEST_HOOKS
 static _Atomic uint64_t shc_hits, shc_misses;
+#endif
 static struct ShcShard *shc_shard(const NxComp *c, uint32_t idx) { return &shc[(idx + (uint32_t)((uintptr_t)c >> 6)) % SHC_SHARDS]; }
 static void shc_drop(struct ShcShard *sh, ShcSlot *x) { sh->held -= x->size; free(x->buf); memset(x, 0, sizeof *x); }
 // 1: bytes [off, off + k) of the entry copied into buf; 0: the entry is not held
@@ -480,7 +486,9 @@ static int shc_get(const NxComp *c, uint32_t idx, size_t off, uint8_t *buf, size
     pthread_mutex_lock(&sh->lock);
     for (int i = 0; i < SHC_SLOTS; i++) { ShcSlot *x = &sh->slot[i]; if (x->buf && x->comp == c && x->idx == idx) { memcpy(buf, x->buf + off, k); x->used = ++sh->clock; hit = 1; break; } }
     pthread_mutex_unlock(&sh->lock);
+#ifdef NX_TEST_HOOKS
     if (hit) shc_hits++; else shc_misses++;
+#endif
     return hit;
 }
 // Takes blk (malloc'd, the entry decoded): kept, or freed when the entry is larger than a shard's share or another thread put it in first
@@ -506,6 +514,7 @@ static void shc_forget(const NxComp *c) {   // a section closing: its entries go
         pthread_mutex_unlock(&shc[s].lock);
     }
 }
+#ifdef NX_TEST_HOOKS
 void nx_shcache_budget(size_t bytes) { shc_budget = bytes; }
 void nx_shcache_stats(uint64_t *hits, uint64_t *misses, uint64_t *held, uint64_t *entries) {
     uint64_t h = 0, n = 0;
@@ -515,6 +524,7 @@ void nx_shcache_stats(uint64_t *hits, uint64_t *misses, uint64_t *held, uint64_t
     if (held) *held = h;
     if (entries) *entries = n;
 }
+#endif
 
 static void comp_free(NxComp *c) { if (!c) return; if (c->shared) shc_forget(c); free(c->e); nx_comp_cache_free(&c->cache); free(c); }
 
@@ -529,7 +539,7 @@ static int comp_read(NxNca *n, int s, uint64_t voff, uint8_t *buf, size_t len, N
     memset(&own, 0, sizeof own);
     if (!cc) cc = c->shared ? &own : &c->cache;   // shared: this call's own scratch for the compressed bytes, nothing of the section written
     if (!c->shared && cc->comp != c) { cc->comp = c; cc->cached = UINT32_MAX; }   // a thread's scratch moving to another section
-    if (voff + len > c->total) { nx_err("%s: read past the decompressed section %d (%llu + %zu > %llu)", n->id, s, (unsigned long long)voff, len, (unsigned long long)c->total); goto out; }
+    if (voff > c->total || len > c->total - voff) { nx_err("%s: read past the decompressed section %d (%llu + %zu > %llu)", n->id, s, (unsigned long long)voff, len, (unsigned long long)c->total); goto out; }
     while (len) {
         const NxCompEntry *e = find_comp(c, voff); if (!e || voff >= e->end) { nx_err("%s: offset %llu is outside the compression table", n->id, (unsigned long long)voff); goto out; }
         size_t k = len, vs = (size_t)(e->end - e->virt); if (voff + k > e->end) k = (size_t)(e->end - voff);
@@ -620,6 +630,7 @@ int nx_nca_open(NxNca *n, const NxContainer *c, const NxEntry *e) {
     snprintf(n->id, sizeof n->id, "%.40s", e->name);
     if (!nx_keys.loaded) { nx_err("keys not loaded (nximport_keys)"); return -1; }
     if (e->size < 0xC00) { nx_err("%s: too small for an NCA", n->id); return -1; }
+    { struct stat st; if (!fstat(n->fd, &st) && ((uint64_t)st.st_size < e->off || e->size > (uint64_t)st.st_size - e->off)) { nx_err("%s: lies outside its file (%llu + %llu > %llu): a cut-off dump?", n->id, (unsigned long long)e->off, (unsigned long long)e->size, (unsigned long long)st.st_size); return -1; } }
     if (nx_pread_all(n->fd, n->hdr, 0xC00, n->base_off)) return -1;
     NxAes a1, a2; nx_aes_init(&a1, nx_keys.header_key); nx_aes_init(&a2, nx_keys.header_key + 16);
     nx_aes_xts_decrypt(&a1, &a2, 0, 0x200, n->hdr, n->hdr, 0x400);
@@ -649,6 +660,9 @@ int nx_nca_open(NxNca *n, const NxContainer *c, const NxEntry *e) {
         for (int j = 0; j < 8; j++) S->ctr[j] = fh[0x140 + 7 - j];
         static const uint8_t zero48[0x58];
         if (memcmp(fh + 0x148, zero48, 0x30) && sparse_load(n, i, fh)) { nx_nca_close(n); return -1; }   // PEANUTS: a sparse section (sparse_load; was "not supported")
+        // A section lies inside its NCA (media units of 0x200: no sum here can wrap). A sparse section's range is virtual, larger than the NCA: its table and
+        // data are checked where they are read (sparse_load, sparse_read)
+        if (me < ms || (!S->sparse && me * 0x200 > n->size)) { nx_err("%s: section %d (%#llx..%#llx) lies outside the NCA (%#llx bytes)", n->id, i, (unsigned long long)(ms * 0x200), (unsigned long long)(me * 0x200), (unsigned long long)n->size); nx_nca_close(n); return -1; }
         if (memcmp(fh + 0x178, zero48, 0x28)) {   // CompressionInfo: the table is read on the first read of the section (comp_load)
             if (memcmp(fh + 0x188, "BKTR", 4) || u32(fh + 0x18C) != 1) { nx_err("%s: section %d: bad compression table header", n->id, i); nx_nca_close(n); return -1; }
             S->compressed = 1;
@@ -694,7 +708,7 @@ NxNode *nx_node_find(NxNode *root, const char *path) {
 }
 int nx_node_read_tc(const NxNode *f, uint64_t off, void *buf, size_t len, NxCompCache *cc) {
     if (f->is_dir) { nx_err("%s is a directory", f->name); return -1; }
-    if (off + len > f->size) { nx_err("%s: read past the end", f->name); return -1; }
+    if (off > f->size || len > f->size - off) { nx_err("%s: read past the end", f->name); return -1; }
     return nx_sec_read_tc(f->nca, f->sec, f->off + off, buf, len, cc);
 }
 int nx_node_read(const NxNode *f, uint64_t off, void *buf, size_t len) { return nx_node_read_tc(f, off, buf, len, NULL); }

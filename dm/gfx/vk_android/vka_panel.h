@@ -23,7 +23,7 @@ typedef struct {
     uint64_t t0;        // the block's first present time
     uint32_t n, blocks; // refreshes since t0; whole blocks measured since the last reset
     uint32_t bad;       // readings in a row off the grid
-    uint32_t resets;    // times the estimate was dropped (for the log)
+    uint32_t resets;    // times the estimate was dropped (read by the test; no log line has it)
 } vkpanel;
 
 static inline uint64_t vkpn_absdiff(uint64_t a, uint64_t b) { return a > b ? a - b : b - a; }

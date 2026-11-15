@@ -7,7 +7,14 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import dev.peanuts.ctl.ExitRecord;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Opening the app from its icon while a game runs goes back to the game, not to Home.
@@ -36,8 +43,17 @@ public final class GameReturn {
     public static boolean back(Activity home, Intent launch) {
         if (launch == null || !Intent.ACTION_MAIN.equals(launch.getAction()) || !launch.hasCategory(Intent.CATEGORY_LAUNCHER)) return false;
         if (launch.getExtras() != null && !launch.getExtras().isEmpty()) return false;
-        if (!gameAlive(home)) return false;
+        if (!processAlive(home, GAME_PROCESS, -1)) return false;
         SharedPreferences p = home.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        // The game that runs must be the remembered one: its own run record names it and its process (last-exit.txt, a few short lines the game writes at
+        // its start; the control interface reads it the same way). Another title, or a record whose process is gone, starts nothing
+        Map<String, String> rec = record(home);
+        int pid = runningPid(rec, p.getString("title_id", null));
+        if (pid <= 0 || !processAlive(home, GAME_PROCESS, pid)) {
+            Log.i(Companion.TAG, "opened from the launcher while a game process runs, but " + (pid <= 0 ? "its run record names " + rec.get("title") + ", not the game started last"
+                    : "the recorded game's process " + pid + " is gone") + ": Home stays");
+            return false;
+        }
         Intent i = new Intent().setClassName(home, GAME_ACTIVITY);
         for (String k : KEYS) {
             String v = p.getString(k, null);
@@ -54,10 +70,26 @@ public final class GameReturn {
         }
     }
 
-    private static boolean gameAlive(Context c) {
+    /** The game's own record of its run (dev.peanuts.ctl.ExitRecord); empty when there is none */
+    private static Map<String, String> record(Context c) {
+        File f = new File(c.getFilesDir(), "last-exit.txt");
+        try { return ExitRecord.parse(f.isFile() && f.length() < 4096 ? new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8) : null); }
+        catch (IOException e) { return ExitRecord.parse(null); }
+    }
+
+    /** The pid the run record gives for the remembered title; -1 when the record names another title, none, or no pid. No Android class: the JVM test drives it */
+    public static int runningPid(Map<String, String> rec, String rememberedTitle) {
+        String title = rec.get("title");
+        if (rememberedTitle == null || title == null || !title.equalsIgnoreCase(rememberedTitle)) return -1;
+        int pid = ExitRecord.pid(rec);
+        return pid > 0 ? pid : -1;
+    }
+
+    /** A process of this app whose name ends with suffix runs (pid &gt; 0: with that pid). The control interface's status asks the same (dev.peanuts.ctl) */
+    public static boolean processAlive(Context c, String suffix, int pid) {
         ActivityManager am = c.getSystemService(ActivityManager.class);
         List<ActivityManager.RunningAppProcessInfo> l = am == null ? null : am.getRunningAppProcesses();
-        if (l != null) for (ActivityManager.RunningAppProcessInfo p : l) if (p.processName != null && p.processName.endsWith(GAME_PROCESS)) return true;
+        if (l != null) for (ActivityManager.RunningAppProcessInfo p : l) if (p.processName != null && p.processName.endsWith(suffix) && (pid <= 0 || p.pid == pid)) return true;
         return false;
     }
 }

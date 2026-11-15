@@ -608,7 +608,8 @@ static void rt_start(void) {
     PnRtConfig c = {0};
     if (romfs && pn_nup_is_spec(romfs)) {
         char why[256] = "";
-        if ((g_nup = pn_nup_open(romfs, why, sizeof why))) pn_nup_provider(g_nup, &c.romfs);
+        const char *pe = getenv("DM_PROGRAM_ID");   // the title and build the host's rom: mount checks dumps against (hle_fs.c img_open)
+        if ((g_nup = pn_nup_open_for(romfs, pe ? strtoull(pe, NULL, 16) : DM_GAME_PROGRAM_ID, dm_main_build(), why, sizeof why))) pn_nup_provider(g_nup, &c.romfs);
         else __android_log_print(ANDROID_LOG_WARN, "peanuts", "companion romfs: cannot open %s: %s (the \"romfs:\" assets stay blank)", romfs, why);
     } else if (romfs) {
         const char *u = strstr(romfs, "/updates/");
@@ -708,9 +709,11 @@ static void *rt_thread(void *arg) {
 // A pack made before the rewriter wrote main.orig.bin gets the file at the game's start, on a thread of the game's screen (dev.peanuts.pack.PackUpgrade: seconds, from the
 // game's own file and main.changed.tsv). Its unfinished file, main.orig.bin.part, is made before the host starts and is gone (renamed, or removed when the file cannot be
 // made) when the work ends: while it is there and less than a minute old the runtime does not start, so rt_orig_load finds the file on the first start already. The game
-// is not held, only the companion comes that much later. Looked at ten times a second at most; a file left by a start that was killed is older and holds nothing
+// is not held, only the companion comes that much later. Looked at ten times a second at most; a file left by a start that was killed is older and holds nothing.
+// The file's age is wall-clock time, so the wait is also bounded on the monotonic clock, a minute from the first look that found the file: a clock set back
+// meanwhile, or a file dated in the future, cannot keep the companion away for longer
 static int rt_orig_pending(void) {
-    static int64_t last; static int pending;
+    static int64_t last, since; static int pending;
     const char *d = dm_main_dir(); if (!d) return 0;
     struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m);
     int64_t now = (int64_t)m.tv_sec * 1000 + m.tv_nsec / 1000000;
@@ -719,6 +722,8 @@ static int rt_orig_pending(void) {
     char p[900]; struct stat st; snprintf(p, sizeof p, "%s/main.orig.bin.part", d);
     int was = pending;
     pending = !stat(p, &st) && time(NULL) - st.st_mtime < 60;
+    if (pending && !since) since = now;
+    if (pending && now - since >= 60000) pending = 0;
     if (pending && !was) __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion: main.orig.bin is being made for this pack: the runtime starts when it is there");
     return pending;
 }

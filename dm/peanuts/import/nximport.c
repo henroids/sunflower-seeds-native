@@ -122,9 +122,10 @@ static int intern(Job *j, const char *s, uint32_t *off) {   // the string pool: 
         free(j->idx); j->idx = ni; j->cidx = nc;
     }
     uint32_t slot = h & (j->cidx - 1);
-    while (j->idx[slot].len || j->idx[slot].h) { Intern *x = &j->idx[slot]; if (x->h == h && x->len == l && !memcmp(j->pool + x->off, s, l)) { *off = x->off; return 0; } slot = (slot + 1) & (j->cidx - 1); }
+    while (j->idx[slot].len || j->idx[slot].h) { Intern *x = &j->idx[slot]; if (x->h == h && x->len == l && (!l || !memcmp(j->pool + x->off, s, l))) { *off = x->off; return 0; } slot = (slot + 1) & (j->cidx - 1); }
     if (j->pool_n + l > j->pool_cap) { size_t nc = j->pool_cap ? j->pool_cap * 2 : 65536; while (nc < j->pool_n + l) nc *= 2; uint8_t *np = realloc(j->pool, nc); if (!np) { nx_err("out of memory"); return -1; } j->pool = np; j->pool_cap = nc; }
-    memcpy(j->pool + j->pool_n, s, l); *off = (uint32_t)j->pool_n; j->pool_n += l;
+    if (l) memcpy(j->pool + j->pool_n, s, l);   // an empty name before any other: the pool is not allocated yet
+    *off = (uint32_t)j->pool_n; j->pool_n += l;
     j->idx[slot].off = *off; j->idx[slot].len = (uint32_t)l; j->idx[slot].h = h ? h : 1; j->nidx++;
     return 0;
 }
@@ -589,7 +590,7 @@ static int font_scan_zip(FontJob *fj, const char *zip_path, const char *out_dir)
 
 int nximport_firmware_fonts(const char *firmware_dir, const char *out_dir) {
     if (!nx_keys.loaded) { nx_err("keys not loaded (nximport_keys)"); return -1; }
-    FontJob fj = { 0, 0, out_dir, 0 };
+    FontJob fj = { 0, 0, out_dir, 0, { 0, 0, 0, 0 } };
     struct stat st; if (stat(firmware_dir, &st)) { nx_err("cannot open %s: %s", firmware_dir, strerror(errno)); return -1; }
     if (!S_ISDIR(st.st_mode) && !S_ISREG(st.st_mode)) { nx_err("%s is neither a folder nor a file", firmware_dir); return -1; }
     if (nx_mkdir(out_dir, 0755) && errno != EEXIST) { nx_err("cannot create %s: %s", out_dir, strerror(errno)); return -1; }

@@ -1,6 +1,6 @@
 # Peanuts Native FAQ
 
-For version 0.1.1. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
+For version 0.1.2. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
 
 ## Quick answers
 
@@ -244,9 +244,9 @@ For a game that is already built, tapping the cover shows the dialog **Game file
 
 ### Which games are supported?
 
-The project's README lists the tested games with the update each one needs. In 0.1.1 they are Link's Awakening, Echoes of Wisdom, Fire Emblem: Three Houses, Fire Emblem Engage, Metroid Dread, Super Mario Odyssey, Mario Kart 8 Deluxe, Animal Crossing: New Horizons, Persona 5 Royal, Castlevania: Belmont's Curse, Octopath Traveler 0, Pokémon Brilliant Diamond, Pokémon Sword and Breath of the Wild (new, little tested). Super Mario Bros. Wonder and Dragon Quest III HD-2D Remake are in the app too, but were not tested on a device yet.
+The project's README lists the tested games with the update each one needs. In 0.1.1 they are Link's Awakening, Echoes of Wisdom, Fire Emblem: Three Houses, Fire Emblem Engage, Metroid Dread, Super Mario Odyssey, Mario Kart 8 Deluxe, Animal Crossing: New Horizons, Persona 5 Royal, Castlevania: Belmont's Curse, Octopath Traveler 0, Pokémon Brilliant Diamond, Pokémon Sword and Breath of the Wild (new, little tested). Super Mario Bros. Wonder and Dragon Quest III HD-2D Remake are in the app too, but were not tested on a device yet. 0.1.2 adds Pokémon Shining Pearl, Pokémon Shield, Final Fantasy Resonance, Skyward Sword HD, Pokémon Legends: Arceus and Resident Evil 4, all new and little tested; the README's table says what was seen of each.
 
-Settings › **About** may list more titles. Those have a profile but are not on the tested list.
+Settings › **About** may list more titles. Those have a profile but are not on the tested list. Three profiles in the source are first drafts that were only packed on a PC and never run: Chained Echoes, Yoru, Tomosu, and Farming Simulator: Nintendo Switch Edition. Farming Simulator keeps its shaders in a file the tools do not read yet: the PC builder stops with that reason, and a build of it could not draw.
 
 ### Why does building take so long?
 
@@ -307,7 +307,7 @@ It is quick when the game's code is otherwise current, and long when it is not. 
 
 ### What is Import again, and when do I need it?
 
-It makes the game's `.nup` again from your dumps (the base, the update, the DLC), then builds the game. Nothing else does: Build and Rebuild use the `.nup` that is already there. You need it:
+It makes the game's `.nup` again from your dumps (the base, the update, the DLC), then builds the game. Nothing else does: Build and Rebuild use the `.nup` that is already there. It is new in 0.1.2 and little tested, so a report helps if it does something else than described here. You need it:
 
 - when DLC was not in the folders at the first build, and you have it now;
 - after you add a newer game update;
@@ -333,16 +333,16 @@ Put them in the game folder, or set Settings › Library › **Update folder** a
 
 ### A build says shaders "come from files your import does not have". What now?
 
-The app takes it that the game was imported without its add-on content (DLC), and that some of its shaders are in files that only come with the DLC. The message names one of the files. No game is known to need this yet, so if you see it, a report with the message's details helps.
+Some of the shaders the app knows for the game are in files your import does not have, and the import has no add-on content (DLC). The app's guess is that those files come with the game's DLC. It is a guess: no game is known to need this yet and the message was not seen on a real one, so if you see it, a report with the message's details helps. The message names one of the files.
 
 This is not the message for a game the app knows in several versions. There the app's shader table holds every version's shaders, and a dump of one version simply does not have the others'. That is normal: the build goes on and only notes it in its log.
 
 The build stops there and lets you choose. Its card has two buttons:
 
-- **Import again with DLC**, when the app found DLC for the game. Without a DLC folder the button is **Set the DLC folder**: set it (or add the DLC file in the game's sheet, **DLC** row), then tap **Import again with DLC**. It makes the `.nup` again with the DLC and builds the game. See [Import again](#what-is-import-again-and-when-do-i-need-it).
-- **Try anyway** builds without those shaders: the base game runs, and what the add-on adds is drawn without those materials. The game's sheet then says "Built without DLC shaders", and **Import again** there makes them later.
+- **Import again with DLC**, when the app found DLC for the game. Without a DLC folder the button is **Set the DLC folder**: set it (or add the DLC file in the game's sheet, **DLC** row), then tap **Import again with DLC**. It makes the `.nup` again with the DLC and builds the game. Whether the missing shaders are then found is not known: no game has needed this yet. See [Import again](#what-is-import-again-and-when-do-i-need-it).
+- **Try anyway** builds without those shaders: the base game runs, and what the add-on adds is drawn without those materials. The game's sheet then says "Built without DLC shaders", and **Import again** there is the way to try for them later.
 
-Older versions of the app went on without asking here, so a game built by one of them can lack these shaders with no message. **Import again** mends that too.
+Older versions of the app went on without asking here, so a game built by one of them can lack these shaders with no message. **Import again** is the thing to try there too.
 
 ### How do I free up storage?
 

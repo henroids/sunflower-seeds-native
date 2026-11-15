@@ -6,6 +6,9 @@
 // code for all three. A file's entry has IMG_ENT_NSP set: a is its offset in the NCA section, b its size, and its bytes come from pn_nsp_read (the importer's
 // section reader, dm/peanuts/import: decrypted, patched and decompressed as they are read; nothing is hashed, as on the import path's readers).
 //
+// The app does not use any of this yet: its launcher sets no dump spec and writes no <index>.nsp entry (that side is not built). The one way in on a device is
+// the diagnostic switch DM_NSP_ROMFS (hle_fs.c h_fs_MountRom) with DM_NX_KEYS; with it unset the host opens what it opened before.
+//
 // Spec (DM_ROMFS, and what the host makes of a DM_AOC_DIR entry <index>.nsp):
 //   nsp:<file>[|<file>...]              the game: its base, and its update when one is among the files (the highest version); which file is which is read from
 //                                       the files (their CNMT), not from their order

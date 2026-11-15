@@ -348,7 +348,7 @@ as it was.
 | File | Hunks | Change | Marker |
 |---|---|---|---|
 | `dm/gfx/vk_android/vka_present.c` | 5 | the include; the estimator's state; `timing_poll` feeds it every actual present time; `present_one` takes a grid time for a game frame whose period is a whole number of refreshes (the limit's period when longer), before the older rule; `vka_panel_tick` (the accessor) and `vka_panel_line` (the `[vk] panel` statistics line: period, the pacer's source, on-screen intervals in refreshes, the companion's state) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
-| `dm/gfx/nvn/hle_nvn.c` | 3 | weak defaults of the two functions; `tsummary` prints the line after the on-screen line; the present's slot period goes through `vka_panel_tick` (what the game is told about its period does not change) | `// PEANUTS ...` |
+| `dm/gfx/nvn/hle_nvn.c` | 6 | weak defaults of the two functions; `tsummary` prints the line after the on-screen line; the present's slot period goes through `vka_panel_tick` (what the game is told about its period does not change); the on-screen statistics ask for a present's time by its ticket (`g_pres_tk`, kept at each present), not by the window's count of presents, which starts again when the game makes its window again: every reading after that was lost ("no timing 300", Final Fantasy Resonance) | `// PEANUTS ...` |
 | `dm/host/hle_fpslock.c` | 1 | `fps_limit_wait`: the limit's period through `vka_panel_tick` | `// PEANUTS ...` |
 | `dm/host/hle_sdk16.c` | 1 | the vi vsync event's period through `vka_panel_tick`, unless `DM_VSYNC_HZ` is set | `// PEANUTS ...` |
 | `dm/host/tests/Makefile` | 1 | `android-panel` | `# PEANUTS begin`/`end` |
@@ -379,7 +379,7 @@ it there. `DM_VK_TBUF_GW=0` is the behaviour before. Buffers the GPU has not wri
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
-| `dm/gfx/vk_android/vka_tex.c` | 3 | the include; `gw_add` keeps the storage texel buffer flag when the same opaque range is recorded again; `vka_tex_gw_tbuf` (the flagged opaque write) and `vka_tex_gw_tbuf_pending` (such a write over a range is not done) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/gfx/vk_android/vka_tex.c` | 6 | the include; `gw_add` keeps the storage texel buffer flag when the same opaque range is recorded again; `vka_tex_gw_tbuf` (the flagged opaque write) and `vka_tex_gw_tbuf_pending` (such a write over a range is not done); `g_gw_tb` counts the flagged writes kept (raised in `gw_add`, lowered where a done write is dropped), so `vka_tex_gw_tbuf_pending` returns at once when there is none | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
 | `dm/gfx/vk_android/vka.h` | 1 | the two declarations | `// PEANUTS ...` |
 | `dm/gfx/vk_android/vka_draw.c` | 5 | the include; `tbuf_gcopy_end` and `tbuf_gw_note` (the `tbuf gw` log line, once per shader, binding and path); `tbuf_view`: the choice through `vka_tbuf_path`, the copy on the GPU (`vkCmdCopyBuffer` into scratch memory after a full barrier), the pending dispatch barrier recorded before a dispatch that reads such a buffer in place; `tbuf_view`: a writable storage texel buffer marks its range; `vka_dispatch`: the barrier after the copies, before the dispatch | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
 | `dm/host/tests/Makefile` | 1 | `android-tbuf` | `# PEANUTS begin`/`end` |
@@ -459,7 +459,7 @@ the dump was of another version, incomplete or modified ("dump the game again").
 message now asks the game files: shaders whose files are not there, in an import without add-on content, are reported as DLC that was not imported, with what to do
 (the phone: set the DLC folder, delete the `.nup`, build again; the PC: pass the DLC `.nsp` and `--force-nup`). Files that are there with other shaders, or missing
 files in an import that has add-on content, keep the old words with a count and an example; an import that cannot be asked keeps them with the DLC named as a
-possibility. No profile says whether its game has add-on content, so the cause is worded as the usual one. The split itself is not changed.
+possibility. No profile says whether its game has add-on content, so the cause is worded as the usual one (the PC's words were made weaker since: "Round 10, the tools before the release"). The split itself is not changed.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
@@ -485,7 +485,7 @@ the app does not set the new form yet, and the build still uses the `.nup`.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
-| `dm/host/hle_fs.c` | 9 | the include of `peanuts_nsp.h`; `img_open` opens a dump spec, checking the dumps against the running game's program ID and main build ID; `mount_ex`, `romfs_work_size` and `dm_aoc_usable` take a dump spec where they take a `.nup` spec; `aoc_dir` knows `<index>.nsp` (a dump, a link to one, a link to `fd:<n>/<name>`); `img_serve` reads a `.zs` file's first bytes through the section reader; `h_fs_ReadFile` serves an `IMG_ENT_NSP` entry (and logs it for `DM_FSLOG`); `h_fs_MountRom` takes `DM_NSP_ROMFS` in place of `DM_ROMFS` (the trial switch) | `// PEANUTS begin`/`end`, `// PEANUTS: ...` |
+| `dm/host/hle_fs.c` | 9 | the include of `peanuts_nsp.h`; `img_open` opens a dump spec, checking the dumps against the running game's program ID and main build ID; `mount_ex`, `romfs_work_size` and `dm_aoc_usable` take a dump spec where they take a `.nup` spec; `aoc_dir` knows `<index>.nsp` (a dump, a link to one, a link to `fd:<n>/<name>`); `img_serve` reads a `.zs` file's first bytes through the section reader; `h_fs_ReadFile` serves an `IMG_ENT_NSP` entry (and logs it for `DM_FSLOG`); `h_fs_MountRom` takes `DM_NSP_ROMFS` in place of `DM_ROMFS` (the diagnostic switch, the only way in until the launcher side is built) | `// PEANUTS begin`/`end`, `// PEANUTS: ...` |
 | `dm/host/hle_misc.c` | 1 | `aoc_load` counts `<index>.nsp` entries of `DM_AOC_DIR` | `/* PEANUTS: ... */` |
 | `android/host/CMakeLists.txt` | 3 | `NSP_C`: `peanuts_nsp.c` and the importer's three reader files in the host library, at `-O2`; `DM_NSP_DIRECT` in both host targets' definitions | `# PEANUTS begin`/`end`, `# PEANUTS: ...` |
 | `docs/env_switches.tsv` | 4 rows | `DM_NX_KEYS`, `DM_NSP_ROMFS` (new); `DM_ROMFS` and `DM_AOC_DIR` name the new forms | `[PEANUTS]` in each row |
@@ -594,3 +594,31 @@ rewriter, the shader library version chains. Checked: a pack made by `dm/tools/p
 the Android API jar; `peanuts.c` passes the NDK compiler's syntax check with the build's own flags. No APK was built and nothing was run on a device. A `main`
 stored in ZBIC is not read by the Java (the decoder is reached from the build's Python only): such a pack keeps the log line and the row, and needs a rebuild.
 Upstream candidate: no (upstream has no companion runtime).
+
+### Round 10, the tools before the release (2026-11-16)
+
+Three faults of the PC tools, found in review:
+
+1. A list argument of `shader_split.py` (RomFS, main, DLC) was parted at every `,`, so a game file or a folder named with a comma ("Yoru, Tomosu") became two
+   paths that do not exist (`FileNotFoundError`). `path_list` takes an argument that names something there whole (what `pack_android.py` and the phone's split
+   pass: one path each, so the app needs no change), parts at the ASCII unit separator when the argument has one, and only otherwise at `,`.
+   `scripts/build_ipa_from_nsp.py` (the Mac's script, not used by this fork's builder) still joins its lists with `,`.
+2. A split that read no shader made a pack with an empty shader library (Farming Simulator's provisional profile: its map has no rows, so nothing was
+   "lacking"). `split_shaders` now stops unless the profile says the game has no NVN shaders (`no_nvn_shaders`: "no NVN shaders" in its `shader_note`, or a
+   `vk_capture.tsv` / `gl_capture.tsv`; the six profiles of Vulkan and OpenGL games with an empty map all do), and `pack_shaders` asks the same of a profile
+   whose map has no rows before it takes a shader package or a library an earlier run left (`require_shaders`). The phone's build is not changed.
+3. `lacking_shaders` named add-on content as the usual cause of missing shaders, which no game has shown. It is now named as one possible reason, and only
+   when the profile's tables are of one version, the dump is that version, the dump has no add-on content, and every missing shader's file is absent. The
+   phone's words (`PrepareText.addonNotImported`) still say "usually".
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/shader_split.py` | 3 | `LIST_SEP`, `path_list`; `main` parts its three list arguments with it | `# PEANUTS begin`/`end`, `PEANUTS` in the two lines |
+| `scripts/pack_android.py` | 5 | `no_nvn_shaders`, `empty_split`, `require_shaders` and the checks in `split_shaders` and `pack_shaders`; `lacking_shaders`' condition and words; its call passes whether the tables are of this one version | `# PEANUTS begin`/`end`, `# PEANUTS ...` |
+| `dm/games/README.md` | 1 | the `shader_note` row says what the pack reads in it | `PEANUTS` in the sentence |
+| `dm/tools/tests/test_split_path_list.py` (new), `test_pack_android_builds.py` | whole file, 3 | paths with a comma, brackets and letters outside ASCII through a real split; an empty split; which profiles say "no NVN shaders"; the add-on words and when they are said | `PEANUTS` in the docstring, `# PEANUTS begin`/`end`, `# PEANUTS ...` |
+
+Peanuts-owned: `peanuts/scripts/peanuts_build.py` (a `DM_OODLE_OOZ` written with `~` is expanded for the tools), `dm/gfx/tools/ue_ondevice.py` (an unused
+import). Checked on a PC against two real games: Yoru, Tomosu's `.nup` reached through a path with a comma, brackets and Japanese letters splits to 35 of its
+profile's 35 shader keys, and Farming Simulator's stops with the new message. No shader-chain file is changed. Upstream candidate: `path_list` and the
+empty split, yes.

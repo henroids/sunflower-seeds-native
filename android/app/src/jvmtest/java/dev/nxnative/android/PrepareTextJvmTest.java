@@ -121,15 +121,17 @@ public final class PrepareTextJvmTest {
         // PEANUTS begin: what is missing is counted and named; shaders from files the import does not have, with no add-on content in it, point at the DLC
         f = PrepareText.addonNotImported("Some Game", 12, 3400, "/Course/Extra_Town/course.ptcl", true, "detail");
         plain(f.text, "add-on content not imported");
-        check(f.text.startsWith("12 of the 3,400 shaders this app knows for Some Game come from files your import does not have (for example "
-                + "Course › Extra_Town › course.ptcl). This usually means the game's add-on content (DLC) was not part of the import: set the DLC folder in Settings "
-                + "(Library), then tap Import again in the game's sheet, which makes the .nup again with the DLC"), "add-on content: " + f.text);
+        check(f.text.startsWith("12 of the 3,400 shaders this app knows for Some Game are missing, all of them from files your import does not have (for example "
+                + "Course › Extra_Town › course.ptcl). The import is incomplete; one possible reason is that the game's add-on content (DLC) was not part of the "
+                + "import: if you have DLC for this game, set the DLC folder in Settings (Library), then tap Import again in the game's sheet"), "add-on content: " + f.text);
+        check(!f.text.contains("usually"), "add-on content is one possible reason, not the usual one: " + f.text);
         check(!f.text.contains("delete the game's .nup"), "no file to delete by hand: Import again replaces it");
         check(f.cause.equals(PrepareText.CAUSE_ADDON) && f.lacks == 12 && f.of == 3400, "add-on content: the cause and its counts, for the build to stop and ask");
         check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.text.contains("Try anyway builds without them") && !f.text.contains("dump the game again"), "add-on content: " + f.text);
         f = PrepareText.addonNotImported("Some Game", 12, 3400, "/Course/Extra_Town/course.ptcl", false, "detail");
         plain(f.text, "add-on content not in a dump folder");
-        check(f.text.contains("files your dump does not have") && f.text.contains("dump the game again with its DLC and tap Retry") && !f.text.contains(".nup"), "a dump folder: " + f.text);
+        check(f.text.contains("files your dump does not have") && f.text.contains("one possible reason is that the game's add-on content (DLC) was not part of the dump")
+                && f.text.contains("dump the game again with its DLC and tap Retry") && !f.text.contains(".nup"), "a dump folder: " + f.text);
         check(f.cause.equals(PrepareText.CAUSE_ADDON), "a dump folder: the same cause");
         f = PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", 7, 131426, "/shader/a.bfsha", "detail");
         plain(f.text, "shaders differ, counted");
@@ -138,10 +140,14 @@ public final class PrepareTextJvmTest {
         check(PrepareText.shadersDiffer("X", "base game", 1, 2, "00000000000000aa", "").text.contains("(for example 00000000000000aa)"), "a shader without a file is named by its key");
         f = PrepareText.shadersDifferUnread("Pokemon Pokopia", "update 655360", "detail");
         plain(f.text, "shaders differ, the dump not read");
-        check(f.text.startsWith(PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", "detail").text) && f.text.endsWith("add-on content (DLC) was not part of the import.")
+        check(f.text.startsWith(PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", "detail").text) && f.text.endsWith("When the game has add-on content (DLC), it may not have been part of the import.")
                 && f.fix.equals(PrepareText.FIX_ANYWAY), "the dump not read: " + f.text);
         check(f.cause.isEmpty() && PrepareText.shadersDiffer("X", "base game", 1, 2, "/a", "").cause.isEmpty() && PrepareText.crashed("Split", "x").cause.isEmpty(),
                 "only add-on content that was not imported carries a cause: the other failures are tried anyway as before");
+        f = PrepareText.noShadersRead("Some Game", "detail");
+        plain(f.text, "no shader read");
+        check(f.text.startsWith("The app found no shaders in your dump of Some Game") && f.fix.equals(PrepareText.FIX_RETRY) && f.cause.isEmpty() && !f.text.contains("Try anyway"),
+                "no shader read: no pack, and no Try anyway: " + f.text);
         // PEANUTS end
 
         // The trigger: a job of a game this APK does not include gets one sentence and no Retry

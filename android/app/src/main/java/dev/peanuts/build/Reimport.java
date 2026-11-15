@@ -40,7 +40,7 @@ public final class Reimport {
         /** The new file does not fit beside the old one */
         public boolean lowSpace() { return freeBytes < needBytes; }
         /** It would fit with the old file deleted first */
-        public boolean fitsWithoutOld() { return freeBytes + oldBytes >= needBytes; }
+        public boolean fitsWithoutOld() { return oldBytes >= needBytes - freeBytes; }   // not free + old: an unknown free space is Long.MAX_VALUE
 
         /** The dumps as the importer takes them, the base first */
         public List<File> inputs() {

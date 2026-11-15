@@ -5,7 +5,8 @@ app starts to need a file that older packs do not have, and that file can be mad
 game already hold, the app makes it at the game's next start. Nothing is rebuilt and no other file of the pack
 is changed.
 
-There is one such file now.
+There is one such file now. It was checked on a PC (the tests below, and a real pack of Link's Awakening from
+2026-11-11: the same bytes from the app's Java and from the PC command); it has not been run on a device yet.
 
 ## main.orig.bin: the game's own bytes of the code the rewriter changed
 

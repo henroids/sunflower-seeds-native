@@ -31,6 +31,46 @@ public final class CompanionSection {
         return packDir == null || packDir.isEmpty() ? null : new File(new File(packDir).getParentFile(), "peanuts");
     }
 
+    /**
+     * The package folder in a companion root whose manifest names this title, null when none does. The app's own packs share one root (packs/peanuts holds
+     * every game's package), so "the first folder there" is another game's companion as often as not. The rule is the runtime's (dm/peanuts/peanuts.c
+     * rt_scan_root): a folder that is not hidden and not a swap's ".new" or ".old", whose dualscreen/manifest.json has this title_id in its first 4 KiB.
+     * Reads a small file per folder: off the main thread, or once per render as the section does
+     */
+    public static String packageFor(File root, String titleId) {
+        long want;
+        try { want = Long.parseUnsignedLong(titleId == null ? "" : titleId.trim(), 16); } catch (NumberFormatException e) { return null; }
+        String[] names = root == null ? null : root.list();
+        if (names == null || want == 0) return null;
+        java.util.Arrays.sort(names);
+        for (String n : names) {
+            if (n.startsWith(".") || n.endsWith(".new") || n.endsWith(".old")) continue;
+            if (manifestTitle(new File(new File(root, n), "dualscreen/manifest.json")) == want) return n;
+        }
+        return null;
+    }
+
+    /** The title a package's manifest names (the hex digits of its first "title_id"), 0 when it names none or does not read */
+    static long manifestTitle(File manifest) {
+        byte[] b = new byte[4095];
+        int n = 0;
+        try (java.io.InputStream in = new java.io.FileInputStream(manifest)) {
+            for (int k; n < b.length && (k = in.read(b, n, b.length - n)) > 0; ) n += k;
+        } catch (IOException e) {
+            return 0;
+        }
+        String head = new String(b, 0, n, java.nio.charset.StandardCharsets.ISO_8859_1);
+        int at = head.indexOf("\"title_id\"");
+        at = at < 0 ? -1 : head.indexOf('"', at + 10);
+        if (at < 0) return 0;
+        int from = at + 1;
+        while (from < head.length() && Character.isWhitespace(head.charAt(from))) from++;
+        if (head.startsWith("0x", from) || head.startsWith("0X", from)) from += 2;
+        int to = from;
+        while (to < head.length() && to - from < 16 && Character.digit(head.charAt(to), 16) >= 0) to++;
+        try { return to == from ? 0 : Long.parseUnsignedLong(head.substring(from, to), 16); } catch (NumberFormatException e) { return 0; }
+    }
+
     public static String secondScreen(Context c, String titleId) {
         return prefs(c).getString(KEY_SECOND_SCREEN + titleId, PHYSICAL);
     }
@@ -96,15 +136,14 @@ public final class CompanionSection {
             }, "peanuts-catalog").start();
         }
 
-        /** The one place that touches disk for the installed package's state (found in review): a directory scan (Companions.installed) plus installed.json's version
+        /** The one place that touches disk for the installed package's state (found in review): a directory scan (packageFor) plus installed.json's version
          * and verified flag. Called from render() only when installedKnown is false - set true right after, so a busy install's progress ticks (which call render()
          * every update) reuse the cached values instead of re-scanning. */
         void refreshInstalled(Companions.Item item) {
             // Self-heal before reading anything: a killed install/switch is completed or rolled back here, never left with no active companion. The package
-            // name to repair can only come from the catalog item at this point (a fully-vanished active folder has no package.json for installed() to find).
+            // name to repair can only come from the catalog item at this point (a fully-vanished active folder has no manifest for packageFor to find).
             if (item != null) Companions.repair(root, item.packageName, c);   // ctx = c: skips while the game is running (the lock alone does not cover that; found in review)
-            List<String> installed = Companions.installed(root);
-            installedPkg = item != null ? item.packageName : installed.isEmpty() ? null : installed.get(0);
+            installedPkg = item != null ? item.packageName : packageFor(root, titleId);   // without the catalog: the package of this title, not the first of the shared folder (another game's, with its Remove)
             installedVersion = installedPkg == null ? null : Companions.installedVersion(root, installedPkg);
             installedVerified = installedPkg != null && installedVersion != null && Companions.installedVerified(root, installedPkg);
             packNotice = installedPkg == null || installedVersion == null || root == null ? null : dev.peanuts.pack.PackUpgrade.notice(c, titleId, new File(root, installedPkg));

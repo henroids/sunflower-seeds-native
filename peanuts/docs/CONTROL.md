@@ -5,6 +5,10 @@ says what the app is doing. This is the first part: reading the state, moving be
 preparing, playing and a few safe settings. One command replaces a file: `reimport` makes a game's `.nup`
 again, and only with `-e confirm true`. Nothing else here deletes or replaces anything.
 
+What was checked: `status` on an AYN Thor. The other commands have not been run on a device yet; which commands
+and arguments are taken or refused, and the JSON that is written, are covered by PC tests
+(`peanuts/tests/test_ctl.py`).
+
 ```
 adb shell am start -n <package>/dev.peanuts.ctl.Command -e cmd <name> [-e <argument> <value> ...] [-e id <token>]
 adb shell cat /sdcard/Android/data/<package>/files/ctl/status.json
@@ -59,7 +63,7 @@ rest of the file.
 | `build` | `-e cmd build -e title_id 0100F2C0115B6000` | The game sheet's Build with the files the sheet would choose: the base, the update chosen earlier (else the newest found), the DLC found, the companion as its switch stands. First build only. Refused with `wrong_version` when the sheet would ask "Build anyway?" |
 | `reimport` | `-e cmd reimport -e title_id 0100F2C0115B6000 -e confirm true` | The game sheet's Import again: the game's `.nup` is made again from its dumps (the base, the update chosen earlier or else the newest found, the DLC found now), then the game is built. The new file is written beside the old one and replaces it only when the import is complete. See below |
 | `prepare` | `-e cmd prepare -e title_id 0100F2C0115B6000` | Storage › Prepare again for a listed game, without its question. A dialog the app answers with is the refusal (`refused`, its text in `message`) |
-| `job` | `-e cmd job -e do pause` | The button of the card that shows: Stop on the build card, Pause on the Prepare card |
+| `job` | `-e cmd job -e do pause` (or `stop`) | The button of the card that shows: Stop on the build card, Pause on the Prepare card |
 | | `-e cmd job -e do resume` (or `retry`) | Resume or Retry: a stopped build builds on; a Prepare job's own button is pressed |
 | | `-e cmd job -e do try_anyway -e title_id 0100F2C0115B6000` | The answer "yes" to "Build anyway?" or to the Prepare card's "Try anyway": the game may not start or may draw wrongly |
 | `play` | `-e cmd play -e title_id 0100F2C0115B6000` | Home's Play: the same checks, the build with mods when one is ready. A dialog Play would show is the refusal: its text comes back and the dialog is closed |

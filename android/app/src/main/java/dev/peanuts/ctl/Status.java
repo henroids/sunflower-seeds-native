@@ -1,12 +1,13 @@
 package dev.peanuts.ctl;
 
-import android.app.ActivityManager;
 import android.content.Context;
 
 import dev.nxnative.android.BuildConfig;
+import dev.peanuts.GameReturn;
 import dev.peanuts.Installer;
 import dev.peanuts.PeanutsPrefs;
 import dev.peanuts.build.BuildPipeline;
+import dev.peanuts.settings.CompanionSection;
 import dev.peanuts.ui.CtlPort;
 
 import org.json.JSONObject;
@@ -137,7 +138,7 @@ final class Status {
                 m.put("listed", r.listed);
                 m.put("game", r.game);
                 m.put("pack", r.pack);
-                Map<String, Object> comp = companion(r.companionRoot);
+                Map<String, Object> comp = companion(r.companionRoot, r.titleId);
                 m.put("has_companion", comp != null);
                 m.put("companion", comp);
                 out.add(m);
@@ -148,19 +149,18 @@ final class Status {
         return out;
     }
 
-    /** The companion installed beside the game's pack (a folder per package, its version in installed.json), null when there is none */
-    private static Map<String, Object> companion(File root) {
-        File[] l = root == null ? null : root.listFiles(d -> d.isDirectory() && !d.getName().startsWith("."));
-        if (l == null) return null;
-        for (File d : l) {
-            String v = Installer.installedVersion(root, d.getName());
-            if (v == null) continue;
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("package", d.getName());
-            m.put("version", v.equals("?") ? null : v);   // "?": installed, its version not recorded
-            return m;
-        }
-        return null;
+    /**
+     * The game's companion: the package beside its pack whose manifest names the title, as the runtime picks it (CompanionSection.packageFor; the app's own
+     * packs share one folder of packages), with its version from installed.json; null when the folder has none for this title
+     */
+    private static Map<String, Object> companion(File root, String titleId) {
+        String pkg = CompanionSection.packageFor(root, titleId);
+        if (pkg == null) return null;
+        String v = Installer.installedVersion(root, pkg);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("package", pkg);
+        m.put("version", v == null || v.equals("?") ? null : v);   // "?": installed, its version not recorded
+        return m;
     }
 
     /** The rows with the game that is built now marked building, as its cover is: the library's own build, or upstream's Prepare job. The kept rows are not changed */
@@ -188,7 +188,7 @@ final class Status {
             File f = (File) Up.get(j, "file");
             JSONObject o = new JSONObject(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
             String state = o.optString("state"), step = o.optString("step");
-            boolean alive = processAlive(c, ":pack", -1);
+            boolean alive = GameReturn.processAlive(c, ":pack", -1);
             m.put("title_id", o.optString("title_id"));
             m.put("name", o.optString("name"));
             m.put("state", state);   // pending, running, paused, failed, done
@@ -240,18 +240,10 @@ final class Status {
         catch (IOException e) { return ExitRecord.parse(null); }
     }
 
-    /** A process of this app whose name ends with suffix runs (pid &gt; 0: with that pid) */
-    static boolean processAlive(Context c, String suffix, int pid) {
-        ActivityManager am = c.getSystemService(ActivityManager.class);
-        List<ActivityManager.RunningAppProcessInfo> l = am == null ? null : am.getRunningAppProcesses();
-        if (l != null) for (ActivityManager.RunningAppProcessInfo p : l) if (p.processName != null && p.processName.endsWith(suffix) && (pid <= 0 || p.pid == pid)) return true;
-        return false;
-    }
-
     private static Map<String, Object> game(Context c) {
         Map<String, String> rec = record(c);
         int pid = ExitRecord.pid(rec);
-        boolean alive = pid > 0 && processAlive(c, ":game", pid);
+        boolean alive = pid > 0 && GameReturn.processAlive(c, ":game", pid);
         Map<String, Object> g = ExitRecord.game(rec, alive);
         Ctl.Launch l = Ctl.launched;
         // the pack is known only for a start this launcher process made itself (Home's Play): the run's record does not hold it

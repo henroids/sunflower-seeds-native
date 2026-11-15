@@ -186,7 +186,7 @@ final class LibraryScanner {
         return titles;
     }
 
-    /** The pack for a title: upstream's list when it has the game ready, else a pack.tsv in <home>/<ID>-work/<any>/ or <home's parent>/<ID>-work/<any>/ */
+    /** The pack for a title: upstream's list when it has the game ready, else a pack.tsv in <home>/<ID>-work/<any>/ or <home's parent>/<ID>-work/<any>/, else the build folder's own pack when it is complete */
     private File packOf(Title t, List<Upstream.Entry> list) {
         if (t.launch == null) return null;
         for (Upstream.Entry e : list) if (e.ready && samePath(e.gameDir, t.launch.getPath())) return new File(e.packDir);
@@ -195,7 +195,25 @@ final class LibraryScanner {
             File[] kids = new File(h, t.titleId + "-work").listFiles(File::isDirectory);
             if (kids != null) for (File k : kids) if (new File(k, "pack.tsv").isFile()) return k;
         }
+        // The build folder's own place (<build folder>/<title ID>/pack, where a build with that folder set writes): a pack put there that no finished build
+        // listed (copied from a PC, or left when its list entry went) was not seen until it was moved. Taken only when it starts the game as it is (Game.ready,
+        // the check Play makes: the title, no unfinished module, the game's build, a shader library), so a pack a build is still writing is not called ready
+        File built = PeanutsPrefs.buildPackDir(ctx, t.titleId);
+        if (built != null && new File(built, "pack.tsv").isFile() && ready(t.titleId, t.launch, built)) return built;
         return null;
+    }
+
+    /** Game.ready for a game file and a pack folder that are not in upstream's list (reflection: Game is upstream's); false when it cannot be asked */
+    private static boolean ready(String titleId, File game, File pack) {
+        try {
+            Class<?> k = Class.forName("dev.nxnative.android.Game");
+            java.lang.reflect.Constructor<?> ctor = k.getDeclaredConstructor(String.class, String.class, String.class, String.class);
+            java.lang.reflect.Method m = k.getDeclaredMethod("ready", k);
+            ctor.setAccessible(true); m.setAccessible(true);
+            return Boolean.TRUE.equals(m.invoke(null, ctor.newInstance(titleId, "", game.getPath(), pack.getPath())));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return false;
+        }
     }
 
     private static boolean samePath(String a, String b) {
