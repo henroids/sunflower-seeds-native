@@ -246,7 +246,7 @@ For a game that is already built, tapping the cover shows the dialog **Game file
 
 The project's README lists the tested games with the update each one needs. In 0.1.1 they are Link's Awakening, Echoes of Wisdom, Fire Emblem: Three Houses, Fire Emblem Engage, Metroid Dread, Super Mario Odyssey, Mario Kart 8 Deluxe, Animal Crossing: New Horizons, Persona 5 Royal, Castlevania: Belmont's Curse, Octopath Traveler 0, Pokémon Brilliant Diamond, Pokémon Sword and Breath of the Wild (new, little tested). Super Mario Bros. Wonder and Dragon Quest III HD-2D Remake are in the app too, but were not tested on a device yet. 0.1.2 adds Pokémon Shining Pearl, Pokémon Shield, Final Fantasy Resonance, Skyward Sword HD, Pokémon Legends: Arceus and Resident Evil 4, all new and little tested; the README's table says what was seen of each.
 
-Settings › **About** may list more titles. Those have a profile but are not on the tested list. Three profiles in the source are first drafts that were only packed on a PC and never run: Chained Echoes, Yoru, Tomosu, and Farming Simulator: Nintendo Switch Edition. Farming Simulator keeps its shaders in a file the tools do not read yet: the PC builder stops with that reason, and a build of it could not draw.
+Settings › **About** may list more titles. Those have a profile but are not on the tested list. Two profiles in the source are first drafts that were only packed on a PC and never run: Chained Echoes and Yoru, Tomosu.
 
 ### Why does building take so long?
 

@@ -703,6 +703,7 @@ void ModRuntime::InstallModuleAreas() {
         map_geometry.clear();
         map_category.clear();
         map_border.clear();
+        map_composite_memo.clear(); // PNRT: built from the geometry that was just replaced
     }
     map_water_solid.clear();
     map_water_pixels.clear();

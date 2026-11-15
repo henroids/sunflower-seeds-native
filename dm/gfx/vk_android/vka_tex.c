@@ -187,6 +187,7 @@ static vka_img *live_first(const uint8_t *mem, int *k) { return vkl_first(g_live
 static vka_img *live_next(const vka_img *im, const uint8_t *mem, int *k) { return vkl_next(g_live, g_nlive, &g_lvx, im, mem, k); }
 static vksm g_cpuw;   // (under g_tmu) serials the CPU wrote before their image existed (a set: vksm with no images)
 static pthread_mutex_t g_tmu = PTHREAD_MUTEX_INITIALIZER;
+static void rb_created_locked(vka_img *im);   // PEANUTS: texture readback (vka_readback.inc, included below)
 static uint64_t g_img_bytes;
 static vksoft_set g_soft_hard; static uint64_t g_soft_n, g_soft_bytes, g_soft_made, g_soft_whole;   // (under g_tmu) soft textures ("Soft textures" below): live, the storage bytes left out, made, made whole
 static int g_zwant;   // (under g_tmu) img_create_ may make a zero-shared image: vka_tex_get's new image whose content is ST_ZERO ("Zero-shared images" below)
@@ -1908,6 +1909,7 @@ vka_img *vka_tex_get(const tex_t *t, VkCommandBuffer cb) {
         if (im && !im->inited) {
             im->vmin = vmin;
             live_add(im);
+            if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_created_locked(im);   // PEANUTS: texture readback: nothing of it is copied out before this batch is on the queue (vka_readback.inc)
             big_note(im, t);
             // Its first content through the upload batch when cb is the replay's (vka_dev.c "Upload batches"): staging that retires on the batch's own completion
             VkCommandBuffer ucb = !ds_here(im, cb) && cb && cb == vka_rp_cb() && vka_up_on() ? vka_up_begin() : VK_NULL_HANDLE;
@@ -2199,6 +2201,7 @@ void mtl_tex_release(tex_t *t) {
 // Linear textures the GPU wrote in this submission. Metal makes a linear texture on the pool buffer, so what the GPU renders there is in guest memory for the CPU to read
 // (agl reads small linear render targets back on the CPU, such as a 1x1 R16F one in Donkey Kong Bananza's level); here the image is copied back into the storage
 static vka_img **g_wb; static int g_nwb, g_wbcap;
+static void rb_written_locked(vka_img *im);   // PEANUTS: texture readback (vka_readback.inc, included below)
 void vka_img_written_at(vka_img *im, const char *file, int line) {
     if (!im) return;
     if (im->is_video) return;
@@ -2211,6 +2214,7 @@ void vka_img_written_at(vka_img *im, const char *file, int line) {
              im->w, im->h, im->layers, im->d.format, im->m.size / 1048576.0, (unsigned long long)vka_frame(), file, line, im->nsamp, im->novl); }
     im->gpu_owned = 1;
     im->last_fence = vka_fence_last();
+    if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_written_locked(im);   // PEANUTS: texture readback: the write, its batch and (from the site's vka_rb_color) a colour target's use are noted, once a companion has asked for a texture
     if ((im->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) && im->mem && !im->wb_pending && im->samples == 1 && im->f.kind < 3 && im->f.bw == 1) {
         if (g_nwb == g_wbcap) { g_wbcap = g_wbcap ? 2 * g_wbcap : 32; g_wb = realloc(g_wb, (size_t)g_wbcap * sizeof *g_wb); }
         im->wb_pending = 1; im->refs++; g_wb[g_nwb++] = im;
@@ -2737,7 +2741,10 @@ static int img_storage_upgrade(vka_img *im, VkCommandBuffer cb, VkFormat need) {
     // PEANUTS: a scaled render target bound as a shader image: the shader writes it in the texture's pixels, so it is made 1x first (vka_resscale.inc; its caller, id_view, holds
     // it once). Not inside an open pass (vka_tex_id_storage_pending ends it for a scaled image), and when it cannot be done now the binding reads as unbound this once
     if (im->rsc && (!cb || (cb == vka_rp_cb() && vka_rp_is_open()) || rs_set_locked(im, cb, 0, RS_WHY_STORAGE, 1) <= 0)) { vka_rs_st.skip++; return 0; }
-    if (!cb || !storage_able(im, need) || im->holds > 1) return 0;
+    // PEANUTS: - im->rb_holds: a texture readback's hold (vka_readback.inc) took the VkImage handle under the table lock and reads nothing of im unlocked, so it does
+    // not stand in the way: the swap below keeps the old VkImage alive while any hold stands (zold), which is all the readback's recorded copy needs. Before, a
+    // compute pass's first storage binding of an image a companion was reading was dropped for that pass
+    if (!cb || !storage_able(im, need) || im->holds - (int)im->rb_holds > 1) return 0;
     tex_t t = {0}; t.serial = im->serial; t.mem = im->mem; t.d = im->d; t.d.flags |= NVN_TEXTURE_FLAGS_IMAGE; t.L = im->L;
     vka_img *n = img_create(&t, &im->f, im->base);
     if (!n) return 0;
@@ -3157,7 +3164,7 @@ int vka_tex_id_target(int id) {
 int vka_tex_id_storage_pending(int id) {
     pthread_mutex_lock(&g_tmu);
     smap_ent *e = id > 0 && id < g_ntreg && g_treg[id].t.serial ? map_get(g_treg[id].t.serial) : NULL;
-    int r = e && e->im && ((!(e->im->usage & VK_IMAGE_USAGE_STORAGE_BIT) && storage_able(e->im, VK_FORMAT_UNDEFINED) && !e->im->holds) || e->im->m.z || e->im->rsc);   // (a zero-shared image gets memory of its own: outside the pass too)   // PEANUTS: rsc (a scaled image is made 1x for the binding: outside the pass too)
+    int r = e && e->im && ((!(e->im->usage & VK_IMAGE_USAGE_STORAGE_BIT) && storage_able(e->im, VK_FORMAT_UNDEFINED) && !(e->im->holds - (int)e->im->rb_holds)) || e->im->m.z || e->im->rsc);   // (a zero-shared image gets memory of its own: outside the pass too)   // PEANUTS: rsc (a scaled image is made 1x for the binding: outside the pass too); - rb_holds: a texture readback's hold does not put the upgrade off (img_storage_upgrade), so the pass is ended for it as for an image nobody holds
     pthread_mutex_unlock(&g_tmu);
     return r;
 }
@@ -3241,6 +3248,7 @@ void vka_tex_dump_done(VkFence fence, const char *dir) {   // after the present'
     vk.vkUnmapMemory(V.dev, g_idump.mem); vk.vkFreeMemory(V.dev, g_idump.mem, NULL); vk.vkDestroyBuffer(V.dev, g_idump.buf, NULL);
     g_idump.buf = VK_NULL_HANDLE; g_idump.mem = VK_NULL_HANDLE; g_idump.map = NULL;
 }
+#include "vka_readback.inc"   // PEANUTS: texture readback for the companion runtime (it reads this file's table lock and live list)
 VkSampler vka_samp_default(void) {
     static VkSampler s;
     if (!s) { VkSamplerCreateInfo ci = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,

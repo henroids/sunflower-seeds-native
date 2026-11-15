@@ -334,15 +334,18 @@ static void cpu_line(const char *what) {
     else LOG("[lifecycle] %s: threads' CPU since the process started %.2f s (%d threads)%s%s", what, (double)total / hz, threads, tlen ? "; busiest: " : "", tl);   // the first line: no earlier reading
     memcpy(g_cpu, cur, (size_t)n * sizeof cur[0]); g_ncpu = n; g_cpu_at = now;
 }
+__attribute__((weak)) void peanuts_lifecycle(int suspended);   // PEANUTS: dm/peanuts/peanuts.c; absent in a build without it
 static void suspend_apply(const char *why) {
     int want = g_bg || g_pause;
     if (want == g_susp) return;
     g_susp = want;
     if (want) {
         dm_focus_set(2); dm_focus_set(3); audio_apply(); guest_clock_freeze_for(1, 1); dm_gfx_suspend(1); dm_guest_suspend(1); crash_watch_hold(1);
+        if (peanuts_lifecycle) peanuts_lifecycle(1);   // PEANUTS: the companion runtime learns of the pause after the game is told to stop (its mailbox epoch, its tick)
         cpu_line(why);
     } else {
         cpu_line(why);
+        if (peanuts_lifecycle) peanuts_lifecycle(0);   // PEANUTS: and of the resume before the game runs again, the order Eden Duo's Pause and Run keep
         crash_watch_hold(0); dm_guest_suspend(0); dm_gfx_suspend(0); guest_clock_freeze_for(1, 0); audio_apply(); dm_focus_set(2);
         if (g_resumed) dm_focus_set(1);
     }

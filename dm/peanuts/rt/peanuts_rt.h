@@ -1,10 +1,13 @@
 // peanuts_rt: the Eden Duo DSMod companion runtime as a standalone library (C API).
 //
 // One runtime instance drives one package for one running title: the host calls pn_rt_tick at
-// ~60 Hz (it samples guest memory through the configured backend, runs the page logic and hands a
-// redraw to the runtime's own worker thread), then polls pn_rt_frame for the latest second-screen
-// image. Everything here is thread-safe with respect to the runtime's own worker; the host should
-// call pn_rt_tick from one thread.
+// 60 Hz, the rate the runtime counts its ticks at (PN_RT_TICK_HZ; Eden drives it from a 60 Hz
+// timing event that stops while the game is paused), and not at all while the game is suspended.
+// A tick samples guest memory through the configured backend, runs the page logic and hands a
+// redraw to the runtime's own worker thread; the host then polls pn_rt_frame for the latest
+// second-screen image. Everything here is thread-safe with respect to the runtime's own worker;
+// the host should call pn_rt_tick from one thread. pn_rt_touch, pn_rt_set_present,
+// pn_rt_lifecycle, pn_rt_pad_state and pn_rt_pad_gate may be called from any thread.
 #ifndef PEANUTS_RT_H
 #define PEANUTS_RT_H
 
@@ -16,6 +19,10 @@ extern "C" {
 #endif
 
 typedef struct PnRt PnRt;
+
+/// Ticks a second the runtime counts with (its ModTickHz): every_ms periods, retries, a module's
+/// get_tick and fades are all in these ticks, so the host must tick at this rate.
+#define PN_RT_TICK_HZ 60
 
 /// Guest-memory backend. `read` copies `len` bytes at guest `addr` into `buf` and returns 1, or
 /// returns 0 (leaving `buf` unspecified) when any byte is unmapped. `write` mirrors it.
@@ -47,6 +54,12 @@ typedef struct PnRtPad {
     void* user;
     void (*set_button)(void* user, size_t player, int button, int pressed);
     void (*set_stick)(void* user, size_t player, int stick, float x, float y);
+    /// Optional, the other direction: the controller as the game's player 1 has it now, before the pad gate (as pn_rt_pad_state
+    /// takes it: the npad it is on, NpadButton bits, four axes). When set, the runtime's emulated controllers read through it
+    /// each time they are asked, so what the companion itself just pressed or released for the game (set_button) is seen at
+    /// once: read from a state sampled before the tick, the companion's own release was a button still held, which controller
+    /// focus took for a press. Called on the tick thread; must not block. NULL: the state of the last pn_rt_pad_state.
+    void (*read)(void* user, uint32_t* npad_id, uint64_t* buttons, int32_t axes[4]);
 } PnRtPad;
 
 /// Optional haptics: at most one pulse per pn_rt_tick (the runtime's own one-haptic-per-tick
@@ -101,7 +114,29 @@ typedef struct PnRtCode {
     uint64_t (*code_block)(void* user, size_t size);
     /// The length of main's code (text) from its base: a load plan may write only below its 16 KiB page end.
     uint64_t text_end;
+    /// Optional: the rewriter's table of main's rewrite sites (the pack's main.sites.tsv), read for the lines "<lo> W <hi>": a
+    /// sequence [lo, hi) of main, as offsets, that runs from a copy elsewhere. A load plan may enter main at lo (the branch to
+    /// the copy stands there) but not after it. NULL or unreadable: an address the plan enters that code_rewritten reports as
+    /// changed is refused, since nothing says what kind of change it is.
+    const char* sites_tsv;
 } PnRtCode;
+
+/// The host's stop of the game's threads, for the runtime's writes "with the guest stopped" (a module's write batch, a manifest
+/// write with expected values, a module's restores): all zero = the host cannot stop them, and such a write then FAILS instead
+/// of running beside the game. Eden suspends its emulated threads around these; under NCE a suspended thread is between two
+/// instructions, anywhere, and that is all this asks of the host too.
+typedef struct PnRtGuest {
+    void* user;
+    /// Stops every game thread. 1: all are stopped and stay so until `resume`; 0: not within `timeout_ms` (none stays stopped);
+    /// -1: another stop was under way for all of `timeout_ms` (the host's stop is exclusive and waits for the other, bounded).
+    /// Between a successful stop and `resume` the runtime only reads and writes guest memory through PnRtMemory and logs: those
+    /// callbacks must not need a lock a stopped game thread can hold.
+    int (*stop)(void* user, uint32_t timeout_ms);
+    void (*resume)(void* user);
+    /// Optional, between stop and resume: how many game threads may be executing in [lo, hi) of guest code or return into it
+    /// (their pc, registers and stacks looked at; conservative, a wrong hit only costs the caller a retry).
+    int (*stopped_in)(void* user, uint64_t lo, uint64_t hi);
+} PnRtGuest;
 
 typedef struct PnRtConfig {
     /// The package directory (contains package.json and dualscreen/). Required.
@@ -150,6 +185,8 @@ typedef struct PnRtConfig {
     PnRtRomfs romfs;
     /// Optional: what the host gives for a package's load plan (guest helper); see PnRtCode. All zero = a plan is not applied.
     PnRtCode helper;
+    /// Optional: the host's stop of the game's threads; see PnRtGuest. One per process (the runtime's stop is process-wide state).
+    PnRtGuest guest;
 } PnRtConfig;
 
 /// Creates a runtime for `config`. NULL when the package has no usable manifest for the title
@@ -157,8 +194,43 @@ typedef struct PnRtConfig {
 PnRt* pn_rt_create(const PnRtConfig* config);
 void pn_rt_destroy(PnRt* rt);
 
-/// One runtime tick (sample -> page logic -> redraw dispatch). Call at ~60 Hz.
+/// One runtime tick (sample -> page logic -> redraw dispatch). Call at PN_RT_TICK_HZ, and not while the game is suspended.
 void pn_rt_tick(PnRt* rt);
+
+/// The second screen's size in pixels, when it is known or changes (the page's view; PnRtConfig's panel_w / panel_h until then):
+/// what "@screen.*" reports, what picks a package's alternate canvas, and the frame of reference of pn_rt_touch. Any thread.
+void pn_rt_set_panel(PnRt* rt, uint32_t w, uint32_t h);
+
+/// Companions off for this launch (Eden Duo's dual screen mode "Off", mods/mod_launch_gate.h): set before pn_rt_create, which
+/// then selects no package, so no runtime starts and no load plan reaches the game. Process-wide.
+void pn_rt_set_companions_disabled(int disabled);
+
+/// Whether the second screen shows the page (the runtime's "__aux_present"; 1 after pn_rt_create). Hidden, a tick skips the
+/// sampler and the page (only a module that asked to tick while hidden runs), controller focus ends, and every finger still
+/// down is released, as Eden does when its second surface goes away: a module never sees a pointer stuck down.
+void pn_rt_set_present(PnRt* rt, int shown);
+
+/// The game was suspended (1) or is about to run again (0). Each call moves the load plan's mailbox epoch on by one (the word in
+/// the guest mailbox and "__mailbox_epoch"), as Eden does at every pause and every resume: a helper or module that waits for an
+/// answer through the mailbox learns that time stood still in between. Call after the game was told to stop, and before it runs.
+void pn_rt_lifecycle(PnRt* rt, int suspended);
+
+/// The controller as the game's player 1 has it, before the pad gate: `npad_id` is the npad it is on (0 = No1, 0x20 = Handheld),
+/// buttons are nn::hid::NpadButton bits (0..15 the buttons, 16..23 the sticks' directions), axes lx, ly, rx, ry in -32767..32767.
+/// Call once a tick, before pn_rt_tick; the runtime reads it for controller focus mode. The other of the two npads holds the
+/// same state and reads as not connected.
+void pn_rt_pad_state(PnRt* rt, uint32_t npad_id, uint64_t buttons, const int32_t axes[4]);
+
+/// The pad gate, for the host's HID where it composes what the game reads: filters one state of npad slot `slot` (0..7 = No1..No8,
+/// 8 = Handheld, 9 = Other) in place. While the second screen has the controller's focus the game gets a neutral pad (only what
+/// the companion presses for the game passes), and what was held when focus ended stays hidden until released. Returns 1 while it
+/// suppresses. Lock-free; does nothing until a package turns focus mode on, and passes everything through when the runtime
+/// has not ticked for half a second (a runtime that stalled or went away must not keep the game's controller).
+int pn_rt_pad_gate(int slot, uint64_t* buttons, int32_t axes[4]);
+
+/// The stops of the game's threads so far (PnRtGuest): how many succeeded, how many were given up, and the longest time the
+/// game stood still for one, in microseconds (from the request to the resume). Any pointer may be NULL.
+void pn_rt_stop_stats(uint64_t* stops, uint64_t* failed, uint64_t* longest_us);
 
 /// Copies the latest published frame into `out_rgba` (w*h uint32 0xAARRGGBB; `*w`/`*h` receive the
 /// frame size; when `out_rgba` is NULL only the size is reported). Returns 1 when a frame newer
@@ -176,11 +248,31 @@ int pn_rt_set_page(PnRt* rt, const char* page_id);
 
 /// One line: "<package name> page=<id> tick=<n> frames=<n> module=<m> err=<last error or ->"
 /// where <m> is the native module's ABI name while its instance runs, "none" for a package
-/// without one, or "error: <why>" (R5). Returns the length written (truncated to n-1).
+/// without one, or "error: <why>" (R5). Returns the length written (truncated to n-1). Any thread: it is the line as of the
+/// last pn_rt_tick (or pn_rt_set_page), kept under a lock; the frames count is as of that tick.
 size_t pn_rt_status(PnRt* rt, char* buf, size_t n);
 
 #ifdef __cplusplus
 }
+
+#include <functional>
+/// What the shim headers call (shim.cpp has the bodies): Core::System::RunWithGuestThreadsSuspended and the emulated
+/// controllers the runtime reads for controller focus mode.
+namespace PnShim {
+/// Runs `fn` with every game thread stopped. False, without running it, when the host cannot stop them now.
+bool RunWithGuestStopped(const std::function<void()>& fn);
+void SetGuest(const PnRtGuest& guest);
+/// Inside the function of RunWithGuestStopped only: how many game threads may be executing in [lo, hi) or return into it
+/// (PnRtGuest::stopped_in); -1 when the host cannot tell. For a writer of several instructions (peanuts_patches.cpp's Target).
+int StoppedIn(uint64_t lo, uint64_t hi);
+void SetPadReader(const PnRtPad& pad);
+/// The runtime ticked (or the game is about to run again after a pause): the pad gate stays in force for half a second from here.
+void NoteTick();
+/// The controller on npad `npad_id` (Core::HID::NpadIdType's value) as pn_rt_pad_state left it.
+bool PadConnected(uint32_t npad_id);
+uint64_t PadButtons(uint32_t npad_id);
+void PadSticks(uint32_t npad_id, int32_t out[4]);
+} // namespace PnShim
 #endif
 
 #endif /* PEANUTS_RT_H */

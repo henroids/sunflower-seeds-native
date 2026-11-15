@@ -148,6 +148,14 @@ struct ViewTransform {
     float home_pan_y{0.0f};
     bool has_reset_value{false};
     double reset_value{0.0};
+    /// Runtime 25 (rt25 addition, mod_input.cpp UpdateGestures): the live finger of this
+    /// gesture, canvas px -- the same raw point the pan path above applies dx/dy from, not the
+    /// pan/zoom units. touch_down is true only while a finger is down on this widget's pan_zoom
+    /// gesture (cleared on lift/cancel); touch_x/touch_y are meaningless while it is false.
+    /// Backs "@view_touch_x/y:<id>" + "@view_touch_down:<id>" (PanZoomViewHostValueFrom below).
+    bool touch_down{false};
+    float touch_x{0.0f};
+    float touch_y{0.0f};
 };
 
 /// Runtime 15: the published values that place a pan_zoom widget's DEFAULT
@@ -259,11 +267,20 @@ struct MapWidgetExtras {
         std::string src_detail_bind;    ///< optional higher-detail image for the same world box
         /// Runtime 24: a text point naming an image whose alpha, stretched (bilinear) over the
         /// overlay's box, multiplies the overlay's alpha -- a dynamic mask such as a fog of war a
-        /// module reads back off the GPU. While the named mask is still loading the overlay is
-        /// not drawn; an empty / missing point draws it unmasked. Unturned views only (a turned
-        /// view, view_rotate_bind, skips a masked overlay).
+        /// module reads back off the GPU. The very first mask this overlay ever names is not
+        /// drawn while it is still loading (never shown unmasked by accident); once one has
+        /// loaded, naming a replacement that is still decoding keeps drawing with the mask last
+        /// actually used instead of blanking for a frame (DrawOverlays' own image_fallback slot --
+        /// the same last-known-good mechanism Image widgets use, mod_ui_map_widget.cpp), and the
+        /// same holds for this overlay's own src/src_bind picture. An empty / missing mask point
+        /// draws the overlay unmasked. Unturned views only (a turned view, view_rotate_bind, skips
+        /// a masked overlay).
         std::string mask_bind;
         float detail_threshold{210.0f}; ///< projected edge length above which detail is requested
+        /// Runtime 25: false = no last-known-good hold for this overlay's picture or mask -- a
+        /// replacement still decoding (or failed) draws nothing instead of the previous one.
+        /// For overlays whose source changes identity. true (default) = hold, as before.
+        bool src_hold{true};
         float x0{}, y0{}, x1{}, y1{};
         PointGate show;
         float opacity{1.0f};
@@ -464,6 +481,11 @@ struct Widget {
     /// deliberate scene change while a picture that merely keeps the same logical content under a
     /// fresh key (a live-rendered frame) swaps instantly, as if nothing special happened.
     std::string src_fade_bind;
+    /// Image (runtime 25): false = no last-known-good hold and no cross-fade for this widget --
+    /// a `src`/`src_bind` picture that is still decoding or failed draws nothing instead of the
+    /// previous picture. For identity-changing widgets (a list row bound to a different item each
+    /// time), where holding the old picture would show the wrong item. true (default) = as before.
+    bool src_hold{true};
     // --- tap-select / drag-and-drop ---------------------------------------------------------
     /// The value this widget carries ("{i}" expanded): an integer (dec or 0x hex), or "$point"
     /// to carry a published int read at the moment it is used.
@@ -556,6 +578,21 @@ struct Widget {
     /// the pan / zoom window may show (ClampPanAxis, mod_view_default.h). A padded picture can
     /// then be panned only over its content. nullopt = the whole picture, as before.
     std::optional<std::array<float, 4>> pan_bounds;
+    // --- runtime 25 ------------------------------------------------------------------------------
+    /// "rect_alt": this widget's {x, y, w, h} while the manifest's canvas_alt is the active canvas
+    /// (ModRuntime::ApplyCanvasVariant swaps it in for `rect`, mod_redraw.cpp); unset (the
+    /// default) = the widget keeps `rect` on both canvases. The smaller of the two manifest
+    /// shapes weighed for per-canvas layout against duplicating whole pages per canvas: one
+    /// widget can reposition for a narrower pane without a second copy of the page and its
+    /// actions / binds / nav_order.
+    std::optional<std::array<s32, 4>> rect_alt;
+    /// "wrap_width_alt": this widget's `wrap_width` while the manifest's canvas_alt is the active
+    /// canvas (swapped alongside `rect_alt`, same ModRuntime::ApplyCanvasVariant, mod_redraw.cpp,
+    /// restored on the return switch); unset (the default) = the widget keeps its literal
+    /// `wrap_width` on both canvases, exactly as runtime <= 24. fit_text / line wrapping /
+    /// ellipsis / DrawTextBlock (mod_ui.cpp) all read `wrap_width` itself, so nothing downstream
+    /// needs its own canvas_alt awareness -- the swap alone is the whole effect, same as rect_alt.
+    std::optional<s32> wrap_width_alt;
 };
 
 /// A drag-to-scroll list region on a page (page "scrolls", or a widget's inline "scroll" object).
@@ -600,6 +637,17 @@ struct ScrollRegion {
     s32 content_h{0};
     std::string content_w_bind;
     std::string content_h_bind;
+    // --- runtime 25 ------------------------------------------------------------------------------
+    /// "rect_alt": this region's `rect` while the manifest's canvas_alt is the active canvas
+    /// (ModRuntime::ApplyCanvasVariant swaps it in for `rect`, mod_redraw.cpp, the same op it
+    /// already does per widget -- see Widget::rect_alt above); unset (the default) = the region
+    /// keeps `rect` on both canvases, same as runtime <= 24. Everything the region's rect drives
+    /// (clip, scrollbar track, hit-testing, content/max offset, scroll_follow, two-axis scroll)
+    /// reads `rect` fresh each snapshot, so nothing else needs to change for the swap to take:
+    /// a portrait list can get its own, narrower-but-taller viewport without duplicating the
+    /// whole page per canvas. `repeat_cols` / `repeat_dx` / `repeat_row_dy` are unaffected --
+    /// only the viewport moves, never the row/column pitch.
+    std::optional<std::array<s32, 4>> rect_alt;
 };
 
 /// A follow_bind change this soon after a finger was in the list is the list's own tap.

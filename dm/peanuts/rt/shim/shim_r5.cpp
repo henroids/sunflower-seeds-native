@@ -2,6 +2,7 @@
 // (the module loader), SHA-256 (the module checksum), the host data paths, the device power
 // state and the shared-font decrypt.
 
+#include "pnrt_services.h"
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
@@ -46,8 +47,7 @@ void* DynamicLibrary::GetSymbolAddress(const char* name) const {
 }
 
 PowerStatus GetPowerStatus() {
-    // No battery model on this host: "unknown, no battery" (the @device.* keys read -1 / 0).
-    return PowerStatus{-1, false, false};
+    return PnShim::PowerStatus(); // the app's pushed reading or the kernel's files; "no battery" when neither answers
 }
 
 namespace FS {

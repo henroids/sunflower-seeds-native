@@ -43,6 +43,7 @@
 #include "core/core.h"
 #include "core/mods/mod_font_pages.h"
 #include "core/mods/mod_runtime.h"
+#include "core/mods/mod_view_default.h"
 #include "core/mods/mod_runtime_shared.h"
 #include "video_core/dsmod/aux_routing.h"
 #include "video_core/gpu.h"
@@ -200,7 +201,7 @@ u64 ModRuntime::UiSignature(const StateSnapshot& s, u32 target_w, u32 target_h) 
         for (const auto& [area, grid] : map_visited) {
             sig ^= mix(hs(area) ^ mix(grid.generation));
             if (visible_map && tick_count - grid.last_reveal_tick < fade)
-                sig ^= mix(tick_count * 0xD1B54A32D192ED03ULL); // one fade step per tick (incremental, cheap)
+                sig ^= mix((tick_count / 4) * 0xD1B54A32D192ED03ULL); // animate the fade at ~15 Hz
         }
     }
     {
@@ -480,7 +481,7 @@ u64 ModRuntime::WidgetDependencyHash(const Widget& w, const StateSnapshot& s,
             h ^= MixHash(hs(area) ^ MixHash(it->second.generation));
             const u64 fade = std::max<u64>(1, manifest.map_style.fade_ticks);
             if (tick_count - it->second.last_reveal_tick < fade) {
-                h ^= MixHash(tick_count * 0xD1B54A32D192ED03ULL);
+                h ^= MixHash((tick_count / 4) * 0xD1B54A32D192ED03ULL);
             }
         }
     }
@@ -696,6 +697,142 @@ std::array<s32, 4> ModRuntime::RepeatElementsRect(const StateSnapshot& s, u32 cw
                                   : std::array<s32, 4>{};
 }
 
+// Runtime 25 canvas_alt: which canvas fits a pane, and the debounced, state-preserving switch
+// between the manifest's default and its optional alternate. Pure aspect math (SelectCanvasAspect)
+// mirrors FitCompanion's own frame-vs-canvas comparison (video_core/dsmod/aux_routing.h); the
+// debounce and the widget rect/rect_alt swap live on ModRuntime, called from PublishUi just below
+// where target_w/target_h were computed directly before runtime 25.
+
+CanvasChoice SelectCanvasAspect(u32 panel_w, u32 panel_h, u32 canvas_w, u32 canvas_h, u32 alt_w,
+                                u32 alt_h, CanvasAltWhen when) noexcept {
+    const u32 default_w = canvas_w != 0 ? canvas_w : panel_w;
+    const u32 default_h = canvas_h != 0 ? canvas_h : panel_h;
+    if (alt_w == 0 || alt_h == 0 || panel_w == 0 || panel_h == 0) {
+        return {default_w, default_h, false};
+    }
+    const bool eligible =
+        when == CanvasAltWhen::Portrait
+            ? panel_h > panel_w
+            // Pane aspect (h/w) wider-than-tall comparison, cross-multiplied like FitCompanion's
+            // frame_cross/canvas_cross: true when the pane is narrower (relatively taller) than
+            // the default canvas's own shape.
+            : static_cast<u64>(panel_h) * default_w > static_cast<u64>(panel_w) * default_h;
+    return eligible ? CanvasChoice{alt_w, alt_h, true} : CanvasChoice{default_w, default_h, false};
+}
+
+CanvasChoice ModRuntime::SelectCanvas(u32 panel_w, u32 panel_h) {
+    if (!manifest.HasCanvasAlt()) {
+        // No canvas_alt declared: always the default canvas, byte-identical to runtime <= 24.
+        return {manifest.canvas_w != 0 ? manifest.canvas_w : panel_w,
+                manifest.canvas_h != 0 ? manifest.canvas_h : panel_h, false};
+    }
+    const CanvasChoice raw =
+        SelectCanvasAspect(panel_w, panel_h, manifest.canvas_w, manifest.canvas_h,
+                           manifest.canvas_alt_w, manifest.canvas_alt_h, manifest.canvas_alt_when);
+    const auto now = std::chrono::steady_clock::now();
+    // The first known pane (nothing pending yet): no layout is on screen to protect from a resize
+    // in flight, so its choice commits at once -- debouncing it drew the default canvas for one
+    // debounce period first (a portrait pane flashed the landscape layout).
+    const bool first = canvas_alt_pending_since == std::chrono::steady_clock::time_point{} &&
+                       panel_w != 0 && panel_h != 0;
+    if (raw.alt != canvas_alt_pending || first) {
+        canvas_alt_pending = raw.alt;
+        canvas_alt_pending_since = now;
+    }
+    if (canvas_alt_pending != canvas_alt_active &&
+        (first || now - canvas_alt_pending_since >= CanvasAltDebounce)) {
+        canvas_alt_active = canvas_alt_pending;
+        ApplyCanvasVariant(canvas_alt_active);
+    }
+    return canvas_alt_active
+               ? CanvasChoice{manifest.canvas_alt_w, manifest.canvas_alt_h, true}
+               : CanvasChoice{manifest.canvas_w != 0 ? manifest.canvas_w : panel_w,
+                              manifest.canvas_h != 0 ? manifest.canvas_h : panel_h, false};
+}
+
+void ModRuntime::ApplyCanvasVariant(bool alt) {
+    for (Page& page : manifest.pages) {
+        for (Widget& widget : page.widgets) {
+            if (widget.rect_alt) {
+                std::swap(widget.rect, *widget.rect_alt);
+                // Runtime 25 bugfix: a pan_zoom Image widget's OWN view (its pan/zoom on top of
+                // its picture, view_state keyed by widget id) is expressed in "widget px at zoom
+                // 1" -- proportional to this rect's own size -- so a size change here needs the
+                // same fractional window origin rescaled, or whatever was centred drifts the
+                // instant the next frame divides the same pan by the new rect's size instead of
+                // the old one (DrawImage, mod_ui.cpp). The Map widget's own base view has its own
+                // (world-space, bound-rect-aware) equivalent, handled separately where it is
+                // computed, with the data this needs (GeometryMapDraw::FrameView,
+                // mod_ui_map_widget.cpp) -- applying this rect-ratio rescale to it too would double
+                // up with that and corrupt it, so Map is excluded here.
+                if (widget.pan_zoom && widget.type != WidgetType::Map && !widget.id.empty()) {
+                    // *widget.rect_alt now holds the OLD rect (the swap above put the new one in
+                    // widget.rect and moved what used to be there into rect_alt) -- both sides of
+                    // the swap are read here, nothing captured beforehand.
+                    std::scoped_lock lk{view_mutex};
+                    if (const auto it = view_state.find(widget.id); it != view_state.end()) {
+                        ReanchorViewPan(it->second, (*widget.rect_alt)[2], (*widget.rect_alt)[3],
+                                       widget.rect[2], widget.rect[3]);
+                    }
+                }
+            }
+            // "wrap_width_alt" (runtime 25): the same self-inverse swap as rect_alt, so a label's
+            // wrap width follows whichever field shape (rect vs. rect_alt) is active. A widget
+            // without wrap_width_alt is untouched, same as one without rect_alt.
+            if (widget.wrap_width_alt) {
+                std::swap(widget.wrap_width, *widget.wrap_width_alt);
+            }
+        }
+        // Scroll regions (Page::scrolls) get the same swap as widgets, same self-inverse op:
+        // a region without rect_alt is untouched, so a portrait list's viewport can resize
+        // independently of its widgets' own rect_alt (or lack of one). Everything the region's
+        // rect drives (clip, scrollbar, hit-testing, content/max offset, scroll_follow, two-axis
+        // scroll) reads `rect` fresh from the page each snapshot, so swapping it here is enough --
+        // nothing downstream needs its own canvas_alt awareness.
+        for (ScrollRegion& region : page.scrolls) {
+            if (region.rect_alt) {
+                std::swap(region.rect, *region.rect_alt);
+            }
+        }
+    }
+    // Bugfix (runtime 25, the portrait-canvas pilot): every widget/scroll-region rect on every
+    // page just moved under whatever page is currently open, not just the one a future page
+    // action switches to -- yet nothing above touches a single one of the caches a PAGE SWITCH
+    // (or a resize) already invalidates (DrivePageTransition's "switched again without a
+    // transition, or resized" branch, mod_pages.cpp), because current_page itself never changed.
+    // Left alone, the open page kept drawing with its pre-switch nav layout, dirty-rect baselines
+    // and expanded repeat rows until it was left and reopened. Reusing that exact reset here makes
+    // the active page re-lay out on its very next publish instead. Module state, current_page,
+    // nav/scroll selection and scroll offsets are untouched -- these are only the caches a page
+    // re-entry would rebuild anyway; scroll offsets stay where they are and are already clamped to
+    // the active rect's own max wherever they are read (MeasureScroll), same as any other tick.
+    ui_signature_valid = false;   // force a full redraw when we next draw widgets
+    widget_sig_page = ~size_t{0}; // re-baseline dirty-rect tracking -- also rebuilds repeat_state
+                                  // (mod_redraw.cpp's own "page_changed" branch, BuildRenderExtras)
+    canvas_page = ~size_t{0};     // the synchronous canvas's own continuity baseline
+    dispatch_page = ~size_t{0};   // the redraw worker's own continuity baseline, mirrored
+    group_defs_page = ~size_t{0}; // widget-group animation boxes were built from the old rects
+    // Bugfix (live re-verify, item30c): the dispatch worker never actually draws the manifest's
+    // own `Page` object above -- it draws `*job.page_copy`, an IMMUTABLE COPY (`shared_page`,
+    // mod_runtime.h) made ONCE when `shared_page_index != current_page` and otherwise reused
+    // forever, exactly so a steady page is not re-copied every tick (its own comment: "the page
+    // never changes until a reload"). That premise just broke: the page's WIDGETS changed in
+    // place above (the swap), but current_page did not, so the stale pre-switch copy -- still
+    // holding the OLD rects -- kept being handed to the worker and drawn every tick after this
+    // one, which is exactly why the nav bar/rows stayed at their landscape position/height and
+    // the right edge kept clipping until the page was left and reopened (current_page changing
+    // there is what finally invalidated this same index). The four resets just above (and
+    // ReloadManifest's own `shared_page.reset()`) never touched it. Invalidating the index here
+    // makes the dispatch block's own check (`!shared_page || shared_page_index != page_index`)
+    // rebuild `shared_page` from the live, now-correctly-swapped `page` on the very next dispatch.
+    shared_page_index = ~size_t{0};
+    // Defense in depth, matching the resize/page-switch branch exactly: a worker job already in
+    // flight for the pre-switch geometry must not be allowed to publish over what gets shown next.
+    redraw_dispatch_generation.fetch_add(1, std::memory_order_relaxed);
+    redraw_authority_generation.fetch_add(1, std::memory_order_relaxed);
+    LOG_INFO(Core, "DSMod: canvas_alt {}", alt ? "on" : "off");
+}
+
 void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
     PumpNxAssets(snapshot); // land decoded game art, drive composites (never blocks)
     if (font_pages != nullptr && font_pages->TakeLanded()) {
@@ -769,17 +906,19 @@ void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
     // is ATTEMPTED; the dirty-flag/signature check right below still drops idle ticks to 0 Hz
     // regardless of this rate.
     const bool animating_now = page_anim.active || page_anim_request.has_value() || group_moving;
-    // PNRT: every tick. The host already paces the tick at ~30 Hz (one per 25+ ms of presents), so
-    // the original "every second tick" gate (made for a 60 Hz tick whose republish forced a GPU
-    // present) held a page to ~15 Hz at best and ~10 Hz when a tick ran long.
-    const bool publish_tick = true;
+    const bool publish_tick = (tick_count % 2) == 0;
     if (!publish_tick && !(animating_now && manifest.anim_hz >= 60)) {
         return; // ~30 Hz republish (composite too): presenting the aux every frame halves fps.
     }
     const u32 panel_w = aux.width.load();
     const u32 panel_h = aux.height.load();
-    const u32 target_w = manifest.canvas_w != 0 ? manifest.canvas_w : panel_w;
-    const u32 target_h = manifest.canvas_h != 0 ? manifest.canvas_h : panel_h;
+    // Runtime 25 canvas_alt: debounced choice between the manifest's canvas and its optional
+    // alternate; also swaps rect/rect_alt on every page's widgets on a committed switch
+    // (ApplyCanvasVariant), so nothing past this point needs to know about it. A manifest
+    // without canvas_alt gets exactly the old ternary back (SelectCanvas's early-out).
+    const CanvasChoice canvas_choice = SelectCanvas(panel_w, panel_h);
+    const u32 target_w = canvas_choice.w;
+    const u32 target_h = canvas_choice.h;
     if (target_w == 0 || target_h == 0 || manifest.pages.empty()) {
         return;
     }
@@ -799,11 +938,22 @@ void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
     // is written before BuildRenderExtras, so a skip leaves no half-updated baseline.
     MapStateLock map_lock{map_state_mutex, std::defer_lock};
     if (!LockMapStateUnlessRaster(map_lock)) {
-        map_publish_skipped.fetch_add(1, std::memory_order_relaxed);
+        map_publish_skipped.fetch_add(1, std::memory_order_relaxed); // PNRT: counted for the snapshot log line
         return;
     }
     const u64 sig = UiSignature(snapshot, target_w, target_h);
     map_lock.unlock();
+    // A module font that was not ready yet (LoadFont's bounded retry, or the module loader lock
+    // busy on the asset worker -- runtime 25) is asked again on its due tick, and only a font
+    // that actually landed repaints the page: the text on screen was laid out with the old one,
+    // and nothing the signature or the dirty scan reads changes with it.
+    if (!font_ready && (font_module_attempts > 0 || font_retry_tick != 0) &&
+        tick_count >= font_retry_tick) {
+        LoadFont();
+        if (font_ready) {
+            ui_signature_valid = false;
+        }
+    }
     // Gates WidgetDependencyHash's per-widget scan in BuildRenderExtras: only run it on a tick
     // where the cheap top-level signature already says "something changed" -- zero extra cost on
     // the common idle tick, which UiSignature already reduces to 0 redraws/s on its own. Computed
@@ -820,7 +970,7 @@ void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
         return; // this tick's transition frame is published
     }
     if (!LockMapStateUnlessRaster(map_lock)) {
-        map_publish_skipped.fetch_add(1, std::memory_order_relaxed);
+        map_publish_skipped.fetch_add(1, std::memory_order_relaxed); // PNRT: counted for the snapshot log line
         return;
     }
     // The dirty scan re-baselines (and reports nothing) on a new page or a reloaded manifest: that
@@ -833,10 +983,7 @@ void ModRuntime::PublishUi(const StateSnapshot& snapshot) {
     map_lock.unlock();
     const bool groups_dirty = anim_dirty[2] > 0 && anim_dirty[3] > 0;
     const bool same = !sig_changed;
-    // A module font that was not ready yet (LoadFont's bounded retry) redraws a still page too.
-    const bool font_retry_due =
-        !font_ready && font_module_attempts > 0 && tick_count >= font_retry_tick;
-    if (same && !groups_dirty && !font_retry_due) {
+    if (same && !groups_dirty) {
         return;
     }
     last_ui_signature = sig;

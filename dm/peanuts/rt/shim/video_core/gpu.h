@@ -5,6 +5,7 @@
 
 #include "video_core/dsmod/aux_routing.h"
 #include "video_core/dsmod/texture_readback.h"
+#include "pnrt_services.h"
 
 namespace Tegra {
 
@@ -14,11 +15,11 @@ public:
         return aux;
     }
     [[nodiscard]] bool DSModTextureReadbackAvailable() const {
-        return false;
+        return PnShim::ReadbackAvailable();
     }
-    bool DSModRequestTextureReadback(const VideoCore::DSMod::ReadbackRequest&,
-                                     VideoCore::DSMod::ReadbackCallback) {
-        return false;
+    bool DSModRequestTextureReadback(const VideoCore::DSMod::ReadbackRequest& request,
+                                     VideoCore::DSMod::ReadbackCallback callback) {
+        return PnShim::ReadbackSubmit(request, std::move(callback));
     }
     VideoCore::DSMod::AuxRouting aux;
 };

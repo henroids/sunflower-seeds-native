@@ -1,4 +1,4 @@
-# peanuts_rt: the Eden Duo DSMod companion runtime (v1.3.5.1, runtime 24) lifted out of the emulator (dm/peanuts/rt/mods,
+# peanuts_rt: the Eden Duo DSMod companion runtime (v1.4.0, runtime 25) lifted out of the emulator (dm/peanuts/rt/mods,
 # original file names) behind a set of shim headers (dm/peanuts/rt/shim) and a tiny C API
 # (peanuts_rt.h). Builds as a static library for Linux hosts and arm64 Android (NDK toolchain).
 #
@@ -38,6 +38,7 @@ set(PNRT_LIFTED
   mods/mod_font_pages.cpp
   mods/mod_host_values.cpp
   mods/mod_input.cpp
+  mods/mod_launch_gate.cpp
   mods/mod_load_plan.cpp
   mods/mod_manifest.cpp
   mods/mod_map.cpp
@@ -75,11 +76,14 @@ add_library(peanuts_rt STATIC
   mods/pnrt_stubs.cpp
   shim/shim.cpp
   shim/shim_r5.cpp
+  shim/shim_readback.cpp
+  shim/shim_services.cpp
   shim/stb_impl.cpp
   ${PNRT_THIRD_PARTY}/bc_decoder/bc_decoder.cpp
   ${PNRT_THIRD_PARTY}/astc/video_core/textures/astc.cpp
   peanuts_rt.cpp
   peanuts_helper.cpp
+  peanuts_patches.cpp
 )
 target_compile_features(peanuts_rt PUBLIC cxx_std_20)
 target_include_directories(peanuts_rt
@@ -110,9 +114,34 @@ if(ANDROID)
 endif()
 
 if(PEANUTS_RT_TEST)
+  # The host services against a fake host (texture readback through the lifted broker, sysfont:, aoc:, @device.*, @perf.*, manifest patches): the shim and
+  # lifted headers it includes are the library's private ones
+  add_executable(svc_test test/svc_test.cpp)
+  target_link_libraries(svc_test PRIVATE peanuts_rt)
+  target_include_directories(svc_test PRIVATE ${PNRT_DIR}/shim ${PNRT_INC_ROOT} ${PNRT_THIRD_PARTY})
+  target_compile_definitions(svc_test PRIVATE PNRT=1 EDEN_DSMOD_BUILD_DEV_TOOLS=0)
+  # What the host side owes the lifted runtime (the stop of the game's threads, the controller, a load plan on a synthetic main, the hidden page)
+  add_executable(gaps_test test/gaps_test.cpp)
+  target_link_libraries(gaps_test PRIVATE peanuts_rt)
+  target_include_directories(gaps_test PRIVATE ${PNRT_DIR}/shim ${PNRT_INC_ROOT} ${PNRT_THIRD_PARTY})
+  target_compile_definitions(gaps_test PRIVATE PNRT=1 EDEN_DSMOD_BUILD_DEV_TOOLS=0)
+  # The replay's texture readback (dm/gfx/vk_android/vka_readback.inc) against a stub Vulkan table: plain C, nothing of the runtime
+  add_executable(vka_readback_test test/vka_readback_test.c)
+  target_link_libraries(vka_readback_test PRIVATE Threads::Threads)
+  target_compile_options(vka_readback_test PRIVATE -std=gnu11 -Wall -Wno-unused-function -Wno-enum-compare)
+  # `ctest` in the build folder (or the `test` target) runs the three
+  enable_testing()
+  add_test(NAME svc_test COMMAND svc_test)
+  add_test(NAME gaps_test COMMAND gaps_test ${CMAKE_CURRENT_BINARY_DIR}/gaps_test.scratch)
+  add_test(NAME vka_readback_test COMMAND vka_readback_test)
   add_executable(rt_test test/rt_test.cpp)
   target_link_libraries(rt_test PRIVATE peanuts_rt)
   target_include_directories(rt_test PRIVATE ${PNRT_THIRD_PARTY}/stb ${PNRT_THIRD_PARTY})
+  # The UiSink hooks of shim/video_core/dsmod/aux_routing.h: a partial publish reaches the host's sink as its own box.
+  add_executable(aux_sink_test test/aux_sink_test.cpp)
+  target_link_libraries(aux_sink_test PRIVATE peanuts_rt)
+  target_include_directories(aux_sink_test PRIVATE ${PNRT_DIR}/shim ${PNRT_INC_ROOT} ${PNRT_THIRD_PARTY})
+  target_compile_definitions(aux_sink_test PRIVATE PNRT=1 EDEN_DSMOD_BUILD_DEV_TOOLS=0)
   # R6: the host's .nup RomFS provider (dm/peanuts/peanuts_nup.c over dm/host/nup_image.h) read on this PC. nup_image.h
   # includes dm/host/plat/plat.h, which refuses any target but Apple / Android arm64: the provider unit alone is compiled
   # as if for Android (declarations only; nothing of plat.h is called but plat_sha256, which nup_test defines over the

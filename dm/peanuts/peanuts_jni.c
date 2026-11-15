@@ -13,6 +13,10 @@ int nxhost_peanuts_frame(void *out_rgba, int w, int h);
 void nxhost_peanuts_frame_again(void);
 #pragma weak nxhost_peanuts_touch
 void nxhost_peanuts_touch(int id, float x, float y, int down);
+#pragma weak nxhost_peanuts_panel
+void nxhost_peanuts_panel(int w, int h);
+#pragma weak nxhost_peanuts_present
+void nxhost_peanuts_present(int shown);
 #pragma weak nxhost_peanuts_rt_state
 int nxhost_peanuts_rt_state(void);
 #pragma weak nxhost_peanuts_haptic
@@ -51,6 +55,18 @@ JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_frameAgain(JNIEnv *env, jclass cl
 JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_touch(JNIEnv *env, jclass cls, jint id, jfloat x, jfloat y, jboolean down) {
     (void)env; (void)cls;
     if (nxhost_peanuts_touch) nxhost_peanuts_touch(id, x, y, down ? 1 : 0);
+}
+
+// The page view's size in pixels (CompanionPresentation, when the view is laid out): the runtime's panel; touches are in these pixels from then on (peanuts.h)
+JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_panel(JNIEnv *env, jclass cls, jint w, jint h) {
+    (void)env; (void)cls;
+    if (nxhost_peanuts_panel) nxhost_peanuts_panel(w, h);
+}
+
+// The page's window is shown or gone (CompanionPresentation.onStart / onStop): the runtime's presence, and the release of held fingers when it goes (peanuts.h)
+JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_present(JNIEnv *env, jclass cls, jboolean shown) {
+    (void)env; (void)cls;
+    if (nxhost_peanuts_present) nxhost_peanuts_present(shown ? 1 : 0);
 }
 
 // 0 pending, 1 a companion package loaded (the page matters), 2 none for this title, 3 found but refused (see peanuts.h)

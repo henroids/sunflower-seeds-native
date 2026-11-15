@@ -16,6 +16,8 @@ namespace PeanutsHelper {
 struct Result {
     bool installed{};  ///< the plan is in place and the mailbox is set on the system
     std::string error; ///< why not, when the package has a plan for this title; empty when it has none
+    u64 epoch_address{}; ///< the mailbox's epoch word (0: the plan has none), for the bump at pause and resume
+    u32 epoch{};         ///< the value written there at install
 };
 
 /// Reads the selected package's load plan for this build of main and applies it to the running process.

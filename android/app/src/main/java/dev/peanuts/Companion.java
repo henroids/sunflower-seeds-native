@@ -48,6 +48,7 @@ public final class Companion {
         if (shown != null) {
             // Hidden, not dismissed: a window made again came back black until the companion drew something new (its page is only sent when it changes)
             try { shown.hide(); } catch (RuntimeException ignored) {}
+            try { Bridge.present(false); } catch (UnsatisfiedLinkError ignored) {}   // hide() runs no onStop: the runtime is told here, and held fingers are released
             Log.i(TAG, "the game left the foreground: the companion is off the second display until it is back");
         }
     }
@@ -58,7 +59,7 @@ public final class Companion {
         away = false;
         if (stopped) return;
         if (shown != null) {
-            try { shown.show(); return; } catch (RuntimeException e) { Log.w(TAG, "companion not shown again: " + e); shown = null; }   // its display went away meanwhile
+            try { shown.show(); try { Bridge.present(true); } catch (UnsatisfiedLinkError ignored) {} return; } catch (RuntimeException e) { Log.w(TAG, "companion not shown again: " + e); shown = null; }   // its display went away meanwhile
         }
         if (allowed && listenerDm != null) show(game, decidingGameName, listenerDm);
     }

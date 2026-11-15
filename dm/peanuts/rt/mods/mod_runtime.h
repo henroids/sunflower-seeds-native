@@ -203,7 +203,21 @@ namespace Core::Mods {
 ///          size + format; EDEN_DSMOD_CAP_TEXTURE_READBACK, mod_texture_readback.h). Map overlays
 ///          take "mask_bind" (a text point naming an image whose alpha cuts the overlay). Older
 ///          runtimes never configure the extension and ignore the key.
-inline constexpr u32 DualScreenRuntimeVersion = 24;
+///   25     Pane geometry host values: "@screen.pane_w" / "pane_h" (panel px) / "orientation"
+///          ("landscape" / "portrait") / "mode" ("physical" / "simulated"), through the same
+///          runtime-21 pattern (mod_host_values.h: IsHostValueKey, uses_host_keys /
+///          JsonReferencesHostKeys, get_i64 / get_text for a native module whether or not the
+///          manifest names them); ABI 1 stays. Optional alternate canvas: manifest "canvas_alt":
+///          {"w","h","when": "portrait" | "narrow"}, the runtime switching to whichever canvas'
+///          aspect fits the pane better (SelectCanvasAspect), debounced ~150 ms so a resize
+///          burst switches once; a widget's "rect_alt" is its rect on that canvas, and a page
+///          "scrolls" entry's "rect_alt" is likewise its viewport on that canvas
+///          (ApplyCanvasVariant swaps rect <-> rect_alt on a committed switch, for both; module
+///          state and the current page are untouched). A package without "canvas_alt" is
+///          unaffected (Fit letterbox only, as before). Virtual button tokens "L3" / "R3"
+///          (aliases "StickL" / "StickR") reach VirtualButton::StickL / StickR (ParseButton);
+///          older runtimes do not recognise them.
+inline constexpr u32 DualScreenRuntimeVersion = 25;
 
 /// Regions a redraw-worker job painted into its canvas but did not publish because it went stale
 /// (runtime 13). Before runtime 13 a job already running when the next was dispatched finished
@@ -245,6 +259,27 @@ struct UnpublishedRegions {
 /// published for an older runtime never gains the chord or the pad suppression.
 [[nodiscard]] bool NavDefaultOn(const nlohmann::json* manifest,
                                 const nlohmann::json* package) noexcept;
+
+/// Runtime 25: the canvas size SelectCanvasAspect (and ModRuntime::SelectCanvas) resolved to --
+/// {w, h} and whether that is the manifest's optional `canvas_alt` rather than its default.
+struct CanvasChoice {
+    u32 w{0};
+    u32 h{0};
+    bool alt{false};
+};
+
+/// Runtime 25 "canvas_alt": which canvas -- the manifest's default (`canvas_w`/`canvas_h`, 0 =
+/// `panel_w`/`panel_h` itself) or its optional `canvas_alt` -- fits a `panel_w` x `panel_h` pane
+/// better. Pure: no debounce (ModRuntime::SelectCanvas adds that over a live pane,
+/// mod_redraw.cpp). `alt_w`/`alt_h` 0 = no canvas_alt declared: always the default, byte-
+/// identical to a runtime <= 24 package. "Portrait" picks the alternate only in a taller-than-
+/// wide pane; "Narrow" picks it whenever the pane's aspect is already narrower than the
+/// DEFAULT canvas's own -- a superset of Portrait that also catches a moderately narrow but
+/// still landscape pane (a Simulated side-by-side companion column,
+/// administration/simulated-dual-screen-20261111/RESEARCH.md S4.5 C2).
+[[nodiscard]] CanvasChoice SelectCanvasAspect(u32 panel_w, u32 panel_h, u32 canvas_w, u32 canvas_h,
+                                              u32 alt_w, u32 alt_h,
+                                              CanvasAltWhen when) noexcept;
 
 /// Nintendo asset references and composite images (mod_nx_runtime.cpp): caches, the decode
 /// worker and its queues. Kept out of this header; always allocated with the runtime.
@@ -319,11 +354,22 @@ struct PendingTap {
                                                        const MapDrawRecords& records,
                                                        size_t records_page, size_t current_page);
 
-/// The pure "@view_zoom:<id>" / "@view_pan_x:<id>" / "@view_pan_y:<id>" lookup over a pan_zoom
-/// widget's own ViewState map -- ModRuntime::PanZoomViewHostValue's own matching logic. Kept free
-/// of ModRuntime for the same reason as MapViewHostValueFrom above.
+/// The pure "@view_zoom:<id>" / "@view_pan_x:<id>" / "@view_pan_y:<id>" / "@view_touch_x:<id>" /
+/// "@view_touch_y:<id>" / "@view_touch_down:<id>" lookup over a pan_zoom widget's own ViewState
+/// map -- ModRuntime::PanZoomViewHostValue's own matching logic. Kept free of ModRuntime for the
+/// same reason as MapViewHostValueFrom above.
 [[nodiscard]] std::optional<f64> PanZoomViewHostValueFrom(std::string_view name,
                                                            const ViewState& states);
+
+/// Runtime 25 (rt25 addition): updates `states[target]`'s live finger behind
+/// "@view_touch_x/y:<id>" + "@view_touch_down:<id>" for one tick of UpdateGestures (mod_input.cpp).
+/// `down` is whether a finger is currently on this gesture; `x`/`y` (canvas px, ignored unless
+/// `down`) is its primary pointer -- UpdateGestures' own `now.front()`, the same point the
+/// single-finger pan path applies dx/dy from, used here for a second finger too (pinch),
+/// consistent with that path. `target` empty (this gesture pans nothing) is a no-op; `down` false
+/// clears whatever view `target` last touched, rather than leaving a stale position behind. Kept
+/// free of ModRuntime for the same reason as PanZoomViewHostValueFrom above.
+void UpdateViewTouch(ViewState& states, const std::string& target, bool down, s32 x, s32 y);
 
 /// The module get_i64 answer for "@flag:<name>": the flag's live value, or nullopt when `name`
 /// is not a flag key or the flag is unknown. PublishFlags runs after the module, so the tick's
@@ -742,12 +788,12 @@ private:
     bool IsVisited(const std::string& area, float wx, float wy) const;
     /// `border_weight` (per pixel, 0..255, may be null) is the grey outline's share of the pixel,
     /// lerped in after the dim so the anti-aliased border never dims and fills stay flat.
-    /// `rect` (x0, y0, x1, y1; x1/y1 exclusive; null = the whole image) limits the pass to those
+    /// PNRT: `rect` (x0, y0, x1, y1; x1/y1 exclusive; null = the whole image) limits the pass to those
     /// pixels (the incremental reveal: only the changed cells' pixels are recomputed).
     void MaskUnvisited(std::vector<u32>& pixels, const std::string& area, int width, int height,
                        const std::vector<u8>* border_weight, const std::vector<u8>* solid_color,
                        MapFadeEndpoint endpoint = MapFadeEndpoint::Animated,
-                       const std::array<int, 4>* rect = nullptr) const;
+                       const std::array<int, 4>* rect = nullptr) const; // PNRT: the added parameter
     const std::vector<u8>& GeometryMask(const std::string& area); ///< which grid cells have map
     /// Cached mask of the cells belonging to one room_categories entry, keyed
     /// (area, category_id). Replaces the old SpecialRoomMask/TransportRoomMask/EmmyRoomMask (three
@@ -838,12 +884,6 @@ private:
     /// short holds (spinning with a yield, at most 250 us), returns false without the lock while
     /// a raster is in progress or the holder outlasts that.
     bool LockMapStateUnlessRaster(MapStateLock& lock) const;
-    /// PNRT: consecutive LockMapStateUnlessRaster refusals (tick thread), and the total of the waits
-    /// that ended one. A raster that restarts as fast as it ends (a handheld, the CPU canvas path:
-    /// every reveal is a new raster) refused every publish for good and the page stayed on its
-    /// first frame.
-    mutable u32 map_lock_refused_run{0};
-    mutable u32 map_lock_forced_waits{0};
     /// PNRT: the last complete composite of an area (Animated endpoint) with the reveal cells it
     /// was built from. A reveal-only change (same pre-fog, border, colour state) copies it and
     /// recomputes just the pixels of the changed cells instead of the whole 3 Mpx image.
@@ -863,9 +903,11 @@ private:
     mutable std::map<std::string, MapCompositeMemo> map_composite_memo;
     /// PNRT counters for the snapshot line: base rasters, composites built (and how many were
     /// incremental), ms of the last composite and of the last base raster, publishes skipped for
-    /// a busy map.
+    /// a busy map (LockMapStateUnlessRaster refused PublishUi; the tick thread never waits for a
+    /// raster), pulse lookups answered from the memo.
     mutable std::atomic<u32> map_base_rasters{0}, map_composites{0}, map_composites_incremental{0},
-        map_last_composite_ms{0}, map_base_last_ms{0}, map_publish_skipped{0}, map_fade_steps{0};
+        map_last_composite_ms{0}, map_base_last_ms{0}, map_publish_skipped{0}, map_fade_steps{0},
+        map_pulse_memo_hits{0};
     /// One module map publication (AcceptModuleMap / AcceptModuleMapState), copied out of the
     /// module's buffers so it can be applied after the call returns. Tick thread only.
     struct PendingMapUpdate {
@@ -1427,6 +1469,9 @@ private:
     /// get_f64 from sample() -- the same one-tick-behind contract as MapViewHostValue. The tick
     /// also publishes them for pages. nullopt: not such a key, or no view tracked for that id. The
     /// key match itself is PanZoomViewHostValueFrom above (mod_input.cpp).
+    /// Runtime 25 (rt25 addition): the same lookup also answers "@view_touch_x/y:<id>" (the
+    /// gesture's live finger, canvas px, nullopt while none is down) and "@view_touch_down:<id>"
+    /// (1/0, always answered), set by UpdateViewTouch each tick UpdateGestures runs.
     [[nodiscard]] std::optional<f64> PanZoomViewHostValue(std::string_view name) const;
     /// Derived points: evaluated after sampling, published into ints and floats.
     /// `volatile_only`: the second, post-interaction evaluation of a tick. Only derived values that
@@ -1463,6 +1508,27 @@ private:
     /// constructor (PerfStats totals, read lazily: PerfStats exists only once the game runs).
     HostValues host_values;
     bool host_values_wanted{false};
+    /// Runtime 25 canvas_alt: the debounced choice between the manifest's canvas and its
+    /// optional alternate (SelectCanvasAspect above, mod_redraw.cpp). `canvas_alt_active` is
+    /// what the last commit chose; `canvas_alt_pending` / `_since` track a raw per-tick read
+    /// that has not held steady for CanvasAltDebounce yet, so an in-flight host resize (the
+    /// Android layout's own ~150 ms debounce, RESEARCH.md R3) switches the canvas at most once
+    /// rather than once per tick. Reset on every (re)load (ReloadManifest, mod_manifest.cpp): a
+    /// freshly parsed manifest's widgets are the authored default, not whatever the old one
+    /// last swapped to.
+    bool canvas_alt_active{false};
+    bool canvas_alt_pending{false};
+    std::chrono::steady_clock::time_point canvas_alt_pending_since{};
+    static constexpr std::chrono::milliseconds CanvasAltDebounce{150};
+    /// This tick's canvas: the manifest's default, or canvas_alt once the debounced choice has
+    /// committed to it. Commits are applied immediately (ApplyCanvasVariant), so by the time
+    /// this returns, every page's widgets already match the returned choice.
+    CanvasChoice SelectCanvas(u32 panel_w, u32 panel_h); // mod_redraw.cpp
+    /// Swaps every page widget's `rect` with its `rect_alt`, and every page scroll region's
+    /// `rect` with its own `rect_alt` (self-inverse: called once per committed edge, in either
+    /// direction). Module state, current_page and everything else about the package are
+    /// untouched -- only widget and scroll-region geometry moves.
+    void ApplyCanvasVariant(bool alt); // mod_redraw.cpp
     void UpdateHeldButtons();                      // mod_actions.cpp
     void PublishUi(const StateSnapshot& snapshot); // mod_redraw.cpp
     /// GPU-composite publish: hand the renderer a quad display list plus up to three source
@@ -1992,7 +2058,10 @@ private:
     /// formats when it is present -- takes precedence over any in-core parser. False when no
     /// module is loaded, the module declares no font decoder, or it rejected `bytes` as
     /// malformed/unrecognised; LoadFont() then falls back to ParseMfnt/ParseSosFont in core.
-    bool ModuleDecodeFont(std::span<const u8> bytes, FontMetrics& out); // mod_assets.cpp
+    /// `busy` (optional) is set when the module loader lock was held by the asset worker: no
+    /// attempt was made, try again shortly (the publication path never waits on that lock).
+    bool ModuleDecodeFont(std::span<const u8> bytes, FontMetrics& out,
+                          bool* busy = nullptr); // mod_assets.cpp
     FontMetrics font_metrics;
     bool font_ready{false};
     /// A module font decoder may read the running game (metric tables read from main),

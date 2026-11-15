@@ -34,6 +34,7 @@
 #include "common/common_types.h"
 #include "common/dsmod_dev_tools.h"
 #include "common/logging.h"
+#include "core/frontend/framebuffer_layout.h"
 
 namespace VideoCore::DSMod {
 
@@ -234,6 +235,16 @@ struct SecondScreenOptions {
                    ? CompanionRatio::Stretch
                    : CompanionRatio::Fit;
     }
+    // Eden Duo Stage 2 (owner decision, revised from an earlier draft of this stage that gave
+    // Simulated its own Fit/Stretch setting): Simulated is always Fit, unconditionally -- never
+    // user-settable, never reading companion_ratio. The layout engine (DualScreenGeometry) sizes
+    // the companion pane to the canvas's own aspect in the first place, so Fit draws it with no
+    // bars in normal use; this is just the safety net for a pane a manual divider shaped
+    // differently. [is_inline] (the panel currently up is Simulated, not Physical) is kept as
+    // CompanionTouchRect's own parameter -- see ActiveRatio.
+    static CompanionRatio ActiveRatio(bool is_inline) {
+        return is_inline ? CompanionRatio::Fit : Ratio();
+    }
     static NoCompanion WithoutCompanion() {
         const u32 v = no_companion.load(std::memory_order_relaxed);
         return v <= static_cast<u32>(NoCompanion::Off) ? static_cast<NoCompanion>(v)
@@ -285,10 +296,14 @@ inline CompanionRect FitCompanion(u32 fw, u32 fh, u32 cw, u32 ch, CompanionRatio
 }
 
 /// The rect a companion's touches map through. A mirror page (the game's own pixels) is always
-/// drawn over the whole panel, whatever Companion Ratio says.
-inline CompanionRect CompanionTouchRect(u32 fw, u32 fh, u32 cw, u32 ch, bool mirror) {
+/// drawn over the whole panel, whatever Companion Ratio says. [is_inline] forces Fit (Simulated
+/// is always Fit) instead of Physical's own Companion Ratio -- the touch rect must agree with
+/// whichever one the draw path used for the panel currently up.
+inline CompanionRect CompanionTouchRect(u32 fw, u32 fh, u32 cw, u32 ch, bool mirror,
+                                        bool is_inline = false) {
     return FitCompanion(fw, fh, cw, ch,
-                        mirror ? CompanionRatio::Stretch : SecondScreenOptions::Ratio());
+                        mirror ? CompanionRatio::Stretch
+                               : SecondScreenOptions::ActiveRatio(is_inline));
 }
 
 /// One axis of a second-screen touch, panel pixels -> canvas pixels, for a point inside the
@@ -296,6 +311,79 @@ inline CompanionRect CompanionTouchRect(u32 fw, u32 fh, u32 cw, u32 ch, bool mir
 inline s32 PanelToCanvas(u32 v, u32 origin, u32 extent, u32 canvas) {
     return static_cast<s32>(static_cast<u64>(v - origin) * canvas / std::max(1u, extent));
 }
+
+// ---------------- Stage 2: Simulated touch routing ----------------
+
+/// A window-pixel point mapped into a sub-rect of that window, normalised 0..1 and clamped to
+/// the rect (so a point past its edge lands on the edge rather than outside 0..1). {0, 0} for an
+/// empty rect. Used both for the companion pane (pane-local coordinates the mod runtime expects,
+/// matching AuxTouchPoint's "aux surface space") and, on the Android frontend, for the narrowed
+/// game rect (EmuWindow_Android), which the SurfaceView itself does not shrink to (Stage 1 keeps
+/// it full-window so the native split alone decides game vs. companion).
+inline std::pair<float, float> MapWindowPointToRect(u32 px, u32 py, const CompanionRect& rect) {
+    if (rect.w == 0 || rect.h == 0) {
+        return {0.0f, 0.0f};
+    }
+    const u32 cx = std::clamp(px, rect.x, rect.x + rect.w - 1);
+    const u32 cy = std::clamp(py, rect.y, rect.y + rect.h - 1);
+    return {static_cast<float>(cx - rect.x) / static_cast<float>(rect.w),
+           static_cast<float>(cy - rect.y) / static_cast<float>(rect.h)};
+}
+
+// ---------------- Stage 1: Simulated (single-surface) dual screen ----------------
+// The companion is drawn as a second rectangle of the main window's own presented frame instead
+// of a real second swapchain (Physical mode, SetAuxWindow). Both rects are stored as fractions of
+// the window (0..1), so a resize needs no republish; FracToPixelRect converts them at the
+// window's current pixel size. Physical and inline are mutually exclusive: an attached aux window
+// always wins (see DSModAuxPresenter::Route), so this struct only ever describes what the window
+// would show *if* no real aux window is attached.
+
+/// A rectangle as a 0..1 fraction of its container, each axis independent of the others.
+struct FracRect {
+    float x{0.0f};
+    float y{0.0f};
+    float w{1.0f};
+    float h{1.0f};
+};
+
+/// `frac` converted to `window_w` x `window_h` pixels, clamped so it never spills past the
+/// window (a bad fraction shrinks instead of going out of bounds). Pure, so the rect math is
+/// unit-testable without a live renderer (tests/video_core/aux_routing.cpp).
+inline CompanionRect FracToPixelRect(u32 window_w, u32 window_h, FracRect frac) {
+    const auto clamp01 = [](float v) { return std::isfinite(v) ? std::clamp(v, 0.0f, 1.0f) : 0.0f; };
+    const float fx = clamp01(frac.x);
+    const float fy = clamp01(frac.y);
+    const float fw = clamp01(frac.w);
+    const float fh = clamp01(frac.h);
+    const u32 x = static_cast<u32>(std::lround(fx * window_w));
+    const u32 y = static_cast<u32>(std::lround(fy * window_h));
+    const u32 w = std::min(window_w - x, static_cast<u32>(std::lround(fw * window_w)));
+    const u32 h = std::min(window_h - y, static_cast<u32>(std::lround(fh * window_h)));
+    return CompanionRect{x, y, w, h, x == 0 && y == 0 && w == window_w && h == window_h};
+}
+
+/// Where the game's picture actually lands inside its inline rect `game` (window pixels): `game`
+/// fitted the way upstream's Layout::DefaultFrameLayout fits a whole window (honouring
+/// Settings::values.aspect_ratio, Stretch included) and placed at `game`'s own position. The
+/// renderer draws the game into it (DSModAuxPresenter::FitInlineGameLayout) and the Android
+/// window maps game touches through it (EmuWindow_Android), so the two always agree -- a touch
+/// lands where the picture is, not stretched across its letterbox bars.
+inline CompanionRect InlineGamePictureRect(const CompanionRect& game) {
+    if (game.w == 0 || game.h == 0) {
+        return game;
+    }
+    const auto screen = Layout::DefaultFrameLayout(game.w, game.h).screen;
+    const u32 w = screen.GetWidth();
+    const u32 h = screen.GetHeight();
+    return CompanionRect{game.x + screen.left, game.y + screen.top, w, h,
+                         game.full && w == game.w && h == game.h};
+}
+
+/// The game and companion rects a window of `window_w` x `window_h` resolves to, at this instant.
+struct InlineRects {
+    CompanionRect game{};
+    CompanionRect companion{};
+};
 
 /// Marks in `mask` (already Reset to w x h and Cleared) every tile where `a` and `b` (both w x h,
 /// tightly packed) differ. Reads both images once; a row equal as a whole costs one memcmp, and
@@ -400,6 +488,10 @@ public:
     std::atomic<u32> height{0};
     std::atomic<u32> rotation{0};
     std::atomic<u32> refresh_hz{60};
+    // Eden Duo Stage 2: which scaling setting (and FitCompanion call) produced the width/height
+    // above right now -- Simulated's own, or Physical's -- set beside every width/height store.
+    // Touch mapping (CompanionTouchRect) reads this so it always agrees with what was drawn.
+    std::atomic<bool> panel_is_inline{false};
 
     // --- written by dsm:u (guest service thread), read by the renderer ---
     std::atomic<u64> bound_layer{NoLayer};
@@ -453,6 +545,74 @@ public:
     std::atomic<float> mirror_y{0.0f};
     std::atomic<float> mirror_w{1.0f};
     std::atomic<float> mirror_h{1.0f};
+
+    // --- Stage 1: Simulated (single-surface) dual screen; see FracRect/FracToPixelRect above ---
+    // Set by the frontend (desktop --aux-inline, Android's layout editor, rotation, resize, fold
+    // and divider drag) before and while the renderer runs; read every frame by
+    // DSModAuxPresenter::Route and RendererVulkan::Composite, and per touch by the Android
+    // window. `inline_enabled` is the user's wish; whether it actually applies this frame also
+    // depends on no real aux window being attached (decided by the presenter, which alone knows
+    // that).
+    std::atomic<bool> inline_enabled{false};
+
+    /// `game` and `companion` are fractions (0..1) of the main window each will occupy. Not
+    /// required to be disjoint or to cover the window -- that is the caller's layout policy, not
+    /// this storage's job. The two rects are published together under inline_layout_mutex (this
+    /// is called live, so a reader must never see one rect from the old layout and one from the
+    /// new, or a half-written rect); `inline_enabled` flips after them (release).
+    void SetInlineLayout(bool enabled, FracRect game, FracRect companion) {
+        {
+            std::scoped_lock lk{inline_layout_mutex};
+            inline_game = game;
+            inline_companion = companion;
+        }
+        inline_enabled.store(enabled, std::memory_order_release);
+    }
+
+    /// Convenience for a fixed "one side" split: the companion takes `companion_frac` of the
+    /// window on its right edge (landscape) or bottom edge (portrait); the game takes the rest.
+    /// Android's hidden inline-dual-screen switch uses this; the desktop --aux-inline flag takes
+    /// an explicit companion rect instead (SetInlineLayout directly).
+    void SetInlineLayoutSideSplit(bool enabled, bool landscape, float companion_frac = 0.4f) {
+        companion_frac = std::isfinite(companion_frac) ? std::clamp(companion_frac, 0.0f, 1.0f)
+                                                       : 0.4f;
+        const float game_frac = 1.0f - companion_frac;
+        if (landscape) {
+            SetInlineLayout(enabled, FracRect{0.0f, 0.0f, game_frac, 1.0f},
+                            FracRect{game_frac, 0.0f, companion_frac, 1.0f});
+        } else {
+            SetInlineLayout(enabled, FracRect{0.0f, 0.0f, 1.0f, game_frac},
+                            FracRect{0.0f, game_frac, 1.0f, companion_frac});
+        }
+    }
+
+    /// The game and companion rects at the window's current pixel size. Call only once
+    /// `inline_enabled` (loaded separately) is known true: this does not re-check it, so a caller
+    /// that wants the "is inline on" answer too should load `inline_enabled` itself first.
+    [[nodiscard]] InlineRects GetInlineRects(u32 window_w, u32 window_h) const {
+        FracRect game;
+        FracRect companion;
+        {
+            std::scoped_lock lk{inline_layout_mutex};
+            game = inline_game;
+            companion = inline_companion;
+        }
+        return InlineRects{FracToPixelRect(window_w, window_h, game),
+                           FracToPixelRect(window_w, window_h, companion)};
+    }
+
+    /// Stage 1: Simulated stopped applying (the switch went off) while no real aux window is
+    /// attached, so the companion has no screen any more: report none again -- as before the
+    /// first inline frame -- and release any touch still held against the pane that is gone.
+    /// The renderer calls this once, on that transition (DSModAuxPresenter::Route); an aux window
+    /// attaching publishes its own presence and size.
+    void ClearInlinePanel() {
+        present.store(false, std::memory_order_relaxed);
+        width.store(0, std::memory_order_relaxed);
+        height.store(0, std::memory_order_relaxed);
+        panel_is_inline.store(false, std::memory_order_relaxed);
+        SetTouch({});
+    }
 
     AuxDisplayInfo GetDisplayInfo() const {
         return AuxDisplayInfo{
@@ -674,6 +834,18 @@ public:
             return; // a truncated canvas would let the copy read past the buffer
         }
         std::scoped_lock lk{ui_mutex};
+        // PNRT: ui_dirty accumulates until TakeUi consumes it, and on a host that draws through
+        // the UiSink nothing calls TakeUi, so after the first whole-page publish it stayed the
+        // whole page and every partial publish made the sink convert all of it. For the length of
+        // this call ui_dirty is set aside and collects this call's changes only (what the sink is
+        // handed below); on every way out it is joined with what was there, for TakeUi as before.
+        struct PnrtCallDirty {
+            std::array<s32, 4>& dirty;
+            std::array<s32, 4> before;
+            ~PnrtCallDirty() {
+                dirty = UnionRect(before, dirty);
+            }
+        } pnrt_call_dirty{ui_dirty, std::exchange(ui_dirty, {0, 0, 0, 0})};
         const bool identity_changed =
             (w != ui_w || h != ui_h || ui_pixels.size() != static_cast<size_t>(w) * h);
         const bool composite_resync =
@@ -732,7 +904,7 @@ public:
         }
         ui_serial++;
         ui_present.store(true, std::memory_order_release);
-        if (ui_sink.publish_ui_partial) { // PNRT: the accumulated dirty box of this publish
+        if (ui_sink.publish_ui_partial) { // PNRT: this call's changed box (ui_dirty is this call's alone here, see the top)
             ui_sink.publish_ui_partial(ui_sink.user, ui_w, ui_h, ui_pixels.data(),
                                        ui_dirty.data());
         } else if (ui_sink.publish_ui) { // PNRT
@@ -1239,6 +1411,11 @@ private:
     /// written under comp_mutex's critical section and read under ui_mutex's, two different locks,
     /// so it needs its own independent synchronization rather than borrowing either one's.
     std::atomic<bool> ui_composite_pending{false};
+
+    /// Stage 1: the inline rect pair (SetInlineLayout/GetInlineRects), one consistent layout.
+    mutable std::mutex inline_layout_mutex;
+    FracRect inline_game{};
+    FracRect inline_companion{0.0f, 0.0f, 0.0f, 0.0f};
 
     std::mutex touch_mutex;
     std::array<AuxTouchPoint, MaxTouch> touch_points{};

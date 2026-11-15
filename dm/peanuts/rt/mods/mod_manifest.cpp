@@ -592,6 +592,17 @@ std::optional<ScrollRegion> ParseScrollRegion(const nlohmann::json& j) {
     r.content_h = static_cast<s32>(j.contains("content_h") ? ParseNumber(j.at("content_h")) : 0);
     r.content_w_bind = j.value("content_w_bind", std::string{});
     r.content_h_bind = j.value("content_h_bind", std::string{});
+    // "rect_alt" (runtime 25): this region's rect while canvas_alt is the active canvas
+    // (ModRuntime::ApplyCanvasVariant). Absent = keeps `rect` on both. Same parsing and same
+    // malformed handling as a widget's "rect_alt" above: anything but a 4-number array leaves it
+    // unset rather than erroring the whole region out.
+    if (j.contains("rect_alt") && j.at("rect_alt").is_array() && j.at("rect_alt").size() == 4) {
+        std::array<s32, 4> alt{};
+        for (size_t i = 0; i < 4; ++i) {
+            alt[i] = ParseCoordinate(j.at("rect_alt")[i]);
+        }
+        r.rect_alt = alt;
+    }
     if (r.rect[2] <= 0 || r.rect[3] <= 0) {
         LOG_WARNING(Core, "DSMod: scroll region '{}' has an empty rect", r.id);
     }
@@ -1053,6 +1064,9 @@ std::shared_ptr<const MapWidgetExtras> ParseMapWidgetExtras(const nlohmann::json
             ov.src_bind = o.value("src_bind", std::string{});
             ov.src_detail_bind = o.value("src_detail_bind", std::string{});
             ov.mask_bind = o.value("mask_bind", std::string{}); // runtime 24
+            if (o.contains("src_hold") && o.at("src_hold").is_boolean()) {
+                ov.src_hold = o.at("src_hold").get<bool>(); // runtime 25
+            }
             ov.detail_threshold = std::max(1.0f, JsonFloat(o, "detail_threshold", 210.0f));
             ov.x0 = JsonFloat(o, "x0", 0.0f);
             ov.y0 = JsonFloat(o, "y0", 0.0f);
@@ -1460,6 +1474,23 @@ void ParseManifestJson(const nlohmann::json& json, Manifest& manifest) {
     manifest.poll_hz = json.value("poll_hz", 60u);
     manifest.canvas_w = json.value("canvas_w", 0u);
     manifest.canvas_h = json.value("canvas_h", 0u);
+    // "canvas_alt" (runtime 25): {"w", "h", "when": "portrait" (default) | "narrow"}. Malformed,
+    // not an object, or zero w/h is ignored (logged), leaving canvas selection exactly as before.
+    if (json.contains("canvas_alt")) {
+        const auto& ca = json.at("canvas_alt");
+        const u32 alt_w = ca.is_object() ? ca.value("w", 0u) : 0u;
+        const u32 alt_h = ca.is_object() ? ca.value("h", 0u) : 0u;
+        if (ca.is_object() && alt_w != 0 && alt_h != 0) {
+            manifest.canvas_alt_w = alt_w;
+            manifest.canvas_alt_h = alt_h;
+            manifest.canvas_alt_when = ca.value("when", std::string{"portrait"}) == "narrow"
+                                           ? CanvasAltWhen::Narrow
+                                           : CanvasAltWhen::Portrait;
+        } else {
+            LOG_WARNING(Core,
+                        "DSMod: canvas_alt needs an object with non-zero 'w' and 'h'; ignored");
+        }
+    }
     manifest.debug_page = Common::DSMod::DevToolsEnabled && json.value("debug_page", false);
     manifest.font_metrics_src = json.value("font", std::string{});
     manifest.font_atlas_src = json.value("font_atlas", std::string{});
@@ -1663,10 +1694,24 @@ void ParseManifestJson(const nlohmann::json& json, Manifest& manifest) {
                     widget.src_fade_ms =
                         static_cast<s32>(std::clamp(w.value("src_fade_ms", 0), 0, 1000));
                     widget.src_fade_bind = w.value("src_fade_bind", std::string{});
+                    // "src_hold" (runtime 25): false = no last-known-good hold / cross-fade.
+                    if (w.contains("src_hold") && w.at("src_hold").is_boolean()) {
+                        widget.src_hold = w.at("src_hold").get<bool>();
+                    }
                     if (w.contains("rect") && w.at("rect").is_array() && w.at("rect").size() == 4) {
                         for (size_t i = 0; i < 4; ++i) {
                             widget.rect[i] = ParseCoordinate(w.at("rect")[i]);
                         }
+                    }
+                    // "rect_alt" (runtime 25): this widget's rect while canvas_alt is the active
+                    // canvas (ModRuntime::ApplyCanvasVariant). Absent = keeps `rect` on both.
+                    if (w.contains("rect_alt") && w.at("rect_alt").is_array() &&
+                        w.at("rect_alt").size() == 4) {
+                        std::array<s32, 4> alt{};
+                        for (size_t i = 0; i < 4; ++i) {
+                            alt[i] = ParseCoordinate(w.at("rect_alt")[i]);
+                        }
+                        widget.rect_alt = alt;
                     }
                     widget.text = StringOr(w, "text");
                     widget.bind = w.value("bind", std::string{});
@@ -1866,6 +1911,12 @@ void ParseManifestJson(const nlohmann::json& json, Manifest& manifest) {
                         widget.text_map = std::move(map);
                     }
                     widget.wrap_width = static_cast<s32>(w.value("wrap_width", 0));
+                    // "wrap_width_alt" (runtime 25): the same field while canvas_alt is active
+                    // (ApplyCanvasVariant swaps it in alongside rect_alt, mod_redraw.cpp).
+                    // Absent or non-number leaves it unset -- unchanged from runtime <= 24.
+                    if (w.contains("wrap_width_alt") && w.at("wrap_width_alt").is_number()) {
+                        widget.wrap_width_alt = static_cast<s32>(w.at("wrap_width_alt").get<f64>());
+                    }
                     widget.max_lines = static_cast<s32>(w.value("max_lines", 0));
                     widget.line_gap = static_cast<s32>(w.value("line_gap", -1));
                     widget.icon_silhouette =
@@ -1995,9 +2046,6 @@ void ParseManifestJson(const nlohmann::json& json, Manifest& manifest) {
             s.hazard_tint = static_cast<int>(st.value("hazard_tint", s.hazard_tint));
             s.water_tint = static_cast<int>(st.value("water_tint", s.water_tint));
             s.fade_ticks = static_cast<u32>(st.value("fade_ticks", s.fade_ticks));
-            // PNRT: the manifest counts ticks at the game's 60 Hz; this host ticks at ~30 Hz, so the
-            // same wall-clock fade takes half as many ticks.
-            s.fade_ticks = std::max<u32>(1, s.fade_ticks / 2);
             s.item_icon = static_cast<s32>(st.value("item_icon", s.item_icon));
             s.door_icon = static_cast<s32>(st.value("door_icon", s.door_icon));
             s.marker_icon = static_cast<s32>(st.value("marker_icon", s.marker_icon));
@@ -2328,6 +2376,16 @@ void ParseManifestJson(const nlohmann::json& json, Manifest& manifest) {
             } else if (kind == "view_reset") {
                 action.kind = ActionKind::ViewReset;
                 action.view = a.value("view", std::string{});
+            } else if (kind == "view_zoom_step") {
+                // Runtime 25: a generic map/image pan_zoom "+/-" step, clamped to the widget's own
+                // zoom limits and centred on the view's current centre (mod_view_default.h's
+                // GlideViewZoomStep, RunAction). A package using it should declare
+                // "min_runtime": 25, same as every other runtime-25-only feature.
+                action.kind = ActionKind::ViewZoomStep;
+                action.view = a.value("view", std::string{});
+                if (a.contains("factor") && a.at("factor").is_number()) {
+                    action.zoom_factor = a.at("factor").get<f64>();
+                }
             }
             if (action.kind != ActionKind::None) {
                 manifest.actions.emplace(name, std::move(action));
@@ -2880,6 +2938,11 @@ void ModRuntime::ReloadManifest() {
     }
     {
         manifest = std::move(replacement);
+        // Runtime 25: the freshly parsed widgets are the authored default, not whatever the old
+        // manifest's canvas_alt last swapped them to -- forget the old debounce state so
+        // SelectCanvas re-derives and re-applies it from scratch (mod_redraw.cpp).
+        canvas_alt_active = false;
+        canvas_alt_pending = false;
         derived_order_list = nullptr;
         shared_page.reset();
         if (!mj->contains("nav")) {
@@ -2946,6 +3009,7 @@ void ModRuntime::ReloadManifest() {
         game_vis_areas.clear();
         water_boxes.clear();
         map_border.clear();
+        map_composite_memo.clear(); // PNRT: the memo's composites were built from the manifest that is going
         map_unlocked = map_zone_inactive = map_zone_alert = false;
         ++water_gen;
         ++zone_gen;

@@ -1784,6 +1784,7 @@ static void rt_comp_tick(uint64_t period_ns);
 static double g_rt_comp_ms;   // Currently declared real-time computation amount (ms; 0 = not declared)
 static double g_rt_period_ms;
 static void sleep_until_ns(uint64_t dl);
+__attribute__((weak)) void dm_thread_native_wait(int entering);   // PEANUTS: hle_thread.c; absent in the graphics unit tests, which have no game threads
 static uint64_t present_period(const win_t *o);
 static uint64_t rt_period_ns(const win_t *o, uint64_t period);
 static int present_itv(const win_t *o);
@@ -1825,11 +1826,13 @@ NVN(nvnWindowAcquireTexture, NVNwindowAcquireTextureResult, NVNwindow *w, NVNsyn
         if (pace < 0) { const char *e = getenv("DM_DETCLOCK_PACE"), *d = getenv("DM_DETCLOCK"); step = d ? strtoull(d, 0, 0) : 0; pace = e && atoi(e) && step; }
         if (pace) { if (last && now_ns() < last + step) sleep_until_ns(last + step); last = now_ns(); }
     }
+    if (dm_thread_native_wait) dm_thread_native_wait(1);   // PEANUTS: the two waits below (a ring slot, the present queue's return of this texture) are native waits too, see sleep_until_ns
     pace_ns += mtl_snap_acquire_wait();   // ring capacity is waited for at acquire, where the game does not hold its present lock
     g_acq_wait_ns += wait; trow(g_frame, "@late_ms", wait ? (now_ns() - at) / 1e6 : 0);
     // The previous present of this texture has not yet been processed by the present thread (display cannot keep up, a whole swapchain round behind): wait for it to be returned, then hand it to the game to draw
     uint64_t tk = *idx < 4 ? o->ticket[*idx] : 0;
     if (tk) { uint64_t w0 = now_ns(); mtl_present_wait(tk); g_pq_wait_ns += now_ns() - w0; }
+    if (dm_thread_native_wait) dm_thread_native_wait(0);   // PEANUTS
     if (s) { ((sync_t *)s)->fenced = 2; ((sync_t *)s)->fence = mtl_acquire_fence(*idx < 4 ? o->pfence[*idx] : 0); }   // The swapchain texture becomes available once the graphics layer says (mtl_acquire_fence) (fenced 2: an acquire sync, for the wait ledger)
     if (!g_fs_start) { g_fs_start = now_ns(); g_fs_wait = pace_ns; }   // the frame starts when the first acquire after a present returns: on a display-link tick when on time
     return NVN_WINDOW_ACQUIRE_TEXTURE_RESULT_SUCCESS;
@@ -2107,7 +2110,12 @@ static void rt_comp_tick(uint64_t period_ns) {
 static void sleep_until_ns(uint64_t dl) {   // absolute time on the monotonic clock
     static plat_timebase_t tb; if (!tb.denom) plat_timebase(&tb);
     uint64_t now = now_ns(); if (dl <= now) return;
+    // PEANUTS: a pacing sleep is a native wait of the game's thread (hle_thread.c dm_thread_native_wait), as an HLE's condition wait is: the thread cannot come back to
+    // game code from it while a stop of all threads holds (dm_guest_stop_all), so the stop need not wait the sleep out. Unbracketed, a 30 fps game's 33 ms pacing sleep
+    // outlasted the stop's 25 ms bound every time the companion wrote with the game stopped
+    if (dm_thread_native_wait) dm_thread_native_wait(1);
     plat_wait_until(plat_abs_time() + (dl - now) * tb.denom / tb.numer);
+    if (dm_thread_native_wait) dm_thread_native_wait(0);   // PEANUTS
 }
 // Present is fixed at 60 Hz: the adaptive mechanism stepped down at frame 60 in 24/24 real-device logs and never came back up, so for this phase 60 fps is the hard floor.
 // DM_PRESENT_HZ=0 (uncapped frame rate) serves only as an explicit performance profiling switch: some of the game's UI logic counts frames (with the same save, uncapped gives

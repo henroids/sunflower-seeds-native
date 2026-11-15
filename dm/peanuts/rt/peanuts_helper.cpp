@@ -17,6 +17,22 @@
 // A patch of an instruction this host's rewriter changed or moved is refused, as a cheat's is: the bytes there are not the ones that
 // run. Without the rewriter's list of what it changed (a pack made before main.orig.bin) nothing is installed.
 //
+// What the plan enters of main is checked too (CheckMainTargets): every address in main's code that the helper or a patch branches
+// to, or takes (a function it may call through a pointer). The rewriter leaves most of them as the file has them. One it changed in
+// place still does its job there: a rewrite site's own word is a branch to a stub that runs the instruction and comes back, and the
+// first word of a sequence it moved is the branch to the copy. The middle of a moved sequence is different: those words no longer
+// run, the copy does, and code entered there runs instructions the rewriter meant to replace (an exclusive pair without its
+// stand-in for x18). The rewriter's own check of branches between modules draws the same line (dm/tools/patch_nso.py, "the middle
+// of a window or retry block"). The moved sequences are the "W" lines of the pack's main.sites.tsv (PnRtCode::sites_tsv); a retry
+// block (an out-of-line loop back onto a window's store) is in no table of the pack and is not known here.
+//
+// The patches are written only with the game's threads stopped (PnRtGuest), and not while a thread may be executing inside a patch
+// of more than one instruction or return into it: such a thread would run the old start of a sequence and the new end of it. The
+// host looks at each stopped thread's pc, registers and stack for that (PnRtGuest::stopped_in). Eden has no such case, its loader
+// patches main before the game runs. When the threads cannot be stopped so, after a number of tries over about two seconds, the
+// plan is refused: nothing is written to main, the package runs without its helper and mailbox, and the log says so. It is never
+// written beside the running game.
+//
 // x18. Horizon leaves x18 to the program, and a helper built for it uses the register as a scratch between calls. On Android x18 is
 // the platform's shadow call stack pointer: Bionic pushes return addresses through it, also in a signal handler that interrupts the
 // helper. The rewritten game keeps its x18 in the thread slot K18 and never touches the register; the helper gets the same treatment.
@@ -30,8 +46,10 @@
 #include <cerrno>
 #include <cstring>
 #include <span>
+#include <cstdlib>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -529,6 +547,75 @@ Result InstallChecked(Core::System& system, const PnRtConfig& config, const std:
 
 } // namespace
 
+/// The moved sequences of main from the rewriter's site table: the lines "<lo>\tW\t<hi>" as {lo, hi} offsets. False when the
+/// file cannot be read.
+bool ReadMovedSequences(const char* sites_tsv, std::vector<std::pair<u64, u64>>& out) {
+    out.clear();
+    std::ifstream f{sites_tsv ? sites_tsv : ""};
+    if (!sites_tsv || !f) {
+        return false;
+    }
+    for (std::string line; std::getline(f, line);) {
+        const size_t a = line.find('\t');
+        if (a == std::string::npos || line.compare(a, 3, "\tW\t") != 0) {
+            continue;
+        }
+        char* end{};
+        const u64 lo = std::strtoull(line.c_str(), &end, 16);
+        const u64 hi = std::strtoull(line.c_str() + a + 3, nullptr, 16);
+        if (end != line.c_str() && hi > lo) {
+            out.emplace_back(lo, hi);
+        }
+    }
+    return true;
+}
+
+/// The addresses of main's code that `relocs` branch to or take (see the top of this file). Empty when all may be entered, else
+/// the refusal. `moved` and `have_moved` are ReadMovedSequences' result; `seen` keeps what was already looked at (an adrp and its
+/// add name one address); `checked` counts the addresses looked at. Not in the anonymous namespace: rt/test/gaps_test.cpp calls
+/// the two functions.
+std::string CheckMainTargets(const PnRtConfig& config, const std::vector<Core::Mods::ModLoadPlan::Relocation>& relocs,
+                             const std::vector<std::pair<u64, u64>>& moved, bool have_moved, std::vector<u64>& seen, u32& checked) {
+    using Kind = Core::Mods::ModLoadPlan::RelocationKind;
+    using Target = Core::Mods::ModLoadPlan::RelocationTarget;
+    for (const auto& r : relocs) {
+        if (r.target != Target::Main || r.addend < 0) {
+            continue;
+        }
+        const u64 off = static_cast<u64>(r.addend);
+        if (off >= config.helper.text_end) {
+            if (r.kind == Kind::AArch64Branch26) { // a branch is an entry wherever it goes
+                return fmt::format("the load plan calls main+{:#x}, which is past the end of main's code (+{:#x}): not something to run", off,
+                                   config.helper.text_end);
+            }
+            continue; // main's data: read or written, never entered
+        }
+        if (std::find(seen.begin(), seen.end(), off) != seen.end()) {
+            continue;
+        }
+        seen.push_back(off);
+        ++checked;
+        if (config.helper.code_rewritten(config.helper.user, config.main_base + (off & ~u64{3}), 4) == 0) {
+            continue; // as the file has it
+        }
+        const char* const does = r.kind == Kind::AArch64Branch26 ? "calls" : "takes the address of";
+        if (!have_moved) {
+            return fmt::format("the load plan {} main+{:#x}, which this host's rewriter changed or moved (the pack's list of moved sequences, "
+                               "main.sites.tsv, is missing: build the game again)",
+                               does, off);
+        }
+        for (const auto& [lo, hi] : moved) {
+            if (off > lo && off < hi) {
+                return fmt::format("the load plan {} main+{:#x}, which this host's rewriter changed or moved (inside the sequence "
+                                   "main+{:#x}..{:#x}, which runs from a copy elsewhere)",
+                                   does, off, lo, hi);
+            }
+        }
+        // changed in place: a rewrite site's own word, or the first word of a moved sequence. What stands there does the job
+    }
+    return {};
+}
+
 /// Nothing a package's files hold may end the game: an exception from the readers below is a refused plan.
 Result Install(Core::System& system, const PnRtConfig& config, const std::array<u8, 0x20>& build_id) {
     try {
@@ -666,6 +753,23 @@ Result InstallChecked(Core::System& system, const PnRtConfig& config, const std:
         }
         staged.push_back(std::move(bytes));
     }
+    // What the plan enters of main, before anything is written
+    u32 targets_checked = 0;
+    {
+        std::vector<std::pair<u64, u64>> moved_sequences;
+        const bool have_moved = ReadMovedSequences(config.helper.sites_tsv, moved_sequences);
+        std::vector<u64> seen;
+        for (const auto& w : plan.Writes()) {
+            if (auto why = CheckMainTargets(config, w.relocations, moved_sequences, have_moved, seen, targets_checked); !why.empty()) {
+                return fail(std::move(why));
+            }
+        }
+        if (guest) {
+            if (auto why = CheckMainTargets(config, guest->relocations, moved_sequences, have_moved, seen, targets_checked); !why.empty()) {
+                return fail(std::move(why));
+            }
+        }
+    }
     int moved = 0;
     if (code_size) {
         auto bytes = guest->bytes;
@@ -729,25 +833,80 @@ Result InstallChecked(Core::System& system, const PnRtConfig& config, const std:
         (into ? late : order).push_back(i);
     }
     order.insert(order.end(), late.begin(), late.end());
-    for (const size_t i : order) {
-        const auto& w = plan.Writes()[i];
-        const u64 at = base + w.offset, n = staged[i].size(), pg = at & ~(ps - 1), len = ((at + n + ps - 1) & ~(ps - 1)) - pg;
-        if (mprotect(reinterpret_cast<void*>(pg), len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
-            out.error = fmt::format("main+{:#x} cannot be patched ({}): the helper is not installed", w.offset, std::strerror(errno));
-            return out;
+    // The error (errno) of the patch that could not be written, 0 when all are. Called with the game's threads stopped when the
+    // host can: system calls and stores only, nothing that allocates or logs
+    u64 failed_offset = 0;
+    const auto write_patches = [&]() -> int {
+        for (const size_t i : order) {
+            const auto& w = plan.Writes()[i];
+            const u64 at = base + w.offset, n = staged[i].size(), pg = at & ~(ps - 1), len = ((at + n + ps - 1) & ~(ps - 1)) - pg;
+            if (mprotect(reinterpret_cast<void*>(pg), len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+                failed_offset = w.offset;
+                return errno ? errno : EIO;
+            }
+            for (u64 k = 0; k < n; k += 4) {
+                u32 word{};
+                std::memcpy(&word, staged[i].data() + k, 4);
+                __atomic_store_n(reinterpret_cast<u32*>(at + k), word, __ATOMIC_RELEASE);
+            }
+            mprotect(reinterpret_cast<void*>(pg), len, PROT_READ | PROT_EXEC);
+            __builtin___clear_cache(reinterpret_cast<char*>(at), reinterpret_cast<char*>(at + n));
         }
-        for (u64 k = 0; k < n; k += 4) {
-            u32 word{};
-            std::memcpy(&word, staged[i].data() + k, 4);
-            __atomic_store_n(reinterpret_cast<u32*>(at + k), word, __ATOMIC_RELEASE);
+        return 0;
+    };
+    // Stopped, and no thread in or coming back into a patch of several instructions past its first: up to 40 tries, 30 ms apart
+    // (a thread found inside moves on once it runs again; the game stands still only during a try, 25 ms at most). Not so within
+    // those tries, or a host that cannot stop the threads or cannot look at them: refused, nothing written
+    if (config.guest.stop == nullptr || config.guest.resume == nullptr || config.guest.stopped_in == nullptr) {
+        out.error = "this host cannot stop the game's threads and look at where they stand, so main cannot be patched safely: the load plan is not "
+                    "installed (the package runs without its helper)";
+        return out;
+    }
+    int write_error = 0, timed_out = 0, found_inside = 0;
+    bool written = false;
+    constexpr int Tries = 40;
+    for (int attempt = 0; attempt < Tries && !written; ++attempt) {
+        if (attempt != 0) {
+            usleep(30000);
         }
-        mprotect(reinterpret_cast<void*>(pg), len, PROT_READ | PROT_EXEC);
-        __builtin___clear_cache(reinterpret_cast<char*>(at), reinterpret_cast<char*>(at + n));
+        if (config.guest.stop(config.guest.user, 25) <= 0) {
+            ++timed_out;
+            continue;
+        }
+        bool inside = false;
+        for (size_t i = 0; i < staged.size() && !inside; ++i) {
+            const u64 at = base + plan.Writes()[i].offset, n = staged[i].size();
+            inside = n > 4 && config.guest.stopped_in(config.guest.user, at + 4, at + n) != 0;
+        }
+        if (!inside) {
+            write_error = write_patches();
+            written = true;
+        } else {
+            ++found_inside;
+        }
+        config.guest.resume(config.guest.user);
+    }
+    const char* const how = "with the game's threads stopped";
+    if (!written) {
+        out.error = fmt::format("main could not be patched with the game's threads stopped ({} tries: {} times they did not all stop, {} times a "
+                                "thread stood inside a patched sequence or was to return into it): the load plan is not installed, nothing was "
+                                "written to main (the package runs without its helper)",
+                                Tries, timed_out, found_inside);
+        return out;
+    }
+    if (write_error != 0) {
+        out.error = fmt::format("main+{:#x} cannot be patched ({}): the helper is not installed", failed_offset, std::strerror(write_error));
+        return out;
     }
     system.SetDualScreenGuestMailbox(mailbox, plan.MailboxSize(), plan.MailboxEpochOffset() ? epoch : 0);
     out.installed = true;
-    LOG_INFO(Core, "peanuts_rt: load plan installed: mailbox {:#x}+{:#x}, helper code {:#x}+{:#x} ({} x18 instruction(s) moved to stubs), {} patch(es) of main",
-             mailbox, plan.MailboxSize(), code, code_len, moved, staged.size());
+    if (const auto at = plan.MailboxEpochOffset()) {
+        out.epoch_address = mailbox + *at;
+        out.epoch = epoch;
+    }
+    LOG_INFO(Core, "peanuts_rt: load plan installed: mailbox {:#x}+{:#x}, helper code {:#x}+{:#x} ({} x18 instruction(s) moved to stubs), {} patch(es) of main "
+                   "written {}; {} address(es) of main's code the plan enters checked against the rewriter's lists",
+             mailbox, plan.MailboxSize(), code, code_len, moved, staged.size(), how, targets_checked);
     return out;
 }
 

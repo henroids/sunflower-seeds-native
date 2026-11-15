@@ -29,7 +29,7 @@
 #include <format>
 #include "common/stb.h"
 
-#include <chrono>
+#include <chrono> // PNRT: the map raster's timing counters (snapshot log line)
 #include <cstdlib>
 #include "common/logging.h"
 #include "core/core.h"
@@ -520,7 +520,7 @@ bool ModRuntime::RoomExplored(const std::string& area, const std::array<float, 4
 void ModRuntime::MaskUnvisited(std::vector<u32>& pixels, const std::string& area, int width,
                                int height, const std::vector<u8>* border_weight,
                                const std::vector<u8>* solid_color, MapFadeEndpoint endpoint,
-                               const std::array<int, 4>* rect) const {
+                               const std::array<int, 4>* rect) const { // PNRT: see mod_runtime.h
     // The caller must already hold map_state_mutex -- today that is always GetImage's "map:"
     // span, which locks for its whole duration (see map_state_mutex's declaration comment for
     // why). Not re-locked here: this is real per-pixel work, and the only call site already holds
@@ -671,6 +671,9 @@ void ModRuntime::MaskUnvisited(std::vector<u32>& pixels, const std::string& area
     const u8* const scp = (solid_color != nullptr && solid_color->size() == pixels.size())
                               ? solid_color->data()
                               : nullptr;
+    // PNRT: with `rect` the pass covers only that pixel box (the incremental composite in
+    // GetImage's "map:" span recomputes just the cells that changed); null = the whole image,
+    // as the original loops did.
     const int ry0 = rect != nullptr ? std::clamp((*rect)[1], 0, height) : 0;
     const int ry1 = rect != nullptr ? std::clamp((*rect)[3], 0, height) : height;
     const int rx0 = rect != nullptr ? std::clamp((*rect)[0], 0, width) : 0;
@@ -679,7 +682,7 @@ void ModRuntime::MaskUnvisited(std::vector<u32>& pixels, const std::string& area
         const size_t crow =
             static_cast<size_t>(tables.row_of_py[static_cast<size_t>(py)]) * VisitedGrid::Cols;
         const size_t rowbase = static_cast<size_t>(py) * width;
-        for (int px = rx0; px < rx1; ++px) {
+        for (int px = rx0; px < rx1; ++px) { // PNRT: the box's columns
             const size_t ci = crow + tables.col_of_px[static_cast<size_t>(px)];
             const u8 c = grid.cells[ci];
             u32& pix = pixels[rowbase + px];
@@ -800,10 +803,14 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         std::string mk = "map:" + src.substr(6);
         if (endpoint == MapFadeEndpoint::Animated) {
             // PNRT: the pulse built with the area's newest composite. Re-stamping here landed on a
-            // later fade step than the map lookup just made and rebuilt the whole map again.
+            // later fade step than the map lookup just made and rebuilt the whole map again. The
+            // memo is kept per area name; its size_key ("<area>@<w>x<h>") says which size it holds.
             std::scoped_lock memo_lk{map_state_mutex};
-            if (const auto mit = map_composite_memo.find(src.substr(6));
+            const auto pulse_at = src.find('@', 6);
+            if (const auto mit = map_composite_memo.find(
+                    src.substr(6, pulse_at == std::string::npos ? pulse_at : pulse_at - 6));
                 mit != map_composite_memo.end() && mit->second.size_key == src.substr(6)) {
+                map_pulse_memo_hits.fetch_add(1, std::memory_order_relaxed);
                 return mit->second.pulse_key.empty() ? nullptr
                                                      : CacheFindImage(mit->second.pulse_key);
             }
@@ -945,7 +952,7 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         // stay valid even if something erases/rehashes image_cache meanwhile.
         std::shared_ptr<const Image> base = CacheFindImage(base_key);
         if (!base) {
-            const auto base_started = std::chrono::steady_clock::now();
+            const auto base_started = std::chrono::steady_clock::now(); // PNRT: timed, see below
             static thread_local RuntimeStageStats base_stats;
             const RuntimeStageTimer base_timer{base_stats, "map-base-rebuild"};
             // Keep only the current silhouette's active/inactive zone variants for this raster.
@@ -1124,6 +1131,9 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                     }
                 }
             }
+            // PNRT: how long this base raster took and how many were made, for the snapshot log
+            // line (mod_runtime.cpp); the log line below gains the milliseconds. A handheld's CPU
+            // raster is slow enough that the numbers are needed to tell a slow map from a stuck one.
             map_base_last_ms.store(
                 static_cast<u32>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                      std::chrono::steady_clock::now() - base_started)
@@ -1337,11 +1347,13 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
             }
             prefog = CachePutImage(prefog_key, std::move(pf));
         }
-        // FOG (cheap, per reveal state): copy the pre-fog image and mask it.
-        const auto composite_started = std::chrono::steady_clock::now();
+        // FOG (cheap, per reveal/fade state): copy the pre-fog image and mask + fade it.
+        const auto composite_started = std::chrono::steady_clock::now(); // PNRT: timed, see the end
         Image image;
         image.w = static_cast<u32>(width);
         image.h = static_cast<u32>(height);
+        // PNRT: the copy of the pre-fog pixels that stood here is made further down, and only
+        // when the build is not incremental (`if (!incremental)`).
         const auto bwl = map_border.find(border_key);
         const auto swl = map_water_solid.find(prefog_key);
         // PNRT: a reveal-only change rebuilds just the pixels of the cells that changed, on a copy
@@ -1440,10 +1452,10 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         if (!incremental) {
             image.pixels = prefog->pixels; // copy before any cache mutation below
         }
-        MaskUnvisited(image.pixels, area_name, width, height, // fog mask
+        MaskUnvisited(image.pixels, area_name, width, height, // fog mask + reveal/colour fade
                       bwl != map_border.end() ? &bwl->second.weight : nullptr,
                       swl != map_water_solid.end() ? &swl->second : nullptr, endpoint,
-                      incremental ? &rect : nullptr);
+                      incremental ? &rect : nullptr); // PNRT: only the changed box
         // Breakable tiles are alpha-1 items in the game's colour layer: the compositing shader
         // forces visited = visible for them, so a tile in a merely seen cell keeps its full
         // weapon colour. Re-stamp them over the fogged image wherever the cell is visible.
@@ -1476,11 +1488,13 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                         const int px0 = qcol(wx0), px1 = qcol(wx0 + tile_size);
                         const int py0 = qrow(wy0 + tile_size), py1 = qrow(wy0);
                         const u32 col = t.color != 0 ? t.color : manifest.map_style.wall_color;
+                        // PNRT: clipped to `rect` (the whole image when the build is not
+                        // incremental), so only the tiles inside the changed box are re-stamped.
                         for (int py = std::max(rect[1], py0); py <= std::min(rect[3] - 1, py1);
                              ++py) {
                             const int r = tables.row_of_py[static_cast<size_t>(py)];
                             for (int px = std::max(rect[0], px0); px <= std::min(rect[2] - 1, px1);
-                                 ++px) {
+                                 ++px) { // PNRT: clipped to `rect`, as the rows
                                 const size_t i = static_cast<size_t>(py) * width + px;
                                 const int c = tables.col_of_px[static_cast<size_t>(px)];
                                 if (c < 0 || c >= VisitedGrid::Cols || r < 0 ||
@@ -1534,9 +1548,9 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                 // magnet line shows only in a revealed cell and takes that cell's intensity
                 // (0.4x seen, 1.0x walked -- main+0xE95194); nothing spills into unexplored cells.
                 const auto& mp = magnet->pixels;
-                for (int y = rect[1]; y < rect[3]; ++y) {
+                for (int y = rect[1]; y < rect[3]; ++y) { // PNRT: only the changed box (all, if not incremental)
                     const int r = tables.row_of_py[static_cast<size_t>(y)];
-                    for (int x = rect[0]; x < rect[2]; ++x) {
+                    for (int x = rect[0]; x < rect[2]; ++x) { // PNRT: as the rows
                         const size_t i = static_cast<size_t>(y) * width + x;
                         if ((mp[i] & 0xFF000000u) == 0) {
                             continue;
@@ -1560,7 +1574,7 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
         // revealed item, as the composite's own pixels in white -- the map widget draws it over
         // the map at a slow blink, like the minimap's pulse for rooms with items left. Cached as
         // "pulse:<same key>" beside the composite and rebuilt with it (a pickup bumps wall_gen).
-        std::string built_pulse_key;
+        std::string built_pulse_key; // PNRT: the pulse image built with this composite, for the memo
         if (endpoint != MapFadeEndpoint::Previous) {
             const std::string pprefix = std::format("pulse:{}@{}x{}#", area_name, width, height);
             CacheEraseImagesIf([&](const std::string& key) {
@@ -1684,7 +1698,7 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                 }
             }
             if (any) {
-                built_pulse_key = "pulse:" + src.substr(4);
+                built_pulse_key = "pulse:" + src.substr(4); // PNRT: kept for the memo below
                 CachePutImage(built_pulse_key, std::move(pulse));
             }
         }
@@ -1718,7 +1732,7 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                                          RasterizeMapOverview(area->second, manifest.map_style,
                                                               width, height, overview_colors));
             }
-            CompositeMapOverview(image, *overview, incremental ? &rect : nullptr);
+            CompositeMapOverview(image, *overview, incremental ? &rect : nullptr); // PNRT: only the changed box
         }
         // Keep only the newest composite per area+size (never evicts the base/pre-fog).
         const std::string prefix = std::format("map:{}@{}x{}#", area_name, width, height);
@@ -1735,6 +1749,8 @@ std::shared_ptr<const Image> ModRuntime::GetImage(const std::string& src_in,
                 endpoint == MapFadeEndpoint::Animated ? !endpoint_key : endpoint_key;
             return candidate && same_family && key != src && key != sibling;
         });
+        // PNRT: the finished composite is remembered with what it was built from (the memo the
+        // incremental build above starts from), and counted and timed for the snapshot log line.
         const auto built = CachePutImage(src, std::move(image));
         if (endpoint == MapFadeEndpoint::Animated) {
             if (const auto vit = map_visited.find(area_name); vit != map_visited.end()) {
@@ -1941,16 +1957,11 @@ ModRuntime::MapStamp ModRuntime::StampFor(const std::string& area) const {
     std::scoped_lock lk{map_state_mutex};
     // Everything a rasterised area image depends on. The fade term steps at ~15 Hz only while a
     // reveal is fading, so the colour transition animates and then the stamp settles.
-    // PNRT: no fade term. A rebuilt composite is a full-size raster on the CPU (hundreds of ms on a
-    // handheld); stepping the key at ~15 Hz through a reveal's fade window rebuilt it for every step
-    // (and again for the pulse companion, whose own lookup landed on the next step), so a reveal
-    // took seconds to show and the page held the map lock for most of them. A reveal now shows at
-    // once, in one (incremental) build.
     u64 fade = 0;
     if (const auto it = map_visited.find(area);
         it != map_visited.end() && tick_count - it->second.last_reveal_tick <
                                        std::max<u64>(1, manifest.map_style.fade_ticks)) {
-        fade = tick_count; // PNRT: one step per tick; each step is an incremental build
+        fade = tick_count / 4;
     }
     return {VisitedGen(area), water_gen, fade, wall_gen, zone_gen};
 }

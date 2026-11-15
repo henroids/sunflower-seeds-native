@@ -603,7 +603,7 @@ Three faults of the PC tools, found in review:
    paths that do not exist (`FileNotFoundError`). `path_list` takes an argument that names something there whole (what `pack_android.py` and the phone's split
    pass: one path each, so the app needs no change), parts at the ASCII unit separator when the argument has one, and only otherwise at `,`.
    `scripts/build_ipa_from_nsp.py` (the Mac's script, not used by this fork's builder) still joins its lists with `,`.
-2. A split that read no shader made a pack with an empty shader library (Farming Simulator's provisional profile: its map has no rows, so nothing was
+2. A split that read no shader made a pack with an empty shader library (a first-draft profile of Farming Simulator, since removed: its map had no rows, so nothing was
    "lacking"). `split_shaders` now stops unless the profile says the game has no NVN shaders (`no_nvn_shaders`: "no NVN shaders" in its `shader_note`, or a
    `vk_capture.tsv` / `gl_capture.tsv`; the six profiles of Vulkan and OpenGL games with an empty map all do), and `pack_shaders` asks the same of a profile
    whose map has no rows before it takes a shader package or a library an earlier run left (`require_shaders`). The phone's build is not changed.
@@ -620,5 +620,105 @@ Three faults of the PC tools, found in review:
 
 Peanuts-owned: `peanuts/scripts/peanuts_build.py` (a `DM_OODLE_OOZ` written with `~` is expanded for the tools), `dm/gfx/tools/ue_ondevice.py` (an unused
 import). Checked on a PC against two real games: Yoru, Tomosu's `.nup` reached through a path with a comma, brackets and Japanese letters splits to 35 of its
-profile's 35 shader keys, and Farming Simulator's stops with the new message. No shader-chain file is changed. Upstream candidate: `path_list` and the
+profile's 35 shader keys, and Farming Simulator's draft profile (since removed) stopped with the new message. No shader-chain file is changed. Upstream candidate: `path_list` and the
 empty split, yes.
+
+### Round 10, runtime 25 (2026-11-16)
+
+The companion runtime under `dm/peanuts/rt` is now a lift of Eden Duo v1.4.0 (`DualScreenRuntimeVersion = 25`; it was v1.3.5.1, runtime 24). No upstream file
+is touched: everything here is Peanuts-owned or lifted from Eden Duo, and the lifted files keep the rule of `dm/peanuts/rt/PORT.md`, byte-identical to Eden Duo's
+except inside hunks marked `PNRT`.
+
+| File | Change |
+|---|---|
+| `dm/peanuts/rt/mods/` (14 files) | replaced by v1.4.0's, byte for byte: `mod_actions.cpp`, `mod_host_values.{cpp,h}`, `mod_input.cpp`, `mod_load_plan.cpp`, `mod_map_view_rect.h`, `mod_types.h`, `mod_types_action.h`, `mod_types_page.h`, `mod_ui.cpp`, `mod_ui.h`, `mod_ui_internal.h`, `mod_ui_map_widget.cpp`, `mod_view_default.h` |
+| `dm/peanuts/rt/mods/` (6 files) | three-way merged, the `PNRT` hunks kept as they were: `mod_assets.cpp`, `mod_manifest.cpp`, `mod_module_host.cpp`, `mod_redraw.cpp`, `mod_runtime.cpp`, `mod_runtime.h` |
+| `dm/peanuts/rt/mods/mod_launch_gate.{h,cpp}` (new) | lifted with v1.4.0 (`mod_load_plan.cpp` includes it); nothing here sets the gate |
+| `dm/peanuts/rt/mods/mod_map.cpp`, `map_overview.h`, `mod_runtime.h`, `mod_redraw.cpp`, `mod_runtime.cpp`, `mod_module_host.cpp` | the 29 hunks of the map work of 2026-11-14 that had no mark carry one now (comments only; `PEANUTS` in `mod_module_host.cpp` became `PNRT`) |
+| `dm/peanuts/rt/shim/video_core/dsmod/aux_routing.h` | v1.4.0's header with the same `UiSink` hunks |
+| `dm/peanuts/rt/shim/core/frontend/framebuffer_layout.h` (new) | stand-in for the one layout function the new `aux_routing.h` names |
+| `dm/peanuts/rt/CMakeLists.txt` | `mods/mod_launch_gate.cpp` in the lifted list |
+| `dm/peanuts/rt/test/check_pnrt_marks.py` (new) | fails when a lifted file differs from a given Eden Duo tree outside a `PNRT`-marked hunk |
+| `dm/peanuts/rt/test/rt_test.cpp` | the version gate (a package asking 25 is accepted, 26 refused), a map probe (fade steps, incremental composites, the pulse memo), `--panel <w>x<h>` for the module run |
+| `dm/peanuts/rt/test/aux_sink_test.cpp` (new) | a partial publish reaches the host's sink as its own rectangle |
+| `dm/peanuts/rt/mods/` (the `PNRT` hunks) | with the host's tick at 60 Hz the 30 Hz corrections are gone (halved `fade_ticks`, publish on every tick, a fade step on every tick) and the map lock is never waited for on the tick thread; the pulse image's memo lookup uses the area's name; the memo is cleared with the other map caches; the sink gets the rectangle of each partial publish |
+| `android/app/src/main/java/dev/peanuts/Installer.java` | `RUNTIME_VERSION` 24 to 25 |
+| `dm/peanuts/rt/PORT.md` | the present state, the hunk table, what runtime 25 needs of the host, how to take the next runtime |
+
+What a package gains: the two published packages that ask for runtime 25 (My Time at Sandrock, Resident Evil 4) are accepted instead of getting the
+update-required page, and runtime 25's fixes that also serve older packages come with it (a module's font decode no longer waits on the module loader, map
+overlays keep their last picture). What stays as it was: this host has no one-screen mode and no Mode "Off", so `@screen.mode` always reads "physical" and the
+launch gate is never set; the second screen's size a package reads is the fixed size the host passes at the runtime's start. Checked on a PC: the marker check
+passes against the v1.4.0 tree (97 files, 57 hunks, all marked); `rt_test` draws the same pictures as before for Link's Awakening and Echoes of Wisdom 1.0.2 and
+loads both runtime-25 packages; the runtime's C++ files pass the NDK compiler's syntax check with the build's flags. No APK was built and nothing was run on a
+device. No shader-chain file is changed. Upstream candidate: no (upstream has no companion runtime).
+
+### Round 11, the companion runtime's host services (2026-11-16)
+
+The services the companion runtime's shims answered "unavailable": texture readback (the runtime's module extension of runtime 24), `sysfont:`, `aoc:`, the
+battery behind `@device.*`, the frame totals behind `@perf.*`, and a manifest's `patches`.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_readback.h`, `vka_readback.inc` (new) | whole files | texture readback on the replay: the contract and pure rules (the header, plain C), and the work (the `.inc`, included by `vka_tex.c` because the picker walks its private live list) | `// PEANUTS:` at the top of each |
+| `dm/gfx/vk_android/vka.h` | 2 | `vka_img` gets its readback notes (`rb_gen`, `rb_fence` and the pair before, `rb_frame`, `rb_rt`, `rb_redrawn`, `rb_srgb`, `rb_holds`); the hooks' prototypes and flags | `// PEANUTS:` / `PEANUTS begin`..`end` |
+| `dm/gfx/vk_android/vka_tex.c` | 7 | two forward declarations; `vka_img_written_at` notes the write, its batch and a colour target's use, and `vka_tex_get` a new image's first use, both once a companion has asked for a texture; `img_storage_upgrade` and `vka_tex_id_storage_pending` no longer count a readback's hold as a reader of the image; the include of `vka_readback.inc` | `// PEANUTS:` |
+| `dm/gfx/vk_android/vka_draw.c` | 1 | a pass's colour target says so (and its view's format) to the write note that follows | `// PEANUTS:` |
+| `dm/gfx/vk_android/vka_exec.c` | 1 | a colour clear's target likewise | `// PEANUTS:` |
+| `dm/gfx/vk_android/vka_present.c` | 4 | the result of the wait for a frame slot's fence is kept; with it the present hands over the copies that rode on that fence, records queued ones in its command buffer and notes their fence, all behind one load of `vka_rb_on` | `// PEANUTS:` |
+| `android/host/CMakeLists.txt` | 1 | `dm/peanuts/peanuts_services.c` in `HOST_C` | `# PEANUTS:` |
+| `docs/env_switches.tsv` | 1 row | `DM_VK_READBACK_LOG` | `[PEANUTS]` |
+
+Peanuts-owned, no upstream file: `dm/peanuts/rt/shim/pnrt_services.h`, `shim_readback.cpp`, `shim_services.cpp` (the runtime's side), `dm/peanuts/rt/peanuts_patches.{h,cpp}`
+(manifest patches), `dm/peanuts/peanuts_services.{c,h}` (the host's side of battery, frame totals and add-on content, and the `Bridge.battery` entry; the header
+holds the parts that only compute), `dm/peanuts/rt/test/svc_test.cpp` and `vka_readback_test.c`, and the test targets of `dm/peanuts/rt/CMakeLists.txt`
+(`svc_test`, `gaps_test`, `vka_readback_test`, run by `ctest`).
+
+Texture readback. A module asks for one texture's level 0 as R8 or as four bytes a pixel, by the address of its storage or as the newest of a size, optionally only
+colour targets, only sRGB or linear ones, only ones drawn into in two frames. The request is only queued; the present thread picks the image under the texture cache's
+lock with the runtime's own rule, holds it, records one `vkCmdCopyImageToBuffer` into the present's command buffer (the method of `DM_VK_IMG_DUMP`'s diagnostic) and
+hands the bytes to a worker thread when the present has next waited for that submission's fence (three presents later; no fence is queried, since a status query
+blocks on the drivers `vka_dev.c` probes for). The present's command buffer is queued ahead of the batch still being recorded, so each image carries the fence of the
+batch that last wrote it: a copy reports the newest generation whose batch is on the queue, and an image made or first written in a batch not yet queued waits for
+the next present. A request no present takes within two seconds is answered as failed by the next request, so a paused game never leaves the two slots taken.
+Formats are the emulator's: plain 8-bit R8, RGBA8 and BGRA8, linear or sRGB, the stored bytes; nothing compressed, float, packed or multisampled. The limits are
+the runtime's (2048 a side, 16 MiB, two requests a second, two at once), so at most 32 MiB a second is copied. With no request queued the present pays one relaxed
+load and a branch; a GPU write's note, a new image's first use and a colour target's site pay one each, false until a companion's first request. A rescaled image
+(`DM_RES_SCALE`) is not read. A request's address is the texture's storage address in the game's memory: this host has no GPU address space.
+
+The smaller services. `sysfont:` serves the firmware fonts the importer wrote as `.ttf` (`DM_SHARED_FONT`, `DM_SHARED_FONT_EXT`, `cjk_*.ttf` beside the standard
+font) under the firmware's file names, in the stored form the lifted source decrypts; never a file of `DM_FONT_DIR`, none over 64 MiB. `aoc:` is the lowest index
+of `DM_AOC_DIR` (a folder, a `.nup` or a dump; when that index cannot be read, nothing). The battery is what the app pushes through `Bridge.battery`, else the
+kernel's power supply files. `@perf.fps` counts the replay's frames; `@perf.frametime_ms` is the GPU's busy time a frame (the emulator's is a frame's time without
+its waits). A manifest's patches are written with the game's threads stopped and no thread inside them, only where main holds the file's own instructions and what
+it held before the package's load plan was installed; a patch that cannot be written just now is tried again on later ticks; the pages keep their protection.
+
+The shims and stubs that call these functions are files of other work in progress; `dm/peanuts/rt/PORT.md` says what is true once their lines are in. Checked on a
+PC: `vka_readback_test` (the replay's `.inc` compiled against a stub Vulkan table: 53 checks over submit, record, the wait for a batch, hand-over, timeout and every
+failure), `svc_test` (135 checks: the lifted broker over a fake replay, the six firmware fonts byte for byte, add-on content, host values, patches, and the same
+through `Tegra::GPU`, `PerfStats`, `GetPowerStatus`, `OpenAocRomfs` and a package with patches loaded by `pn_rt_create`), My Time at Sandrock's package in `rt_test`
+with a fake texture source, its live-fog code against the broker, and the NDK compiler's syntax check of every new and changed file. No APK was built and nothing was
+run on a device. No shader-chain file is changed (`dmsh_chain.py` `FILES` and `vk_android_build.py` `VK_FILES` name none of the replay's files). Upstream candidate:
+no (upstream has no companion runtime).
+
+### Round 11, what the host owes the companion runtime (2026-11-16)
+
+The companion runtime (`dm/peanuts/rt`, fork-owned) asked the host for things it did not have: every game thread stopped around a write, a look at where
+the stopped threads stand, the controller's state and a gate over what the game reads of it, word of the game's pause and resume, a helper's code counted
+as game code, and the render thread's pacing waits counted as waits.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_thread.c` | 7 | `thr_t.world`, `thr_t.nat_sp` (set in `dm_thread_native_wait`); `dm_guest_code_range` and its use in the pause signal (a companion helper's pages beside main are game code: a thread in them was never stopped); `dm_guest_stop_all` / `dm_guest_resume_all` / `dm_guest_stopped_in`, built on the pause `SetThreadActivity` uses, with a bound, threads looked at again on every pass, the game's own pauses waited for and left alone; `SetThreadActivity`'s pause takes a thread over from a stop under way and sets `paused` from what holds now | `// PEANUTS begin`/`end`, `// PEANUTS:`, `// PEANUTS(upstream-candidate):` |
+| `dm/host/hle_hid.c` | 2 | `fill` hands each state through `dm_pad_gate` when one is set; `dm_pad_raw`, player 1's state before the gate, without taking a press latch | `// PEANUTS begin`/`end` |
+| `dm/host/dm_input.h` | 1 | the two declarations | `// PEANUTS begin`/`end` |
+| `dm/host/android/input_android.c` | 3 | `suspend_apply` calls the weak `peanuts_lifecycle` after the game is told to stop and before it runs again | `// PEANUTS:` |
+| `dm/gfx/nvn/hle_nvn.c` | 4 | `sleep_until_ns` and the two waits at the end of `nvnWindowAcquireTexture` are bracketed with `dm_thread_native_wait` (weak here): a stop of all threads no longer waits a pacing sleep out | `// PEANUTS:` |
+| `dm/host/tests/Makefile` | 1 | `peanuts-host` and its three programs, in `run` on Linux | `# PEANUTS begin`/`end` |
+| `dm/host/tests/t_peanuts_stopworld.c`, `t_peanuts_padgate.c`, `t_peanuts_host.c`, `t_peanuts_hid_stubs.c`, `stub_android/android/log.h` (new) | whole files | the stop with real threads (game code, host code, an SVC, a native wait, a helper's range, the game's own pause complete and under way, a thread started or exiting during a stop, two stoppers, return addresses on a stack, 300 stops in a row); the raw pad and the gate over `t_hid.c`'s stand-ins; `dm/peanuts/peanuts.c`'s thread, presence, pad reads and guarded reads | `PEANUTS` in the first line |
+
+`make GAME=<id> peanuts-host` in `dm/host/tests` builds and runs the three on a Linux PC, the host's files compiled as if for Android
+(`-D__ANDROID__=1 -D__aarch64__=1 -D_ASM_X86_SIGCONTEXT_H -include stdbool.h`). Not run on a device. No shader-chain file is changed: the hunks in
+`hle_nvn.c` are two calls around waits and feed nothing a shader key is made of.
+Upstream candidate: the `paused` line of `SetThreadActivity` yes (a stale flag after "paused inside an SVC, resumed before the SVC ended"); the rest no
+(upstream has no companion runtime).

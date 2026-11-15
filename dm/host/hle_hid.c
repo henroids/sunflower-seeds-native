@@ -489,9 +489,39 @@ static void fill(NpadState *s, uint32_t id, uint32_t style) {
     if (s->ry > STICK_THRESH) b |= 1u << 21;
     if (s->rx > STICK_THRESH) b |= 1u << 22;
     if (s->ry < -STICK_THRESH) b |= 1u << 23;
+    // PEANUTS begin: the companion's pad gate (dm_pad_gate, below fill): while the second screen has the controller's focus the game reads a neutral pad
+    { void (*gate)(int, uint64_t *, int32_t *) = atomic_load_explicit(&dm_pad_gate, memory_order_acquire);
+      if (gate) { int32_t g[4] = {s->lx, s->ly, s->rx, s->ry}; gate(id == NPAD_HANDHELD ? 8 : (int)id, &b, g); s->lx = g[0]; s->ly = g[1]; s->rx = g[2]; s->ry = g[3]; } }
+    // PEANUTS end
     s->buttons = b;
     s->attributes = ATTR_CONNECTED | (id == NPAD_HANDHELD ? ATTR_WIRED | ATTR_LEFT_CONN | ATTR_LEFT_WIRED | ATTR_RIGHT_CONN | ATTR_RIGHT_WIRED : ATTR_LEFT_CONN | ATTR_RIGHT_CONN);
 }
+// PEANUTS begin: the companion runtime and the pad (dm/peanuts). Two directions, as Eden Duo's controller focus mode has them:
+//   dm_pad_raw: what player 1 holds as fill composes it for the game (keyboard / touch / the companion's own presses, the controller and the controllers merged into player 1,
+//   the scripted path; buttons 0..15 and the sticks' direction bits 16..23), but before the gate, without taking a press latch and without counting a sample: the runtime reads
+//   it once a tick to move its focus and never costs the game a press. npad: the id player 1 is on now (Handheld 0x20 or No1 0), 0 buttons before the game set its styles;
+//   dm_pad_gate: when set, fill hands every state it is about to give the game through it: slot 0..7 = No1..No8, 8 = Handheld; buttons and the four axes in place.
+// The gate runs on the game's reading threads and must not block; the pointer is set once (an atomic store) and stays
+void (*_Atomic dm_pad_gate)(int slot, uint64_t *buttons, int32_t axes[4]);
+void dm_pad_raw(uint32_t *npad, uint64_t *buttons, int32_t axes[4]) {
+    uint32_t src = 1u | merged_players(); uint64_t b = atomic_load(&g_btn) | atomic_load(&g_sc_btn); int32_t a[4];
+    uint64_t k = atomic_load(&g_axes), c = atomic_load(&g_sc_axes);
+    for (int i = 0; i < 4; i++) a[i] = pick(ax(k, i), ax(c, i));
+    for (int p = 0; p < DM_PLAYERS; p++) if (src >> p & 1) { b |= atomic_load(&g_pad_btn[p]); uint64_t v = atomic_load(&g_pad_axes[p]); for (int i = 0; i < 4; i++) a[i] = pick(a[i], ax(v, i)); }
+    b &= 0xffffull;
+    if (a[0] < -STICK_THRESH) b |= 1u << 16;
+    if (a[1] > STICK_THRESH) b |= 1u << 17;
+    if (a[0] > STICK_THRESH) b |= 1u << 18;
+    if (a[1] < -STICK_THRESH) b |= 1u << 19;
+    if (a[2] < -STICK_THRESH) b |= 1u << 20;
+    if (a[3] > STICK_THRESH) b |= 1u << 21;
+    if (a[2] > STICK_THRESH) b |= 1u << 22;
+    if (a[3] < -STICK_THRESH) b |= 1u << 23;
+    if (npad) *npad = connected_id();
+    if (buttons) *buttons = styles_set() ? b : 0;
+    if (axes) for (int i = 0; i < 4; i++) axes[i] = styles_set() ? a[i] : 0;
+}
+// PEANUTS end
 // The cheat VM's key mask (hle_cheats.c "all keys of the mask held"): the OR of every player's controller buttons
 // (the keyboard / touch source's bits included) plus the eight stick-direction pseudo buttons of the merged axes —
 // one flat bitset, not exactly any one npad read (fill() publishes per-npad states with attributes, merges and

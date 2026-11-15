@@ -18,6 +18,12 @@ __attribute__((visibility("default"))) int nxhost_peanuts_frame(void *out_rgba, 
 // background, or its display was attached again), which holds no pixels yet and would stay black until the companion drew something new
 __attribute__((visibility("default"))) void nxhost_peanuts_frame_again(void);
 __attribute__((visibility("default"))) void nxhost_peanuts_touch(int id, float x, float y, int down);
+// The page view's size in pixels (the second screen's real panel area for the page): the runtime's "@screen.*" and its choice of a package's alternate canvas follow it,
+// and touches are in these pixels from the first call on (before it: page pixels, over 1240 x 1080)
+__attribute__((visibility("default"))) void nxhost_peanuts_panel(int w, int h);
+// The page's window is shown (1) or went away (0): the runtime's "second screen present". Without this call the host goes by the window's polls (a page that has not
+// asked for its size or a frame for 1.5 s is not shown); with it, hiding is at once, and a finger still down on the page is released then, not left held.
+__attribute__((visibility("default"))) void nxhost_peanuts_present(int shown);
 
 // Whether a companion is on second-screen duty for this run: 0 still deciding (no module loaded yet, or the runtime has not tried pn_rt_create), 1 a package
 // loaded (nxhost_peanuts_frame_size/frame now matter), 2 no companion package beside this title's pack, 3 a package was found but pn_rt_create refused it (see

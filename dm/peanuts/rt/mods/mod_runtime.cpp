@@ -72,19 +72,33 @@ ModRuntime::ModRuntime(System& system_, Manifest manifest_)
     // Runtime 21 @perf.*: the non-resetting PerfStats totals (GetAndResetStats belongs to the
     // frontends' overlays). PerfStats is created after this runtime (System::Load) and exists once
     // the game runs, which the first tick proves; a module's create() can ask earlier.
-    host_values.SetSource(HostValueSource{.perf = [this]() -> std::optional<PerfSample> {
-        if (tick_count == 0 || !system.IsPoweredOn()) {
-            return std::nullopt;
-        }
-        const auto totals = system.GetPerfStats().GetTotals();
-        return PerfSample{
-            .game_frames = totals.game_frames,
-            .system_frames = totals.system_frames,
-            .frametime_ns =
-                std::chrono::duration_cast<std::chrono::nanoseconds>(totals.frametime).count(),
-            .emulated_us = core_timing.GetGlobalTimeUs().count(),
-        };
-    }});
+    host_values.SetSource(HostValueSource{
+        .perf = [this]() -> std::optional<PerfSample> {
+            if (tick_count == 0 || !system.IsPoweredOn()) {
+                return std::nullopt;
+            }
+            const auto totals = system.GetPerfStats().GetTotals();
+            return PerfSample{
+                .game_frames = totals.game_frames,
+                .system_frames = totals.system_frames,
+                .frametime_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                    totals.frametime)
+                                    .count(),
+                .emulated_us = core_timing.GetGlobalTimeUs().count(),
+            };
+        },
+        // Runtime 25 @screen.*: the companion pane is the same AuxRouting width/height/
+        // inline_enabled PublishUi already reads every tick for touch (panel_w/panel_h); "mode"
+        // is Stage 1's own inline wish, the only such signal AuxRouting exposes.
+        .screen = [this]() -> ScreenPane {
+            const auto& aux = system.GPU().DSModAux();
+            return ScreenPane{
+                .width = aux.width.load(std::memory_order_relaxed),
+                .height = aux.height.load(std::memory_order_relaxed),
+                .simulated = aux.inline_enabled.load(std::memory_order_relaxed),
+            };
+        },
+    });
 }
 
 Kernel::KProcess* ModRuntime::OwnerProcess() const {
@@ -382,11 +396,12 @@ void ModRuntime::Initialize() {
         // the HUD overlay over a transparent map area and the screen would never show the map.
         // The flag is ignored here and the CPU raster path (what every other companion uses) runs.
         if (!env_off && (env_gc || manifest_gc)) {
+            // PNRT: the two stores that turned the composite path on are gone; the log says why.
             LOG_INFO(Core,
                      "DSMod: GPU composite requested (via {}) but this host has no compositor; "
                      "using the CPU raster path",
                      env_gc ? "env" : "manifest flag");
-        } else {
+        } else { // PNRT: said in the log either way, so a run always names its path
             LOG_INFO(Core, "DSMod: CPU raster path");
         }
     }
@@ -723,6 +738,15 @@ void ModRuntime::Tick() {
             snapshot.floats["@view_zoom:" + key] = view.zoom;
             snapshot.floats["@view_pan_x:" + key] = view.pan_x;
             snapshot.floats["@view_pan_y:" + key] = view.pan_y;
+            // Runtime 25 (rt25 addition): the gesture's live finger, same publication. Absent
+            // (no "@view_touch_x/y:" key) while no finger is down, like PanZoomViewHostValue;
+            // "@view_touch_down:" always answers so a page/module can tell "no finger" from
+            // "finger at 0,0".
+            snapshot.ints["@view_touch_down:" + key] = view.touch_down ? 1 : 0;
+            if (view.touch_down) {
+                snapshot.floats["@view_touch_x:" + key] = view.touch_x;
+                snapshot.floats["@view_touch_y:" + key] = view.touch_y;
+            }
         }
     }
 
@@ -811,15 +835,16 @@ void ModRuntime::Tick() {
             return it != snapshot.ints.end() ? it->second : s64{-1};
         };
         summary += std::format("[gates map_ready={} cutscene={} module_ready={} build_match={} "
-                               "map_lock_forced={} ui_frames={} map_base_rasters={} base_ms={} "
+                               "ui_frames={} map_base_rasters={} base_ms={} "
                                "map_composites={} incremental={} composite_ms={} "
-                               "publish_skipped={} fade_steps={}] ",
+                               "publish_skipped={} fade_steps={} pulse_memo_hits={}] ",
                                gate("map_ready"), gate("cutscene"), gate("module_ready"),
-                               gate("build_match"), map_lock_forced_waits,
+                               gate("build_match"),
                                system.GPU().DSModAux().UiSerial(), map_base_rasters.load(),
                                map_base_last_ms.load(), map_composites.load(),
                                map_composites_incremental.load(), map_last_composite_ms.load(),
-                               map_publish_skipped.load(), map_fade_steps.load());
+                               map_publish_skipped.load(), map_fade_steps.load(),
+                               map_pulse_memo_hits.load());
         LOG_INFO(Core, "DSMod snapshot: {}", summary);
     }
 

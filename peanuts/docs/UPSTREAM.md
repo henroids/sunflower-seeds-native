@@ -21,7 +21,7 @@ Three different upstreams feed this repo, and they don't overlap in what they ow
 | GPU driver list | `android/app/src/main/java/dev/nxnative/android/DriverFetch.java` (`REPOS[]`) | **Banana Native** (moceure) — a hand-picked list of *external* GitHub Turnip/Adreno driver repos, not vendored code | No nxnative or nx2android involvement; these are third-party driver projects Banana Native links to for download, under their own licences (`android/NOTICE.md`). Treat every entry as a trust decision, not metadata (see §2.4). |
 | Host (`dm/host/`) | emulation core | **nxnative**, with Banana Native's Android/Vulkan backend layered in | 255 `seedds` / 17 `moceure` / 6 `igawa6` commits on `dm/host`. |
 | App (`android/`) | launcher UI, `android/app/src/main/java/dev/nxnative/android/*` | **Banana Native** is the majority author; Peanuts (`dev.peanuts.*`) is a UI overlay on top of it, hooked in with `PEANUTS` markers at call sites in `MainActivity.java`, `GameActivity.java`, etc. `android/app/src/peanuts/` (the flavor source set: icons, strings, manifest fragment) is wholly Peanuts' own and does not exist upstream at all. | All Peanuts-owned files live under `android/app/src/main/java/dev/peanuts/` and `android/app/src/peanuts/`; the Banana Native files they call into carry `PEANUTS`-marked hunks. |
-| Companion runtime | `dm/peanuts/rt/` | **Eden Duo** (`~/eden/src/core/mods`), lifted wholesale, not nxnative/Banana Native at all | `dm/peanuts/rt/PORT.md`: the current lift is Eden Duo tag `v1.3.5.1`, `DualScreenRuntimeVersion = 24`. The lifted files keep their original names and are byte-identical to that tag's content except for a handful of `PNRT`-tagged hunks. |
+| Companion runtime | `dm/peanuts/rt/` | **Eden Duo** (`~/eden/src/core/mods`), lifted wholesale, not nxnative/Banana Native at all | `dm/peanuts/rt/PORT.md`: the current lift is Eden Duo tag `v1.4.0`, `DualScreenRuntimeVersion = 25`. The lifted files keep their original names and are byte-identical to that tag's content except for a handful of `PNRT`-tagged hunks. |
 
 ### Is nx2android a different format? Can we import from it?
 
@@ -243,7 +243,7 @@ describe --tags` essentially never equals the bare tag name once you're even one
 
 `peanuts/scripts/upstream/sync-rt.sh [--apply]`:
 
-1. Confirms the pinned tag (`v1.3.5.1` by default, override with `EDEN_DUO_TAG`) exists in
+1. Confirms the pinned tag (`v1.4.0` by default, override with `EDEN_DUO_TAG`) exists in
    `~/eden` and matches `dm/peanuts/rt/PORT.md`'s recorded lift.
 2. For each of the lifted files in `dm/peanuts/rt/mods/`, diffs our copy against `git -C ~/eden
    show <tag>:src/core/mods/<name>` and partitions into unchanged / safe straight copy /

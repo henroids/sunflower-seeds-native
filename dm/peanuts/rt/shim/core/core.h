@@ -22,6 +22,7 @@
 #include "hid_core/frontend/emulated_controller.h"
 #include "input_common/drivers/virtual_gamepad.h"
 #include "video_core/gpu.h"
+#include "peanuts_rt.h" // PNRT: PnShim::RunWithGuestStopped
 
 namespace Service::FileSystem {
 
@@ -89,11 +90,11 @@ public:
     [[nodiscard]] bool IsMulticore() const {
         return true;
     }
-    /// Eden pauses the guest's threads around `fn` (a module's atomic write batch). The host owns
-    /// the guest here; `fn` simply runs (the writes still go through PnRtMemory.write).
+    /// Eden pauses the guest's threads around `fn` (a module's atomic write batch). PNRT: the host
+    /// stops the game's real threads (PnRtGuest, shim.cpp); false, with `fn` not run, when it
+    /// cannot stop them now. The writes still go through PnRtMemory.write.
     bool RunWithGuestThreadsSuspended(const std::function<void()>& fn) {
-        fn();
-        return true;
+        return PnShim::RunWithGuestStopped(fn);
     }
     /// {address, size} of the guest mailbox installed by a load plan; {0,0} = none.
     /// PNRT: set by the host once it has applied the package's load plan (peanuts_helper.cpp).

@@ -47,10 +47,10 @@ import java.util.zip.ZipInputStream;
 public final class Installer {
     public interface Progress { void on(String what, long done, long total); }
 
-    /** dm/peanuts/rt/mods/mod_runtime.h:206 (DualScreenRuntimeVersion) - the runtime this app's native module host actually implements. No Java binding for the
+    /** dm/peanuts/rt/mods/mod_runtime.h (DualScreenRuntimeVersion) - the runtime this app's native module host actually implements. No Java binding for the
      * C++ constant exists (it would need new JNI surface, out of this file's scope), so this is kept in sync by hand; a mismatch would make a compatible package
      * look incompatible or vice versa, so check both still agree after any runtime bump. */
-    static final int RUNTIME_VERSION = 24;
+    static final int RUNTIME_VERSION = 25;
 
     private static final String VERSIONS_DIR = ".peanuts-versions";
     private static final Pattern SHA256_LINE = Pattern.compile("([0-9A-Fa-f]{64})");

@@ -25,6 +25,10 @@ uint64_t dm_cheats_keys(void);
 void dm_pad_set(uint64_t buttons, int32_t lx, int32_t ly, int32_t rx, int32_t ry);
 void dm_pad_set_player(int player, uint64_t buttons, int32_t lx, int32_t ly, int32_t rx, int32_t ry);   // player 0..DM_PLAYERS-1 (player 1..8)
 void dm_pad_players(uint32_t mask);   // bit p: player p + 1 has a controller; player 1 always counts as connected (the keyboard, the touch gamepad, DM_KEYS)
+// PEANUTS begin: the companion runtime's side of the pad (hle_hid.c, dm/peanuts): player 1's state before the gate, and the gate fill applies to what the game reads
+void dm_pad_raw(uint32_t *npad, uint64_t *buttons, int32_t axes[4]);
+extern void (*_Atomic dm_pad_gate)(int slot, uint64_t *buttons, int32_t axes[4]);
+// PEANUTS end
 // Live controller motion (hle_hid.c, motion_fusion.h): player 0..DM_PLAYERS-1's gyro and accelerometer as GameController reports them, acceleration in G (gravity direction,
 // (0, 0, -1) face up) and rotation rate in rad/s, in Apple's controller frame. While samples keep coming the player's six-axis sensor follows the controller; dm_motion_clear stops it
 void dm_motion_set(int player, const float acc[3], const float rot[3]);

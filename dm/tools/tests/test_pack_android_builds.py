@@ -198,7 +198,7 @@ class SplitAbsent(unittest.TestCase):
             self.assertIn('lack 1 of the 2', str(e.exception))
             self.assertEqual('DLC' in str(e.exception), dlc, (versions, ver))
 
-    # PEANUTS begin: a split that reads no shader is a failure, unless the profile says the game has no NVN shaders (Farming Simulator's provisional profile packed with an empty library)
+    # PEANUTS begin: a split that reads no shader is a failure, unless the profile says the game has no NVN shaders 
     def empty(self, note=None, capture=None, map_rows=()):
         g, split = self.union('v100')
         (g.dir / 'shader_map.tsv').write_text('# map\npackage\tindex\tstage\tdm_ctl_sha16\tsource\n' + ''.join(f'cs_x.bin\t0\tcompute\t{k}\tmain#BNSH@0x2\n' for k in map_rows))
@@ -226,7 +226,7 @@ class SplitAbsent(unittest.TestCase):
     def test_the_profiles_say_which_games_have_no_nvn_shaders(self):   # the profiles as they are: every map without rows, and what its profile says
         none = sorted(d.name for d in (REPO / 'dm/games').iterdir() if (d / 'shader_map.tsv').is_file() and not pa.map_keys(d / 'shader_map.tsv'))
         said = [t for t in none if pa.no_nvn_shaders(pa.game.load(t))]
-        self.assertEqual([t for t in none if t not in said], ['0100D04004176000'], 'Farming Simulator: its shaders are in a file the split has no reader for')
+        self.assertEqual([t for t in none if t not in said], [], 'a profile with an empty map says why')
         self.assertIn('0100535012974000', said, 'Hades')
         for t in none:   # pack_shaders asks before it takes a package or a library an earlier run left
             if t in said: pa.require_shaders(pa.game.load(t))

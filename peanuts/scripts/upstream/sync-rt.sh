@@ -27,7 +27,7 @@ set -eu
 cd "$(git rev-parse --show-toplevel)"
 
 eden="${EDEN_DIR:-$HOME/eden}"
-tag="${EDEN_DUO_TAG:-v1.3.5.1}"
+tag="${EDEN_DUO_TAG:-v1.4.0}"
 apply="${1:-}"
 mods_dir="dm/peanuts/rt/mods"
 scratch="/tmp/peanuts-rt-sync"
@@ -41,7 +41,7 @@ if ! git -C "$eden" rev-parse -q --verify "$tag^{commit}" >/dev/null 2>&1; then
 fi
 tag_commit=$(git -C "$eden" rev-parse --short "$tag")
 
-port_tag=$(grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' dm/peanuts/rt/PORT.md | head -1 || true)
+port_tag=$(grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' dm/peanuts/rt/PORT.md | head -1 || true)
 
 echo "pinned Eden Duo tag: $tag ($tag_commit)"
 echo "dm/peanuts/rt/PORT.md's last lift: ${port_tag:-unknown}"

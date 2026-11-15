@@ -6,6 +6,7 @@
 // points below, which log "unsupported on this host" and otherwise do nothing (RunAction itself
 // still reports ActionResult::Done for them, fire-and-forget, as in Eden). See PORT.md.
 
+#include "peanuts_patches.h"
 #include <algorithm>
 #include <cstring>
 #include <optional>
@@ -31,7 +32,7 @@ void ModRuntime::RequestCall(const Action& action, const StateSnapshot&) {
                 action.name);
 }
 void ModRuntime::ArmSpies() {}
-void ModRuntime::ApplyPatches() {}
+void ModRuntime::ApplyPatches() { PeanutsPatches::Apply(system, manifest.patches, patch_done, patches_applied); }
 void ModRuntime::DrainGuestBridgeResults() {}
 void ModRuntime::RunPolledSequences(const StateSnapshot&) {}
 

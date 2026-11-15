@@ -616,3 +616,24 @@ $(B)/t_dkb_wide: t_dkb_wide.c ../android/dkb_wide.c ../android/wide_shape.h ../h
 run: $(B)/t_pkp_aspect
 $(B)/t_pkp_aspect: t_pkp_aspect.c ../android/pkp_aspect.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wno-unused-function -I.. $(GINC) -o $@ t_pkp_aspect.c -lm -pthread
+
+# PEANUTS begin: the host side of the companion runtime, on a Linux PC: make GAME=<id> peanuts-host (in `run` on a Linux host). The host's files are compiled as they
+# are, as if for Android (their declarations; what differs on a PC is replaced in each test). t_peanuts_stopworld: every game thread stopped (hle_thread.c
+# dm_guest_stop_all / dm_guest_resume_all / dm_guest_stopped_in) with real threads. t_peanuts_padgate: the pad before the gate and the gate over what the game reads
+# (hle_hid.c dm_pad_raw / dm_pad_gate), over t_hid.c's stand-ins. t_peanuts_host: dm/peanuts/peanuts.c's tick thread, presence, pad reads and guarded reads
+PN_ASIF = -D__ANDROID__=1 -D__aarch64__=1 -D_ASM_X86_SIGCONTEXT_H -include stdbool.h
+.PHONY: peanuts-host
+peanuts-host: $(B)/t_peanuts_stopworld $(B)/t_peanuts_padgate $(B)/t_peanuts_host
+	$(B)/t_peanuts_stopworld
+	TMPDIR="$(abspath $(B))" $(B)/t_peanuts_padgate
+	$(B)/t_peanuts_host "$(abspath $(B))"
+ifeq ($(shell uname -s),Linux)
+run: peanuts-host
+endif
+$(B)/t_peanuts_stopworld: t_peanuts_stopworld.c ../hle_thread.c ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -I.. $(GINC) -o $@ t_peanuts_stopworld.c -lpthread -lm
+$(B)/t_peanuts_padgate: t_peanuts_padgate.c t_hid.c t_peanuts_hid_stubs.c ../hle_hid.c ../hle_haptics.c ../dm_input.h ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -I.. $(GINC) -o $@ t_peanuts_padgate.c t_peanuts_hid_stubs.c ../hle_haptics.c -lpthread -lm
+$(B)/t_peanuts_host: t_peanuts_host.c stub_android/android/log.h ../../peanuts/peanuts.c ../../peanuts/peanuts.h ../../peanuts/rt/peanuts_rt.h ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -Istub_android -I.. $(GINC) -o $@ t_peanuts_host.c -lpthread -lm
+# PEANUTS end

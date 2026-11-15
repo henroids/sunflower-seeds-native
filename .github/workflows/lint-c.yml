@@ -40,6 +40,7 @@ defaults:
 # runner's 3 cores (65 s on 8 cores of an M2 Max), seconds for the compile database.
 jobs:
   lint:
+    if: vars.UPSTREAM_CI == 'true'   # PEANUTS: this job needs Banana Native's runner or its lint baseline; the fork's checks are in peanuts.yml
     name: clang-tidy (ratchet)
     runs-on: xcode-27
     timeout-minutes: 30

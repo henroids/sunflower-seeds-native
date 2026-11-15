@@ -314,6 +314,11 @@ typedef struct vka_img {
     // PEANUTS: region writes queued for it and not yet copied (vka_tex.c mtl_tex_write_region; each holds a reference): it is not evicted meanwhile, and a pool drop
     // takes them back (rw_cancel_locked), since both give the image up whatever its reference count says
     uint32_t rw_pend;
+    // PEANUTS: texture readback for the companion runtime (vka_readback.inc), under the texture cache's lock; all 0 until a companion first asks for a texture:
+    // rb_gen: raised at each GPU write, rb_fence: the fence of the batch that holds the last one; rb_pgen, rb_pfence: the same of the batch before (rb_pok: there is
+    // one); rb_rt: drawn into or cleared as a colour target, first in frame rb_frame; rb_redrawn: and again in a later frame; rb_srgb: the view it was last drawn
+    // through (1 linear, 2 sRGB); rb_holds: how many of its holds are a readback's (they read no field of it unlocked: img_storage_upgrade does not count them)
+    uint64_t rb_gen, rb_fence, rb_pgen, rb_pfence, rb_frame; uint8_t rb_rt, rb_redrawn, rb_pok, rb_srgb; uint16_t rb_holds;
 } vka_img;
 // PEANUTS begin: resolution scale (DM_RES_SCALE, restart only): vka_resscale.h the arithmetic, vka_resscale.inc (in vka_tex.c) the images and what the rest is for
 #include "vka_resscale.h"
@@ -420,6 +425,15 @@ int vka_dlss_ready(void);   // the stand-in's pipelines are made (vka_dlss_scale
 // The control line "screenshot" (vka_ctl.c): the present copies the window texture's crop into its command buffer, then hands the texels to the PNG writer once that submission is done
 void vka_ctl_shot_record(VkCommandBuffer cb, vka_img *im, VkFormat fmt, int cx, int cy, int cw, int ch);
 void vka_ctl_shot_done(VkFence fence);
+// PEANUTS begin: texture readback for the companion runtime (vka_readback.h the contract, vka_readback.inc in vka_tex.c the work). vka_rb_on: requests queued or in
+// flight (the present's hooks run only then); vka_rb_track: GPU writes and colour targets are noted (from the first request on); vka_rb_color: set by a colour
+// target's site while vka_rb_track, for the vka_img_written that follows it on the same thread (1: drawn through a linear view, 2: an sRGB one)
+extern _Atomic int vka_rb_on, vka_rb_track;
+extern _Thread_local uint8_t vka_rb_color;
+void vka_rb_poll(VkFence reuse, VkResult waited);      // present thread: after the wait for a frame slot's fence (its result), before the fence is reset
+void vka_rb_record(VkCommandBuffer cb);                // present thread: into the present's command buffer, before it ends
+void vka_rb_submitted(VkFence fence, int ok);          // present thread: after the present's submission
+// PEANUTS end
 int vka_swap_rb(void);
 
 VkImageView vka_tex_id_view(int id, VkCommandBuffer cb, uint8_t dim, int storage, VkImageLayout *layout);   // texture ID id as a view of shape dim (DMSH_VK_DIM_*); VK_NULL_HANDLE = none fits

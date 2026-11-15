@@ -71,6 +71,7 @@ final class CompanionPresentation extends Presentation {
         page.setScaleType(ImageView.ScaleType.FIT_CENTER);
         page.setVisibility(View.GONE);
         page.setOnTouchListener(this::onPageTouch);
+        page.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> { panelSet = false; tellPanel(); });
         page.setHapticFeedbackEnabled(true);
         root.addView(page, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         textRoot = new LinearLayout(getContext());
@@ -87,8 +88,9 @@ final class CompanionPresentation extends Presentation {
         setContentView(root);
     }
 
-    @Override protected void onStart() { super.onStart(); poll(); }
+    @Override protected void onStart() { super.onStart(); try { Bridge.present(true); } catch (UnsatisfiedLinkError ignored) { } poll(); }
     @Override protected void onStop() {
+        try { Bridge.present(false); } catch (UnsatisfiedLinkError ignored) { }
         ui.removeCallbacksAndMessages(null);
         if (brightnessObserver != null) { try { getContext().getContentResolver().unregisterContentObserver(brightnessObserver); } catch (RuntimeException ignored) { } brightnessObserver = null; }
         super.onStop();
@@ -123,6 +125,7 @@ final class CompanionPresentation extends Presentation {
     }
 
     private void poll() {
+        tellPanel(); tellBattery();
         int w = Bridge.pageWidth(), h = Bridge.pageHeight();
         if (w > 0 && h > 0) {
             if (w != pw || h != ph) {
@@ -152,11 +155,17 @@ final class CompanionPresentation extends Presentation {
         ui.postDelayed(this::poll, POLL_MS);
     }
 
-    /** A touch on the scaled page → page pixels (FIT_CENTER: one scale, centred) */
+    /** The runtime's panel is the page view: told once the native library is there (the game process loads it after this window is made) and again on a new size */
+    private boolean panelSet;
+    private void tellPanel() {
+        if (panelSet || page.getWidth() <= 0 || page.getHeight() <= 0) return;
+        try { Bridge.panel(page.getWidth(), page.getHeight()); panelSet = true; } catch (UnsatisfiedLinkError ignored) { }
+    }
+
+    /** A touch on the page view, in the view's pixels: the runtime knows the view's size (tellPanel) and maps them to its page itself */
     private boolean onPageTouch(View v, MotionEvent e) {
-        if (pw == 0 || ph == 0) return false;
-        float sx = (float) v.getWidth() / pw, sy = (float) v.getHeight() / ph, s = Math.min(sx, sy);
-        float ox = (v.getWidth() - pw * s) / 2, oy = (v.getHeight() - ph * s) / 2;
+        tellPanel();
+        if (!panelSet) return false;
         int action = e.getActionMasked();
         boolean down = action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_MOVE;
         boolean up = action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP || action == MotionEvent.ACTION_CANCEL;
@@ -164,9 +173,21 @@ final class CompanionPresentation extends Presentation {
         int idx = action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_POINTER_UP ? e.getActionIndex() : -1;
         for (int i = 0; i < e.getPointerCount(); i++) {
             if (idx >= 0 && i != idx) continue;
-            try { Bridge.touch(e.getPointerId(i), (e.getX(i) - ox) / s, (e.getY(i) - oy) / s, down); } catch (UnsatisfiedLinkError ignored) { return false; }
+            try { Bridge.touch(e.getPointerId(i), e.getX(i), e.getY(i), down); } catch (UnsatisfiedLinkError ignored) { return false; }
         }
         return true;
+    }
+
+    /** The battery, every few seconds, for a companion that shows it */
+    private long batteryAt;
+    private void tellBattery() {
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (now - batteryAt < 5000) return;
+        batteryAt = now;
+        try {
+            android.os.BatteryManager bm = (android.os.BatteryManager) getContext().getSystemService(Context.BATTERY_SERVICE);
+            if (bm != null) Bridge.battery(bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY), bm.isCharging());
+        } catch (UnsatisfiedLinkError | RuntimeException ignored) { }
     }
 
     // --- haptics: one pending pulse from the runtime per poll (Bridge.hapticPulse, dm/peanuts/peanuts.c rt_haptic), played the same way Eden Duo's

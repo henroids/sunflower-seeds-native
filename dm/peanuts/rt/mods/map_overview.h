@@ -4,7 +4,7 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
+#include <array> // PNRT: CompositeMapOverview's optional rectangle
 #include <cmath>
 #include <cstddef>
 #include <ranges>
@@ -120,12 +120,14 @@ inline Image RasterizeMapOverview(const MapArea& area, const MapStyle& style, u3
 
 /// Put the detailed map over the coarse downloaded overview. Transparent holes in detail reveal
 /// coarse rooms, translucent detail is composited normally, and opaque detail remains bit-exact.
-/// `rect` (x0, y0, x1, y1; x1/y1 exclusive; null = all) limits the pass to those pixels.
+/// PNRT: `rect` (x0, y0, x1, y1; x1/y1 exclusive; null = all) limits the pass to those pixels,
+/// so the incremental map composite (mod_map.cpp) redoes only the box that changed.
 inline void CompositeMapOverview(Image& detail, const Image& overview,
                                  const std::array<int, 4>* rect = nullptr) {
     if (detail.w != overview.w || detail.h != overview.h ||
         detail.pixels.size() != overview.pixels.size())
         return;
+    // PNRT: the original loop over every pixel, limited to `rect` when one is given.
     const int w = static_cast<int>(detail.w), h = static_cast<int>(detail.h);
     const int ry0 = rect != nullptr ? std::clamp((*rect)[1], 0, h) : 0;
     const int ry1 = rect != nullptr ? std::clamp((*rect)[3], 0, h) : h;

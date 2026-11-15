@@ -1065,7 +1065,10 @@ bool ModRuntime::ApplyGuestStores(std::span<const GuestExpect> expects,
     // a neighbouring bit. When the application cannot be stalled right now (a pause/resume in
     // progress) the batch is applied as before this path existed, rather than dropping the tap.
     if (!RunWithGuestStopped(apply)) {
-        apply();
+        // PNRT: Eden's false is only a pause/resume in transit, where applying is safe. Here it is
+        // the game's threads not stopping in time while the game runs: nothing is written and the
+        // action is refused, rather than a check-and-store beside running game code.
+        return false;
     }
     return applied;
 }

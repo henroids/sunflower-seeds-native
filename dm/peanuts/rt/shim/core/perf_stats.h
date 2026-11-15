@@ -5,6 +5,7 @@
 #include <chrono>
 
 #include "common/common_types.h"
+#include "pnrt_services.h"
 
 namespace Core {
 
@@ -17,7 +18,8 @@ public:
         Clock::duration frametime{};
     };
     [[nodiscard]] Totals GetTotals() const {
-        return totals;
+        const auto t = PnShim::ReadPerfTotals();
+        return {t.game_frames, t.system_frames, std::chrono::nanoseconds{t.frametime_ns}};
     }
     Totals totals{};
 };

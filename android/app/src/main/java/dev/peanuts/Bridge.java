@@ -18,6 +18,12 @@ public final class Bridge {
     public static native void frameAgain();
     /** A touch on the page, in page pixels. */
     public static native void touch(int id, float x, float y, boolean down);
+    /** The page's window is shown or gone: the runtime's presence; gone releases held fingers (dm/peanuts/peanuts.c nxhost_peanuts_present) */
+    public static native void present(boolean shown);
+    /** The page view's size in pixels: the runtime's panel. Touches are in these pixels from then on (nxhost_peanuts_panel) */
+    public static native void panel(int w, int h);
+    /** The device's battery for a companion that shows it (dm/peanuts/peanuts_services.c) */
+    public static native void battery(int percent, boolean charging);
     /** 0 still deciding, 1 a companion package loaded, 2 none for this title, 3 found but refused (logcat "peanuts" says why). */
     public static native int rtState();
     /** One pending haptic pulse, packed (see peanuts_jni.c): kind(4 bits) &lt;&lt; 25 | respect_system &lt;&lt; 24 | amplitude(1..255) &lt;&lt; 16 | ms(1..65535); 0 = none to play. */

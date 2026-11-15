@@ -37,7 +37,7 @@ typedef struct { uint64_t addr; uint64_t last; } cand_t;
 
 #include "rt/peanuts_rt.h"
 static void rt_tick(void);   // the companion runtime, below
-static PnRt *g_rt;
+static PnRt *_Atomic g_rt;   // set once (rt_start, on the presenting thread); read by the tick thread, the page's UI thread (touch, presence) and the lifecycle's thread
 static void rt_ui_publish(void *u, uint32_t w, uint32_t h, const uint32_t *px);
 static void rt_ui_publish_partial(void *u, uint32_t w, uint32_t h, const uint32_t *px, const int32_t r[4]);
 
@@ -291,7 +291,7 @@ static void refresh(void) {
 
 void peanuts_tick(void) {
     g_frames++;
-    rt_tick();   // the companion runtime, every presented frame
+    rt_tick();   // the companion runtime: started at the first presented frame after main is loaded; its ticks come from a timer of its own (rt_thread)
     if (g_frames % REFRESH_EVERY) return;
     pthread_mutex_lock(&g_mu);
     refresh();
@@ -305,6 +305,8 @@ void peanuts_tick(void) {
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "peanuts_nup.h"
@@ -314,16 +316,43 @@ static pn_nup *g_nup;   // the .nup RomFS layers behind the runtime's "romfs:" (
 static uint32_t *g_frame; static uint32_t g_frame_w, g_frame_h; static int g_frame_new;
 static pthread_mutex_t g_frame_mu = PTHREAD_MUTEX_INITIALIZER;
 
-// Guest memory for the runtime. Guest VA == host VA, so a read inside a mapped readable range is a memcpy; the ranges (the guest block's rw regions and the modules, from
-// /proc/self/maps) are cached and refreshed every 2 s and after any miss. Outside them process_vm_readv (plat_mem_read) decides, as before: a syscall per read was
-// the runtime's whole cost (profiled: 15 % of the process in peanuts-tick, mostly process_vm_readv, for ~700 point reads a tick)
-static range_t g_rd[512]; static int g_nrd; static time_t g_rd_at;
+// Guest memory for the runtime. Guest VA == host VA, so a read inside a mapped readable range is a memcpy; the ranges (the guest block's readable regions and the modules,
+// from /proc/self/maps) are cached and refreshed every 2 s (by the tick thread, before a tick) and after a miss. Outside them process_vm_readv (plat_mem_read) decides, as
+// before: a syscall per read was the runtime's whole cost (profiled: 15 % of the process in peanuts-tick, mostly process_vm_readv, for ~700 point reads a tick).
+// The cache holds what is READABLE, with neighbours joined: it took only the read-write regions, one entry each, up to 512. The GPU's dirty tracking (gfx/nvn/nvn_dirty.c)
+// write-protects pages of the game's pools and lifts the protection again all the time, which cuts the guest block into many regions: the read-only ones were never in the
+// cache, so every read of a tracked page was a system call and, being "readable but not cached", made the whole of /proc/self/maps be read again every 500 ms; and a block
+// in more than 512 pieces lost the rest of its pieces the same way. Joined, the block is a handful of ranges whatever its pages' protection is.
+// g_rd is written under g_rd_mu by whoever refreshes and read under it by every reader (the tick thread, the runtime's workers)
+static range_t g_rd[512]; static int g_nrd; static _Atomic int64_t g_rd_at_ms;
 static pthread_mutex_t g_rd_mu = PTHREAD_MUTEX_INITIALIZER;
+static int64_t mono_ns(void) { struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m); return (int64_t)m.tv_sec * 1000000000 + m.tv_nsec; }
 static int range_cmp(const void *a, const void *b) { uint64_t x = ((const range_t *)a)->a, y = ((const range_t *)b)->a; return x < y ? -1 : x > y; }
+// Adds [a, b) to r[0..n), joined to the entry before it when it begins where that one ends (the lines of /proc/self/maps come in address order)
+static int range_add(range_t *r, int n, int max, uint64_t a, uint64_t b) {
+    if (n && r[n - 1].b == a) { r[n - 1].b = b; return n; }
+    if (n < max) { r[n].a = a; r[n].b = b; n++; }
+    return n;
+}
+static int rt_scan_readable(range_t *r, int max) {
+    int n = 0;
+    FILE *f = fopen("/proc/self/maps", "r");
+    char line[512];
+    while (f && fgets(line, sizeof line, f)) {
+        if (!strstr(line, "[anon:nxnative guest]")) continue;   // the name first: most lines are not the guest's, and need no parsing
+        uint64_t a, b; char perm[8];
+        if (sscanf(line, "%" SCNx64 "-%" SCNx64 " %7s", &a, &b, perm) != 3 || perm[0] != 'r') continue;
+        n = range_add(r, n, max, a, b);
+    }
+    if (f) fclose(f);
+    for (int i = 0; i < g_nmod && n < max; i++) if (g_mod[i].loaded && !g_mod[i].nro) { r[n].a = (uint64_t)(uintptr_t)g_mod[i].base; r[n].b = r[n].a + g_mod[i].size; n++; }
+    return n;
+}
 static void rt_ranges_refresh(void) {
-    range_t r[512]; int n = scan_ranges(r, 512);
+    range_t r[512]; int n = rt_scan_readable(r, 512);
     qsort(r, n, sizeof r[0], range_cmp);
-    pthread_mutex_lock(&g_rd_mu); memcpy(g_rd, r, n * sizeof r[0]); g_nrd = n; g_rd_at = time(NULL); pthread_mutex_unlock(&g_rd_mu);
+    pthread_mutex_lock(&g_rd_mu); memcpy(g_rd, r, n * sizeof r[0]); g_nrd = n; pthread_mutex_unlock(&g_rd_mu);
+    atomic_store(&g_rd_at_ms, mono_ns() / 1000000);
 }
 // The game's code as its file has it. The process runs main rewritten (dm/tools/patch_nso.py: x18 sites, cuts, patches), so the bytes in memory differ from the file's at
 // the runs of main.changed.tsv; a package's module that hashes a function to know the build, or decodes its instructions for an address, then fails on every function
@@ -379,8 +408,16 @@ static int rt_code_rewritten(void *u, uint64_t addr, size_t len) {
 static void rt_heap_range(void *u, uint64_t *base, uint64_t *open_len) { (void)u; size_t n = 0; dm_guest_heap_range(base, &n); *open_len = n; }
 // Room for a package's guest helper (rt/peanuts_helper.cpp): the end of the gap the loader leaves inaccessible between main's patch area and its base (a main with the patch
 // area before the base, loader.c map_image: 16 or 32 MB, of which the patches take a few), else free pages just past the last module. A branch in main reaches either
+static uint64_t rt_code_block_find(size_t size);
+// The block is guest code for the host's thread pause from now on (hle_thread.c dm_guest_code_range): a game thread running the helper is stopped as one running the game
+void dm_guest_code_range(uint64_t lo, uint64_t hi);
 static uint64_t rt_code_block(void *u, size_t size) {
     (void)u;
+    uint64_t at = rt_code_block_find(size);
+    if (at) dm_guest_code_range(at, at + size);
+    return at;
+}
+static uint64_t rt_code_block_find(size_t size) {
     module_t *m = module_named("main");
     if (!m || !size || (size & 0x3FFF)) return 0;
     if (m->patch_off < 0 && (uint64_t)-m->patch_off >= m->patch_len + size) {
@@ -411,17 +448,41 @@ static int rt_range_has(uint64_t addr, size_t len) {   // [addr, addr+len) insid
     pthread_mutex_unlock(&g_rd_mu);
     return ok;
 }
+// The cache says what was readable when /proc/self/maps was last read, up to 2 s ago. A range the game unmapped or made inaccessible since (a heap it shrank, a pool it
+// freed) would fault the plain copy, and a fault of this thread ends the process. So the copy is guarded: the host's crash handler asks its fault hooks first (crash.c
+// dm_fault_hook_register), and rt_read_fault takes a read fault of a thread that is inside rt_copy back to rt_copy, which answers "not readable"; the caller then asks
+// the kernel (plat_mem_read), which says how it is now, and the cache is read again. Per thread (g_rd_guard), so a fault of any other thread, or of this one elsewhere, is
+// not ours. _setjmp keeps no signal mask (no system call per read); the two signals are unblocked on the rare way back.
+// Not covered: memory a package's module reads through a pointer it was handed (rt_mem_pointer, the module's get_read_pointer): those loads are the module's own
+static __thread jmp_buf *g_rd_guard;
+static _Atomic uint64_t g_rd_faults;
+static int rt_read_fault(void *addr, int is_write, void *uc) {
+    (void)addr; (void)uc;
+    jmp_buf *j = g_rd_guard; if (!j || is_write) return 0;
+    g_rd_guard = NULL; _longjmp(*j, 1);
+}
+static int rt_copy(void *dst, uint64_t addr, size_t len) {
+    jmp_buf j;
+    if (_setjmp(j)) {
+        sigset_t m; sigemptyset(&m); sigaddset(&m, SIGSEGV); sigaddset(&m, SIGBUS); pthread_sigmask(SIG_UNBLOCK, &m, NULL);
+        if (!atomic_fetch_add(&g_rd_faults, 1)) __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion: a range the read cache held was no longer readable (0x%" PRIx64 "): read through the kernel instead, the cache is read again (logged once)", addr);
+        return 0;
+    }
+    g_rd_guard = &j; memcpy(dst, (const void *)(uintptr_t)addr, len); g_rd_guard = NULL;
+    return 1;
+}
 static int rt_mem_read(void *u, uint64_t addr, void *buf, size_t len) {
     (void)u;
-    if (time(NULL) - g_rd_at > 2) rt_ranges_refresh();
-    if (rt_range_has(addr, len)) { memcpy(buf, (const void *)(uintptr_t)addr, len); rt_orig_apply(addr, buf, len); return 1; }
+    if (rt_range_has(addr, len)) {
+        if (rt_copy(buf, addr, len)) { rt_orig_apply(addr, buf, len); return 1; }
+        rt_ranges_refresh();   // the cache was wrong: read it again, and let the kernel answer this read
+    }
     if (plat_mem_read(addr, buf, len)) return 0;
     rt_orig_apply(addr, buf, len);
     // Readable but not in the cache: maybe a new mapping, so refresh, but at most every 500 ms. Some pages read memory that stays outside the cached ranges
     // (Animal Crossing's, every tick), and a /proc/self/maps parse per such read held the tick thread at 100 % (~140 ms a tick, the page at ~7 Hz).
-    struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m);
-    static int64_t miss_at; int64_t now = (int64_t)m.tv_sec * 1000 + m.tv_nsec / 1000000;
-    if (now - miss_at >= 500) { miss_at = now; rt_ranges_refresh(); }
+    static _Atomic int64_t miss_at; int64_t now = mono_ns() / 1000000;
+    if (now - atomic_load(&miss_at) >= 500) { atomic_store(&miss_at, now); rt_ranges_refresh(); }
     return 1;
 }
 // A guest write: process_vm_writev (plat_mem_write) first. Reads of the cached ranges are plain memcpys, so a seccomp policy that refuses process_vm_* (ENOSYS / EPERM)
@@ -442,6 +503,10 @@ static int rt_pipe_write(uint64_t addr, const void *buf, size_t len) {
 }
 static int rt_mem_write(void *u, uint64_t addr, const void *buf, size_t len) {
     (void)u;
+    // The host's rule for its own writes of guest memory (dm.h dm_guest_write_prepare): a page the GPU's dirty tracking holds read-only is given back first and marked as
+    // written, since a system call into it fails with EFAULT where the game's own store would fault and be let through. A companion's write into such a page (a value in
+    // a block the game also hands the GPU) failed until now. The hooks take no lock: table lookups, atomics and mprotect (crash.c), also with the game's threads stopped
+    dm_guest_write_prepare((void *)(uintptr_t)addr, len);
     if (!plat_mem_write(addr, buf, len)) return 1;
     static atomic_int via_pipe, failed;
     int e = errno;
@@ -456,7 +521,6 @@ static uint8_t *rt_mem_pointer(void *u, uint64_t addr, size_t len) {
     (void)u; uint8_t b;
     if (!len) return NULL;
     if (g_nor && addr < g_or_hi && addr + len > (g_or_lo & ~(uint64_t)0xfff)) return NULL;   // main's rewritten part: read through rt_mem_read (rt_orig_apply)
-    if (time(NULL) - g_rd_at > 2) rt_ranges_refresh();
     if (rt_range_has(addr, len)) return (uint8_t *)(uintptr_t)addr;
     if (addr + (len - 1) < addr) return NULL;   // the span wraps
     if (plat_mem_read(addr, &b, 1) || plat_mem_read(addr + len - 1, &b, 1)) return NULL;   // both ends read: the guest block is contiguous between
@@ -590,11 +654,55 @@ static int rt_find_package(char *dir, size_t n, uint64_t *title) {
     return 0;
 }
 
+// ---- the game's threads stopped, for the runtime's writes "with the guest stopped" (rt/shim/shim.cpp PnShim::RunWithGuestStopped; rt/peanuts_helper.cpp's patches) ----
+// The host's stop (hle_thread.c dm_guest_stop_all, built on the pause the game's own SetThreadActivity uses): every game thread is between two instructions of game code,
+// inside an SVC it cannot return from, or in a native wait it cannot come back from, and the host's thread lock is held until the resume. What runs between stop and
+// resume here is the runtime's check and stores: rt_mem_read / rt_mem_write, which take g_rd_mu (only ever held by this file's readers, never by a game thread), read
+// /proc/self/maps, make system calls and go through the write-prepare hooks (lock-free). Nothing of it takes the host's thread lock or a lock a stopped thread can hold.
+// The audio output, the audio renderer's thread and the GPU's workers are not game threads and keep running
+int dm_guest_stop_all(uint64_t timeout_ns);
+void dm_guest_resume_all(void);
+int dm_guest_stopped_in(uint64_t lo, uint64_t hi);
+static int rt_guest_stop(void *u, uint32_t timeout_ms) {   // 1 stopped, 0 not all stopped in time, -1 another stop was under way all that time (PnRtGuest)
+    (void)u; int r = dm_guest_stop_all((uint64_t)timeout_ms * 1000000ull);
+    return r == 0 ? 1 : r == -2 ? -1 : 0;
+}
+static void rt_guest_resume(void *u) { (void)u; dm_guest_resume_all(); }
+static int rt_guest_stopped_in(void *u, uint64_t lo, uint64_t hi) { (void)u; return dm_guest_stopped_in(lo, hi); }
+
+// ---- the controller, both ways (hle_hid.c dm_pad_raw / dm_pad_gate) ----
+// To the runtime: player 1's state before the gate, once a tick (rt_thread). From the runtime: its gate over every state the game reads (fill): while a package's
+// controller focus mode is on, the game gets a neutral pad and the companion moves its focus with the buttons instead. Runs on the game's reading threads: atomics only
+static void rt_pad_gate(int slot, uint64_t *buttons, int32_t axes[4]) { pn_rt_pad_gate(slot, buttons, axes); }
+// Read by the runtime whenever it asks, not sampled once before the tick: what the companion itself pressed or released for the game earlier in the same tick
+// (rt_pad_button, dm_input_set) is in the answer, so its own release is not read back as a button still held
+static void rt_pad_read(void *u, uint32_t *npad, uint64_t *buttons, int32_t axes[4]) { (void)u; dm_pad_raw(npad, buttons, axes); }
+
+// ---- whether the page is shown, and the game's pause ----
+// g_present_told: what the launcher said last (nxhost_peanuts_present), 1 before it says anything. g_page_asked_ms: when the page's window last asked for its size or a
+// frame (it does every 33 ms while it shows, and nothing else asks). The tick thread puts the two together (rt_thread). g_rt_suspended: the game is suspended
+// (peanuts_lifecycle, the launcher's thread): the tick thread makes no tick then, as Eden's timing stops with its emulation. All three are atomics
+static _Atomic int g_present_told = 1, g_rt_suspended;
+static _Atomic int g_panel_w, g_panel_h;   // the page view's size in pixels as the launcher told it (0: not told), any thread
+static _Atomic int64_t g_page_asked_ms;
+void peanuts_lifecycle(int suspended) {   // android/input_android.c suspend_apply: after the game was told to stop, and before it runs again
+    atomic_store(&g_rt_suspended, suspended != 0);
+    if (g_rt) pn_rt_lifecycle(g_rt, suspended);   // the mailbox epoch moves on at both, as on Eden
+}
+
 static void rt_start(void) {
-    g_rt_tried = 1;
     module_t *m = module_named("main");
     if (!m) { atomic_store(&g_rt_state, 2); return; }   // no "main" module loaded yet when g_nmod turned positive: rt_tick never retries (g_rt_tried), so the state must resolve here too
     char dir[768]; uint64_t title = 0;
+    // Companions off for this launch (PN_COMPANION=off from the launcher: Eden Duo's dual screen mode "Off"): no package is looked for, so neither a page nor a load
+    // plan's patches reach the game; the state reads "no companion", and the launcher leaves the second display alone
+    { const char *e = getenv("PN_COMPANION");
+      if (e && !strcmp(e, "off")) {
+          pn_rt_set_companions_disabled(1);
+          __android_log_print(ANDROID_LOG_INFO, "peanuts", "companions are off for this launch (PN_COMPANION=off)");
+          atomic_store(&g_rt_state, 2);
+          return;
+      } }
     if (!rt_find_package(dir, sizeof dir, &title)) {
         __android_log_print(ANDROID_LOG_INFO, "peanuts", "no companion package beside %s", dm_module_dir());
         atomic_store(&g_rt_state, 2);
@@ -628,7 +736,9 @@ static void rt_start(void) {
     c.main_base = (uint64_t)(uintptr_t)m->base;
     rt_orig_load(c.main_base);
     c.main_size = m->size;
-    c.panel_w = 1240; c.panel_h = 1080;
+    // The second screen's size: the page view's real pixels once the launcher has told them (nxhost_peanuts_panel, also after the runtime started), 1240 x 1080 until then
+    c.panel_w = (uint32_t)atomic_load(&g_panel_w); c.panel_h = (uint32_t)atomic_load(&g_panel_h);
+    if (!c.panel_w || !c.panel_h) { c.panel_w = 1240; c.panel_h = 1080; }
     // R5: the runtime's own data (persisted flags, "user:" assets, and the staging folder a package's native module is copied to before dlopen) lives in the app's
     // private files folder (DM_AOC_DIR = <private files>/aoc/<title>, the one private path the launcher hands the game): shared storage is mounted noexec, so a
     // module staged there would not load. The title's save folder is DM_SAVE; the console's shared fonts come as .ttf here, not .bfttf, so "sysfont:" stays off
@@ -643,21 +753,21 @@ static void rt_start(void) {
     c.data_dir = data_dir;
     c.save_dir = getenv("DM_SAVE");
     c.memory.read = rt_mem_read; c.memory.write = rt_mem_write; c.memory.pointer_at = rt_mem_pointer; c.memory.heap_range = rt_heap_range;
-    c.pad.set_button = rt_pad_button; c.pad.set_stick = rt_pad_stick;
+    c.pad.set_button = rt_pad_button; c.pad.set_stick = rt_pad_stick; c.pad.read = rt_pad_read;
     c.ui.publish_ui = rt_ui_publish; c.ui.publish_ui_partial = rt_ui_publish_partial;
     c.haptics.pulse = rt_haptic;
     c.helper.code_rewritten = rt_code_rewritten; c.helper.slot18_offset = (uint32_t)plat_slot_key_entry(PLAT_SLOT_K18); c.helper.code_block = rt_code_block; c.helper.text_end = m->text_end;   // a package's load plan: rt/peanuts_helper.cpp
+    static char sites[900];
+    if (dm_main_dir()) { snprintf(sites, sizeof sites, "%s/main.sites.tsv", dm_main_dir()); c.helper.sites_tsv = sites; }   // the rewriter's moved sequences, for what a load plan enters of main
+    c.guest.stop = rt_guest_stop; c.guest.resume = rt_guest_resume; c.guest.stopped_in = rt_guest_stopped_in;
     c.log = rt_log; c.log_level = 2;
+    { static int hooked; if (!hooked) { hooked = 1; dm_fault_hook_register(rt_read_fault); } }   // before the first read (rt_copy)
     g_rt = pn_rt_create(&c);
+    if (g_rt) atomic_store(&dm_pad_gate, rt_pad_gate);   // from now on the game's pad reads pass the runtime's gate (a no-op until a package turns controller focus on)
     atomic_store(&g_rt_state, g_rt ? 1 : 3);
     __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion package %s (title %016" PRIx64 ", build %s, romfs %s): %s", dir, title, m->build_id,
                         c.romfs_dir ? c.romfs_dir : g_nup ? pn_nup_describe(g_nup) : "none", g_rt ? "loaded" : "not loaded");
 }
-
-// The runtime ticks on a thread of its own, once per presented frame (the present thread only signals), so its sampling and page logic never cost the game a frame
-static pthread_mutex_t g_tick_mu = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_tick_cv = PTHREAD_COND_INITIALIZER;
-static uint64_t g_tick_signalled, g_tick_done;
 
 // The runtime's publishes arrive here (its redraw thread), whole or as the changed rectangle; the rows are swizzled to the bytes Android's ARGB_8888 bitmaps hold (R, G, B, A)
 // into the page buffer, so the page's poll copies as is and a moving marker costs its rectangle, not the whole page
@@ -676,32 +786,58 @@ static void rt_ui_rect(uint32_t w, uint32_t h, const uint32_t *px, int x0, int y
 static void rt_ui_publish(void *u, uint32_t w, uint32_t h, const uint32_t *px) { (void)u; rt_ui_rect(w, h, px, 0, 0, (int)w, (int)h); }
 static void rt_ui_publish_partial(void *u, uint32_t w, uint32_t h, const uint32_t *px, const int32_t r[4]) { (void)u; rt_ui_rect(w, h, px, r[0], r[1], r[2], r[3]); }
 
-static void rt_tick_once(void) { pn_rt_tick(g_rt); }   // the frames come through the sink above
-
+// The runtime ticks on a thread of its own at the rate it counts with, 60 a second (PN_RT_TICK_HZ; Eden: a 60 Hz timing event), whatever the game's frame rate is and
+// whether or not it presents. It ticked on presents, at most every 25 ms (about 30 Hz, 20 Hz with no present): everything the runtime counts in ticks then took twice as
+// long (a rule's every_ms, retries and timeouts, a module's get_tick), and two places of the lifted code had been corrected by hand for it.
+// No tick while the game is suspended (Eden's timing is paused with its emulation). It ticked at 20 Hz then: one log shows peanuts-tick with 70.9 s of CPU in a pause of
+// 412.7 s, sampling a game that could not change, nine tenths of the whole process's CPU in that time.
+// While the page is not shown the runtime's own tick is short (no sampling, no page; a module only if it asked to tick while hidden).
+// What a tick costs is logged every 30 s (count, mean, longest, and the stops of the game's threads): nothing here was measured on a device
 static void *rt_thread(void *arg) {
     (void)arg;
     pthread_setname_np(pthread_self(), "peanuts-tick");
-    int64_t last = 0;
+    // The runtime is made here, not on the thread that presents (it was: rt_tick called rt_start). Making it applies a package's load plan, which stops every game
+    // thread to patch main; from the presenting thread the stop waited for the game's own thread, which was waiting for that very present, so every try timed out and
+    // the patch went in beside the running game (seen on a device). This thread is none of the game's and none the game waits for
+    rt_start();
+    if (!g_rt) return NULL;
+    const int64_t period = 1000000000 / PN_RT_TICK_HZ;
+    int64_t next = mono_ns(), stat_at = next, busy = 0, longest = 0; unsigned ticks = 0, hidden = 0;
+    int shown = 1;   // as pn_rt_create leaves it
     for (;;) {
-        pthread_mutex_lock(&g_tick_mu);
-        // ~30 Hz whatever the game's rate: a tick on the first present at least 25 ms after the last one (every second frame at 60 fps, every frame at 30 fps;
-        // counting two presents made a 30 fps game's page, e.g. Animal Crossing's, sample, redraw and take touches at 15 Hz). A stalled present (the game
-        // paused) still ticks at 20 Hz for the page's own animations.
-        for (;;) {
-            struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m);
-            int64_t since = (int64_t)m.tv_sec * 1000000000 + m.tv_nsec - last;
-            int pending = g_tick_signalled != g_tick_done;
-            if ((pending && since >= 25000000) || since >= 50000000) break;
-            int64_t wait = (pending ? 25000000 : 50000000) - since;   // a present already waiting ticks at 25 ms, not at the stall timeout
-            struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); ts.tv_nsec += wait; while (ts.tv_nsec >= 1000000000) { ts.tv_sec++; ts.tv_nsec -= 1000000000; }
-            pthread_cond_timedwait(&g_tick_cv, &g_tick_mu, &ts);
+        if (atomic_load(&g_rt_suspended)) {   // the game is paused or in the background: looked at ten times a second, and the timer starts again from the resume
+            struct timespec ts = {0, 100000000}; nanosleep(&ts, NULL);
+            next = mono_ns(); stat_at = next; busy = longest = 0; ticks = hidden = 0;
+            continue;
         }
-        { struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m); last = (int64_t)m.tv_sec * 1000000000 + m.tv_nsec; }
-        g_tick_done = g_tick_signalled;
-        pthread_mutex_unlock(&g_tick_mu);
-        rt_tick_once();
-        // a tick longer than the interval: the next one 25 ms after this one ends, not at once (back-to-back ticks would pin a core)
-        { struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m); int64_t end = (int64_t)m.tv_sec * 1000000000 + m.tv_nsec; if (end - last > 25000000) last = end; }
+        next += period;
+        int64_t now = mono_ns();
+        // A tick longer than the period: none is made up for, and the next comes no sooner than 2 ms after this one ended. Ticks run back to back held a core at
+        // 100 % for as long as each took over 16.7 ms (a module's sweep, a page that reads much), on a phone the game needs the cores of
+        if (next < now + 2000000) next = now + 2000000;
+        { struct timespec ts = {(time_t)(next / 1000000000), (long)(next % 1000000000)}; clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL); }
+        if (atomic_load(&g_rt_suspended)) continue;
+        int64_t t0 = mono_ns(), ms = t0 / 1000000;
+        // The page is shown while the launcher has not said it is gone and its window keeps asking (it asks every 33 ms). Hidden: the runtime skips its sampling and the
+        // page, ends controller focus and releases held fingers (pn_rt_set_present). A launcher that never tells is handled by the polls alone.
+        // Only this thread tells the runtime (shown is what it was last told): the launcher's call stores its word and no more, so the two cannot disagree. It did
+        // call pn_rt_set_present itself for a hide; one that came while the game was suspended left the runtime hidden and this thread believing "shown" for good
+        int want = atomic_load(&g_present_told) && ms - atomic_load(&g_page_asked_ms) < 1500;
+        if (want != shown) {
+            shown = want; pn_rt_set_present(g_rt, shown);
+            __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion: the page is %s", shown ? "shown" : "not shown: the runtime only keeps a module that asked for it ticking");
+        }
+        if (ms - atomic_load(&g_rd_at_ms) > 2000) rt_ranges_refresh();
+        pn_rt_tick(g_rt);   // the frames come through the sink above
+        int64_t t1 = mono_ns(), d = t1 - t0;
+        busy += d; if (d > longest) longest = d; ticks++; hidden += !shown;
+        if (t1 - stat_at >= 30000000000ll) {
+            uint64_t stops = 0, failed = 0, stop_us = 0; pn_rt_stop_stats(&stops, &failed, &stop_us);
+            LOG("[peanuts] companion ticks: %u in %.1f s (%u with the page not shown), %.2f ms each on average, longest %.2f ms, %.1f%% of one core; the game's threads stopped for writes %llu times since the start (%llu given up), longest %.2f ms",
+                ticks, (t1 - stat_at) / 1e9, hidden, ticks ? busy / 1e6 / ticks : 0.0, longest / 1e6, 100.0 * busy / (double)(t1 - stat_at),
+                (unsigned long long)stops, (unsigned long long)failed, stop_us / 1e3);
+            stat_at = t1; busy = longest = 0; ticks = hidden = 0;
+        }
     }
     return NULL;
 }
@@ -728,22 +864,17 @@ static int rt_orig_pending(void) {
     return pending;
 }
 
-static void rt_tick(void) {
-    if (!g_rt) {
-        if (g_rt_tried || g_nmod <= 0) return;
-        if (rt_orig_pending()) return;
-        rt_start();
-        if (!g_rt) return;
-        { pthread_condattr_t ca; pthread_condattr_init(&ca); pthread_condattr_setclock(&ca, CLOCK_MONOTONIC); pthread_cond_init(&g_tick_cv, &ca); pthread_condattr_destroy(&ca); }   // the tick's waits on the monotonic clock: a wall-clock step cannot stall the page (unused until the thread below starts)
-        pthread_t th; pthread_attr_t at; pthread_attr_init(&at); pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
-        if (pthread_create(&th, &at, rt_thread, NULL)) __android_log_print(ANDROID_LOG_ERROR, "peanuts", "tick thread failed");
-        pthread_attr_destroy(&at);
-        return;
-    }
-    pthread_mutex_lock(&g_tick_mu); g_tick_signalled++; pthread_cond_signal(&g_tick_cv); pthread_mutex_unlock(&g_tick_mu);
+static void rt_tick(void) {   // the presenting thread: starts the runtime's thread once main is loaded (rt_thread makes the runtime and ticks it)
+    if (g_rt_tried || g_nmod <= 0) return;
+    if (rt_orig_pending()) return;
+    g_rt_tried = 1;
+    pthread_t th; pthread_attr_t at; pthread_attr_init(&at); pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&th, &at, rt_thread, NULL)) { __android_log_print(ANDROID_LOG_ERROR, "peanuts", "tick thread failed"); atomic_store(&g_rt_state, 3); }
+    pthread_attr_destroy(&at);
 }
 
 void nxhost_peanuts_frame_size(int *w, int *h) {
+    atomic_store(&g_page_asked_ms, mono_ns() / 1000000);   // the page's window asks every 33 ms while it shows (rt_thread: presence)
     pthread_mutex_lock(&g_frame_mu);
     if (w) *w = (int)g_frame_w; if (h) *h = (int)g_frame_h;
     pthread_mutex_unlock(&g_frame_mu);
@@ -755,6 +886,7 @@ unsigned peanuts_frame_polls(void) { return atomic_exchange(&g_frame_polls, 0); 
 int nxhost_peanuts_frame(void *out_rgba, int w, int h) {
     int got = 0;
     atomic_fetch_add(&g_frame_polls, 1);
+    atomic_store(&g_page_asked_ms, mono_ns() / 1000000);
     pthread_mutex_lock(&g_frame_mu);
     if (g_frame && g_frame_new && (uint32_t)w == g_frame_w && (uint32_t)h == g_frame_h) {
         memcpy(out_rgba, g_frame, (size_t)w * h * 4);   // already R, G, B, A bytes (swizzled on publish)
@@ -767,6 +899,18 @@ int nxhost_peanuts_frame(void *out_rgba, int w, int h) {
 void nxhost_peanuts_frame_again(void) { pthread_mutex_lock(&g_frame_mu); if (g_frame) g_frame_new = 1; pthread_mutex_unlock(&g_frame_mu); }   // (peanuts.h)
 
 void nxhost_peanuts_touch(int id, float x, float y, int down) { if (g_rt && x >= 0 && y >= 0) pn_rt_touch(g_rt, (uint32_t)id, (uint32_t)x, (uint32_t)y, down); }
+
+// The page view's size in pixels (the launcher, when the view is laid out and when it changes). From then on touches are in these pixels (pn_rt_touch scales panel
+// pixels to the page), where before they were in page pixels over the fixed 1240 x 1080
+void nxhost_peanuts_panel(int w, int h) {
+    if (w <= 0 || h <= 0) return;
+    atomic_store(&g_panel_w, w); atomic_store(&g_panel_h, h);
+    if (g_rt) pn_rt_set_panel(g_rt, (uint32_t)w, (uint32_t)h);
+}
+
+// The page's window is shown (1) or gone (0), told by the launcher (dev.peanuts.CompanionPresentation onStart / onStop, dev.peanuts.Companion away / back). The tick
+// thread puts it together with the window's polls and tells the runtime (rt_thread); a finger that was down when the window went is released then
+void nxhost_peanuts_present(int shown) { atomic_store(&g_present_told, shown != 0); }   // taken up by the tick thread at its next tick (within 17 ms; after a pause, at the first tick)
 
 size_t nxhost_peanuts_snapshot(char *out, size_t n) {
     if (!out || !n) return 0;

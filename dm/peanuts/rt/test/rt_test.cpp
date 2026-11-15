@@ -28,6 +28,7 @@
 #include <fstream>
 #include <map>
 #include <string>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -268,13 +269,20 @@ bool CapturePng(PnRt* rt, const std::filesystem::path& out) {
     return false;
 }
 
+/// The runtime number this test expects of the lifted runtime (DualScreenRuntimeVersion in
+/// mods/mod_runtime.h). Raised by hand with every lift, see PORT.md "How to take the next runtime".
+constexpr int ExpectedRuntime = 25;
+
 /// A minimal package whose one page prints the two fake values with the built-in font.
-std::string WriteProbePackage(const std::filesystem::path& out_dir) {
-    const auto pkg = out_dir / "probe_package";
+/// `min_runtime` > 0 is written into its manifest (the version gate test), into folder `name`.
+std::string WriteProbePackage(const std::filesystem::path& out_dir, int min_runtime = 0,
+                              const char* name = "probe_package") {
+    const auto pkg = out_dir / name;
     std::filesystem::create_directories(pkg / "dualscreen");
     std::ofstream(pkg / "package.json") << R"({"format":1,"type":"dual-screen-mod",
         "title_id":"01006BB00C6F0000","name":"rt_test probe","version":"0.0.1"})";
     std::ofstream(pkg / "dualscreen" / "manifest.json") << R"({
+      "min_runtime": )" << min_runtime << R"(,
       "format": 1, "title_id": "01006BB00C6F0000", "name": "rt_test probe",
       "canvas_w": 640, "canvas_h": 360, "background": "#FF102030",
       "pages": [{"id": "main", "title": "probe", "widgets": [
@@ -292,12 +300,162 @@ std::string WriteProbePackage(const std::filesystem::path& out_dir) {
     return pkg.string();
 }
 
+// --- The map probe: a package with one geometry map area and a marker bound to fake memory. Moving
+// the marker reveals map cells (the runtime's own fog of war), each reveal fades in over
+// map.style.fade_ticks, and the runtime's snapshot log line carries the counters of the map work
+// this port adds (PORT.md: the incremental composite, the pulse memo, the publishes a raster
+// refused). The probe reads them from the log.
+
+std::mutex g_log_mutex;
+std::string g_last_snapshot; ///< the newest "DSMod snapshot:" line
+
+void CaptureLog(int level, const char* where, const char* message) {
+    if (std::strstr(message, "DSMod snapshot:") != nullptr) {
+        std::scoped_lock lk{g_log_mutex};
+        g_last_snapshot = message;
+        return; // every 3 seconds: kept out of the test's output
+    }
+    std::fprintf(stderr, "[%d] %s: %s\n", level, where, message);
+}
+
+/// The number after "<key>=" in the newest snapshot line, -1 when absent.
+long SnapshotCounter(const char* key) {
+    std::scoped_lock lk{g_log_mutex};
+    const std::string needle = std::string{" "} + key + "=";
+    const auto at = g_last_snapshot.find(needle);
+    return at == std::string::npos ? -1 : std::strtol(g_last_snapshot.c_str() + at + needle.size(), nullptr, 10);
+}
+
+std::string WriteMapProbePackage(const std::filesystem::path& out_dir) {
+    // The map image's longest side. RT_TEST_RASTER_PX makes the rasters longer (8192 is the
+    // runtime's limit) to see the page publish beside slow ones, as on a handheld.
+    const char* const px_env = std::getenv("RT_TEST_RASTER_PX");
+    const int raster_px = px_env != nullptr ? std::atoi(px_env) : 3072;
+    const auto pkg = out_dir / "probe_map";
+    std::filesystem::create_directories(pkg / "dualscreen");
+    std::ofstream(pkg / "package.json") << R"({"format":1,"type":"dual-screen-mod",
+        "title_id":"01006BB00C6F0000","name":"rt_test map probe","version":"0.0.1"})";
+    std::ofstream(pkg / "dualscreen" / "manifest.json") << R"({
+      "format": 1, "title_id": "01006BB00C6F0000", "name": "rt_test map probe",
+      "canvas_w": 640, "canvas_h": 360, "background": "#FF000000",
+      "map": {"cell": 16, "icons": {}, "style": {"fade_ticks": 60, "raster_px": )" << raster_px << R"(},
+              "areas": {"field": {"geo": "file:field.geo", "min": [0, 0], "max": [1000, 500]}}},
+      "pages": [{"id": "main", "title": "map", "widgets": [
+        {"type": "map", "rect": [0, 0, 640, 360], "area": "field", "id": "m", "color": "#FF7FD4E8",
+         "bg": "#FF0B0F14", "marker_x_bind": "px", "marker_y_bind": "py"}
+      ]}]})";
+    std::ofstream(pkg / "dualscreen" / "909E904AF78AC1B8.json") << R"({
+      "points": {
+        "px": {"type": "f32", "ptr": ["main+0x1CC0800"], "offset": "0x0"},
+        "py": {"type": "f32", "ptr": ["main+0x1CC0804"], "offset": "0x0"}
+      }})";
+    // The area's geometry: one rectangle over the whole area (4 vertices normalised to 0..65535,
+    // 2 triangles), in the runtime's .geo layout: u32 vertex count, u32 index count, u16 x/y
+    // pairs, u32 indices.
+    const uint32_t counts[2] = {4, 6};
+    const uint16_t verts[8] = {0, 0, 65535, 0, 65535, 65535, 0, 65535};
+    const uint32_t indices[6] = {0, 1, 2, 0, 2, 3};
+    std::ofstream geo(pkg / "dualscreen" / "field.geo", std::ios::binary);
+    geo.write(reinterpret_cast<const char*>(counts), sizeof(counts));
+    geo.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+    geo.write(reinterpret_cast<const char*>(indices), sizeof(indices));
+    return pkg.string();
+}
+
+/// Walks the marker across the map for 175 ticks (a new cell every few ticks, so a fade is always
+/// in progress), stops, and lets the last fade run out. The snapshot line comes every 180 ticks:
+/// the one at 180 closes the walk, the one at 360 holds the still fade that followed.
+/// Returns the failures.
+int RunMapProbe(FakeMemory& mem, const std::filesystem::path& out_dir) {
+    const std::string probe = WriteMapProbePackage(out_dir);
+    PnRtConfig cfg = MakeConfig(mem, probe, nullptr);
+    cfg.panel_w = 640;
+    cfg.panel_h = 360;
+    cfg.log = &CaptureLog;
+    PnRt* rt = pn_rt_create(&cfg);
+    if (rt == nullptr) {
+        std::fprintf(stderr, "rt_test: pn_rt_create failed for the map probe\n");
+        return 1;
+    }
+    struct Counters {
+        long frames, composites, incremental, fade_steps, pulse_hits, skipped, base_ms, composite_ms;
+    };
+    const auto read = [] {
+        return Counters{SnapshotCounter("ui_frames"),      SnapshotCounter("map_composites"),
+                        SnapshotCounter("incremental"),    SnapshotCounter("fade_steps"),
+                        SnapshotCounter("pulse_memo_hits"), SnapshotCounter("publish_skipped"),
+                        SnapshotCounter("base_ms"),        SnapshotCounter("composite_ms")};
+    };
+    int ticks = 0, slow_ticks = 0;
+    double worst_ms = 0.0;
+    const auto run_to = [&](int until, bool moving) {
+        for (; ticks < until; ++ticks) {
+            if (moving) {
+                mem.Poke<float>(MainBase + 0x1CC0800, 60.0f + static_cast<float>(ticks) * 0.5f);
+                mem.Poke<float>(MainBase + 0x1CC0804, 250.0f);
+            }
+            const auto t0 = std::chrono::steady_clock::now();
+            pn_rt_tick(rt);
+            const double ms =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            worst_ms = std::max(worst_ms, ms);
+            slow_ticks += ms > 16.0;
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        }
+    };
+    run_to(175, true);
+    const bool wrote = CapturePng(rt, out_dir / "probe_map_fading.png");
+    run_to(184, false);
+    const Counters walk = read(); // the snapshot of tick 180
+    run_to(364, false);
+    const Counters end = read(); // the snapshot of tick 360
+    std::printf("rt_test: map probe, the walk (ticks 1-180): ui_frames=%ld map_composites=%ld incremental=%ld "
+                "fade_steps=%ld pulse_memo_hits=%ld publish_skipped=%ld base_ms=%ld composite_ms=%ld\n",
+                walk.frames, walk.composites, walk.incremental, walk.fade_steps, walk.pulse_hits, walk.skipped,
+                walk.base_ms, walk.composite_ms);
+    std::printf("rt_test: map probe, the still fade after it (ticks 181-360): ui_frames +%ld map_composites +%ld "
+                "incremental +%ld pulse_memo_hits +%ld publish_skipped +%ld; "
+                "slowest tick %.1f ms, %d ticks over 16 ms\n",
+                end.frames - walk.frames, end.composites - walk.composites, end.incremental - walk.incremental,
+                end.pulse_hits - walk.pulse_hits, end.skipped - walk.skipped, worst_ms, slow_ticks);
+    int failures = !wrote;
+    const auto expect = [&](bool ok, const char* what) {
+        if (!ok) {
+            std::fprintf(stderr, "rt_test: FAILED: map probe: %s\n", what);
+            ++failures;
+        }
+    };
+    expect(walk.composites > 0 && walk.fade_steps > 0, "no map composite was built during a fade");
+    expect(walk.incremental > 0, "no composite was incremental");
+    expect(walk.pulse_hits > 0, "the pulse lookup never found the area's composite memo");
+    // The page publishes on every second tick at most, and a composite belongs to a publish.
+    expect(walk.composites <= 180 / 2 + 4, "more map composites than publish ticks during the walk");
+    // A raster runs only in a redraw job, and a job is sent only by a publish that got the map
+    // state: a publish refused for a raster (publish_skipped) is retried, and every composite is
+    // followed by a frame. So the page cannot be starved by rasters, however long they are.
+    expect(end.frames >= end.composites, "a map composite was not followed by a published frame");
+    const bool slow = std::getenv("RT_TEST_RASTER_PX") != nullptr; // long rasters on purpose: fewer steps fit
+    // The page keeps publishing while the map fades: at least a frame every fourth tick.
+    expect(slow || walk.frames >= 180 / 4, "the page published too few frames while the map was fading");
+    // The fade that is still running at tick 180 has about 55 ticks left (fade_ticks 60, the last
+    // reveal near tick 175) and steps on every fourth tick: about 14 composites, all incremental.
+    const long still = end.composites - walk.composites;
+    expect(still <= 20 && (slow ? still >= 1 : still >= 8),
+           "a still fade should step on every fourth tick (8 to 20 composites)");
+    expect(end.incremental - walk.incremental == still, "a fade step was not an incremental composite");
+    expect(end.pulse_hits - walk.pulse_hits >= still, "a fade step's pulse lookup missed the memo");
+    // The tick thread never waits for a raster.
+    expect(worst_ms < 50.0, "a tick took 50 ms or more");
+    pn_rt_destroy(rt);
+    return failures;
+}
+
 } // namespace
 
 int RunModuleMode(int argc, char** argv) {
     if (argc < 6) {
         std::fprintf(stderr,
-                     "usage: rt_test --module <package dir> <out dir> <title hex> <build hex> [--romfs <dir>] [page...]\n");
+                     "usage: rt_test --module <package dir> <out dir> <title hex> <build hex> [--romfs <dir>] [--panel <w>x<h>] [page...]\n");
         return 2;
     }
     const std::string package_dir = argv[2];
@@ -306,11 +464,19 @@ int RunModuleMode(int argc, char** argv) {
     const char* build = argv[5];
     // R7: `--romfs <dir>` anywhere after the build id hands the module a game RomFS (the Dread
     // module's standby page names romfs:...bctex textures); the remaining arguments are page ids.
+    // Runtime 25: `--panel <w>x<h>` sets the second screen's size in pixels (default 1240x1080), so
+    // a package with canvas_alt can be drawn on a portrait or a narrow panel and @screen.* read.
     const char* romfs_dir = nullptr;
+    unsigned panel_w = 1240, panel_h = 1080;
     std::vector<const char*> pages;
     for (int i = 6; i < argc; ++i) {
         if (std::strcmp(argv[i], "--romfs") == 0 && i + 1 < argc) {
             romfs_dir = argv[++i];
+        } else if (std::strcmp(argv[i], "--panel") == 0 && i + 1 < argc) {
+            if (std::sscanf(argv[++i], "%ux%u", &panel_w, &panel_h) != 2 || panel_w == 0 || panel_h == 0) {
+                std::fprintf(stderr, "rt_test: --panel wants <w>x<h>\n");
+                return 2;
+            }
         } else {
             pages.push_back(argv[i]);
         }
@@ -321,8 +487,8 @@ int RunModuleMode(int argc, char** argv) {
     PnRtConfig cfg = MakeConfig(mem, package_dir, romfs_dir);
     cfg.title_id = title;
     cfg.build_id_hex = build;
-    cfg.panel_w = 1240;
-    cfg.panel_h = 1080;
+    cfg.panel_w = panel_w;
+    cfg.panel_h = panel_h;
     const std::string data_dir = (out_dir / "data").string();
     cfg.data_dir = data_dir.c_str();
     PnRt* rt = pn_rt_create(&cfg);
@@ -399,6 +565,31 @@ int main(int argc, char** argv) {
         failures += !RenderPage(rt, nullptr, out_dir / "probe.png");
         pn_rt_destroy(rt);
     }
+    // --- The version gate: a package that asks for exactly this runtime is accepted, one that
+    // asks for the next number gets the runtime's own "update required" page instead of its pages.
+    for (const int ask : {ExpectedRuntime, ExpectedRuntime + 1}) {
+        const std::string name = "probe_min_runtime_" + std::to_string(ask);
+        const std::string probe = WriteProbePackage(out_dir, ask, name.c_str());
+        PnRtConfig cfg = MakeConfig(mem, probe, nullptr);
+        PnRt* rt = pn_rt_create(&cfg);
+        if (rt == nullptr) {
+            std::fprintf(stderr, "rt_test: pn_rt_create failed for %s\n", name.c_str());
+            return 1;
+        }
+        failures += !RenderPage(rt, nullptr, out_dir / (name + ".png"));
+        char status[256];
+        pn_rt_status(rt, status, sizeof(status));
+        const bool refused = std::strstr(status, "page=update_required") != nullptr;
+        const bool want_refused = ask > ExpectedRuntime;
+        std::printf("rt_test: min_runtime %d: %s (%s)\n", ask, refused ? "refused" : "accepted", status);
+        if (refused != want_refused) {
+            std::fprintf(stderr, "rt_test: FAILED: min_runtime %d should be %s by runtime %d\n", ask,
+                         want_refused ? "refused" : "accepted", ExpectedRuntime);
+            ++failures;
+        }
+        pn_rt_destroy(rt);
+    }
+    failures += RunMapProbe(mem, out_dir);
     // --- R2 interaction: touch -> AuxRouting -> mod_input.cpp/mod_actions.cpp, on the real LA
     // package. The panel is set to the manifest's own canvas size (1240x1080) so the touch
     // coordinates handed to pn_rt_touch equal canvas pixels exactly (to_canvas_x/y is then the

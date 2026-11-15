@@ -745,8 +745,13 @@ static int present_one(const pq_item *it) {
         vk.vkAllocateCommandBuffers(V.dev, &ai, &g_fr[k].cb); vk.vkCreateFence(V.dev, &fi, NULL, &g_fr[k].fence); vk.vkCreateSemaphore(V.dev, &sci, NULL, &g_fr[k].acq);
     }
     // The frame's last copy done, bounded: after a GPU hang (vka_dev.c) nothing more is presented
-    for (VkResult w; !vka_hung() && (w = vk.vkWaitForFences(V.dev, 1, &g_fr[k].fence, VK_TRUE, 100000000ull)) == VK_TIMEOUT;) {}
+    VkResult rb_fw = VK_SUCCESS;   // PEANUTS: the wait's result is kept for the texture readback below (it was a variable of the loop)
+    for (; !vka_hung() && (rb_fw = vk.vkWaitForFences(V.dev, 1, &g_fr[k].fence, VK_TRUE, 100000000ull)) == VK_TIMEOUT;) {}
     if (vka_hung()) { VRED_ONCE("GPU hang: nothing more is presented"); vka_tex_drop(im); return 0; }
+    // PEANUTS: texture readback for the companion runtime (vka_readback.inc): rb is 0 unless a companion's request is queued or its copy in flight, and then this
+    // present hands over the copies that rode on frame k's fence (just waited for: rb_fw says how that ended), records the queued ones below and notes their fence
+    int rb = atomic_load_explicit(&vka_rb_on, memory_order_relaxed);
+    if (rb) vka_rb_poll(g_fr[k].fence, rb_fw);
     if (g_fr[k].held) { vka_tex_drop(g_fr[k].held); g_fr[k].held = NULL; }
     if (g_fsr.mid[k] && !fsr_wanted()) fsr_free(k);   // FSR switched off live: frame k's fence is signalled, so its intermediate image is no longer read
     uint32_t idx; uint64_t t0 = now_ns();
@@ -816,6 +821,7 @@ static int present_one(const pq_item *it) {
     if (blit >= 0) vka_img_barrier(cb, g_simg[idx], VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
     ovl_draw(cb, k, idx);   // the launcher's overlay over the picture (generated frames too)
     if (!it->src) vka_ctl_shot_record(cb, im, g_pfmt, cx, cy, cw, ch);   // the game's own frames only
+    if (rb) vka_rb_record(cb);   // PEANUTS: texture readback: a companion's queued copies ride in this command buffer (above)
     vk.vkEndCommandBuffer(cb);
     if (rs_lock) pthread_mutex_unlock(&vka_rs_mu);   // PEANUTS: (above)
     VkSemaphore ws[2] = {g_fr[k].acq, V.tl}; uint64_t wv[2] = {0, it->fence}; VkPipelineStageFlags st[2] = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};   // the image's first barrier is ALL_COMMANDS
@@ -891,6 +897,7 @@ static int present_one(const pq_item *it) {
     pthread_mutex_unlock(&V.qmu);
     g_fr[k].held = im;
     if (!r) vka_ctl_shot_done(g_fr[k].fence);
+    if (rb) vka_rb_submitted(g_fr[k].fence, !r);   // PEANUTS: texture readback: the copies recorded above are done when this fence signals
     if (r == VK_ERROR_DEVICE_LOST || pr == VK_ERROR_DEVICE_LOST) vka_device_lost(r ? "the present's submission" : "vkQueuePresentKHR");
     if (r) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 8) VRED("present submission %d", r); return 0; }
     if (pr == VK_ERROR_OUT_OF_DATE_KHR) g_recreate = 1;

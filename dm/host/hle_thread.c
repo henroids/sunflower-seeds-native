@@ -80,6 +80,8 @@ typedef struct thr {
     // Pausing (SetThreadActivity, used by IL2CPP's garbage collector to stop the world): pause_req = requested, paused = stopped; when stopped inside an SVC the context comes from the gate frame svc_regs (registered on SVC entry),
     // when stopped in guest code the signal handler saves it into ctx_*; pcv lets the requester wait for "stopped" and the paused thread wait for "resume"
     _Atomic int pause_req; int paused;
+    int world;                 // PEANUTS: this pause_req was set by dm_guest_stop_all (the companion runtime's stop of every game thread), not by the game's SetThreadActivity; under G
+    uint64_t nat_sp;           // PEANUTS: a stack address of this thread at its entry into the outermost native HLE wait (dm_thread_native_wait): dm_guest_stopped_in scans its stack from there; under G
     uint64_t *_Atomic svc_regs; uint64_t svc_pc, svc_x18;   // svc_x18: the guest's x18 at SVC entry (its thread slot; the gate frame holds the Apple platform register)
     // SVC exit without G: bit 0 = inside an SVC, bit 1 = a pause was requested. The exit clears bit 0 with one compare-and-swap when bit 1 is clear, and takes G only otherwise;
     // the requester sets bit 1 and treats the thread as stopped only if bit 0 was set, so a thread it counts as stopped in an SVC cannot leave the SVC without G (svc_regs stays valid for GetThreadContext3)
@@ -177,6 +179,7 @@ void dm_thread_native_wait(int entering) {
     if (!t) return;
     pthread_mutex_lock(&G);
     if (entering) { if (!t->native_wait++) t->gnat_t0 = now_ns(); hand_leave(t); }
+    if (entering && t->native_wait == 1) t->nat_sp = (uint64_t)(uintptr_t)__builtin_frame_address(0);   // PEANUTS: where this thread's stack is while it waits (dm_guest_stopped_in)
     else { if (!t->native_wait) die("unbalanced native HLE wait"); if (!--t->native_wait) t->gnat_ns += now_ns() - t->gnat_t0; }
     pthread_mutex_unlock(&G);
 }
@@ -380,12 +383,20 @@ void dm_thread_returned(void) { die("guest thread entry function returned (Horiz
 //   · running guest code: send SIGUSR2; the handler saves the ucontext and waits there for the resume (guest code holds no host locks, so the handler may take G);
 //   · inside host code (HLE functions etc.): the handler does not stop it; the requester resends every 100 µs until the thread is back in guest code or enters an SVC.
 module_t *module_of(const void *p);
+// PEANUTS begin: guest code outside the modules. A companion package's helper (dm/peanuts/rt/peanuts_helper.cpp) is code of the package that a patched call of the game runs on
+// the game's own thread, in pages beside main that belong to no module. Without this the pause signal took a thread in it for one in host code and never stopped it there: a
+// stop requested while the helper waited (for one of the game's locks, say) could not complete. The helper holds no host lock, so it stops as game code does.
+// One range, set once before any thread can be in it and never changed: read without a lock, also from the signal handler
+static _Atomic uint64_t g_xcode_lo, g_xcode_hi;
+void dm_guest_code_range(uint64_t lo, uint64_t hi) { atomic_store(&g_xcode_hi, hi); atomic_store(&g_xcode_lo, lo); }
+static int guest_code_extra(uint64_t pc) { uint64_t lo = atomic_load(&g_xcode_lo); return lo && pc >= lo && pc < atomic_load(&g_xcode_hi); }
+// PEANUTS end
 static void on_pause_sig(int sig, siginfo_t *si, void *uc_) {
     (void)sig; (void)si;
     thr_t *t = pthread_getspecific(g_keythr);
     if (!t || !atomic_load(&t->pause_req) || atomic_load(&t->svc_regs)) return;
     ucontext_t *uc = uc_;
-    if (!module_of((void *)PLAT_UC_PC(uc))) return;   // in host code: do not stop; the requester resends
+    if (!module_of((void *)PLAT_UC_PC(uc)) && !guest_code_extra(PLAT_UC_PC(uc))) return;   // in host code: do not stop; the requester resends   // PEANUTS: a companion's helper code is guest code too (guest_code_extra)
     pthread_mutex_lock(&G);
     if (t->pause_req) {
         for (int i = 0; i < 29; i++) t->ctx_x[i] = PLAT_UC_X(uc, i);
@@ -424,6 +435,94 @@ static void pause_install(void) {
     sigemptyset(&sa.sa_mask);
     sigaction(SIGUSR2, &sa, NULL);
 }
+// PEANUTS begin: every game thread stopped, for the companion runtime's writes "with the guest stopped" (dm/peanuts: a package's write batch checks values and stores several
+// words; Eden suspends the emulated threads around it). Built on the pause above (SetThreadActivity), so a stopped thread is where that leaves it:
+//   - in game code (or a companion helper's), between two instructions, held in the pause signal's handler: it holds no host lock;
+//   - inside an SVC: it may still finish the SVC's host work, but cannot return to game code (thr_svc_leave needs G, which the caller of dm_guest_stop_all holds);
+//   - in a native HLE wait (native_wait): it cannot come back from it for the same reason (dm_thread_native_wait takes G).
+// A thread in other host code (an HLE call) is not stopped there: the signal is sent again every 100 us until it is back in game code or enters an SVC, as for SetThreadActivity.
+// That is what Eden gives under NCE (a signal stops a thread between two instructions, anywhere), with one thing less: Eden waits for a thread's SVC to end, here an SVC
+// that copies into the game's memory without G (a file read into a game buffer, hle_fs.c; the memory SVCs' answers, hle_svc.c) may still do so during the stop.
+// Not stopped: the calling thread, threads the host made for itself (host_owned: the audio renderer's, the movie player's), and every host thread (audio output, GPU workers).
+// A thread the game itself pauses (IL2CPP's collector, SetThreadActivity) is the game's: this waits for that pause to be complete like for its own, and does not resume it.
+// Threads are looked at again on every pass, G being given up between passes: a thread started meanwhile is asked to stop too, one that exits is gone.
+// 0: all are stopped and G IS HELD until dm_guest_resume_all (so the caller must not call anything that takes G: no thread SVC, no thread list or dump);
+// -1: not all stopped within timeout_ns; -2: another stop was under way for all of timeout_ns. After -1 and -2 every thread runs again and nothing is held.
+// One stop at a time (g_world_mu): a second caller waits for the first, within its own bound
+static pthread_mutex_t g_world_mu = PTHREAD_MUTEX_INITIALIZER;
+static void world_release(void) {   // holding G: the threads this stop paused run again
+    for (thr_t *t = g_all; t; t = t->all) if (t->world) {
+        // (paused of a thread held in the signal handler is the handler's to clear when it leaves: until then it is still there, and a new stop finds it so)
+        t->world = 0; if (!t->ctx_ok) t->paused = 0; atomic_store(&t->pause_req, 0); atomic_fetch_and(&t->svc_state, ~2); pthread_cond_broadcast(&t->pcv);
+    }
+}
+int dm_guest_stop_all(uint64_t timeout_ns) {
+    thr_t *me = pthread_getspecific(g_keythr);
+    uint64_t t0 = now_ns();
+    while (pthread_mutex_trylock(&g_world_mu)) {
+        if (now_ns() - t0 >= timeout_ns) return -2;
+        struct timespec ts = {0, 100000}; nanosleep(&ts, 0);
+    }
+    pthread_mutex_lock(&G);
+    for (;;) {
+        int pending = 0;
+        for (thr_t *t = g_all; t; t = t->all) {
+            if (t == me || !t->started || t->exited || t->host_owned) continue;
+            if (!t->world && !atomic_load(&t->pause_req)) {   // not asked yet (also: started since the last pass)
+                t->world = 1; atomic_store(&t->pause_req, 1);
+                // Inside an SVC: stopped as far as game code goes. Still in the signal handler of the stop before this one (resumed, not yet woken): it sees the new
+                // request and stays. Else not stopped yet, whatever an earlier pause left in the flag
+                t->paused = (atomic_fetch_or(&t->svc_state, 2) & 1) != 0 || t->ctx_ok;
+            }
+            // Ours or the game's own pause under way (pause_req without world): either way not stopped until it says so
+            if (!t->paused && !t->native_wait) { pending++; pthread_kill(t->pt, SIGUSR2); }   // holding G: a thread not yet exited under G is still there to signal
+        }
+        if (!pending) return 0;   // G and g_world_mu stay held
+        if (now_ns() - t0 >= timeout_ns) break;
+        pthread_mutex_unlock(&G);   // the handlers and the SVC gates need G to report
+        { struct timespec ts = {0, 100000}; nanosleep(&ts, 0); }
+        pthread_mutex_lock(&G);
+    }
+    world_release();
+    pthread_mutex_unlock(&G); pthread_mutex_unlock(&g_world_mu);
+    return -1;
+}
+void dm_guest_resume_all(void) { world_release(); pthread_mutex_unlock(&G); pthread_mutex_unlock(&g_world_mu); }
+// Between dm_guest_stop_all and dm_guest_resume_all: how many game threads may be executing in [lo, hi) of code or come back into it, for a writer of several
+// instructions there. Conservative: a thread counts when its pc, its link register, any of its general registers or any 8-byte word of its stack from the saved sp to the
+// stack's top lies in the range (a return address of a caller's frame, a saved register). A wrong hit costs the writer a retry; a miss would let a thread run half of an
+// old sequence and half of a new one. Registers and sp: the pause signal's saved context, the SVC gate's frame, or for a thread in a native wait the stack address it
+// recorded on entry (nat_sp, less 1 KiB for the frames of the wait itself; its registers were saved by the host frames above that or are not known: the stack is what is
+// looked at). A thread of which none of these is known counts as inside. Threads the host made for itself run on and are not looked at
+static int in_range(uint64_t v, uint64_t lo, uint64_t hi) { return v >= lo && v < hi; }
+static int stack_in_range(uint64_t sp, uint64_t top, uint64_t lo, uint64_t hi) {
+    // Read through the kernel, page by page, and ended by the first page that cannot be read: the thread may stand on a stack that is not the one it was created with
+    // (a game's fibers), so nothing is assumed mapped between sp and a top. To the thread's own top when sp lies under it within 8 MB, else 1 MB up from sp
+    sp &= ~7ull;
+    uint64_t end = top > sp && top - sp <= (8ull << 20) ? top : sp + (1ull << 20), buf[512];
+    for (uint64_t p = sp; p < end; ) {
+        size_t n = 4096 - (size_t)(p & 4095); if (n > end - p) n = (size_t)(end - p);
+        if (plat_mem_read(p, buf, n)) break;
+        for (size_t i = 0; i + 8 <= n; i += 8) if (in_range(buf[i / 8], lo, hi)) return 1;
+        p += n;
+    }
+    return 0;
+}
+int dm_guest_stopped_in(uint64_t lo, uint64_t hi) {
+    thr_t *me = pthread_getspecific(g_keythr); int n = 0;
+    for (thr_t *t = g_all; t; t = t->all) {
+        if (t == me || !t->started || t->exited || t->host_owned) continue;
+        const uint64_t *r = atomic_load(&t->svc_regs); int hit = 0; uint64_t sp = 0;
+        if (r) { hit = in_range(t->svc_pc, lo, hi); for (int i = 0; i < 31 && !hit; i++) hit = in_range(r[i], lo, hi); sp = r[99]; }
+        else if (t->ctx_ok) { hit = in_range(t->ctx_pc, lo, hi) || in_range(t->ctx_lr, lo, hi) || in_range(t->ctx_fp, lo, hi); for (int i = 0; i < 29 && !hit; i++) hit = in_range(t->ctx_x[i], lo, hi); sp = t->ctx_sp; }
+        else if (t->native_wait && t->nat_sp) sp = t->nat_sp - 1024;
+        else hit = 1;
+        if (!hit && sp) hit = stack_in_range(sp, t->stack_top, lo, hi);
+        n += hit;
+    }
+    return n;
+}
+// PEANUTS end
 // Horizon svc::ThreadContext (arm64, 0x320 bytes)
 typedef struct { uint64_t r[29], fp, lr, sp, pc; uint32_t pstate, pad; __uint128_t v[32]; uint32_t fpcr, fpsr; uint64_t tpidr; } hz_ctx_t;
 _Static_assert(sizeof(hz_ctx_t) == 0x320, "ThreadContext");
@@ -1014,8 +1113,12 @@ static int svc_thread_impl(int num, uint64_t *regs) {
         else if (t == me) r = R_BAD_STATE;
         else if (act == 1) {
             atomic_store(&t->pause_req, 1);
+            t->world = 0;   // PEANUTS: the game's own pause takes the thread over from a stop of all threads under way (dm_guest_stop_all), whose end then leaves it paused
             int st = atomic_fetch_or(&t->svc_state, 2);
-            if (!t->started || t->exited || (st & 1)) t->paused = 1;
+            // PEANUTS(upstream-candidate): the flag is set from what holds now, not left as an earlier pause had it. An SVC's exit clears it only on its slow path
+            // (thr_svc_leave), so after "paused inside an SVC, resumed before the SVC ended" it stayed 1 and the next pause took a running thread for a stopped one.
+            // ctx_ok: still held in the pause signal's handler (a stop of all threads that is ending, or one that just handed the thread over)
+            t->paused = !t->started || t->exited || (st & 1) || t->ctx_ok;
             uint64_t t0 = now_ns(); int warned = 0;
             while (!t->paused && !t->exited) {
                 pthread_mutex_unlock(&G); pthread_kill(t->pt, SIGUSR2); pthread_mutex_lock(&G);

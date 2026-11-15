@@ -2,14 +2,18 @@
 // package with the lifted runtime's own Discover() and drives ModRuntime through the fake core
 // timing (pn_rt_tick) and the AuxRouting sink (pn_rt_frame).
 
+#include "peanuts_patches.h"
+#include "pnrt_services.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -18,6 +22,7 @@
 #include "common/logging.h"
 #include "common/settings.h"
 #include "core/core.h"
+#include "core/mods/mod_launch_gate.h"
 #include "core/mods/mod_module.h"
 #include "core/mods/mod_runtime.h"
 #include "peanuts_helper.h"
@@ -89,7 +94,40 @@ struct PnRt {
     // android/.../native_input.cpp: one SetTouch per input event, carrying every finger still
     // down, bit0 set only for a finger just starting).
     std::vector<VideoCore::DSMod::AuxTouchPoint> live_touches;
+    /// live_touches is the UI thread's (pn_rt_touch) and whoever hides the page (pn_rt_set_present):
+    /// both take this.
+    std::mutex touch_mutex;
+    /// The load plan's mailbox epoch. Eden moves it on at every pause and resume (core.cpp
+    /// InvalidateDualScreenGuestMailbox): the word in the guest's mailbox, and the value a module
+    /// reads as "__mailbox_epoch". pn_rt_lifecycle (any thread) writes the guest word with an atomic
+    /// exchange and this atomic; pn_rt_tick copies it into the system, whose field only the tick
+    /// thread touches. epoch_address is set once in pn_rt_create (0: the plan has no epoch word).
+    u64 epoch_address{};
+    std::atomic<u32> epoch{0};
+    /// pn_rt_status's line. The runtime's page, name and module error are the tick thread's (a module that fails mid-run
+    /// rewrites its error text), so the tick thread writes the line here after each tick (and pn_rt_create, pn_rt_set_page,
+    /// which are that thread's too) and pn_rt_status, any thread, copies it. Both under status_mutex.
+    std::mutex status_mutex;
+    std::string status{"no runtime"};
 };
+
+namespace {
+/// The tick thread only: reads the runtime, then stores the line under the lock.
+void RefreshStatus(PnRt& rt) {
+    char line[512];
+    if (!rt.runtime) {
+        std::snprintf(line, sizeof(line), "no runtime");
+    } else {
+        const auto& r = *rt.runtime;
+        std::snprintf(line, sizeof(line), "%s page=%s tick=%llu frames=%llu module=%s err=%s", Core::Mods::PnRtAccess::Name(r).c_str(),
+                      Core::Mods::PnRtAccess::PageId(r).c_str(), static_cast<unsigned long long>(Core::Mods::PnRtAccess::Ticks(r)),
+                      static_cast<unsigned long long>(rt.frames_taken), Core::Mods::PnRtAccess::Module(r).c_str(),
+                      rt.last_error.empty() ? "-" : rt.last_error.c_str());
+    }
+    std::scoped_lock lock{rt.status_mutex};
+    rt.status = line;
+}
+} // namespace
 
 namespace {
 
@@ -153,6 +191,12 @@ PnRt* pn_rt_create(const PnRtConfig* config) {
         Common::Log::SetSink(config->log);
     }
     Common::Log::SetMinLevel(static_cast<Common::Log::Level>(std::clamp(config->log_level, 0, 5)));
+    // Eden's launch gate, where Eden reads it: core.cpp skips discovery and the runtime, and the loader's SelectLoadPlanPackage
+    // selects no plan. Here both happen below this line (Discover, PeanutsHelper::Install), so one check serves.
+    if (Core::Mods::CompanionsDisabledForLaunch()) {
+        LOG_INFO(Core, "peanuts_rt: companions are off for this launch: no package is selected, no load plan is applied");
+        return nullptr;
+    }
 
     Settings::values.language_index.SetValue(
         config->language >= 1 && config->language <= 20
@@ -165,9 +209,11 @@ PnRt* pn_rt_create(const PnRtConfig* config) {
     rt->pad = config->pad;
     rt->haptics = config->haptics;
     auto& sys = rt->system;
+    PnShim::SetGuest(config->guest); // before the helper below and the runtime: both may ask for a stop
     sys.title_id = config->title_id;
     sys.memory.SetBackend({&rt->memory, &MemRead, &MemWrite, &MemPointer});
     sys.input.pad.SetSink({&rt->pad, &PadButton, &PadStick});
+    PnShim::SetPadReader(config->pad);
     sys.fs_controller.load_root = FileSys::MakeSyntheticDir("load", {config->package_dir});
     rt->romfs = config->romfs;
     if (config->romfs_dir != nullptr) {
@@ -204,7 +250,9 @@ PnRt* pn_rt_create(const PnRtConfig* config) {
     if (config->save_dir != nullptr) {
         sys.save_root = FileSys::OpenHostDirectory(config->save_dir);
     }
-    if (config->sysfont_dir != nullptr) {
+    if (config->sysfont_dir == nullptr) {
+        sys.sysfont_root = PnShim::SysfontRoot(); // the firmware fonts the host serves the game (DM_SHARED_FONT), for "sysfont:"
+    } else {
         sys.sysfont_root = FileSys::OpenHostDirectory(config->sysfont_dir);
     }
     // R5: the data directory behind Common::FS::GetEdenPath (persisted flags, "user:" assets) and
@@ -248,15 +296,22 @@ PnRt* pn_rt_create(const PnRtConfig* config) {
     }
     // The package's load plan (its mailbox and guest helper), before the runtime loads the package's module: the module
     // takes the mailbox from the system when it is configured (mod_module_services.cpp)
+    // A manifest's patches: what main holds at their sites is noted before the load plan writes anything (peanuts_patches.h)
+    PeanutsPatches::Configure(*config, manifest->patches);
     if (config->helper.code_rewritten != nullptr) {
         const auto helper = PeanutsHelper::Install(sys, *config, build_id);
         if (!helper.installed && !helper.error.empty()) {
             LOG_WARNING(Core, "peanuts_rt: the package's load plan is not installed (no guest helper, no mailbox): {}", helper.error);
         }
+        if (helper.installed) {
+            rt->epoch_address = helper.epoch_address;
+            rt->epoch.store(helper.epoch, std::memory_order_release);
+        }
     }
     rt->runtime.emplace(sys, std::move(*manifest));
     rt->runtime->SetMainMemoryParameters(config->main_base, config->main_size);
     rt->runtime->Initialize();
+    RefreshStatus(*rt);
     return rt.release();
 }
 
@@ -289,7 +344,64 @@ void pn_rt_tick(PnRt* rt) {
             }
         }
     }
+    // The mailbox epoch as pn_rt_lifecycle left it, before the module's tick asks for it
+    if (rt->epoch_address != 0) {
+        const u32 epoch = rt->epoch.load(std::memory_order_acquire);
+        if (rt->system.GetDualScreenGuestMailboxEpoch() != epoch) {
+            const auto [address, size] = rt->system.GetDualScreenGuestMailbox();
+            rt->system.SetDualScreenGuestMailbox(address, size, epoch);
+        }
+    }
+    PnShim::NoteTick(); // the pad gate's liveness (pn_rt_pad_gate)
     rt->system.core_timing.FireAll();
+    RefreshStatus(*rt);
+}
+
+void pn_rt_set_panel(PnRt* rt, uint32_t w, uint32_t h) {
+    if (rt == nullptr || w == 0 || h == 0) {
+        return;
+    }
+    auto& aux = rt->system.gpu.DSModAux(); // two atomics, as Eden's renderer stores them when its second window resizes
+    aux.width.store(w);
+    aux.height.store(h);
+}
+
+void pn_rt_set_companions_disabled(int disabled) {
+    Core::Mods::SetCompanionsDisabledForLaunch(disabled != 0);
+}
+
+void pn_rt_set_present(PnRt* rt, int shown) {
+    if (rt == nullptr) {
+        return;
+    }
+    auto& aux = rt->system.gpu.DSModAux();
+    if (shown) {
+        aux.present.store(true);
+        return;
+    }
+    // As Eden when its second surface goes (vk_dsmod_aux.cpp, aux_routing.h): hidden first, then no finger down. The
+    // mailbox keeps each lost finger as "ended" for the runtime's next look at it, so a held pointer ends, it is not forgotten.
+    aux.present.store(false);
+    std::scoped_lock lock{rt->touch_mutex};
+    rt->live_touches.clear();
+    aux.SetTouch(std::span<const VideoCore::DSMod::AuxTouchPoint>{});
+}
+
+void pn_rt_lifecycle(PnRt* rt, int suspended) {
+    if (!suspended) {
+        PnShim::NoteTick(); // the game runs again before the first tick does: the pad gate holds across the pause
+    }
+    if (rt == nullptr || rt->epoch_address == 0) {
+        return;
+    }
+    // Pause and resume both: one step each, never 0 (0 reads as "no epoch"), as Eden's InvalidateDualScreenGuestMailbox.
+    // The helper's code may read the word at any moment: one atomic store of the whole word.
+    u32 next = rt->epoch.load(std::memory_order_acquire);
+    u32 want;
+    do {
+        want = next + 1 == 0 ? 1 : next + 1;
+    } while (!rt->epoch.compare_exchange_weak(next, want, std::memory_order_acq_rel));
+    __atomic_store_n(reinterpret_cast<u32*>(rt->epoch_address), want, __ATOMIC_RELEASE);
 }
 
 int pn_rt_frame(PnRt* rt, uint32_t* w, uint32_t* h, uint32_t* out_rgba, size_t out_capacity) {
@@ -319,6 +431,7 @@ void pn_rt_touch(PnRt* rt, uint32_t finger_id, uint32_t x, uint32_t y, int down)
     if (rt == nullptr) {
         return;
     }
+    std::scoped_lock lock{rt->touch_mutex};
     auto& touches = rt->live_touches;
     const auto it = std::find_if(touches.begin(), touches.end(), [&](const auto& p) {
         return p.finger_id == finger_id;
@@ -349,24 +462,21 @@ int pn_rt_set_page(PnRt* rt, const char* page_id) {
     if (rt == nullptr || page_id == nullptr || !rt->runtime) {
         return 0;
     }
-    return Core::Mods::PnRtAccess::SetPage(*rt->runtime, page_id) ? 1 : 0;
+    const bool found = Core::Mods::PnRtAccess::SetPage(*rt->runtime, page_id);
+    RefreshStatus(*rt);
+    return found ? 1 : 0;
 }
 
 size_t pn_rt_status(PnRt* rt, char* buf, size_t n) {
     if (buf == nullptr || n == 0) {
         return 0;
     }
-    if (rt == nullptr || !rt->runtime) {
+    if (rt == nullptr) {
         return static_cast<size_t>(std::snprintf(buf, n, "no runtime"));
     }
-    const auto& r = *rt->runtime;
-    const int len = std::snprintf(buf, n, "%s page=%s tick=%llu frames=%llu module=%s err=%s",
-                                  Core::Mods::PnRtAccess::Name(r).c_str(),
-                                  Core::Mods::PnRtAccess::PageId(r).c_str(),
-                                  static_cast<unsigned long long>(Core::Mods::PnRtAccess::Ticks(r)),
-                                  static_cast<unsigned long long>(rt->frames_taken),
-                                  Core::Mods::PnRtAccess::Module(r).c_str(),
-                                  rt->last_error.empty() ? "-" : rt->last_error.c_str());
+    // The line the tick thread left (RefreshStatus): nothing of the runtime is read here
+    std::scoped_lock lock{rt->status_mutex};
+    const int len = std::snprintf(buf, n, "%s", rt->status.c_str());
     return len < 0 ? 0 : std::min(static_cast<size_t>(len), n - 1);
 }
 

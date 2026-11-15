@@ -884,6 +884,7 @@ static void clear_color(const p_clear_color *c) {
     if (!rc.extent.width) return;
     vka_fmt fl = f; fl.srgb = 0;   // in a pass the attachment is the sRGB view: the clear colour stays linear there
     vka_pclear pc = {c->index, im, f.vk, VK_IMAGE_ASPECT_COLOR_BIT, lv, l0, nl, rc, !part, {.color = color_value(&f, c->rgba)}, {.color = color_value(&fl, c->rgba)}};
+    if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed) && !im->is_video) vka_rb_color = (uint8_t)(1 + (f.srgb != 0));   // PEANUTS: texture readback: a colour clear counts as a use as a colour target, as a pass does (noted with the write on the next line: vka_readback.inc)
     vka_img_written(im); g_stat_ops++;
     int inpass = clear_in_pass(&pc); if (!inpass) vka_clear_outside(&pc);
     if (g_rcl > 0 && im->d.target == NVN_TEXTURE_TARGET_3D) { g_rcl--; VLOG("rc 3d clear: frame %llu serial %llu %ux%ux%u fmt %#x level %u slices %u+%u of %u, %s, %s, rgba %g %g %g %g", (unsigned long long)g_frame, (unsigned long long)im->serial,

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <set>
 #include <atomic>
+#include <chrono>
+#include <functional>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -26,6 +28,7 @@
 #include "common/thread.h"
 #include "core/file_sys/vfs/vfs.h"
 #include "core/memory.h"
+#include "hid_core/resources/npad/dsmod_pad_gate.h"
 #include "peanuts_rt.h" // PnRtRomfs (R6: OpenProviderDirectory)
 
 namespace Settings {
@@ -570,3 +573,233 @@ std::string Memory::ReadCString(VAddr vaddr, std::size_t max_length) {
 }
 
 } // namespace Core::Memory
+
+// --- the game's threads stopped (Core::System::RunWithGuestThreadsSuspended) --------------------
+// Eden suspends its emulated threads around a function (core.cpp: KernelCore::SuspendEmulation,
+// refused while a pause or resume is under way). Here the host stops the game's real threads
+// through PnRtGuest. What is kept of Eden's contract: `fn` runs only while no game thread executes
+// game code, and a stop that cannot be had is reported as false so the caller writes nothing (a
+// module's write batch) or says so. What this host adds is a bound: Eden waits for its cores
+// without one, a host thread in the middle of host work may take long to come back to game code.
+//
+// Threads: any thread may call RunWithGuestStopped (the tick thread does); the host's stop is
+// exclusive, a second caller fails at once. The counters are atomics; the guest callbacks are set
+// once in pn_rt_create, before the runtime (and so any caller) exists.
+namespace PnShim {
+namespace {
+constexpr uint32_t StopTimeoutMs = 25;  // one 60 Hz frame of host work (a present waiting for its turn) and some
+constexpr int64_t StopBackoffNs = 200'000'000; // after a stop was given up: no new attempt for this long
+constexpr int64_t StopReportNs = 30'000'000'000;
+PnRtGuest g_guest{};
+std::atomic<uint64_t> g_stops{0}, g_stop_failed{0}, g_stop_longest_ns{0};
+std::atomic<int64_t> g_stop_failed_at{0}, g_stop_reported_at{0};
+std::atomic<uint64_t> g_stops_reported{0}, g_failed_reported{0}, g_longest_window_ns{0};
+std::atomic<bool> g_stop_warned{false};
+thread_local int t_stopped_depth = 0;
+
+int64_t MonoNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+void RaiseMax(std::atomic<uint64_t>& a, uint64_t v) {
+    uint64_t now = a.load(std::memory_order_relaxed);
+    while (now < v && !a.compare_exchange_weak(now, v, std::memory_order_relaxed)) {
+    }
+}
+/// The cost made visible: one line when there was a stop or a failure since the last one, at most every 30 s.
+void ReportStops(int64_t now) {
+    int64_t last = g_stop_reported_at.load(std::memory_order_relaxed);
+    if (now - last < StopReportNs || !g_stop_reported_at.compare_exchange_strong(last, now)) {
+        return;
+    }
+    const uint64_t stops = g_stops.load(), failed = g_stop_failed.load();
+    const uint64_t d_stops = stops - g_stops_reported.exchange(stops), d_failed = failed - g_failed_reported.exchange(failed);
+    const uint64_t window = g_longest_window_ns.exchange(0);
+    if (d_stops != 0 || d_failed != 0) {
+        LOG_INFO(Core,
+                 "peanuts_rt: the game's threads were stopped {} time(s) for companion writes since the last line (longest {:.2f} ms), {} "
+                 "stop(s) given up; in all {} and {}, longest {:.2f} ms",
+                 d_stops, static_cast<double>(window) / 1e6, d_failed, stops, failed,
+                 static_cast<double>(g_stop_longest_ns.load()) / 1e6);
+    }
+}
+} // namespace
+
+void SetGuest(const PnRtGuest& guest) {
+    g_guest = guest;
+}
+
+int StoppedIn(uint64_t lo, uint64_t hi) {
+    return t_stopped_depth > 0 && g_guest.stopped_in != nullptr ? g_guest.stopped_in(g_guest.user, lo, hi) : -1;
+}
+
+bool RunWithGuestStopped(const std::function<void()>& fn) {
+    if (t_stopped_depth > 0) { // this thread already holds the game stopped
+        fn();
+        return true;
+    }
+    if (g_guest.stop == nullptr || g_guest.resume == nullptr) {
+        g_stop_failed.fetch_add(1, std::memory_order_relaxed);
+        if (!g_stop_warned.exchange(true)) {
+            LOG_WARNING(Core, "peanuts_rt: this host cannot stop the game's threads: writes that need the game stopped are refused");
+        }
+        return false;
+    }
+    const int64_t t0 = MonoNs();
+    if (const int64_t failed_at = g_stop_failed_at.load(std::memory_order_relaxed); failed_at != 0 && t0 - failed_at < StopBackoffNs) {
+        g_stop_failed.fetch_add(1, std::memory_order_relaxed);
+        return false; // a stop was given up a moment ago: do not hold the game up again so soon
+    }
+    const int stopped = g_guest.stop(g_guest.user, StopTimeoutMs);
+    if (stopped < 0) {
+        // Busy: another stop held the game for the whole bound (the host waited for it). Not a sign that the game's threads
+        // are hard to stop, so no back-off: the caller tries again at its next tick
+        g_stop_failed.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    if (stopped == 0) {
+        g_stop_failed.fetch_add(1, std::memory_order_relaxed);
+        g_stop_failed_at.store(MonoNs(), std::memory_order_relaxed);
+        if (!g_stop_warned.exchange(true)) {
+            LOG_WARNING(Core,
+                        "peanuts_rt: the game's threads did not all stop within {} ms: this write is refused, not made beside the running game "
+                        "(logged once; the periodic line counts the rest)",
+                        StopTimeoutMs);
+        }
+        ReportStops(MonoNs());
+        return false;
+    }
+    // From here to resume: guest memory through PnRtMemory only (the host's rule, PnRtGuest::stop).
+    struct Resume {
+        ~Resume() {
+            --t_stopped_depth;
+            g_guest.resume(g_guest.user);
+        }
+    };
+    {
+        ++t_stopped_depth;
+        const Resume resume;
+        fn();
+    }
+    const int64_t t1 = MonoNs();
+    g_stop_failed_at.store(0, std::memory_order_relaxed);
+    g_stops.fetch_add(1, std::memory_order_relaxed);
+    RaiseMax(g_stop_longest_ns, static_cast<uint64_t>(t1 - t0));
+    RaiseMax(g_longest_window_ns, static_cast<uint64_t>(t1 - t0));
+    ReportStops(t1);
+    return true;
+}
+
+// --- the controller (hid_core/frontend/emulated_controller.h) -----------------------------------
+// What pn_rt_pad_state left for each npad: written by the host's tick thread, read by the runtime's
+// tick (the same thread in practice); each field is an atomic of its own, a reader may see the
+// buttons of one sample with the sticks of the next, as two reads of a real pad would.
+namespace {
+struct Pad {
+    std::atomic<bool> connected{false};
+    std::atomic<uint64_t> buttons{0};
+    std::atomic<int32_t> axes[4]{};
+};
+Pad g_pads[10]; // Player1..8, Handheld, Other (NpadIdTypeToIndex)
+Pad* PadOf(uint32_t npad_id) {
+    return npad_id < 8 ? &g_pads[npad_id] : npad_id == 0x20 ? &g_pads[8] : npad_id == 0x10 ? &g_pads[9] : nullptr;
+}
+// The host's live reader (PnRtPad::read), set once in pn_rt_create before the runtime exists. With it every question below
+// is answered from the host as it is now, not from a sample: the companion's own press or release for the game, made earlier
+// in the same tick, is in it.
+PnRtPad g_pad_reader{};
+/// The state of npad `npad_id` now: through the reader when there is one (player 1's pad is on one of No1 / Handheld; both
+/// hold its state, the one it is on is connected), else what pn_rt_pad_state left.
+bool PadNow(uint32_t npad_id, bool& connected, uint64_t& buttons, int32_t axes[4]) {
+    if (g_pad_reader.read != nullptr && (npad_id == 0 || npad_id == 0x20)) {
+        uint32_t on = 0;
+        buttons = 0;
+        axes[0] = axes[1] = axes[2] = axes[3] = 0;
+        g_pad_reader.read(g_pad_reader.user, &on, &buttons, axes);
+        connected = on == npad_id;
+        return true;
+    }
+    const Pad* const p = PadOf(npad_id);
+    if (p == nullptr) {
+        return false;
+    }
+    connected = p->connected.load(std::memory_order_acquire);
+    buttons = p->buttons.load(std::memory_order_relaxed);
+    for (int i = 0; i < 4; ++i) {
+        axes[i] = p->axes[i].load(std::memory_order_relaxed);
+    }
+    return true;
+}
+std::atomic<int64_t> g_last_tick_ns{0};
+constexpr int64_t GateLiveNs = 500'000'000;
+} // namespace
+void SetPadReader(const PnRtPad& pad) {
+    g_pad_reader = pad;
+}
+void NoteTick() {
+    g_last_tick_ns.store(MonoNs(), std::memory_order_relaxed);
+}
+bool PadConnected(uint32_t npad_id) {
+    bool connected{};
+    uint64_t buttons{};
+    int32_t axes[4];
+    return PadNow(npad_id, connected, buttons, axes) && connected;
+}
+uint64_t PadButtons(uint32_t npad_id) {
+    bool connected{};
+    uint64_t buttons{};
+    int32_t axes[4];
+    return PadNow(npad_id, connected, buttons, axes) ? buttons : 0;
+}
+void PadSticks(uint32_t npad_id, int32_t out[4]) {
+    bool connected{};
+    uint64_t buttons{};
+    if (!PadNow(npad_id, connected, buttons, out)) {
+        out[0] = out[1] = out[2] = out[3] = 0;
+    }
+}
+} // namespace PnShim
+
+extern "C" void pn_rt_pad_state(PnRt*, uint32_t npad_id, uint64_t buttons, const int32_t axes[4]) {
+    using namespace PnShim;
+    // Player 1's controller is on No1 or on Handheld. Both hold its state, as Eden's two emulated controllers are fed by the one
+    // physical pad (the runtime asks Player1 for the sticks whatever the mode is); only the npad it is on reads as connected,
+    // which is what the runtime ORs the buttons of and latches for the gate.
+    for (const uint32_t id : {0u, 0x20u}) {
+        Pad* const p = PadOf(id);
+        p->buttons.store(buttons, std::memory_order_relaxed);
+        for (int i = 0; i < 4; ++i) {
+            p->axes[i].store(axes != nullptr ? axes[i] : 0, std::memory_order_relaxed);
+        }
+        p->connected.store(id == npad_id, std::memory_order_release);
+    }
+}
+
+extern "C" int pn_rt_pad_gate(int slot, uint64_t* buttons, int32_t axes[4]) {
+    if (slot < 0 || buttons == nullptr || axes == nullptr) {
+        return 0;
+    }
+    // Liveness: the gate is the runtime's, and only a runtime that ticks can end it (controller focus off, the page hidden). When
+    // it has not ticked for half a second (stalled, crashed in a module, never started) the game gets its controller as it is;
+    // nothing of the gate's state is touched, so it is in force again with the next tick. The clock is read only while the
+    // gate would change something.
+    namespace Gate = Core::HID::DSModPadGate;
+    if ((Gate::Active() || Gate::Latched(static_cast<size_t>(slot)) != 0) &&
+        PnShim::MonoNs() - PnShim::g_last_tick_ns.load(std::memory_order_relaxed) > PnShim::GateLiveNs) {
+        return 0;
+    }
+    Core::HID::AnalogStickState left{axes[0], axes[1]}, right{axes[2], axes[3]};
+    const bool held = Core::HID::DSModPadGate::Apply(static_cast<size_t>(slot), *buttons, left, right);
+    axes[0] = left.x;
+    axes[1] = left.y;
+    axes[2] = right.x;
+    axes[3] = right.y;
+    return held ? 1 : 0;
+}
+
+extern "C" void pn_rt_stop_stats(uint64_t* stops, uint64_t* failed, uint64_t* longest_us) {
+    if (stops) *stops = PnShim::g_stops.load();
+    if (failed) *failed = PnShim::g_stop_failed.load();
+    if (longest_us) *longest_us = PnShim::g_stop_longest_ns.load() / 1000;
+}

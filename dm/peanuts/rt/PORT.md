@@ -1,9 +1,11 @@
-# peanuts_rt port notes (R1a .. R7)
+# peanuts_rt port notes (R1a .. R8)
 
-The Eden Duo DSMod companion runtime (`~/eden/src/core/mods`) lifted into a standalone static
-library. **R5 (2026-11-12): the lift is Eden Duo v1.3.5.1 (tag `v1.3.5.1`, `102f69ed3f`,
-`DualScreenRuntimeVersion = 24`)**; R1a..R2 below were against the old `dsmod` branch
-(`c6541721fa`, runtime 12) and are kept as history. Layout:
+The Eden Duo DSMod companion runtime (Eden Duo's `src/core/mods`) lifted into a standalone static
+library. **R8 (2026-11-16): the lift is Eden Duo v1.4.0 (tag `v1.4.0`, `123d552976`,
+`DualScreenRuntimeVersion = 25`).** The sections "The lift today", "Edited lifted files",
+"Runtime 25 on this host" and "How to take the next Eden runtime" describe the present state.
+Everything from "R5" down is the history of the earlier rounds (runtime 12, then 24), kept as
+written; where a statement there no longer holds it is marked *superseded*. Layout:
 
 ```
 dm/peanuts/rt/
@@ -15,6 +17,8 @@ dm/peanuts/rt/
   shim/                           stand-ins for the Eden headers the lifted files include (same include paths)
   shim/shim.cpp, shim/stb_impl.cpp, shim/shim_r5.cpp (R5: dlopen, SHA-256, data paths, fonts)
   test/rt_test.cpp                Linux host test: real package + fake guest memory -> PNGs
+  test/check_pnrt_marks.py        checks "byte-identical except where marked PNRT" against an Eden Duo tree
+  test/aux_sink_test.cpp          Linux host test of the UiSink hooks: a partial publish reaches the sink as its own box
 dm/peanuts/third_party/
   nlohmann/json.hpp, json_fwd.hpp (v3.12.0 single header, from Eden's CPM cache)
   stb/stb_image.h, stb_image_resize.h, stb_image_write.h (Eden externals/stb; Eden uses resize v1, not resize2)
@@ -26,10 +30,211 @@ dm/peanuts/third_party/
 
 The lifted files include each other as `core/mods/<name>`; CMake creates
 `<build>/pnrt_include/core/mods -> dm/peanuts/rt/mods` (file(CREATE_LINK ... SYMBOLIC)) so no
-include line changed. Upstream sync: copy the Eden file over `mods/<name>`, re-apply the PNRT
-hunks listed below (`diff -u ~/eden/src/core/mods/X mods/X` shows exactly them).
+include line changed. Upstream sync: see "How to take the next Eden runtime".
+
+## The lift today (R8, 2026-11-16)
+
+Counted by `test/check_pnrt_marks.py <v1.4.0 tree> --list` (97 files compared, 84 identical,
+13 edited, 57 hunks, every hunk marked):
+
+| What | Files | Identical to v1.4.0 | Edited (PNRT hunks only) |
+|---|---|---|---|
+| `mods/` (lifted from `src/core/mods`) | 90 | 78 | 12 |
+| `shim/` and `third_party/astc` verbatim copies | 7 | 6 | 1 (`aux_routing.h`) |
+| `mods/pnrt_stubs.cpp` | 1 | this port's own, no counterpart | |
+
+The rule: **a lifted file is byte-identical to Eden Duo's file except inside hunks that carry a
+comment containing `PNRT`**, and the comment says what the hunk changes and why. Nothing else may
+differ: no reformatting, no renames, no comment edits.
+
+### What is not lifted, and why
+
+| Eden Duo file | Why it stays out |
+|---|---|
+| `mod_guest_bridge.cpp` | Guest calls through BRK traps. The rewritten game has no trap handling here, and Eden Duo itself turns the bridge off under NCE. Its members are stubs in `pnrt_stubs.cpp`; `ScanRange` and `ScanPattern` are copied from it (unchanged between v1.3.5.1 and v1.4.0) |
+| `mod_re_tools.cpp`, `mod_console.cpp` | Developer tools, compiled out by `EDEN_DSMOD_BUILD_DEV_TOOLS=0` as in Eden Duo's release build |
+| `duo_core.cmake`, `modules/README.md` | Build glue and notes of the emulator |
+
+Outside `src/core/mods` and with no counterpart here: the emulator's second-screen modes
+(one-screen "Simulated" mode with its layout engine and Vulkan companion quad, Mode "Off" and its
+settings), the GPU quad compositor and the map fade shader, the `dsm:u` service, the loader's
+load-plan step (replaced by `peanuts_helper.cpp`). Texture readback from the GPU's texture cache
+is replaced by the replay's (`dm/gfx/vk_android/vka_readback.inc`, `shim/shim_readback.cpp`).
+
+### What a companion loses on this host
+
+- Call and Sequence actions, polled sequences and spies do nothing (the guest bridge).
+- Manifest `patches` are applied by `peanuts_patches.cpp`, not as on the emulator at mapping: with
+  the game's threads stopped, only where main holds the file's own instructions (refused over code
+  the host's rewriter changed and over the package's own load-plan sites), tried again on later
+  ticks while the threads cannot be stopped; an optional patch is skipped.
+- Texture readback (runtime 24) is advertised and served by the Vulkan replay, with the emulator's
+  formats and limits. Different: a request's address is the texture's storage address in the game's
+  memory (there is no GPU address space); a copy comes back when the present returns to its frame
+  slot (three presents later); colour targets are known from a companion's first request on; a
+  rescaled image (`DM_RES_SCALE`) is refused; while the game does not present, requests fail after
+  the timeout.
+- `gpu_composite` is ignored: the CPU raster draws the page.
+- `aoc:` is the lowest index of `DM_AOC_DIR` (a folder, a `.nup` or a dump; a RomFS image is not
+  read, and then nothing is served). `sysfont:` serves the firmware fonts the app imported
+  (`DM_SHARED_FONT`, `DM_SHARED_FONT_EXT` and the `cjk_*.ttf` beside the standard font), never the
+  stand-ins of `DM_FONT_DIR`; `nintendo_ext2_003` is not there. `@device.*` is the battery the app
+  pushes (`Bridge.battery`), else the kernel's power supply files, else "no battery". `@perf.fps`
+  counts the replay's frames; `@perf.frametime_ms` is the GPU's busy time a frame (the emulator's is
+  a frame's time without its waits) and is absent on a driver without GPU timestamps.
+- Controller focus mode and `PadIsPushed` need pad state from the host; the pad gate needs the
+  host to apply it.
+- Runtime 25: `@screen.mode` is always "physical" and the pane size is the size the host gave at
+  `pn_rt_create` (see "Runtime 25 on this host").
+
+## Edited lifted files (R8 state; every hunk carries a `PNRT` marker)
+
+One line per hunk. "Hunk" is a hunk of `diff -U0` against the v1.4.0 file.
+
+| File | Hunks | What each changes and why |
+|---|---|---|
+| `mods/mod_assets.cpp` | 6 | (1, 2) `#if !PNRT` around `SerialVfsFile` and `OpenPrivateRomFS`: Eden Duo's loader / PatchManager / NCA chain does not exist here. (3, 4) `sysfont:` opens the folder the host hands over (`System::SysfontRoot`) instead of the system NAND archive. (5, 6) `OpenGameRomFS` takes the host's RomFS root (`System::RomfsRoot`) |
+| `mods/mod_load_plan.h` | 1 | Two read accessors, `Writes()` and `GuestCodeData()`, so `peanuts_helper.cpp` can apply a plan to a running process |
+| `mods/mod_manifest.cpp` | 1 | A manifest reload clears the map composite memo with the other map caches (`ReloadManifest`) |
+| `mods/mod_module.cpp` | 1 | The build check accepts the host's 8-byte build id as a prefix of a manifest's full id and the reverse |
+| `mods/mod_module_services.cpp` | 3 | (1, 2) `ResolveTitleSaveDirectory` returns the save folder the host hands over (`System::SaveRoot`); the save-data service path stays under `#else`. (3) installing a module's map areas clears the map composite memo with the other geometry caches |
+| `mods/mod_romfs_sources.cpp` | 2 | (1, 2) `base:` is the host's RomFS without the mods' folders, `aoc:` is `PnShim::AocRoot` (the lowest index of `DM_AOC_DIR`, `shim/shim_services.cpp`); Eden Duo's bodies stay under `#else` |
+| `mods/mod_module_host.cpp` | 3 | (1) five headers for the log hunks. (2) integers a module publishes whose name ends in `_failures`, `_hidden`, `_supported`, `_request` or `_version` go to the log when they change (`DM_RT_VALUES=1`: all of them): nothing else shows them on this host. (3) the same for texts ending in `.diag`. `LockMapStateUnlessRaster` is Eden Duo's again (see "The tick rate and the map lock") |
+| `mods/mod_redraw.cpp` | 2 | (1, 2) a publish that `LockMapStateUnlessRaster` refused for a busy map is counted for the snapshot log line, at `PublishUi`'s two lock sites. The fade step and the publish gate are Eden Duo's |
+| `mods/mod_runtime.cpp` | 4 | (1, 2, 3) the manifest's `gpu_composite` flag does not turn the composite path on (this host has no compositor; the page would show no map) and the log says which path runs. (4) the snapshot log line gains the module's gates and the map counters (`ui_frames`, `map_base_rasters`, `base_ms`, `map_composites`, `incremental`, `composite_ms`, `publish_skipped`, `fade_steps`, `pulse_memo_hits`) |
+| `mods/mod_runtime.h` | 4 | (1) `friend struct PnRtAccess` for the C API. (2, 3) `MaskUnvisited` takes an optional pixel rectangle. (4) the per-area memo of the last map composite (`MapCompositeMemo`) and the map counters |
+| `mods/map_overview.h` | 3 | (1) `<array>`. (2, 3) `CompositeMapOverview` takes an optional pixel rectangle and limits its pass to it |
+| `mods/mod_map.cpp` | 19 | The incremental map composite of 2026-11-14 (Metroid Dread's map on the CPU path: a whole rebuild per fade step took seconds on a handheld). (1) `<chrono>`. (2, 3, 4) `MaskUnvisited` works on the given rectangle only. (5) the pulse image is taken from the area's newest composite instead of being stamped again: the memo is looked up by the area's name and its `size_key` must equal the size asked for (until R8 the lookup used the name with the size, which is never a key, so it never hit). (6, 7) the base raster is timed and counted. (8, 9) the composite is timed; the copy of the pre-fog image moves into the non-incremental branch. (10) the incremental build: a reveal-only change copies the last composite and recomputes the pixel box of the cells that changed or are still fading. (11) `MaskUnvisited` is called with that box. (12, 13) breakable tiles and (14, 15) the magnet overlay are clipped to the box. (16, 17) the pulse image's key is kept for the memo. (18) the overview composite is limited to the box. (19) the finished composite is stored in the memo, counted and timed. `MapRasterStamp`'s fade term is Eden Duo's (a step every fourth tick) |
+| `shim/video_core/dsmod/aux_routing.h` | 8 | Eden Duo's header with the `UiSink` hooks: (1) head comment, (2) the `UiSink` struct, (3) `SetUiSink`, `UiSerial` and the member, (4, 5, 7, 8) a forward to the host's callbacks at the end of `PublishUi`, `PublishUiWith`, `PublishUiPartialRects` and `ClearUi`, (6) `PublishUiPartialRects` sets the accumulated dirty box aside for the length of the call, so the sink is handed the box of that publish (nothing consumes the accumulated box on this host, which made every partial publish cover the whole page) and `TakeUi` still gets the union |
+
+The 2026-11-14 map work was entered without marks on 29 of its hunks; R8 marked them. Two comment
+lines that work had reworded in `mod_map.cpp` ("FOG (cheap, per reveal/fade state) ..." and the
+trailing comment of the `MaskUnvisited` call) were put back to Eden Duo's words, since the fade is
+still drawn there.
+
+## The tick rate and the map lock (R8, 2026-11-16)
+
+The host ticks the runtime at 60 Hz (`PN_RT_TICK_HZ` in `peanuts_rt.h`), the rate the runtime
+counts with. The corrections made while the host ticked at about 30 Hz are gone and the code is
+Eden Duo's again: `map_style.fade_ticks` is taken as written, the page publishes on every second
+tick (30 Hz), and a map's fade steps on every fourth tick (15 Hz) in `UiSignature`, the widget
+hash and `MapRasterStamp`. A fade step is still an incremental composite here.
+
+`LockMapStateUnlessRaster` is Eden Duo's too. From 2026-11-14 to R8 it took the lock for real
+after 60 refusals in a row, so that a map raster could not starve the page's publish; that wait
+could hold the tick thread for the length of a raster, and could deadlock when reached from a
+module's own `tick` (`publish_text("__map_state")`, then `ApplyPendingMapUpdates`) while the
+raster read that module's `module:` data. It is removed, not replaced, for this reason: a map
+raster off the tick thread runs only inside a redraw job, and the one place that sends a job is
+`PublishUi` after it got the map state. So every raster follows a publish that got through, a
+refused publish is retried on the next publish tick, and the worst case is one frame per raster.
+`rt_test`'s map probe shows it, also with rasters made long on purpose (`RT_TEST_RASTER_PX=8192`
+on one slow core: base raster 530 ms, composites 144 ms, 109 publishes refused, every one of the
+20 composites followed by a frame, no tick over 1 ms). The starvation of 2026-11-14 came with
+whole-map rebuilds on every fade step and a second rebuild for the pulse image; both are gone
+(the incremental composite, the pulse memo). On a device the snapshot log line tells: `ui_frames`
+must keep rising while `publish_skipped` rises. Not run on a device.
+
+The map composite memo is cleared where the other map caches are: a manifest reload and the
+install of a module's map areas. A canvas switch clears no image cache in Eden Duo either; the
+memo holds one composite per area and its size check leaves one of another size unused until the
+next composite of that area replaces it.
+
+## Runtime 25 on this host (R8)
+
+What v1.4.0 added (runtime 24 to 25), and its state here. "Lifted" means the lifted files carry it
+and nothing of this host is involved.
+
+| Change | State |
+|---|---|
+| `@screen.pane_w`, `@screen.pane_h`, `@screen.orientation`, `@screen.mode` | Lifted. The values are `AuxRouting::width` / `height`, which `pn_rt_create` sets once from `PnRtConfig::panel_w` / `panel_h`. The host passes a fixed 1240x1080 today, so a package reads that size and "landscape" whatever the second screen is. `@screen.mode` is always "physical" (`inline_enabled` is never set): true, this host has no one-screen mode |
+| `canvas_alt`, `rect_alt`, `wrap_width_alt` | Lifted and exercised on the PC (`rt_test --module ... --panel 1080x1620` draws My Time at Sandrock on its 1080x1620 canvas). On the device the alternate canvas is never chosen while the host reports 1240x1080 |
+| Canvas-switch cache reset, map view refit, pan re-anchor | Lifted; they run only on a canvas switch |
+| Button tokens `L3` / `R3` (`StickL` / `StickR`) | Lifted. The pad sink already carries them: the virtual button's id is the host's button bit (StickL 4, StickR 5) |
+| Action `view_zoom_step` | Lifted |
+| `@view_touch_x`, `@view_touch_y`, `@view_touch_down` | Lifted, fed by the touches of `pn_rt_touch` |
+| Map overlays keep the last picture while a new one decodes | Lifted |
+| `src_hold: false` | Lifted |
+| A module's font decode try-locks the module loader | Lifted. The retry is 2 ticks later, 33 ms at the host's 60 Hz tick, as in Eden Duo: the count is not changed |
+| Launch gate (`mod_launch_gate.{h,cpp}`, the emulator's Mode "Off") | Lifted because `mod_load_plan.cpp` includes it. Nothing on this host sets it, it defaults to "not disabled", nothing waits on it, and `peanuts_helper.cpp` reads plans through `ReadModLoadPlan`, which does not ask it. A package is never told about a mode. "Companion off" here is not calling `pn_rt_create` |
+| Touch rect follows the one-screen mode's Fit | Lifted; `panel_is_inline` is never set, so the touch rect is computed as in runtime 24 |
+
+Host work that would make the first two rows true on any device (none of it is in the lifted
+files): give `pn_rt_create` the second screen's real size in pixels, add a call that stores a new
+size in `AuxRouting::width` / `height` when the companion window changes, and send touches in the
+same pixels (the app scales a touch to page pixels today, which equals panel pixels only while the
+panel and the canvas are the same size).
+
+New shim: `shim/core/frontend/framebuffer_layout.h` (`Layout::DefaultFrameLayout` returning the
+whole rectangle). `aux_routing.h` includes it for `InlineGamePictureRect`, a function of the
+one-screen mode that no lifted file calls.
+
+Checked on a PC (2026-11-16, nothing run on a device):
+
+- `rt_test <Link's Awakening package> <out>` without a RomFS: the same status lines as before the
+  lift, and 6 of the 7 PNGs byte-identical to the runtime-24 build's (the seventh,
+  `gear_after_close.png`, is caught in the middle of a page transition and differs from run to run
+  on either build).
+- The version gate (new in `rt_test`): a probe package with `min_runtime` 25 is accepted, one with
+  26 gets the update-required page. The same test against the runtime-24 library fails, as it should.
+- The map probe (new in `rt_test`): a generated package with one geometry map area and a marker
+  bound to fake memory. While the marker walks (180 ticks) the page publishes 71 frames with 71
+  composites, 69 of them incremental; the still fade that follows steps 15 times in its 55 ticks
+  (every fourth tick), all incremental, and the pulse lookup is answered from the memo (86 and 46
+  times). No tick takes longer than 1 ms.
+- `aux_sink_test`: after a whole-page publish, three small partial publishes reach the sink as
+  their own rectangles, an unchanged one is not forwarded, and `TakeUi` still returns the page.
+- `rt_test --module` on Echoes of Wisdom 1.0.2 (`min_runtime` 22): module loaded, the same PNG as
+  on the runtime-24 build. On Resident Evil 4 1.0.0 and a development build of My Time at Sandrock
+  (both `min_runtime` 25, refused with the update page before the lift): accepted, module loaded,
+  manifests parse (`src_hold`, `rect_alt`, `wrap_width_alt`, `view_zoom_step`). With zeroed game
+  memory and no RomFS, Resident Evil 4 stays on its standby page and Sandrock draws its pages in the
+  built-in font; Sandrock's log says texture readback is unavailable and the module keeps its
+  fallback.
+- All 46 C++ files of the runtime in the Android build, and `mod_launch_gate.cpp`, pass the NDK
+  compiler's syntax check with the build's own flags. No APK was built.
+
+## How to take the next Eden runtime
+
+Three trees are needed: BASE = the Eden Duo release this lift was taken from (today `v1.4.0`),
+NEW = the release to take, and this one. Use exported or checked-out trees of the tags, not a
+working tree that other work moves.
+
+1. Before anything: `python3 test/check_pnrt_marks.py <BASE tree>` must say OK, and build and run
+   `rt_test` (below) to keep its PNGs and status lines for comparison.
+2. For every file under `mods/` with a counterpart in BASE's `src/core/mods`, and for the verbatim
+   copies listed in `check_pnrt_marks.py` (`VERBATIM`):
+   - identical to BASE's file: replace it with NEW's file, byte for byte;
+   - edited: three-way merge, `diff3 -m <ours> <BASE file> <NEW file>`, and write the result over
+     ours. Resolve conflicts by hand. Where a merge is clean but a PNRT hunk sits within a few
+     lines of an upstream change, read the merged function: `PublishUi` in `mod_redraw.cpp` is the
+     usual place.
+3. Files new in NEW's `src/core/mods`: lift the ones the lifted files include or call and add the
+   `.cpp` files to `PNRT_LIFTED` in `CMakeLists.txt`. A file that stays out goes on `NOT_LIFTED`
+   in the checker with its reason in the table above.
+4. New includes of emulator headers: add a stand-in under `shim/` with the same path.
+5. If `mod_guest_bridge.cpp` changed, copy `ScanRange` and `ScanPattern` into `pnrt_stubs.cpp`
+   again, and give every new `ModRuntime` member that lives in an unlifted file a stub there.
+6. `python3 test/check_pnrt_marks.py <NEW tree>` must say OK: every remaining difference is a
+   marked hunk. `--show` prints the hunks that fail, `--list` the table of edited files. A hunk
+   passes when `PNRT` is in one of its lines or in the line just above or below it. A hunk whose
+   reason is unknown is marked "reason not recorded", never given an invented one.
+7. The number: `DualScreenRuntimeVersion` comes with `mod_runtime.h`. Set
+   `dev.peanuts.Installer.RUNTIME_VERSION` and `ExpectedRuntime` in `test/rt_test.cpp` to it;
+   `peanuts/scripts/check-runtime-version.sh` compares the first two.
+8. For every change of the new runtime, decide: works from the lifted files alone, needs a value
+   or a call from the host, or cannot exist here. A package must not be told of a mode this host
+   does not have. Write the table as in "Runtime 25 on this host".
+9. Build and test: `cmake -S dm/peanuts/rt -B <build> -DPEANUTS_RT_TEST=ON`, then `aux_sink_test`,
+   `rt_test <package> <out>` (compare the PNGs with step 1; a package that uses nothing new must
+   draw the same; its version gate and map probe must pass), `rt_test --module <package> <out> <title> <build id> [--panel <w>x<h>] [page...]`
+   on a package of the previous and of the new `min_runtime`, and the Android compile.
+10. Update this file: the header, the counts, the hunk table, the per-change table.
 
 ## R5: the v1.3.5.1 lift (runtime 24) and native modules
+
+*History. Superseded by R8 where it names the lifted release, the number of files and the edited
+files: the lift is v1.4.0 now, and "exactly four edited files" was not true after 2026-11-14.*
 
 Every file in Eden's `src/core/mods/` at v1.3.5.1 is in `mods/` **except** the ones that stay
 out by design: `mod_guest_bridge.cpp` (BRK guest-call bridge), ~~`engine_il2cpp/mercury/ichigo.cpp`~~
@@ -96,7 +301,10 @@ engine_formats.h, mod_module.h, dsmod_module_abi.h, dsmod_module_extensions.h, m
 dsmod branch: mod_expr.cpp, mod_settings.cpp, mod_nav.cpp, mod_host_values.{h,cpp},
 mod_view_default.h, mod_input_tokens.h (their functionality lives inside the files above).
 
-## Edited lifted files (all hunks carry a `PNRT` marker; R5 state)
+## Edited lifted files, R5 state (superseded: see "Edited lifted files (R8 state ...)" above)
+
+*History. This table lists 5 of the 12 files that are edited today, and "all hunks carry a PNRT
+marker" stopped being true on 2026-11-14 (made true again in R8).*
 
 | file | why |
 |---|---|
@@ -106,7 +314,7 @@ mod_view_default.h, mod_input_tokens.h (their functionality lives inside the fil
 | mods/mod_module_services.cpp (R5) | `ResolveTitleSaveDirectory` = `system.SaveRoot()` (PnRtConfig::save_dir) instead of the save-data HLE + profile manager. |
 | mods/mod_module.cpp | `GameModule::Load`'s build-id check accepts the host's 16-hex-digit (8-byte, zero-padded) build id as a prefix of a manifest's full 20-byte id and vice versa (one PNRT hunk at the `build_ids` any_of). |
 
-Everything else in `mods/` is byte-identical to Eden v1.3.5.1.
+~~Everything else in `mods/` is byte-identical to Eden v1.3.5.1.~~ (superseded)
 
 ## Shims (dm/peanuts/rt/shim)
 
@@ -136,13 +344,13 @@ Everything else in `mods/` is byte-identical to Eden v1.3.5.1.
 | common/settings.h (`language_index`) | (R1b) `Settings::Language` + `CanonicalizeEnum`; set from `PnRtConfig::language` (default American English) |
 | common/alignment.h, video_core/textures/workers.h | (R1b) `DivideUp`; `ThreadWorker` that runs astc row jobs inline (the Nx asset worker is already a thread) |
 | **R5 shims** | |
-| video_core/dsmod/aux_routing.h | now **Eden's v1.3.5.1 header verbatim** (wheel/pinch mailboxes, CompanionRect/FitCompanion/PanelToCanvas, SecondScreenOptions, companion_context_active, the GPU composite slots) plus PNRT-marked hunks only: a `UiSink` struct + `SetUiSink`, and a forward to it at the end of `PublishUi` / `PublishUiWith` / `PublishUiPartialRects` / `ClearUi` (34 added lines, `diff` shows them) |
+| video_core/dsmod/aux_routing.h | (R8: v1.4.0's header, same hunks) now **Eden's v1.3.5.1 header verbatim** (wheel/pinch mailboxes, CompanionRect/FitCompanion/PanelToCanvas, SecondScreenOptions, companion_context_active, the GPU composite slots) plus PNRT-marked hunks only: a `UiSink` struct + `SetUiSink`, and a forward to it at the end of `PublishUi` / `PublishUiWith` / `PublishUiPartialRects` / `ClearUi` (34 added lines, `diff` shows them) |
 | video_core/dsmod/texture_readback.h, common/dsmod_dev_tools.h, common/device_power_state.h, hid_core/resources/npad/dsmod_pad_gate.h | verbatim Eden copies (pure headers) |
 | video_core/surface.h | the `PixelFormat` names texture_readback.h compares |
-| video_core/gpu.h | + `DSModTextureReadbackAvailable()` = false, `DSModRequestTextureReadback` = false (no texture cache: the module keeps its fallback) |
+| video_core/gpu.h | + `DSModTextureReadbackAvailable()` / `DSModRequestTextureReadback` = `PnShim::ReadbackAvailable` / `ReadbackSubmit` (`shim/shim_readback.cpp`: the Vulkan replay's readback, `dm/gfx/vk_android/vka_readback.h`) |
 | core/core.h | + `Kernel()` (KernelCore), `GetPerfStats()` (zeros), `IsPoweredOn()`/`IsMulticore()` = true, `RunWithGuestThreadsSuspended(fn)` = run fn, `GetDualScreenGuestMailboxEpoch()` = 0, `SaveRoot()`, `SysfontRoot()`; **`process` is now always non-null** (a `KProcess` whose `GetMemory()` is the PnRtMemory accessor) because the runtime's every guest access goes through `OwnerMemory()` = `OwnerProcess()->GetMemory()` |
 | core/hle/kernel/kernel.h, k_auto_object.h, k_thread.h, k_process.h | `KernelCore::RetainApplicationProcess(&epoch)` -> the one process (epoch 1), `IsApplicationProcess` = same pointer; `KScopedAutoObject<T>` = a plain pointer holder (GetPointerUnsafe/SetObject/IsNull); `KThread::GetContext()` non-const (RefuseChangedProcess assigns it); `KProcess::GetMemory()` |
-| core/perf_stats.h | `PerfStats::GetTotals()` = {0,0,0} (@perf.* never published) |
+| core/perf_stats.h | `PerfStats::GetTotals()` = `PnShim::ReadPerfTotals` (the replay's frame count and the GPU's time a frame; all zero without a host) |
 | core/arm/debug.h | `InvalidateInstructionCacheRange` no-op, `ArmInterface` fwd |
 | core/core_timing.h | + `GetGlobalTimeNs/Us()` = steady clock since construction (@game.seconds) |
 | common/fs/path_util.h, fs_util.h | `GetEdenPath(EdenDir|CacheDir)` over one host data dir (`SetEdenDir`, from `PnRtConfig::data_dir`, default `<tmp>/peanuts_rt`); `PathToUTF8String` |
@@ -165,7 +373,8 @@ only the guest bridge (R7: the engine stubs are gone too, see "Engines"):
 
 - **mod_guest_bridge.cpp** (also: RunAction's Call/Sequence kinds, mod_actions.cpp): `RequestCall`,
   `StartSequence` (log "unsupported on this host", no-op; RunAction still returns `Done`),
-  `ArmSpies`, `ApplyPatches`, `DrainGuestBridgeResults`, `RunPolledSequences` (no-ops).
+  `ArmSpies`, `DrainGuestBridgeResults`, `RunPolledSequences` (no-ops); `ApplyPatches` =
+  `PeanutsPatches::Apply` (`peanuts_patches.cpp`).
   **`ScanRange` + `ScanPattern` are Eden's bodies verbatim** (lines 63-228 of v1.3.5.1's
   mod_guest_bridge.cpp, copied into pnrt_stubs.cpp): they only read guest memory
   (OwnerMemory, HeapLow/HeapHigh, InGameplay) and engine_il2cpp.cpp's `FindClassSlotByName`
@@ -416,10 +625,12 @@ arguments stay page ids), so a module package can be run against a game RomFS.
 
 ## Known gaps (R5)
 
+*Still current after R8 except where "What a companion loses on this host" above says otherwise.*
+
 - Controller focus mode (mod_nav.cpp) and `PadIsPushed` compile but never engage: the HID shim
   has no connected controller. The pad gate (`DSModPadGate`) is set/reset by the runtime but
   nothing on this host applies it to a real pad.
-- `@perf.*` never published (PerfStats totals stay 0); `@device.*` reads "no battery";
+- (since served: `@perf.*`, `@device.*`, "aoc:", "sysfont:", texture readback, manifest patches: see "What a companion loses on this host") `@perf.*` was never published (PerfStats totals stayed 0); `@device.*` read "no battery";
   `@game.seconds` is the wall clock since pn_rt_create.
 - "aoc:" source always unavailable; "base:" = the same romfs dir as "romfs:"; "sysfont:" only
   when the host passes `sysfont_dir` (a folder of the console's .bfttf files); a module's

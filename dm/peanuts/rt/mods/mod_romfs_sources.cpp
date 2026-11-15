@@ -12,6 +12,7 @@
 // The cache key is the program id plus the booted game file object (held, so its address
 // cannot be reused by a later boot): a new boot reopens, so a changed DLC setting takes effect.
 
+#include "pnrt_services.h" // PNRT
 #include <algorithm>
 #include <chrono>
 #include <mutex>
@@ -125,9 +126,7 @@ FileSys::VirtualDir BuildBase(Core::System& system, u64 program_id) {
 }
 
 FileSys::VirtualDir BuildAoc(Core::System&, u64 program_id) {
-    LOG_INFO(Core, "DSMod: aoc romfs of {:016X} unavailable (no add-on content on this host)",
-             program_id);
-    return nullptr;
+    return PnShim::AocRoot(program_id); // PNRT: the lowest add-on content index the host mounts (DM_AOC_DIR)
 }
 #else
 FileSys::VirtualDir BuildBase(Core::System& system, u64 program_id) {
