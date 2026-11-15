@@ -56,7 +56,7 @@ int main(void) {
     CHECK(vkps_why(VKPS_PASS, VKPS_VERTS, &d) == VKPS_PASS, "the pass bit alone");
     d = draw(30000, 1, 16, 16); CHECK(vkps_why(VKPS_PASS | VKPS_WRITES, VKPS_VERTS, &d) == 0, "a small target without its bit");
     d = draw(30000, 1, 1280, 720); d.writes = 1; CHECK(vkps_why(VKPS_PASS | VKPS_SMALL, VKPS_VERTS, &d) == 0, "a writing draw without its bit");
-    CHECK(VKPS_ALL == (VKPS_PASS | VKPS_SMALL | VKPS_WRITES | VKPS_NEW), "the default is every kind");
+    CHECK(VKPS_ALL == (VKPS_PASS | VKPS_SMALL | VKPS_WRITES | VKPS_NEW) && VKPS_DEFAULT == (VKPS_SMALL | VKPS_WRITES), "every kind, and the default: small targets and draws that write memory");
     { int w[5] = {0, VKPS_PASS, VKPS_SMALL, VKPS_WRITES, VKPS_NEW};
       for (int i = 0; i < 5; i++) for (int j = i + 1; j < 5; j++) CHECK(strcmp(vkps_name(w[i]), vkps_name(w[j])), "the names of reasons %d and %d differ", w[i], w[j]); }
 

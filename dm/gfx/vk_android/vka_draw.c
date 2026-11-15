@@ -210,7 +210,7 @@ static struct {
 static vkps_seen g_ps_seen;
 static void ps_mark(const vka_img *im, uint32_t lv, uint32_t l0) {
     uint64_t vka_frame(void);
-    if (!(VKA_ENV("DM_VK_PSO_SYNC_PASS", VKPS_ALL) & VKPS_NEW)) return;
+    if (!(VKA_ENV("DM_VK_PSO_SYNC_PASS", VKPS_DEFAULT) & VKPS_NEW)) return;
     uint64_t key = vkps_key(im->mem ? (uint64_t)(uintptr_t)im->mem : im->serial, im->d.width, im->d.height, (uint32_t)im->d.format, lv, l0);
     if (!vkps_mark(&g_ps_seen, key, vka_frame(), VKA_ENV("DM_VK_PSO_SYNC_GAP", VKPS_GAP))) R.ps_new = 1;
 }
@@ -2703,10 +2703,10 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     // PEANUTS begin: with DM_VK_PSO_ASYNC a pipeline the cache lacks is made in the background and its draws skipped until then. Not the draws whose result the game
     // keeps or that make the whole frame (vka_psosync.h: a direct draw of a few vertices, a small target, a draw that writes memory, a draw into a target the game
     // does not draw into every frame: R.ps_new, ps_mark): theirs is made now, on the frame path (Super Mario Odyssey stayed black for a whole first run). Looked at
-    // only when a pipeline is missing. DM_VK_PSO_SYNC_PASS (live, 15; 0 = every miss skipped): the kinds; DM_VK_PSO_SYNC_VERTS (live, 6): the most vertices or
+    // only when a pipeline is missing. DM_VK_PSO_SYNC_PASS (live, 6; 0 = every miss skipped): the kinds; DM_VK_PSO_SYNC_VERTS (live, 6): the most vertices or
     // indices of the first kind; the last kind's frame time is bounded per frame (DM_VK_PSO_SYNC_NEW_MS, vka_gfx_pipeline_now: none returned past it, so skipped)
     if (!p && !mesh) {
-        int bits = VKA_ENV("DM_VK_PSO_SYNC_PASS", VKPS_ALL);
+        int bits = VKA_ENV("DM_VK_PSO_SYNC_PASS", VKPS_DEFAULT);
         if (bits) {
             float rf = R.rsf > 0.f ? R.rsf : 1.f;   // (the target in the game's own pixels: DM_RES_SCALE)
             vkps_draw q = {.mesh = 0, .indirect = ind != 0 || mdi != 0, .instances = dw ? dw->instances : di->instances, .writes = d->rast_discard || draw_writes(sh, d),

@@ -37,7 +37,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum { VKPS_PASS = 1, VKPS_SMALL = 2, VKPS_WRITES = 4, VKPS_NEW = 8, VKPS_ALL = 15,   // DM_VK_PSO_SYNC_PASS's bits, and the reason vkps_why returns
+enum { VKPS_PASS = 1, VKPS_SMALL = 2, VKPS_WRITES = 4, VKPS_NEW = 8, VKPS_ALL = 15, VKPS_DEFAULT = VKPS_SMALL | VKPS_WRITES,   /* the default, 6: bits 1 and 8 are for a game that needs them. A 2D game draws its whole scene as quads of a few vertices, so bit 1 made nearly every missing pipeline wait (OCTOPATH TRAVELER 0 on the AYN Thor, 2026-11-15: 99 pipelines by bit 1 and 36 by bit 8 on the frame path, 3.2 s of frame time, frames up to 564 ms), and the small-target kind alone is what Super Mario Odyssey's first launch needs */   // DM_VK_PSO_SYNC_PASS's bits, and the reason vkps_why returns
        VKPS_VERTS = 6,                                                // DM_VK_PSO_SYNC_VERTS's default
        VKPS_SMALL_PX = 64,                                            // a small target's side at most
        VKPS_GAP = 4,                                                  // DM_VK_PSO_SYNC_GAP's default: the most frames between two frames a target drawn every frame is drawn in
