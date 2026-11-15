@@ -14,6 +14,9 @@ __attribute__((visibility("default"))) size_t nxhost_peanuts_snapshot(char *out,
 // frame was copied, 0 when nothing changed or no page), and a touch on it (pointer id, page coordinates, down/up)
 __attribute__((visibility("default"))) void nxhost_peanuts_frame_size(int *w, int *h);
 __attribute__((visibility("default"))) int nxhost_peanuts_frame(void *out_rgba, int w, int h);
+// The next nxhost_peanuts_frame call copies the frame there is even when it was handed out before: for a page window made again (the game came back from the
+// background, or its display was attached again), which holds no pixels yet and would stay black until the companion drew something new
+__attribute__((visibility("default"))) void nxhost_peanuts_frame_again(void);
 __attribute__((visibility("default"))) void nxhost_peanuts_touch(int id, float x, float y, int down);
 
 // Whether a companion is on second-screen duty for this run: 0 still deciding (no module loaded yet, or the runtime has not tried pn_rt_create), 1 a package

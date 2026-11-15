@@ -9,6 +9,8 @@ size_t nxhost_peanuts_snapshot(char *out, size_t n);
 void nxhost_peanuts_frame_size(int *w, int *h);
 #pragma weak nxhost_peanuts_frame
 int nxhost_peanuts_frame(void *out_rgba, int w, int h);
+#pragma weak nxhost_peanuts_frame_again
+void nxhost_peanuts_frame_again(void);
 #pragma weak nxhost_peanuts_touch
 void nxhost_peanuts_touch(int id, float x, float y, int down);
 #pragma weak nxhost_peanuts_rt_state
@@ -38,6 +40,12 @@ JNIEXPORT jboolean JNICALL Java_dev_peanuts_Bridge_frame(JNIEnv *env, jclass cls
     jlong cap = (*env)->GetDirectBufferCapacity(env, buffer);
     if (!p || cap < (jlong)w * h * 4 || !nxhost_peanuts_frame) return JNI_FALSE;
     return nxhost_peanuts_frame(p, w, h) ? JNI_TRUE : JNI_FALSE;
+}
+
+// The next frame() hands out the frame there is, changed or not (a page window made again: peanuts.h)
+JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_frameAgain(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls;
+    if (nxhost_peanuts_frame_again) nxhost_peanuts_frame_again();
 }
 
 JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_touch(JNIEnv *env, jclass cls, jint id, jfloat x, jfloat y, jboolean down) {

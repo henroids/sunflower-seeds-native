@@ -581,6 +581,7 @@ static int rt_find_package(char *dir, size_t n, uint64_t *title) {
     const char *romfs = getenv("DM_ROMFS");
     if (romfs && want) {
         const char *nup = strstr(romfs, ".nup:"); const char *slash = NULL;
+        if (!strncmp(romfs, "nsp:", 4)) { romfs += 4; nup = strchr(romfs, '|'); }   // a dump spec (peanuts_nsp.h): beside its first dump
         for (const char *q = romfs; q < (nup ? nup : romfs + strlen(romfs)); q++) if (*q == '/') slash = q;
         if (slash) snprintf(roots[nroots++], sizeof roots[0], "%.*s/%016" PRIX64 "-work/peanuts", (int)(slash - romfs), romfs, want);
     }
@@ -738,6 +739,8 @@ int nxhost_peanuts_frame(void *out_rgba, int w, int h) {
     pthread_mutex_unlock(&g_frame_mu);
     return got;
 }
+
+void nxhost_peanuts_frame_again(void) { pthread_mutex_lock(&g_frame_mu); if (g_frame) g_frame_new = 1; pthread_mutex_unlock(&g_frame_mu); }   // (peanuts.h)
 
 void nxhost_peanuts_touch(int id, float x, float y, int down) { if (g_rt && x >= 0 && y >= 0) pn_rt_touch(g_rt, (uint32_t)id, (uint32_t)x, (uint32_t)y, down); }
 

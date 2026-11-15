@@ -130,6 +130,9 @@ final class CompanionPresentation extends Presentation {
                 bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
                 pixels = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder());
                 page.setImageBitmap(bitmap);
+                // This window's bitmap is empty: ask for the frame there is. Without it a window made again (the game back from the background, the display
+                // attached again) stayed black until the companion drew something new, since a frame is handed out once (seen on the AYN Thor, 2026-11-15)
+                try { Bridge.frameAgain(); } catch (UnsatisfiedLinkError ignored) { }
             }
             boolean fresh;
             try { fresh = Bridge.frame(pixels, w, h); } catch (UnsatisfiedLinkError e) { fresh = false; }

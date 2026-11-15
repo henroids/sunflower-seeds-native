@@ -1186,6 +1186,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         }
         stopped = false;
         hostInBackground = false;
+        dev.peanuts.Companion.back(this);   // PEANUTS: the companion returns to the second display with the game (it left at onStop)
         // Another app took the audio focus for good while the game was away (AudioFocus): no gain would come, and the game stayed silent. Asked for again here
         if (audio != null && focus != null && focusState.askAgain()) {
             if (requestFocus()) { Native.note("audio focus asked for again on the return: granted"); Native.audioInterrupt(false); }
@@ -1209,6 +1210,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     }
     @Override protected void onStop() {
         if (started) { stopped = true; if (!isChangingConfigurations()) hostInBackground = true; Native.lifecycle(1); }
+        if (!isChangingConfigurations()) dev.peanuts.Companion.away();   // PEANUTS: Home or another app is in front: the companion's window leaves the second display (a Presentation outlives its activity's stop)
         super.onStop();
     }
     @Override public void onConfigurationChanged(Configuration c) {

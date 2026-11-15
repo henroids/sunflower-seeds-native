@@ -14,6 +14,8 @@ public final class Bridge {
     public static native int frameSize();
     /** The newest page frame (RGBA8) into a direct buffer of at least w*h*4 bytes: true when a new one was written. */
     public static native boolean frame(ByteBuffer out, int w, int h);
+    /** The next {@link #frame} writes the frame there is even when it was handed out before: for a page window made again, which has no pixels yet. */
+    public static native void frameAgain();
     /** A touch on the page, in page pixels. */
     public static native void touch(int id, float x, float y, boolean down);
     /** 0 still deciding, 1 a companion package loaded, 2 none for this title, 3 found but refused (logcat "peanuts" says why). */

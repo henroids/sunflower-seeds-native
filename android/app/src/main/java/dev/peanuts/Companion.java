@@ -35,14 +35,40 @@ public final class Companion {
     private static boolean stopped;
     /** Set once decide() resolves: whether this run is allowed to take the second display at all. Until then, a hot-plugged display is ignored. */
     private static boolean allowed;
+    /** Set while the game's activity is stopped (Home or another app is in front, or the screen is off): the companion's window is off the second display
+     * then, which goes back to whatever Android shows there. A Presentation is not closed by its activity stopping, so without this the companion stayed
+     * on the bottom screen over the home screen or the other app (seen on the AYN Thor, 2026-11-15). */
+    private static boolean away;
 
     private Companion() {}
+
+    /** The game left the foreground (GameActivity.onStop): the companion's window is taken off the second display until {@link #back}. */
+    public static void away() {
+        away = true;
+        if (shown != null) {
+            // Hidden, not dismissed: a window made again came back black until the companion drew something new (its page is only sent when it changes)
+            try { shown.hide(); } catch (RuntimeException ignored) {}
+            Log.i(TAG, "the game left the foreground: the companion is off the second display until it is back");
+        }
+    }
+
+    /** The game is in front again (GameActivity.onStart): the companion is shown again when this run had it. */
+    public static void back(Activity game) {
+        if (!away) return;
+        away = false;
+        if (stopped) return;
+        if (shown != null) {
+            try { shown.show(); return; } catch (RuntimeException e) { Log.w(TAG, "companion not shown again: " + e); shown = null; }   // its display went away meanwhile
+        }
+        if (allowed && listenerDm != null) show(game, decidingGameName, listenerDm);
+    }
 
     /** Starts the game hold and, once the host has decided whether a companion loaded, shows it (or leaves the display alone). Keeps trying as displays come and go. */
     public static void start(Activity game, String gameName) {
         if (listener != null) return;
         stopped = false;
         allowed = false;
+        away = false;
         DisplayManager dm = (DisplayManager) game.getSystemService(Activity.DISPLAY_SERVICE);
         listener = new DisplayManager.DisplayListener() {
             @Override public void onDisplayAdded(int id) { if (allowed) show(game, gameName, dm); }
@@ -93,7 +119,7 @@ public final class Companion {
     }
 
     private static void show(Activity game, String gameName, DisplayManager dm) {
-        if (shown != null || game.isFinishing() || game.isDestroyed()) return;
+        if (shown != null || away || game.isFinishing() || game.isDestroyed()) return;   // away: shown again by back()
         Display d = secondDisplay(game, dm);
         if (d == null) { Log.i(TAG, "no second display: companion not shown"); return; }
         try {
