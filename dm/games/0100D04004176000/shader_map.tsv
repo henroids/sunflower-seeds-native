@@ -1,0 +1,3 @@
+# kind: evidence  Farming Simulator: Nintendo Switch Edition shaders (provisional profile; none read yet) ( in RomFS + main) → control section + code area keys (dm/gfx/tools/shader_split.py)
+# column 5 records where each key first appears; no PC shader pairing supplied
+package	index	stage	dm_ctl_sha16	source
