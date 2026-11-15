@@ -2061,7 +2061,11 @@ def oodle(comp, n):
         # PEANUTS begin: on the phone there is no host executable: the title's host library in a worker process, as for an Unreal game's shader archives (ue_ondevice.py DeviceOodle;
         # PackService sets DM_UE_HOST, DM_UE_HOST_LIB and DM_UE_MODULES for the split step). Pokemon Legends: Arceus's 678 GFPAK archives stopped the build there without it
         dev, lib, dmods = os.environ.get('DM_UE_HOST', ''), os.environ.get('DM_UE_HOST_LIB', ''), os.environ.get('DM_UE_MODULES', '')
-        if (not host or not mods) and dev and lib and dmods:
+        # PEANUTS: DM_OODLE_OOZ=<helper> (opt-in, for a PC that has neither the Mac host nor the phone's library): a worker built from the open-source ooz decoder answers the
+        # same requests instead of the game's own decoder. It is not the game's code, so its output counts only once the split's tables are the profile's (every key hashes its shader's bytes)
+        ooz = os.environ.get('DM_OODLE_OOZ', '')
+        if ooz: argv = [ooz]
+        elif (not host or not mods) and dev and lib and dmods:
             import shlex, ue_ondevice
             argv = shlex.split(dev) + ['-I', '-c', ue_ondevice.HOST_CODE, lib, dmods]
         elif not host or not mods: red('Oodle- or LZ5-compressed game files: set DM_OODLE_HOST (the Mac host, make -C dm/host GAME=<id> dmhost) and DM_OODLE_MODULES (the rewritten modules) to decode them with the game\'s own decoder')

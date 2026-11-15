@@ -25,6 +25,7 @@
 #include "vka_spvpatch.h"
 #include "game_profile.h"
 #include "vka_texown.h"
+#include "vka_tbuf.h"   // PEANUTS: which GPU writes keep a texel buffer from being read through the CPU's copy
 
 __attribute__((weak)) int dm_codec_is_video_mem(const void *mem, uint64_t size, uint32_t *stride) { (void)mem; (void)size; (void)stride; return 0; }
 __attribute__((weak)) uint64_t dm_codec_video_gen(const void *mem) { (void)mem; return 0; }
@@ -755,7 +756,7 @@ static void gw_add(int kind, uint64_t dst, uint64_t n, uint64_t src, uint32_t va
     if (g_ngw == g_gwcap) { g_gwcap = g_gwcap ? 2 * g_gwcap : 256; g_gw = realloc(g_gw, (size_t)g_gwcap * sizeof *g_gw); }
     if (kind == GW_OPAQUE)   // the same range again in this submission (a storage buffer bound by draw after draw): one entry, at the newest place
         for (int i = g_ngw - 1; i >= 0 && i >= g_ngw - 16 && !g_gw[i].fence; i--) if (g_gw[i].kind == GW_OPAQUE && g_gw[i].lo == dst && g_gw[i].hi == dst + n) {
-            gw_t w = g_gw[i]; memmove(&g_gw[i], &g_gw[i + 1], (size_t)(g_ngw - 1 - i) * sizeof *g_gw); w.seq = g_gwseq++; g_gw[g_ngw - 1] = w; pthread_mutex_unlock(&g_tmu); return; }
+            gw_t w = g_gw[i]; memmove(&g_gw[i], &g_gw[i + 1], (size_t)(g_ngw - 1 - i) * sizeof *g_gw); w.seq = g_gwseq++; w.value |= value; /* PEANUTS: a storage texel buffer's flag stays (vka_tex_gw_tbuf) */ g_gw[g_ngw - 1] = w; pthread_mutex_unlock(&g_tmu); return; }
     if (kind == GW_UPDATE)   // the same inline update range again in this submission (Splatoon Raiders' 1,550 occlusion queries: 11,010 updates to 7 ranges): overwrite in place
         for (int i = g_ngw - 1; i >= 0 && i >= g_ngw - 16 && !g_gw[i].fence; i--) {
             if (g_gw[i].kind == GW_COPY) break;
@@ -774,6 +775,19 @@ void vka_tex_gw_copy(uint64_t src, uint64_t dst, uint64_t n) { gw_add(GW_COPY, d
 void vka_tex_gw_fill(uint64_t dst, uint64_t n, uint32_t value) { gw_add(GW_FILL, dst, n, 0, value, NULL); }
 void vka_tex_gw_update(uint64_t dst, uint64_t n, const void *data) { gw_add(GW_UPDATE, dst, n, 0, 0, data); }
 void vka_tex_gw_opaque(uint64_t dst, uint64_t n) { gw_add(GW_OPAQUE, dst, n, 0, 0, NULL); }
+// PEANUTS begin: stores through a storage texel buffer (vka_draw.c tbuf_view): an opaque write like any other (the textures over it are uploaded again once it is done),
+// with value 1 so that a read-only texel buffer over the range is not read through the CPU's copy while the write is not done (vka_tbuf.h; Final Fantasy Resonance's
+// particle instance counts, read from leftover memory in a scene's first frame: a GPU timeout)
+void vka_tex_gw_tbuf(uint64_t dst, uint64_t n) { gw_add(GW_OPAQUE, dst, n, 0, 1, NULL); }
+int vka_tex_gw_tbuf_pending(uint64_t addr, uint64_t n) {
+    int r = 0;
+    pthread_mutex_lock(&g_tmu);
+    uint64_t done = vka_done();
+    for (int i = g_ngw - 1; i >= 0 && !r; i--) r = vka_tbuf_gw_pending(g_gw[i].lo, g_gw[i].hi, g_gw[i].fence, g_gw[i].kind == GW_OPAQUE && g_gw[i].value, addr, addr + n, done);
+    pthread_mutex_unlock(&g_tmu);
+    return r;
+}
+// PEANUTS end
 // Stores through raw global memory (an address the shader loaded: dmsh_abi.h DMSH_GMEM_LOG_*) land where only the GPU knows: each draw or dispatch with such stores gets a write
 // log of its own, read once its submission is done; its pools (or, in an older ABI's page-hash log, its pages) become writes of unknown bytes, done (the images over them are
 // uploaded again). The log's format is the playing library's (vka_gml.h, vka_shader_lib_differs): each buffer holds either, each log is bound at its format's size

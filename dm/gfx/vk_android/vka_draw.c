@@ -15,6 +15,8 @@
 #include "game_profile.h"
 #include "vka_memu_abi.h"
 #include "vka_prepass.h"
+#include "vka_psosync.h"   // PEANUTS: which draws are not skipped while their pipeline is made in the background (DM_VK_PSO_SYNC_PASS)
+#include "vka_tbuf.h"   // PEANUTS: how a texel buffer is read: in place, through the CPU's copy or through a copy the GPU makes (tbuf_view)
 #include <math.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -1413,6 +1415,22 @@ static vka_res g_res[512];   // the NaN scan's own walk (DM_VK_NANSCAN_FS)
 typedef struct { VkBuffer b; VkDeviceSize off, range; VkFormat f; VkBufferView v; } tbv_ent;
 static tbv_ent g_tbv[512]; static uint64_t g_tbv_gen;
 static void tbv_destroy(void *v) { vk.vkDestroyBufferView(V.dev, (VkBufferView)(uintptr_t)v, NULL); }
+// PEANUTS begin: a read-only texel buffer over a range a storage texel buffer's stores have written in work that is not done (DM_VK_TBUF_GW, live, default 1; vka_tbuf.h):
+// not the CPU's copy, whose bytes are older than those stores. g_tbuf_disp: a dispatch's bindings are being resolved (vka_dispatch: no pass is open, a copy can be recorded);
+// g_tbuf_gcopy: copies on the GPU were recorded for it, so the barrier between them and the dispatch is owed (tbuf_gcopy_end, after bind_sets). The first use of each (shader, binding) is logged, 32 lines at most
+static int g_tbuf_disp, g_tbuf_gcopy;
+static void tbuf_gcopy_end(void) { if (g_tbuf_gcopy) { g_tbuf_gcopy = 0; vka_barrier(g_cb); } }
+static void tbuf_gw_note(const vka_shader *sh, const vka_res *r, uint64_t addr, uint64_t bytes, int path, uint32_t off, uint32_t al) {
+    static uint64_t seen[32]; static int n; uint64_t h = sh->key ^ ((uint64_t)r->binding << 8) ^ ((uint64_t)path << 4);
+    for (int i = 0; i < n; i++) if (seen[i] == h) return;
+    if (n == 32) return;
+    seen[n++] = h;
+    uint64_t vka_frame(void);
+    VLOG("tbuf gw: frame %llu shader %016llx binding %u: the texel buffer at %#llx (%llu bytes, offset %% %u = %u) holds stores of work that is not done: read %s (DM_VK_TBUF_GW=0: the CPU's copy)", (unsigned long long)vka_frame(),
+         (unsigned long long)sh->key, r->binding, (unsigned long long)addr, (unsigned long long)bytes, al, off,
+         path == VKTB_PLACE ? "in place" : path == VKTB_GPU ? "through a copy made on the GPU before the dispatch" : "through the CPU's copy all the same, which may be stale: it cannot be viewed in place and is bound to a draw or is not in placed memory");
+}
+// PEANUTS end
 static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, int storage) {
     uint64_t addr, bytes; VkFormat f; uint32_t texel; int want = r->dim & DMSH_VK_DIM_SINT ? 2 : r->dim & DMSH_VK_DIM_UINT ? 1 : 0;
     if (!vka_tex_id_tbuf(tid, want, storage, &addr, &bytes, &f, &texel)) {
@@ -1428,7 +1446,26 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
                  (unsigned long long)sh->key, r->binding, tid, (unsigned long long)addr, (unsigned long long)bytes, (int)f, texel, storage ? "storage" : "uniform", al, (unsigned)(o % al), (unsigned long long)run,
                  w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], fl[0], fl[1], fl[2], fl[3], fl[4], fl[5], fl[6], fl[7]); }
     }
-    if ((run < bytes || (o % al) || VKA_ENV("DM_VK_TBUF_COPY", 1)) && !storage && bytes && bytes <= (1u << 20)) {   // DM_VK_TBUF_COPY (live, default 1; 0: only what cannot be viewed in place): see below   // read only and not viewable where it is: a view of a copy of its bytes as the CPU has them now, for this submission
+    // PEANUTS begin: the choice (vka_tbuf.h): as before, except where a storage texel buffer's stores over the range are not done (gw): then in place, or for a dispatch
+    // through a copy the GPU makes here, after everything recorded so far (a full barrier before the first copy of the dispatch, one after the last: tbuf_gcopy_end)
+    int gw = !storage && bytes && bytes <= VKTB_COPY_MAX && VKA_ENV("DM_VK_TBUF_GW", 1) && vka_tex_gw_tbuf_pending(addr, bytes);
+    int path = vka_tbuf_path(storage, bytes, run >= bytes, !(o % al), VKA_ENV("DM_VK_TBUF_COPY", 1) != 0, gw, !g_tbuf_disp);
+    if (gw) tbuf_gw_note(sh, r, addr, bytes, path, (uint32_t)(o % al), al);
+    if (gw && path == VKTB_PLACE && g_tbuf_disp) vka_disp_settle(g_cb);   // (a dispatch reading what a dispatch before it stored: the barrier the replay leaves pending after a dispatch is needed here, unless the game's own came since)
+    if (path == VKTB_GPU) {
+        vka_span sp; uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements, n = texel && bytes / texel > mx ? mx * texel : bytes;
+        VkBufferView v = VK_NULL_HANDLE;
+        if (vka_scratch(n, al > 16 ? al : 16, &sp)) {
+            VkBufferViewCreateInfo ci = {VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO, .buffer = sp.buf, .format = f, .offset = sp.off, .range = n};
+            if (!vk.vkCreateBufferView(V.dev, &ci, NULL, &v)) {
+                if (!g_tbuf_gcopy) vka_barrier(g_cb);
+                VkBufferCopy c = {o, sp.off, n}; vk.vkCmdCopyBuffer(g_cb, b, sp.buf, 1, &c); g_tbuf_gcopy = 1;
+                vka_after(vka_fence_last() + 1, tbv_destroy, (void *)(uintptr_t)v); return v; }
+        }
+        path = VKTB_CPU;   // no scratch memory or no view: the CPU's copy, as before
+    }
+    // PEANUTS end
+    if (path == VKTB_CPU) {   // PEANUTS: was this condition written out; now vka_tbuf_path's (the same without a pending GPU write)   // DM_VK_TBUF_COPY (live, default 1; 0: only what cannot be viewed in place): see below   // read only and not viewable where it is: a view of a copy of its bytes as the CPU has them now, for this submission
         vka_span sp; uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements, n = texel && bytes / texel > mx ? mx * texel : bytes;
         // (its bytes as the GPU will have them at this point of the submission: guest memory with the buffer copies, fills and inline updates recorded so far, vka_tex_gw_read.
         // Unreal Engine fills its particle buffers with buffer copies from a staging buffer: read as the CPU has them at recording, they were the frame before's or what the
@@ -1444,6 +1481,7 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
             (unsigned long long)addr, (unsigned long long)bytes, run < bytes ? "not in placed guest memory" : "not aligned to the device's texel buffer offset");
         return VK_NULL_HANDLE; }
     uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements; if (texel && bytes / texel > mx) bytes = mx * texel;
+    if (storage && (r->flags & (DMSH_VK_BF_RW | DMSH_VK_BF_ATOMIC)) && VKA_ENV("DM_VK_TBUF_GW", 1)) vka_tex_gw_tbuf(addr, bytes);   // PEANUTS: the shader may store into it: the CPU does not have those bytes until this submission is done
     uint64_t gen = vka_mem_gen();
     if (gen != g_tbv_gen) { for (int i = 0; i < 512; i++) if (g_tbv[i].v) vka_after(vka_fence_last() + 1, tbv_destroy, (void *)(uintptr_t)g_tbv[i].v);
         memset(g_tbv, 0, sizeof g_tbv); g_tbv_gen = gen; }
@@ -2647,6 +2685,21 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     if (!mesh) vin_build_kept(d, sh[0], &k);
     PT(4);
     VkPipeline p = vka_gfx_pipeline(sh, &lay, &k);
+    // PEANUTS begin: with DM_VK_PSO_ASYNC a pipeline the cache lacks is made in the background and its draws skipped until then. Not the draws whose result the game
+    // keeps or that make the whole frame (vka_psosync.h: a direct draw of a few vertices, a small target, a draw that writes memory): theirs is made now, on the frame
+    // path (Super Mario Odyssey stayed black for a whole first run). Looked at only when a pipeline is missing. DM_VK_PSO_SYNC_PASS (live, 7; 0 = every miss skipped):
+    // the kinds; DM_VK_PSO_SYNC_VERTS (live, 6): the most vertices or indices of the first kind
+    if (!p && !mesh) {
+        int bits = VKA_ENV("DM_VK_PSO_SYNC_PASS", VKPS_ALL);
+        if (bits) {
+            float rf = R.rsf > 0.f ? R.rsf : 1.f;   // (the target in the game's own pixels: DM_RES_SCALE)
+            vkps_draw q = {.mesh = 0, .indirect = ind != 0 || mdi != 0, .instances = dw ? dw->instances : di->instances, .writes = d->rast_discard || draw_writes(sh, d),
+                           .count = dw ? dw->count : di->count, .w = (uint32_t)(R.full_w / rf + 0.5f), .h = (uint32_t)(R.full_h / rf + 0.5f)};
+            int why = vkps_why(bits, VKA_ENV("DM_VK_PSO_SYNC_VERTS", VKPS_VERTS), &q);
+            if (why) p = vka_gfx_pipeline_now(sh, why, q.indirect ? -1 : (long long)q.count, q.w, q.h);
+        }
+    }
+    // PEANUTS end
     if (!p) { g_skipped++; g_skip_dev[VKS_PIPELINE]++; return; }   // the driver refused it (logged when it was made)
     // DM_VK_INSTANCE: a direct indexed draw of one instance with only vertex and pixel shaders, their base modules and no retyped inputs may join the open run (its
     // instanced pipeline stays bound) or start one (decided at the sets, below)
@@ -3381,7 +3434,8 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
         }
       } }
   ndsr_net:
-    if (!bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_COMPUTE, &c0)) { g_skipped++; return; }
+    { g_tbuf_disp = 1; int ok = bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_COMPUTE, &c0); g_tbuf_disp = 0; tbuf_gcopy_end();   // PEANUTS: + the barrier after the texel buffer copies the GPU makes for this dispatch (tbuf_view), whether it is recorded or not
+      if (!ok) { g_skipped++; return; } }
     if (dp->ind && c0.buf) {   // the group counts the GPU wrote, into c0's dispatch words before the dispatch reads them (nvn_mtl.m g_c0_dim_buf); NVN2 reads them at c0 + 4 too
         vka_disp_settle(g_cb);   // (a copy: after the dispatches before it, as before; "Dispatch order")
         VkBufferCopy c[2] = {{io, c0.off + DMSH_C0_DISPATCH, 12}, {io, c0.off + DMSH_C0_DISPATCH_NVN2, 12}};

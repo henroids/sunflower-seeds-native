@@ -488,6 +488,33 @@ $(B)/t_android_tf: t_android_tf.c $(VKA)/vka_tf_spv.c $(VKA)/vka_tf.h $(VKA)/vka
 android-tf: $(B)/t_android_tf
 	$(B)/t_android_tf
 # PEANUTS end
+# PEANUTS begin: the panel's refresh grid (vka_panel.h): the period estimate from actual present times, a pacing period as whole refreshes, the chain of desired
+# present times (DM_VK_PACE_PANEL, DM_VK_PRESENT_GRID). Built with run; android-panel builds and runs it
+run: $(B)/t_android_panel
+$(B)/t_android_panel: t_android_panel.c $(VKA)/vka_panel.h | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_panel.c
+.PHONY: android-panel
+android-panel: $(B)/t_android_panel
+	$(B)/t_android_panel
+# PEANUTS end
+# PEANUTS begin: how a texel buffer is read (vka_tbuf.h; vka_draw.c tbuf_view, DM_VK_TBUF_GW): in place, the CPU's copy or a copy the GPU makes, for every combination
+# of its inputs, and which GPU writes count as pending. Built with run; android-tbuf builds and runs it
+run: $(B)/t_android_tbuf
+$(B)/t_android_tbuf: t_android_tbuf.c $(VKA)/vka_tbuf.h | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_tbuf.c
+.PHONY: android-tbuf
+android-tbuf: $(B)/t_android_tbuf
+	$(B)/t_android_tbuf
+# PEANUTS end
+# PEANUTS begin: which draws are not skipped while their pipeline is made in the background (vka_psosync.h vkps_why; vka_draw.c draw_body, DM_VK_PSO_SYNC_PASS): each
+# kind by its bit, the limits' edges, scene draws left skipped. Built with run; android-psosync builds and runs it
+run: $(B)/t_android_psosync
+$(B)/t_android_psosync: t_android_psosync.c $(VKA)/vka_psosync.h | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_psosync.c
+.PHONY: android-psosync
+android-psosync: $(B)/t_android_psosync
+	$(B)/t_android_psosync
+# PEANUTS end
 # A model of the texture cache's image lifetimes under random operations (references, holds, the old image of an in-place swap, lingering, eviction, pool drops,
 # queued region writes; vka_tex.c): the sanitizer stops at the first image used or freed after it was freed. `build/t_android_imglife old` shows the fault of the
 # first device run of the resolution scale. Built with run; android-imglife builds and runs it

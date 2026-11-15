@@ -1970,6 +1970,11 @@ static void power_line(uint64_t frame) {
 #endif
 }
 int nxhost_fps_limit_get(void) __attribute__((weak));   // the host's frame limit (hle_fpslock.c), 0 without one
+// PEANUTS: the Android layer's panel-locked pacing (vka_present.c, vka_panel.h; these defaults elsewhere): a pacing period in whole refreshes of the panel as
+// measured, and its line after the on-screen line. g_pace_nominal / g_pace_tick: the acquire pacer's period on the host's clock and the one it used at the last present
+__attribute__((weak)) uint64_t vka_panel_tick(uint64_t period_ns) { return period_ns; }
+__attribute__((weak)) void vka_panel_line(unsigned long long frame, const double *iv_ms, unsigned n, uint64_t nominal_ns, uint64_t tick_ns) { (void)frame; (void)iv_ms; (void)n; (void)nominal_ns; (void)tick_ns; }
+static uint64_t g_pace_nominal, g_pace_tick;
 static void tsummary(uint64_t frame) {
     char line[1024]; size_t o = 0;
     for (int k = 0; k < 6; k++) {
@@ -1994,6 +1999,7 @@ static void tsummary(uint64_t frame) {
       int64_t foot = plat_footprint_bytes(); double fp = foot >= 0 ? foot / 1048576.0 : -1;
       double br = dm_brightness_now();   // footprint / brightness are carried on the on-screen present row: does not depend on the tick-entry observation gate (camp runs have it too)
       if (k) { qsort(v, k, sizeof *v, dcmp); LOG("[nvn] on-screen up to frame %llu: %u frames, dropped %u (discarded %u), p99 %.2f ms; footprint %.0f MiB; brightness %.2f; thermal %d", frame, k + discard, drop, discard, v[(k * 99) / 100 < k ? (k * 99) / 100 : k - 1], fp, br, dm_thermal_now()); }
+      vka_panel_line(frame, g_pres_iv, n, g_pace_nominal, g_pace_tick);   // PEANUTS: the panel's period, the pacer's source, on-screen intervals in refreshes
       g_presn = 0; }
     power_line(frame);
     { static uint64_t prev[6], pf; uint64_t v[6]; mtl_vbuf_stats(&v[0], &v[1], &v[2], &v[3], &v[4], &v[5]);
@@ -2504,6 +2510,9 @@ NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
     // Real-device semantics: present only enqueues and returns immediately; this frame's display time is scheduled by the pacer, and the texture can be acquired again only at "display time + one period" (blocking in AcquireTexture)
     uint64_t period = present_period(o), now = dm_detclock_enabled() ? guest_ns() : now_ns();
     g_hold_ring[o->presents % 16] = (uint8_t)present_itv(o);
+    // PEANUTS: DM_VK_PACE_PANEL: the slots are whole refreshes of the panel as measured, not sixtieths of a second on the host's clock (an AYN Thor's panel runs at
+    // 59.83 Hz: the game outran it and waited about 24 ms in an acquire every few seconds). Only when the game may go on changes: the period it is told stays
+    g_pace_nominal = period; if (!dm_detclock_enabled()) period = vka_panel_tick(period); g_pace_tick = period;
     nvn_pacer pc = {o->pace};
     uint64_t slot = now + nvn_pace(&pc, now, period);
     o->pace = pc.target;

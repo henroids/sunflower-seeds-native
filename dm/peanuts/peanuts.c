@@ -725,8 +725,11 @@ void nxhost_peanuts_frame_size(int *w, int *h) {
 }
 
 // The newest frame as RGBA8 bytes (Android's ARGB_8888 bitmaps hold R, G, B, A in memory; the runtime's pixels are 0xAARRGGBB words)
+static _Atomic unsigned g_frame_polls;   // times the launcher's second-screen page asked for a frame: CompanionPresentation polls it while it shows
+unsigned peanuts_frame_polls(void) { return atomic_exchange(&g_frame_polls, 0); }   // since the last call (the present's statistics line, vka_present.c)
 int nxhost_peanuts_frame(void *out_rgba, int w, int h) {
     int got = 0;
+    atomic_fetch_add(&g_frame_polls, 1);
     pthread_mutex_lock(&g_frame_mu);
     if (g_frame && g_frame_new && (uint32_t)w == g_frame_w && (uint32_t)h == g_frame_h) {
         memcpy(out_rgba, g_frame, (size_t)w * h * 4);   // already R, G, B, A bytes (swizzled on publish)

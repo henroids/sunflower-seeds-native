@@ -57,20 +57,25 @@ def decode(romfs, main_nso, out):
     work, part = out + '.job', out + '.partial'
     rmtree(work); rmtree(part)
     cmd, lib, mods = os.environ.get('DM_UE_HOST', ''), os.environ.get('DM_UE_HOST_LIB', ''), os.environ.get('DM_UE_MODULES', '')
+    # PEANUTS: DM_OODLE_OOZ=<helper> (opt-in, for a PC that has neither the Mac host nor the phone's library): a worker built from the open-source ooz decoder answers the same
+    # requests (uepak.OodleHost's protocol; it ignores its arguments) instead of the game's own decoder. Its output counts only once the split's tables are the profile's
+    ooz = os.environ.get('DM_OODLE_OOZ', '')
+    Host = DeviceOodle
+    if ooz: cmd, lib, mods, Host = ooz, 'the ooz worker ' + ooz, '-', lambda c, l, m: uepak.OodleHost(c, m)
     dec = None
     try:
         if uepak.io_shader_tocs(romfs):
             # PEANUTS fix (AUDIT #7): an IoStore title's archives may need the game's own Oodle before uepak.job can even list them (unlike the loose-pak case below,
             # which only raises once it knows n > 0); without this check DeviceOodle ran Popen on an empty command and failed with a confusing OSError/FileNotFoundError
             if not cmd or not lib or not mods: raise ValueError('Oodle-compressed shaders and no host to decode them (DM_UE_HOST, DM_UE_HOST_LIB, DM_UE_MODULES)')
-            dec = DeviceOodle(cmd, lib, mods)
+            dec = Host(cmd, lib, mods)   # PEANUTS: DM_OODLE_OOZ, above
         listing, n = uepak.job(romfs, main_nso, work, decode=dec)
         if not listing: raise ValueError(f'the RomFS has Unreal paks, but none under {romfs} holds a shader code archive')
         print('ue: ' + '; '.join(f'{x["name"]} {x["shaders"]:,} shaders' + (f' ({x["compression"]})' if x.get('compression') else '') for x in listing)
               + (f'; decoding {n:,} with the game\'s Oodle in {lib}' if n else ''), flush=True)
         if n:
             if not cmd or not lib or not mods: raise ValueError('Oodle-compressed shaders and no host to decode them (DM_UE_HOST, DM_UE_HOST_LIB, DM_UE_MODULES)')
-            dec = dec or DeviceOodle(cmd, lib, mods)
+            dec = dec or Host(cmd, lib, mods)   # PEANUTS: DM_OODLE_OOZ, above
             with open(os.path.join(work, 'oodle.job'), 'rb') as f, open(os.path.join(work, 'oodle.job.out.partial'), 'wb') as o:
                 magic, count = struct.unpack('<II', f.read(8))
                 if magic != uepak.JOB_MAGIC or count != n: raise ValueError('the Oodle job file does not match its listing')

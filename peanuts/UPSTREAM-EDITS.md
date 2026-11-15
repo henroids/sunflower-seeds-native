@@ -337,3 +337,93 @@ A shader-chain change, on purpose: `DMSH_CHAIN` 9b2613d5216b → 9474b20069ad, `
 | `dm/gfx/tools/vk_android_spv.py`, `dm/gfx/tools/vk_android_build.py`, `dm/gfx/nvn/dmsh_chain_vk.h` | 1 + 1, generated | `extended_format_caps`: a module with an image type of a format outside the base set (Rg32ui) declares `StorageImageExtendedFormats`; `workgroup_plain_arrays`: a Workgroup variable whose array type carries `ArrayStride` (shared memory of 8 words has the type of the support block's `uint[8]` member) gets an undecorated array type of its own. Final Fantasy Resonance: 105 + 10 of its 73,496 shaders failed spirv-val, all 115 build now. Python only: no translator rebuild, `DMSH_CHAIN` stays 9474b20069ad; `DMSH_VK_CHAIN` 80271a5f763d → 4d3a924dcd04 (`DMSH_VK_ABI` unchanged). Control: 5,324 other shaders of the game (its other 2,819 compute shaders, 2,001 pixel, 500 vertex, 4 geometry) built with the tools before and after have the same library entry hash, every one | `# PEANUTS begin`/`end`, `# PEANUTS` |
 
 Upstream candidates: the `ReadsWritableMemory` rule and `born` are upstream's own already (nxnative has both).
+
+### Round 10, pacing on the panel's own refresh (2026-11-15)
+
+`dm/gfx/vk_android/vka_panel.h` (Peanuts-owned, test `dm/host/tests/t_android_panel.c`, `make android-panel`): the panel's refresh period and phase estimated from the
+actual present times `VK_GOOGLE_display_timing` reports. Two switches, both default on: `DM_VK_PACE_PANEL` (the host's pacing clocks tick in whole measured refreshes
+instead of a free-running 60.000 Hz) and `DM_VK_PRESENT_GRID` (every game frame gets a desired present time on the measured grid). Frame generation's own timing is
+as it was.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_present.c` | 5 | the include; the estimator's state; `timing_poll` feeds it every actual present time; `present_one` takes a grid time for a game frame whose period is a whole number of refreshes (the limit's period when longer), before the older rule; `vka_panel_tick` (the accessor) and `vka_panel_line` (the `[vk] panel` statistics line: period, the pacer's source, on-screen intervals in refreshes, the companion's state) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/gfx/nvn/hle_nvn.c` | 3 | weak defaults of the two functions; `tsummary` prints the line after the on-screen line; the present's slot period goes through `vka_panel_tick` (what the game is told about its period does not change) | `// PEANUTS ...` |
+| `dm/host/hle_fpslock.c` | 1 | `fps_limit_wait`: the limit's period through `vka_panel_tick` | `// PEANUTS ...` |
+| `dm/host/hle_sdk16.c` | 1 | the vi vsync event's period through `vka_panel_tick`, unless `DM_VSYNC_HZ` is set | `// PEANUTS ...` |
+| `dm/host/tests/Makefile` | 1 | `android-panel` | `# PEANUTS begin`/`end` |
+| `docs/env_switches.tsv` | 2 rows | the two switches | generated table, rows by hand |
+
+`dm/peanuts/peanuts.c` (ours) counts the second-screen page's frame requests for the line. Upstream candidate: yes, as a whole (upstream paces the same way on Android).
+
+### Round 10, the adb control interface (2026-11-15)
+
+`dev.peanuts.ctl` (Peanuts-owned, `peanuts/docs/CONTROL.md`): commands over `am start` behind `android.permission.DUMP`, and a status file. It reaches upstream's
+package-private classes through reflection (`dev.peanuts.ctl.Up`, as `dev.peanuts.ui.Upstream` does), so the upstream files carry only these hooks:
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/AndroidManifest.xml` | 1 | the activity `dev.peanuts.ctl.Command`: exported, `android:permission="android.permission.DUMP"`, no display | `<!-- PEANUTS: ... -->` above it |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 4 | `onCreate` and `onNewIntent`: `Ctl.attach(this)` (commands that waited for the screen run; they come from the package's own queue, no extra is read); `build()`: `Ctl.screen()` (the status file names the page); `start(Game)`: `Ctl.started(...)` (Play's answer, and the pack the game started with) | `// PEANUTS: ...` on each line |
+
+Each hook returns at once until a command was received in the process. Not an upstream candidate (upstream has its own adb extras, `AdbControl`).
+
+### Round 10, texel buffers the GPU writes (2026-11-15)
+
+`dm/gfx/vk_android/vka_tbuf.h` (Peanuts-owned, test `dm/host/tests/t_android_tbuf.c`, `make android-tbuf`): how a read-only buffer texture bound to a texel buffer slot
+is read. The copy of the CPU's bytes taken at recording (`DM_VK_TBUF_COPY`, our own earlier addition) is wrong for a buffer the GPU writes earlier in the same work.
+Final Fantasy Resonance on an AYN Thor: the particle instance counts, written by compute dispatches through storage texel buffers, were read from leftover memory in a
+scene's first frame, the indirect draws got a huge instance count and the GPU timed out in 40-50 % of the loads. Stores through a storage texel buffer are now kept as
+GPU writes of that range, and while one is not done a read-only texel buffer over it is viewed in place, or for a dispatch copied on the GPU when the device cannot view
+it there. `DM_VK_TBUF_GW=0` is the behaviour before. Buffers the GPU has not written keep the CPU's copy.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_tex.c` | 3 | the include; `gw_add` keeps the storage texel buffer flag when the same opaque range is recorded again; `vka_tex_gw_tbuf` (the flagged opaque write) and `vka_tex_gw_tbuf_pending` (such a write over a range is not done) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/gfx/vk_android/vka.h` | 1 | the two declarations | `// PEANUTS ...` |
+| `dm/gfx/vk_android/vka_draw.c` | 5 | the include; `tbuf_gcopy_end` and `tbuf_gw_note` (the `tbuf gw` log line, once per shader, binding and path); `tbuf_view`: the choice through `vka_tbuf_path`, the copy on the GPU (`vkCmdCopyBuffer` into scratch memory after a full barrier), the pending dispatch barrier recorded before a dispatch that reads such a buffer in place; `tbuf_view`: a writable storage texel buffer marks its range; `vka_dispatch`: the barrier after the copies, before the dispatch | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/host/tests/Makefile` | 1 | `android-tbuf` | `# PEANUTS begin`/`end` |
+| `docs/env_switches.tsv` | 1 row | `DM_VK_TBUF_GW` | generated table, row by hand |
+
+Left as it was: a draw's read-only texel buffer that the GPU wrote and the device cannot view in place (no copy can be recorded inside the draw's pass: the CPU's copy,
+with a `tbuf gw` line saying so); ranges written through storage buffers, raw global memory or texture to buffer copies (their marks can cover far more than was
+written, so they do not take the CPU's copy away); buffer textures read as 2D images (`DM_VK_TBUF`, `vka_tex.c`), which are uploaded again once a GPU write is done.
+
+### Round 10, draws that are not skipped for a background pipeline (2026-11-15)
+
+`dm/gfx/vk_android/vka_psosync.h` (Peanuts-owned, test `dm/host/tests/t_android_psosync.c`, `make android-psosync`): with `DM_VK_PSO_ASYNC` on (the launcher's default) a draw
+whose pipeline the cache lacks is skipped until a background thread has made it. Super Mario Odyssey on an AYN Thor drew a black picture with only the HUD for a whole
+first run (no pipeline cache yet), and still did with every pipeline made: a skipped draw's result was kept by the game. Three kinds of draw now get a missing pipeline
+on the frame path instead, as with `DM_VK_PSO_ASYNC=0`: a direct draw of one instance and at most 6 vertices or indices (full-screen and post-processing passes), a
+draw into a target of at most 64x64 texels, and a draw that writes memory or runs with the rasterizer off. `DM_VK_PSO_SYNC_PASS=0` is the behaviour before. Not verified
+on a device yet.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_pso.c` | 9 | the include; the stats line's buffer in `mtl_pso_line` (480 bytes, was 200: the line was cut before the new counts); the counters; `as_main` notes its thread on the entry it builds and puts its priority back after each build (2 hunks); `vka_pso_async_line`: the counts of the draws not skipped (2 hunks); `last_g` at file scope; `vka_gfx_pipeline_now` (the last lookup's queued job taken back and built on the frame path, or the frame waits for the thread that has it) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/gfx/vk_android/vka.h` | 1 | the declaration | `// PEANUTS ...` |
+| `dm/gfx/vk_android/vka_draw.c` | 2 | the include; `draw_body`: when the pipeline lookup returns none, `vkps_why` decides and `vka_gfx_pipeline_now` makes it | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/host/tests/Makefile` | 1 | `android-psosync` | `# PEANUTS begin`/`end` |
+| `docs/env_switches.tsv` | 2 rows | `DM_VK_PSO_SYNC_PASS`, `DM_VK_PSO_SYNC_VERTS` | generated table, rows by hand |
+| `docs/reference/rendering.md`, `docs/agents/symptoms.md` | 1 entry, generated | "A draw skipped for its pipeline left a result the game kept (Android)" | `PEANUTS` in the Symptom text (the index copies it) |
+
+Left as it was: a kept result drawn with ordinary geometry into a larger target (a cube map, a shadow atlas, a texture drawn once with scene geometry) is still skipped
+while its pipeline is made. Upstream candidate: yes, as a whole (upstream's asynchronous pipelines skip the same draws).
+
+### Round 10, texture copies go by the textures' formats (2026-11-15)
+
+Super Mario Odyssey on an AYN Thor (Adreno 740, Turnip; the same picture on an Adreno 840 with Qualcomm's driver, issue #21): water, crystal and other refracting materials
+drew flat bright green. `copy_t2t` chose between a plain copy and a converting blit by the two images' formats; a copy between two R11G11B10 textures, the second sharing
+an R32 float texture's image (learned view formats), was converted into the float image and read back as R11G11B10. The copy now goes by the textures' formats, and a copy
+that does convert with such a side goes through scratch images of the textures' formats. Verified on the device with learned view formats on. A profile key that turned
+learned view formats off for the game was written first and taken out again: the profile's format is as it was.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_exec.c` | 6 | `SCONV_N` 8 (was 4); `copy_t2t`: `tsf` / `tdf`, the textures' formats, and `fs` / `fd`; the plain copy's condition, its note and the blit's checks go by them; a converting copy with a side whose image has another format goes through `sconv_image` scratch images | `// PEANUTS ...` |
+| `docs/reference/rendering.md`, `docs/agents/symptoms.md` | 1 entry, generated | "Refracting materials flat green through a shared image of two formats (Android)" | `PEANUTS` in the Symptom text (the index copies it) |
+| `dm/games/0100000000010000/README.md` | 2 | the Rendering item and an Open item (the opening not checked again) | `PEANUTS` in the text |
+| `docs/env_switches.tsv` | 1 row | the missing row of `DM_OODLE_OOZ` (the opt-in worker of this round's `shader_split.py` / `ue_ondevice.py` hook) | generated table, rows by hand |
+
+Not audited: other operations that take an image's format where the texture's is meant (the DLSS stand-in's blit, clears outside a pass). Upstream candidate: yes
+(upstream's `copy_t2t` judges by the images the same way).
