@@ -449,3 +449,148 @@ Peanuts-owned, no marker needed: `peanuts/scripts/peanuts_build.py` (`pc_decode`
 line), `peanuts/tests/test_unoodle.py`, `peanuts/tests/test_peanuts_build.py`, `peanuts/docs/BUILDER.md`. Not touched: the shader library version chains
 (`dmsh_chain.py` `FILES`, `vk_android_build.py` `VK_FILES`), the Android app. Upstream candidate: no (upstream builds on a Mac, which has the game's decoder; and
 ooz has no licence file upstream, `dm/third_party/ooz/README.md`).
+
+### Round 10, missing shaders that point at DLC that was not imported (2026-11-15)
+
+(Corrected below, "Round 10, the shaders of another listed version": this round took Mario Kart 8 Deluxe's 135 missing shaders for DLC that was not imported.
+They are update 4.0.1's. What follows is kept for the message it added, which no known game needs.)
+A dump lacked shaders of the profile's map (29,650 of 29,785 found), and both builders said
+the dump was of another version, incomplete or modified ("dump the game again"). The missing shaders' rows in the profile's `shader_map.tsv` name their files, so the
+message now asks the game files: shaders whose files are not there, in an import without add-on content, are reported as DLC that was not imported, with what to do
+(the phone: set the DLC folder, delete the `.nup`, build again; the PC: pass the DLC `.nsp` and `--force-nup`). Files that are there with other shaders, or missing
+files in an import that has add-on content, keep the old words with a count and an example; an import that cannot be asked keeps them with the DLC named as a
+possibility. No profile says whether its game has add-on content, so the cause is worded as the usual one. The split itself is not changed.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `scripts/pack_android.py` | 3 | `lacking_shaders`: the message of a split that lacks shaders, from the map's sources, the RomFS the split read and the dump's add-on count; `split_shaders` raises it; `main` keeps the count (`a.dlc_count`) | `# PEANUTS begin`/`end`, `# PEANUTS ...` |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | 3 | `splitMatchesProfile`: `lack()` reads what the split lacks before its tables are deleted (`Lack`, `inRomfs`: a `.nup`'s package or a dump folder), and the three messages | `// PEANUTS begin`/`end`, `// PEANUTS ...` |
+| `android/app/src/main/java/dev/nxnative/android/PrepareText.java` | 1 | `addonNotImported`, `shadersDiffer` with a count and an example, `shadersDifferUnread`, `shown` | `// PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/ShaderLibs.java` | 1 | `missingSources`: the keys a split lacks and the RomFS path each row names | `// PEANUTS begin`/`end` |
+| `android/app/src/jvmtest/java/dev/nxnative/android/PrepareTextJvmTest.java`, `ShaderLibsJvmTest.java` | 1, 2 | the three texts; a `missing` command | `// PEANUTS begin`/`end`, `PEANUTS` in the line |
+| `dm/tools/tests/test_pack_android_builds.py`, `test_android_preparetext.py`, `test_android_shader_delta.py` | 1 each | `lacking_shaders`' four cases; the service's wiring; `missingSources` | `# PEANUTS ...` |
+
+Peanuts-owned, no marker needed: `peanuts/docs/FAQ.md` (the new question), `peanuts/docs/BUILDER.md` (the flag list). Not touched: `shader_split.py` and the
+on-device worker (the evidence is in the tables and the game files), the shader library version chains (`dmsh_chain.py` `FILES`, `vk_android_build.py` `VK_FILES`;
+`scripts/pack_android.py` is in neither). Not done: a warning before the import (the importer's `probe` reports the titles in the given files only), and a
+re-import action in the app (a build reuses a `.nup` that is there; the message says to delete it). Not run on a device or against the game's files.
+Upstream candidate: the count and the example yes; the DLC wording names this fork's Settings and builder.
+
+### Round 10, a game read from its dumps, stage 1 (2026-11-15)
+
+The host can mount a game's RomFS and its add-on content straight from the player's NSP or XCI dumps at run time (`DM_ROMFS=nsp:<base>[|<update>]`, keys from
+`DM_NX_KEYS`), with no `.nup`: `peanuts/docs/NSP-DIRECT.md`. The image over the dumps and the reader are Peanuts-owned (`dm/peanuts/peanuts_nsp.c`, the importer's
+`nx_nca.c`, `nx_crypto.c`, `nx_lz4.c`); the host's file system gets a third kind of image entry beside the plain and the zstd ones. Native code and PC tests only:
+the app does not set the new form yet, and the build still uses the `.nup`.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_fs.c` | 9 | the include of `peanuts_nsp.h`; `img_open` opens a dump spec, checking the dumps against the running game's program ID and main build ID; `mount_ex`, `romfs_work_size` and `dm_aoc_usable` take a dump spec where they take a `.nup` spec; `aoc_dir` knows `<index>.nsp` (a dump, a link to one, a link to `fd:<n>/<name>`); `img_serve` reads a `.zs` file's first bytes through the section reader; `h_fs_ReadFile` serves an `IMG_ENT_NSP` entry (and logs it for `DM_FSLOG`); `h_fs_MountRom` takes `DM_NSP_ROMFS` in place of `DM_ROMFS` (the trial switch) | `// PEANUTS begin`/`end`, `// PEANUTS: ...` |
+| `dm/host/hle_misc.c` | 1 | `aoc_load` counts `<index>.nsp` entries of `DM_AOC_DIR` | `/* PEANUTS: ... */` |
+| `android/host/CMakeLists.txt` | 3 | `NSP_C`: `peanuts_nsp.c` and the importer's three reader files in the host library, at `-O2`; `DM_NSP_DIRECT` in both host targets' definitions | `# PEANUTS begin`/`end`, `# PEANUTS: ...` |
+| `docs/env_switches.tsv` | 4 rows | `DM_NX_KEYS`, `DM_NSP_ROMFS` (new); `DM_ROMFS` and `DM_AOC_DIR` name the new forms | `[PEANUTS]` in each row |
+
+Without `DM_NSP_DIRECT` (the Mac and iOS hosts, the host's unit tests) `peanuts_nsp.h` gives stand-ins: a dump spec is recognised and refused with a reason, and
+nothing of `dm/peanuts` is linked. A `DM_ROMFS` that names a `.nup`, a RomFS image or a folder takes the paths it took before.
+
+Peanuts-owned, no marker needed: `dm/peanuts/peanuts_nsp.c`/`.h` (new); `dm/peanuts/import/nx_nca.c` and `nx_internal.h` (`nx_container_open_rt`: by descriptor,
+no read-ahead hint; `preadv_all` under `ctr_read_at`: a range off the 16-byte grid in one system call; the shared cache of decoded LZ4 entries and `nx_sec_share`;
+personalized tickets counted); `dm/peanuts/peanuts_nup.c`/`.h` (a dump spec is one layer of the companion's provider); `dm/peanuts/peanuts.c` (the package folder
+beside the first dump); `dm/peanuts/import/CMakeLists.txt` and `tests/nsp_test.c`, `nsp_fixture.h`, `nsp_compare.c` (new); `peanuts/docs/NSP-DIRECT.md` (new).
+Not touched: the Java side, `scripts/pack_android.py`, the importer's `.nup` writer, the shader library version chains (`dmsh_chain.py` `FILES`,
+`vk_android_build.py` `VK_FILES`). Not run on a device. Upstream candidate: no (upstream has no importer; its phone app unpacks dumps on a computer).
+
+### Round 10, Import again, and a build that asks before it goes on without DLC shaders (2026-11-15)
+
+Three gaps the round above left ("Round 10, missing shaders that point at DLC that was not imported"):
+
+1. The build pressed Try anyway for the player on every failure that offers it, so the new message was never seen and the game was built without the
+   shaders. `dev.peanuts.build.Prepare` now stops for one cause, add-on content that was not imported, and the build card offers "Import again with DLC" (or
+   "Set the DLC folder") and "Try anyway". The other failures that offer Try anyway are tried as before (`dev.peanuts.build.AutoRelax`).
+2. Nothing imported a game a second time: Build and Rebuild use the `.nup` that is there. The game sheet has "Import again…" for a game whose base is a `.nup`
+   (`dev.peanuts.build.Reimport`, `GameSheet.importAgain`): it names what is missing and does nothing, or asks and then makes the `.nup` anew from the dumps
+   found now. The new file is written beside the old one, which is replaced only when the import is complete (`BuildService.stepImport`); deleting the old file
+   first is a second choice when both do not fit. The control interface has the same as `reimport` (`peanuts/docs/CONTROL.md`).
+3. A pack finished without those shaders counted as up to date, so a build after a new import answered "Already prepared". The pack folder gets a note of its
+   own beside `pack.tsv` (`peanuts-pack.tsv`, `dev.peanuts.build.PackNote`; `pack.tsv` and its format are not changed, and a pack without the file reads as
+   before): `stale` is written by the import before a new `.nup` takes an old one's place, and `Prepare` then leaves the old job and makes the shaders and the
+   pack again; `without` says how many shaders a Try anyway build left out for add-on content, and the sheet shows it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/PrepareText.java` | 3 | `Failure` carries a cause and its counts (the three-argument constructor is kept); `CAUSE_ADDON`; `addonNotImported` names the cause and says "Import again" where it said to delete the `.nup` by hand | `// PEANUTS begin`/`end`, `/** PEANUTS: ... */`, inside the round's `// PEANUTS begin`/`end` |
+| `android/app/src/ondevice/java/dev/nxnative/android/Job.java` | 2 | `fail` writes `cause` and, for add-on content, `addon_missing` (kept through Try anyway, dropped by a failure of another cause); `state` removes `cause` | `// PEANUTS begin`/`end`, `// PEANUTS: ...` |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | 1 | the log sentence of the same failure names Import again | inside the round's `// PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | the Build again row's line no longer says it remakes the `.nup` | the row's `// PEANUTS: ...` |
+| `android/app/src/jvmtest/java/dev/nxnative/android/PrepareTextJvmTest.java` | 3 | the new words, the cause and its counts, no cause on the other failures | inside the round's `// PEANUTS begin`/`end` |
+| `dm/tools/tests/test_android_preparetext.py` | 1 | the cause reaches `job.json` and the counts outlive Try anyway | `# PEANUTS: ...` |
+
+Peanuts-owned, no marker needed: `dev.peanuts.build` (`AutoRelax`, `PackNote`, `Reimport` new; `Prepare`, `BuildService`, `BuildRequest`, `BuildListener`),
+`dev.peanuts.ui` (`GameSheet`, `Library`, `CtlPort`), `dev.peanuts.ctl` (`Ctl`, `Request`, `Status`), `peanuts/tests/test_reimport.py` (new) and `test_ctl.py`,
+`peanuts/docs/FAQ.md` and `CONTROL.md`. Not touched: the importer, `scripts/pack_android.py`, the split, the shader library version chains (`dmsh_chain.py`
+`FILES`, `vk_android_build.py` `VK_FILES`). All the app's Java compiles with `javac` against the Android API jar and the last build's `R.jar`; no APK was built
+and nothing was run on a device. Open: the phone's split reads the game version's RomFS only (`PackService` "split" passes no add-on roots), so an import with the DLC
+can only bring back shaders the importer puts into that RomFS; no game is known where it does (see the next round). Upstream candidate: no (upstream has no importer and no build card).
+
+### Round 10, the shaders of another listed version (2026-11-15)
+
+A correction first. Commit 1d034f07's message, and the two rounds above, say Mario Kart 8 Deluxe lacked 135 of 29,785 shaders because it was imported without
+its Booster Course Pass. That was wrong. The profile's `game.tsv` has `shader_versions v1441792 v1507328`: its tables are the union of updates 4.0.0 and 4.0.1,
+and the 135 are 4.0.1's own (the 135 rows of `shader_map.tsv` whose source starts with `/v1507328/`). The game's add-on content holds only `contents.dat` and
+`version.txt`; the courses are in the update. The dump was 4.0.0 alone, so nothing was missing from it. The example file named in that round's test
+(`/Course/B3ds_WuhuTown/course.ptcl`) was made up, not seen.
+
+`dm/games/README.md` gives the rule for `shader_versions`: a version is built from the profile as it is only when all listed versions are there, else from a
+derived profile with that version's own tables. Only `scripts/build_ipa_from_nsp.py` did that. The pack now does the smallest equivalent, on the PC and the phone
+alike: when the dump's version is one of several listed, the map's rows tagged with the other listed versions (`/v<N>/…`, `main@v<N>`, as `shader_split.py`
+writes a shader that first appears in a later version) are keys the dump may lack, exactly as the keys of `shader_optional.tsv` are. The build goes on with no
+failure and no Try anyway, says one line (`N of M shaders in this app's table belong to other versions of the game (vB): not needed for vA`), and the pack is not
+marked as built without shaders. Downstream needed nothing: the phone's shaders step already builds from a key list without the absent keys with
+`DMSH_VK_REQUIRE_ALL=1`, and the PC's already leaves the keys of `_absent.tsv` out. No shader-chain file is changed.
+
+The bound is exact, not a guess: only tagged rows of other listed versions may be lacking (135 for Mario Kart 8 Deluxe 4.0.0), and any other missing key is
+refused as before. What the tags cannot say is which untagged rows a later version dropped, so a dump of 4.0.1 alone that lacks 4.0.0-only shaders is still
+refused; `shader_optional.tsv` is the way to name those (Super Mario Bros. Wonder's names both sides: 3,457 of 1.2.1 only, which are exactly its tagged rows, and
+3,451 of 1.0.0 only). A dump whose version is not in `shader_versions`, and a profile with one version, behave as before.
+
+The add-on content message of the earlier round stays, but only for a profile whose tables are of one version, and after this check. No game is known that needs
+it, and it is untested against a real one. Import again (the round above) stands on its own: a newer update or added DLC still needs it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `scripts/pack_android.py` | 7 | `shader_versions`, `other_versions`, `other_version_keys`, `may_lack` (new); `absent_optional`, `ooz_split_checked` and `split_shaders` take the dump's version and ask `may_lack` where they asked `optional_keys`; the log line; `lacking_shaders` does not say DLC for tables of several versions; `main` keeps the version (`a.pack_ver`); the round's comment no longer names Mario Kart 8 Deluxe as a DLC case | `# PEANUTS begin`/`end`, `# PEANUTS ...` |
+| `android/app/src/main/java/dev/nxnative/android/ShaderLibs.java` | 2 | `shaderVersions`, `otherVersions`, `otherVersionKeys`, `otherVersionsLine` (new); `absentOptional` with the dump's version (the two-argument form is kept) | `// PEANUTS begin`/`end`, `// PEANUTS ...` |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | 6 | the shaders step and `splitMatchesProfile` pass `j.version()`; the line into logcat and `shaders.log`; `Lack.versions`, and the add-on message only when it is at most 1 | `// PEANUTS begin`/`end`, `// PEANUTS ...` |
+| `android/app/src/main/java/dev/nxnative/android/PrepareText.java` | 1 | the comment of the round's block | inside its `// PEANUTS begin`/`end` |
+| `android/app/src/jvmtest/java/dev/nxnative/android/ShaderLibsJvmTest.java`, `PrepareTextJvmTest.java` | 2, 1 | a `versions` command; the add-on text's example is no real game | `PEANUTS` in the line, inside the round's block |
+| `dm/tools/tests/test_pack_android_builds.py`, `test_android_shader_delta.py`, `test_android_preparetext.py` | 2, 1, 1 | two listed versions and a dump of one, an unlisted version, every key otherwise, the two real profiles; the order of the checks in the service | `# PEANUTS begin`/`end`, `# PEANUTS ...` |
+
+Peanuts-owned: `peanuts/docs/FAQ.md`, `BUILDER.md`. Not run on a device or against the game's files: the counts come from the profile's own tables. Upstream
+candidate: yes (`may_lack` and its Java twin; upstream's Android pack has the same gap for any profile with two `shader_versions`).
+
+### Round 10, a pack from before main.orig.bin gets the file at the game's start (2026-11-15)
+
+A companion package's load plan (the helper that lets it call the game's own functions) is installed only when the pack has `main.orig.bin`, which the rewriter has
+written since 2026-11-14. A pack built before that lost the helper without a word: The Legend of Zelda: Echoes of Wisdom's companion on a pack from 2026-11-12
+pressed buttons where it should have equipped an echo directly. Such a pack is kept as it is by design (the earlier rewriter counts as equivalent), so
+`scripts/pack_android.py`'s `write_orig`, which runs in a build, never reached it.
+
+No upstream file is changed. All of it is Peanuts-owned:
+
+| File | Change |
+|---|---|
+| `android/app/src/main/java/dev/peanuts/pack/OrigFill.java` (new) | `main.orig.bin` from the game's `main` (an NSO read as a stream, LZ4 through a 64 KiB window) and the pack's `main.changed.tsv`; written only when the table's build ID is the file's, the code matches the header's SHA-256, and `main.patched.bin` equals the file outside the table's runs; through `main.orig.bin.part`, once. No Android classes |
+| `android/app/src/main/java/dev/peanuts/pack/PackUpgrade.java` (new) | at a game's start: makes the `.part` file, runs `OrigFill` on its own thread with the game's `main` from upstream's readers (`Pack.gameVersion`, `BuildCheck.mod`, `Nup.read`, by reflection), logs the result, keeps the reason of a failure per title |
+| `android/app/src/main/java/dev/peanuts/Companion.java` | `start` calls `PackUpgrade.atGameStart` first (the existing hook in `GameActivity.onCreate`, before the host starts) |
+| `android/app/src/main/java/dev/peanuts/settings/CompanionSection.java` | a row under the installed companion when the last start could not make the file: what the companion lost, and that a rebuild fixes it |
+| `dm/peanuts/peanuts.c` | `rt_orig_pending`: the companion runtime does not start while `main.orig.bin.part` is there and less than a minute old, so the first start already reads the file |
+| `peanuts/scripts/pack_origfill.py` (new) | the same for a pack on a computer: `pack_origfill.py <pack> <game .nup or dump folder> [--module NAME or all]` |
+| `peanuts/tests/test_origfill.py` (new), `peanuts/docs/PACK-UPGRADE.md` (new) | the tests and the description |
+
+The pack's state does not change with the file: what the app compares is each module's `.android.key`, `pack.tsv` and the shader library's version (`PackCheck`,
+`Pack.libraryProblem`), and `build_src.sha256` lists the rewriter's own files, none of which is touched. Not touched either: `scripts/pack_android.py`, the
+rewriter, the shader library version chains. Checked: a pack made by `dm/tools/patch_nso.py` gets the same file back from the Python and from the Java
+(`test_origfill.py`, 27 tests); a real pack of 2026-11-11 (Link's Awakening) gets the same 21,584 bytes from both; all the app's Java compiles with `javac` against
+the Android API jar; `peanuts.c` passes the NDK compiler's syntax check with the build's own flags. No APK was built and nothing was run on a device. A `main`
+stored in ZBIC is not read by the Java (the decoder is reached from the build's Python only): such a pack keeps the log line and the row, and needs a rebuild.
+Upstream candidate: no (upstream has no companion runtime).

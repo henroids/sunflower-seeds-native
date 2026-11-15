@@ -219,6 +219,7 @@ final class Status {
                 m.put("error", o.optString("error"));
                 m.put("error_detail", Up.jobText(j, "errorDetail"));
                 m.put("fix", Up.jobText(j, "fix"));
+                m.put("cause", o.has("cause") ? o.optString("cause") : null);   // addon_not_imported: the build stops and asks instead of trying anyway by itself
             }
             m.put("try_anyway", o.optBoolean("try_anyway", false));
             m.put("updated", o.optLong("updated"));

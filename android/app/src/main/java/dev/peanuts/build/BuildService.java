@@ -24,7 +24,9 @@ import java.util.Locale;
  * resumable (a step whose output is there already is skipped):
  * <ol>
  * <li><b>import</b> — an NSP/XCI base becomes &lt;gameDir&gt;/&lt;Name&gt;/&lt;Name&gt;.nup with its update and DLC inside ({@link Importer}: dev.peanuts.importer.Native.writeNup
- *     after Native.keys on &lt;files&gt;/keys/prod.keys); skipped when the .nup is there and newer than every input. A .nup or a dump folder passes through.</li>
+ *     after Native.keys on &lt;files&gt;/keys/prod.keys); skipped when the .nup is there and newer than every input. A .nup or a dump folder passes through.
+ *     Import again ({@link Reimport}, {@link BuildRequest#replaceNup}) makes a .nup that is there anew: the new file is written beside it and takes its place
+ *     only when the import is complete, and the pack made from the old file is marked ({@link PackNote}) so that Prepare makes its shaders again.</li>
  * <li><b>prepare</b> — the on-device Prepare ({@link Prepare}): upstream's job in &lt;dump&gt;/../&lt;title ID&gt;-work/ondevice/job.json, run by its PackService (":pack"),
  *     watched until the pack is done, then the game into the launcher's list.</li>
  * <li><b>companion</b> — the chosen catalog package into &lt;title ID&gt;-work/peanuts/&lt;Name&gt;/ ({@link Companions}); skipped when that version is installed.</li>
@@ -35,7 +37,7 @@ import java.util.Locale;
 public final class BuildService extends Service {
     public static final String ACTION_BUILD = "dev.peanuts.build.BUILD", ACTION_CANCEL = "dev.peanuts.build.CANCEL";
     static final String EXTRA_ID = "id", EXTRA_TITLE = "title_id", EXTRA_NAME = "name", EXTRA_BASE = "base", EXTRA_UPDATE = "update", EXTRA_DLCS = "dlcs", EXTRA_GAME_DIR = "game_dir",
-            EXTRA_COMPANION = "companion", EXTRA_BUILD_ANYWAY = "build_anyway";
+            EXTRA_COMPANION = "companion", EXTRA_BUILD_ANYWAY = "build_anyway", EXTRA_REPLACE_NUP = "replace_nup", EXTRA_DELETE_FIRST = "delete_old_first";
     private static final String TAG = Prepare.TAG, CHANNEL = "peanuts_build";
     private static final int NOTE = 7001;
     /** Each step's share of the bar: import 0-45, prepare 45-90, companion 90-100 */
@@ -61,6 +63,7 @@ public final class BuildService extends Service {
         List<String> d = new ArrayList<>();
         for (File f : r.dlcs) if (f != null) d.add(f.getPath());
         i.putStringArrayListExtra(EXTRA_DLCS, new ArrayList<>(d));
+        if (r.replaceNup != null) i.putExtra(EXTRA_REPLACE_NUP, r.replaceNup.getPath()).putExtra(EXTRA_DELETE_FIRST, r.deleteOldFirst);
         return i;
     }
 
@@ -77,6 +80,9 @@ public final class BuildService extends Service {
         s = i.getStringExtra(EXTRA_GAME_DIR);
         r.gameDir = s == null ? null : new File(s);
         r.companionPackage = i.getStringExtra(EXTRA_COMPANION);
+        s = i.getStringExtra(EXTRA_REPLACE_NUP);
+        r.replaceNup = s == null ? null : new File(s);
+        r.deleteOldFirst = i.getBooleanExtra(EXTRA_DELETE_FIRST, false);
         return r;
     }
 
@@ -188,21 +194,30 @@ public final class BuildService extends Service {
         // PEANUTS: a build folder (Settings - Library - Build folder), when set, is where this title's .nup and pack both go (<build folder>/<title ID>/),
         // instead of beside the game and in the app's own storage; PeanutsPrefs.buildGameDir validates the title ID and returns null without one set
         File buildGameDir = dev.peanuts.PeanutsPrefs.buildGameDir(this, r.titleId);
-        if (buildGameDir == null && r.gameDir == null) throw new IOException("No game folder to write the .nup into (Setup).");
+        File replace = r.replaceNup;   // Import again: the .nup to make anew, where it is
+        boolean again = replace != null;
+        if (!again && buildGameDir == null && r.gameDir == null) throw new IOException("No game folder to write the .nup into (Setup).");
         // SpaceEstimate's pre-flight (P4): warn-only (found in review — the multiplier is uncalibrated, so it never blocks Build; a real
         // ENOSPC further down still fails with OUT_OF_SPACE through category()). getExternalFilesDir(null), not getFilesDir(): AppStorage puts the pack there
         // (found in review). Importing: the pack's basis is the merged .nup's own size (importBytes again), same as the game-folder check
         List<File> inputs = r.inputs();
         long importNeed = SpaceEstimate.inputBytes(inputs);
         // PEANUTS: both volumes move to the build folder when it is set (the .nup and the pack land under the same <title ID> folder there)
-        File importDest = buildGameDir != null ? buildGameDir : r.gameDir;
+        File importDest = again ? replace.getAbsoluteFile().getParentFile() : buildGameDir != null ? buildGameDir : r.gameDir;
         File packVolume = buildGameDir != null ? new File(buildGameDir, "pack") : getExternalFilesDir(null);
         String spaceWarn = SpaceEstimate.warning(importNeed, importNeed, true, importDest, packVolume);
         if (spaceWarn != null) Log.w(TAG, "space: " + name + ": " + spaceWarn);
-        File dir = buildGameDir != null ? buildGameDir : new File(r.gameDir, r.fileName()), out = new File(dir, r.fileName() + ".nup");
+        File dir = again ? importDest : buildGameDir != null ? buildGameDir : new File(r.gameDir, r.fileName()), out = again ? replace : new File(dir, r.fileName() + ".nup");
+        if (dir == null) throw new IOException("The .nup has no folder: " + out);
         long newest = 0;
         for (File f : inputs) newest = Math.max(newest, f.lastModified());
-        if (out.isFile() && out.length() > 0 && out.lastModified() >= newest) { progress("import", IMPORT_END, "Imported already: " + out.getName()); return out; }
+        if (!again && out.isFile() && out.length() > 0 && out.lastModified() >= newest) { progress("import", IMPORT_END, "Imported already: " + out.getName()); return out; }
+        // Import again: the new file is written beside the old one, so both must fit (the sheet checked the same and asked; this is the last look before the
+        // work). Unlike the first import's estimate above this one stops the build: the player chose between freeing space and deleting the old file first
+        boolean oldThere = again && out.isFile();
+        if (oldThere && !r.deleteOldFirst && SpaceEstimate.freeBytes(dir) < importNeed)
+            throw new BuildListener.Failure("Not enough free space to import " + name + " again: the new .nup needs about " + Reimport.size(importNeed) + " beside the old "
+                    + "one, and " + Reimport.size(SpaceEstimate.freeBytes(dir)) + " is free in " + dir + ". Nothing was changed.", BuildListener.OUT_OF_SPACE);
         if (!Importer.available()) throw new IOException("This build of the app cannot import NSP/XCI files yet (no importer). Use a .nup or a dump folder.");
         File keys = new File(new File(getFilesDir(), "keys"), "prod.keys");
         if (!keys.isFile()) throw new IOException("No prod.keys: add your keys in Setup first.");
@@ -212,6 +227,17 @@ public final class BuildService extends Service {
             if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create " + dir);
             File tmp = new File(dir, out.getName() + ".part");
             tmp.delete();
+            // The old .nup stays where it is until the new one is complete, so a failed or stopped import leaves the game as it was. Only the player's own
+            // second choice (not enough room for both, Reimport.lowSpace) deletes it first; the pack made from it is marked before the file goes
+            boolean deleted = false;
+            if (oldThere && r.deleteOldFirst) {
+                markPacksStale(r, out);
+                if (!out.delete()) throw new IOException("Cannot delete the old " + out.getName() + ". Nothing was changed.");
+                deleted = true;
+                Log.i(TAG, "import again: " + out + " deleted first (the player's choice)");
+            }
+            String kept = !again ? "" : deleted ? " The old .nup was deleted first, as you chose: open the game's sheet and tap Build to make it again."
+                    : " Nothing was replaced: the game is as it was.";
             final long[] last = {0};
             int rc = Importer.writeNup(tmp, inputs, r.titleId, (step, done, total) -> {
                 long now = System.currentTimeMillis();
@@ -220,14 +246,42 @@ public final class BuildService extends Service {
                 int pct = total > 0 ? (int) Math.min(IMPORT_END - 1, done * (IMPORT_END - 1) / Math.max(1, total)) : 0;
                 progress("import", pct, step + (total > 0 ? String.format(Locale.getDefault(), ": %d %%", Math.min(100, done * 100 / total)) : ""));
             });
-            if (cancelled) { tmp.delete(); throw new BuildListener.Failure("Build cancelled.", BuildListener.CANCELLED); }
-            if (rc != 0) { tmp.delete(); throw new IOException("Import failed: " + Importer.lastError()); }
-            if (!tmp.renameTo(out)) { tmp.delete(); throw new IOException("Cannot place " + out); }
+            if (cancelled) { tmp.delete(); throw new BuildListener.Failure("Build cancelled." + kept, BuildListener.CANCELLED); }
+            if (rc != 0) { tmp.delete(); throw new IOException("Import failed: " + Importer.lastError() + (again ? "." + kept : "")); }
+            // A pack made from the file this import replaces (Import again, or inputs newer than the .nup) was made from other game files: marked before the
+            // new file takes the old one's place, so no moment has the new file with a pack that counts as up to date (PackNote, Prepare.run0)
+            if (out.isFile()) markPacksStale(r, out);
+            if (!place(tmp, out)) { tmp.delete(); throw new IOException("Cannot place " + out + (again ? "." + kept : "")); }
         } catch (ReflectiveOperationException e) {
             throw new IOException("The importer does not match this build of the app (" + e.getMessage() + ").");
         }
         progress("import", IMPORT_END, "Imported " + out.getName());
         return out;
+    }
+
+    /** The finished import over the file it replaces, in one step where the storage can (the old file is never deleted first here) */
+    private static boolean place(File tmp, File out) {
+        try {
+            java.nio.file.Files.move(tmp.toPath(), out.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            return true;
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "import: moving " + tmp.getName() + " into place: " + e);
+            return tmp.renameTo(out);
+        }
+    }
+
+    /** The packs made from this game file get PackNote's stale row: the pack of the job beside it, and the pack the launcher would start it with */
+    private void markPacksStale(BuildRequest r, File nup) {
+        java.util.Set<File> packs = new java.util.LinkedHashSet<>();
+        try {
+            File jf = Upstream.jobFileOf(Upstream.workOf(nup, r.titleId));
+            if (jf.isFile()) packs.add(Upstream.jobPack(Upstream.jobRead(jf)));
+        } catch (ReflectiveOperationException | RuntimeException e) { /* no job, or one of another format: the pack below is enough */ }
+        try { packs.add(Upstream.packFor(this, nup, r.titleId)); } catch (ReflectiveOperationException | RuntimeException e) { /* no pack found */ }
+        for (File p : packs) {
+            try { if (p != null && PackNote.markStale(p)) Log.i(TAG, "import: the pack " + p + " is of the old game file: its shaders are made again"); }
+            catch (IOException e) { Log.w(TAG, "import: cannot mark " + p + ": " + e.getMessage()); }
+        }
     }
 
     /** (b) the pack, by upstream's on-device Prepare */

@@ -29,6 +29,9 @@ public interface BuildListener {
     String CANCELLED = "cancelled";
     /** A packer tool exited with an error (shaders, rewrite, pack): today's "Retry", with the detail in Details */
     String TOOL_STOPPED = "tool_stopped";
+    /** Prepare stopped because shaders come from files the import does not have and no add-on content (DLC) was imported ({@link AutoRelax}): the card offers
+     *  "Import again with DLC" (or where to set the DLC folder) and "Try anyway"; nothing is relaxed for the player here */
+    String ADDON_MISSING = "addon_missing";
     /** Anything not categorized above: today's "Retry" */
     String OTHER = "other";
 

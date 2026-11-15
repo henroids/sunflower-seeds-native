@@ -113,6 +113,8 @@ class CtlTest(unittest.TestCase):
         self.assertEqual(self.request('cmd=scan'), 'ok scan null true null')
         self.assertEqual(self.request('cmd=build', 'title_id=' + TITLE.lower()), 'ok build null true ' + TITLE)
         self.assertEqual(self.request('cmd=prepare', 'title_id=' + TITLE), 'ok prepare null true ' + TITLE)
+        self.assertEqual(self.request('cmd=reimport', 'title_id=' + TITLE), 'ok reimport null true ' + TITLE)   # the question (needs_confirm) is answered where the plan is known
+        self.assertEqual(self.request('cmd=reimport', 'title_id=' + TITLE, 'confirm=true', 'delete_first=no'), 'ok reimport null true ' + TITLE)
         self.assertEqual(self.request('cmd=play', 'title_id=' + TITLE, 'id=p1'), 'ok play p1 true ' + TITLE)
         self.assertEqual(self.request('cmd=nav', 'to=home', 'filter=ready', 'find=zelda'), 'ok nav null true null')
         self.assertEqual(self.request('cmd=nav', 'to=settings', 'section=System'), 'ok nav null true null')
@@ -132,6 +134,9 @@ class CtlTest(unittest.TestCase):
         for out in ('saves', 'clean', 'driver', 'mods', 'pack', 'setup', 'reset', 'dialog'):   # not in this version on purpose
             self.assertEqual(self.request('cmd=' + out), 'bad unknown_command', out)
         self.assertEqual(self.request('cmd=build'), 'bad bad_args')
+        self.assertEqual(self.request('cmd=reimport'), 'bad bad_args')
+        self.assertEqual(self.request('cmd=reimport', 'title_id=' + TITLE, 'confirm=maybe'), 'bad bad_args')
+        self.assertEqual(self.request('cmd=reimport', 'title_id=' + TITLE, 'delete_first=2'), 'bad bad_args')
         self.assertEqual(self.request('cmd=build', 'title_id=0100F2C0115B600'), 'bad bad_args')
         self.assertEqual(self.request('cmd=play', 'title_id=../../../../etc/pw'), 'bad bad_args')
         self.assertEqual(self.request('cmd=nav'), 'bad bad_args')

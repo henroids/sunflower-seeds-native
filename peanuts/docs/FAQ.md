@@ -283,12 +283,13 @@ Yes. By default a build is written beside the game, so a game on the card is bui
 
 Do not remove the card during a build or while a game from it runs.
 
-### What is the difference between Build, Rebuild, Build again and Prepare again?
+### What is the difference between Build, Rebuild, Import again, Build again and Prepare again?
 
 | Name | Where | What it does |
 |---|---|---|
 | **Build** | The sheet of a game that is not built | The first build: imports the game into one `.nup`, prepares it and installs the companion. |
-| **Rebuild** | The same sheet, opened for a game that is already built | Makes the `.nup` and the pack again from the files in the sheet, and updates the companion. |
+| **Rebuild** | The same sheet, opened for a game that is already built | Makes again the parts of the built game that no longer fit this app version (its code, its shaders), and updates the companion. It keeps the `.nup`. |
+| **Import again…** | The same sheet, under Build or Rebuild, for a game that has a `.nup` | Makes the `.nup` again from your dumps, with the update and DLC found now, then builds the game. See [below](#what-is-import-again-and-when-do-i-need-it). |
 | **Build again** | Hold the cover › **Storage** tab | Opens that sheet for a built game. You then tap **Rebuild**. |
 | **Prepare again** | Hold the cover › **Storage** tab, only for a game added as a dump folder | Remakes only the parts of the pack that do not fit, from the dump. It does not import or touch the companion. |
 | **Build with mods** | Hold the cover › **Game** tab › **Mods** | Makes a separate build that carries code mods. See [Mods](#mods). |
@@ -297,13 +298,30 @@ A tap on a ready cover plays the game, so the way to its sheet is hold the cover
 
 ### What is Build again, and when do I need it?
 
-It remakes the game's `.nup` and pack from your files. Hold the game's cover, open the **Storage** tab, tap **Build again**, then **Rebuild** in the sheet. You need it:
+It opens the game's sheet, where **Rebuild** makes again what no longer fits this app version. Hold the game's cover, open the **Storage** tab, tap **Build again**, then **Rebuild** in the sheet. You need it:
 
 - once after an app update, for a game whose companion uses map or helper features;
-- when a message or a setting row asks for it;
-- after you add a newer game update.
+- when a message or a setting row asks for it.
 
-It is quick when the game's code is otherwise current, and long when it is not.
+It is quick when the game's code is otherwise current, and long when it is not. Rebuild does not read your dumps again: it uses the `.nup` that is there. For a newer game update or added DLC, use **Import again**.
+
+### What is Import again, and when do I need it?
+
+It makes the game's `.nup` again from your dumps (the base, the update, the DLC), then builds the game. Nothing else does: Build and Rebuild use the `.nup` that is already there. You need it:
+
+- when DLC was not in the folders at the first build, and you have it now;
+- after you add a newer game update;
+- when a build says its shaders "come from files your import does not have".
+
+Open the game's sheet (for a built game: hold the cover › **Storage** › **Build again**) and tap **Import again…**. It asks first, and says:
+
+- what is deleted: the old `.nup`, with its size and where it is. It is replaced only when the new one is complete. If the import fails or you stop it, the game stays as it was;
+- what is kept: your saves, mods and settings, and the built game until the new build replaces it;
+- what it found: the base game, the update and how many DLC.
+
+The dumps must still be in their folders. If one is missing, the app names it and the folders it read, and changes nothing. Every part the old `.nup` has must be found again: its base, an update at least as new, and each of its DLC.
+
+The new file is written beside the old one, so for a while both are on the storage. If there is not enough room, the app says how much is needed. When deleting the old file first would make room, it offers that as a second choice. The risk: if the import then fails or is stopped, the game has no `.nup` and cannot be played until a build from its sheet has made one.
 
 ### Can I build on a PC or a Mac instead?
 
@@ -315,13 +333,16 @@ Put them in the game folder, or set Settings › Library › **Update folder** a
 
 ### A build says shaders "come from files your import does not have". What now?
 
-The game was imported without its add-on content (DLC), and some of its shaders are in files that only come with the DLC. Mario Kart 8 Deluxe without its Booster Course Pass is one such game. The message names one of the files.
+The app takes it that the game was imported without its add-on content (DLC), and that some of its shaders are in files that only come with the DLC. The message names one of the files. No game is known to need this yet, so if you see it, a report with the message's details helps.
 
-1. Set Settings › Library › **DLC folder**, or add the DLC file in the game's sheet (**DLC** row).
-2. Delete the game's `.nup` file with a file manager. The message's details have its path. The app has no button for this, and a build reuses a `.nup` that is already there.
-3. Open the game's sheet and build again. The import now takes the DLC.
+This is not the message for a game the app knows in several versions. There the app's shader table holds every version's shaders, and a dump of one version simply does not have the others'. That is normal: the build goes on and only notes it in its log.
 
-**Try anyway** builds without those shaders: the base game runs, and what the add-on adds is drawn without those materials.
+The build stops there and lets you choose. Its card has two buttons:
+
+- **Import again with DLC**, when the app found DLC for the game. Without a DLC folder the button is **Set the DLC folder**: set it (or add the DLC file in the game's sheet, **DLC** row), then tap **Import again with DLC**. It makes the `.nup` again with the DLC and builds the game. See [Import again](#what-is-import-again-and-when-do-i-need-it).
+- **Try anyway** builds without those shaders: the base game runs, and what the add-on adds is drawn without those materials. The game's sheet then says "Built without DLC shaders", and **Import again** there makes them later.
+
+Older versions of the app went on without asking here, so a game built by one of them can lack these shaders with no message. **Import again** mends that too.
 
 ### How do I free up storage?
 

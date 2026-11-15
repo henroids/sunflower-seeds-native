@@ -92,7 +92,10 @@ public final class CtlPort {
         if (t == null) return new String[] {"unknown_title", titleId + " is not in the library (scan first)."};
         if (t.status == LibraryScanner.Status.NO_PROFILE) return new String[] {"not_in_app", String.valueOf(Upstream.profileMissing(t.titleId, t.name))};
         if (BuildPipeline.running() != 0 || lib.building(titleId)) return new String[] {"busy", "A build is running now. Wait for it to finish."};
-        if (t.status == LibraryScanner.Status.READY) return new String[] {"already_built", t.name + " is built already. This command makes the first build only (prepare remakes what does not fit)."};
+        // a built game is not built again from here, except to go on with its own stopped build (the build card's Resume, Retry and Try anyway)
+        Library.Build stopped = Library.buildNow();
+        boolean goesOn = stopped != null && stopped.failed && stopped.titleId.equalsIgnoreCase(titleId);
+        if (t.status == LibraryScanner.Status.READY && !goesOn) return new String[] {"already_built", t.name + " is built already. This command makes the first build only (prepare remakes what does not fit, reimport makes the .nup again)."};
         if (t.base == null) return new String[] {"no_base", "No base game found. Only an update or DLC is in the folder."};
         if (!t.base.file.exists()) return new String[] {"file_missing", "The base file is no longer where the app found it: " + t.base.file.getName()};
         LibraryScanner.Source up = GameSheet.storedUpdate(a, t);
@@ -105,6 +108,45 @@ public final class CtlPort {
         GameSheet.State s = GameSheet.resumeState(a, t, CompanionPort.forTitle(Library.catalogNow(), t.titleId));
         s.buildAnyway = anyway;
         String why = lib.startBuild(s);
+        return why == null ? null : new String[] {"refused", why};
+    }
+
+    /**
+     * The sheet's Import again for a title with no sheet open (GameSheet.importAgain, dev.peanuts.build.Reimport): the .nup made anew from the dumps found now,
+     * then the build. data gets what the plan found (nup, old_bytes, base, update, update_version, dlc, need_bytes, free_bytes) whatever the answer. Refused
+     * with dumps_missing (which, and where it looked) or low_space (how much; delete_first is the second choice when that makes room). confirm is the answer to
+     * the sheet's question: without it the command is refused with needs_confirm and the question's own text. Returns null when the build was handed to the
+     * pipeline, else {code, sentence}.
+     */
+    public static String[] reimport(Activity a, String titleId, boolean confirm, boolean deleteFirst, Map<String, Object> data) {
+        Library lib = Library.of(a);
+        if (lib == null) return new String[] {"no_home", "Home was not drawn yet."};
+        LibraryScanner.Title t = lib.title(titleId);
+        if (t == null) return new String[] {"unknown_title", titleId + " is not in the library (scan first)."};
+        if (t.status == LibraryScanner.Status.NO_PROFILE) return new String[] {"not_in_app", String.valueOf(Upstream.profileMissing(t.titleId, t.name))};
+        if (BuildPipeline.running() != 0 || lib.building(titleId)) return new String[] {"busy", "A build is running now. Wait for it to finish."};
+        if (t.base == null || !t.base.isNup()) return new String[] {"not_a_nup", "Import again makes a game's .nup anew: " + t.name + " has none (" + (t.base == null ? "no base game found" : t.base.file.getName()) + ")."};
+        if (!PeanutsPrefs.hasKeys(a)) return new String[] {"no_keys", "Add your keys first (Settings › Library), then import."};
+        if (!PeanutsPrefs.hasFonts(a)) return new String[] {"no_firmware", "Add your firmware first (Settings › Library), then import."};
+        dev.peanuts.build.Reimport.Plan p = GameSheet.plan(a, t);
+        data.put("nup", p.nup.getPath());
+        data.put("old_bytes", p.oldBytes);
+        data.put("base", p.base == null ? null : p.base.getPath());
+        data.put("update", p.update == null ? null : p.update.getPath());
+        data.put("update_version", p.update == null ? null : (Object) p.updateVersion);
+        List<String> dlc = new ArrayList<>();
+        for (File f : p.dlcs) dlc.add(f.getPath());
+        data.put("dlc", dlc);
+        data.put("need_bytes", p.needBytes);
+        data.put("free_bytes", p.freeBytes == Long.MAX_VALUE ? null : (Object) p.freeBytes);
+        if (p.missing != null) return new String[] {"dumps_missing", p.missing};
+        if (p.lowSpace() && !(deleteFirst && p.fitsWithoutOld()))
+            return new String[] {"low_space", dev.peanuts.build.Reimport.lowSpace(p) + (p.fitsWithoutOld() ? " That second choice is -e delete_first true." : "")};
+        boolean first = deleteFirst && p.lowSpace();   // the old file goes first only when it has to: with room for both it is kept until the new one is complete
+        data.put("delete_first", first);
+        if (!confirm) return new String[] {"needs_confirm", (first ? dev.peanuts.build.Reimport.deleteFirst(p, t.name) + " Found: " + dev.peanuts.build.Reimport.found(p) + "."
+                : dev.peanuts.build.Reimport.confirm(p, t.name)) + " Add -e confirm true."};
+        String why = GameSheet.reimport(a, lib, t, CompanionPort.forTitle(Library.catalogNow(), t.titleId), p, first);
         return why == null ? null : new String[] {"refused", why};
     }
 

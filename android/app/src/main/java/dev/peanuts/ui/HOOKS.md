@@ -29,7 +29,7 @@ call `Haptics` themselves, and both would play.
   = previous/next filter. The Building filter holds the full cards (the build card, upstream's Ondevice card) two per row; in All the building game is a cover with
   a progress strip and a `Building · N %` chip that opens that filter. The first-run card when no game folder is set; the scan (`LibraryScanner`) and the catalog
   (`CompanionPort`) off the main thread; a scanned game that is ready goes into upstream's list (`Upstream.addToList`) so Play and Manage are Banana's own.
-- `GameSheet` — the game's dialog: Base / Update / DLC / Companion rows, Build or Rebuild, Add keys… when prod.keys are missing. Its Choose/Add pickers come back
+- `GameSheet` — the game's dialog: Base / Update / DLC / Companion rows, Build or Rebuild, Import again… for a game whose base is a .nup (the .nup made anew from the dumps, `dev.peanuts.build.Reimport`), Add keys… when prod.keys are missing. Its Choose/Add pickers come back
   through `LibrarySettings.result` (requests 65, 66).
 - `LibrarySettings` — Settings › Library: folders, keys, firmware, Rescan, Haptics (System / Off), Motion (System / Reduced), Companions; the pickers
   (also the first-run card's and the sheet's).

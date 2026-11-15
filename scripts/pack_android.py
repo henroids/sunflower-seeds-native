@@ -247,11 +247,47 @@ def optional_keys(g):
     return {l.split('\t')[0] for l in f.read_text().splitlines() if l and not l.startswith('#')} if f.is_file() else set()
 
 
-def absent_optional(g, pkg):
+# PEANUTS begin: a profile whose shader tables are the union of several versions of the game (game.tsv shader_versions, dm/games/README.md), packed from a dump
+# of one of them. scripts/build_ipa_from_nsp.py derives a profile with that version's own tables then; a pack needs less: the map's rows say which shaders only
+# another version has. shader_split.py prefixes the source of a shader that first appears in a later version with that version (/v1507328/Common/..., main@v1507328;
+# the first version's rows carry none), so a dump of one listed version may lack exactly the rows tagged with the other listed versions, and they join the keys
+# the dump may lack (optional_keys' use below). Mario Kart 8 Deluxe's map is the union of 4.0.0 and 4.0.1: 135 of its 29,785 rows are tagged /v1507328/, and a
+# dump of 4.0.0 alone was refused as "another version or incomplete" for exactly those 135 (2026-11-15). What the tags cannot say: which untagged rows a later
+# version dropped. A dump of a later version that lacks those is refused as before, unless shader_optional.tsv names them (Super Mario Bros. Wonder's does)
+def shader_versions(g):
+    """The versions the profile's shader tables are the union of (game.tsv shader_versions: 'v0', 'v327680'), [] when it names none"""
+    try: return [v for v in g.words('shader_versions') if v[:1] == 'v' and v[1:].isdigit()]
+    except Exception: return []
+
+
+def other_versions(g, ver):
+    """The listed versions other than the dump's (ver: a number), when the dump's version is listed; else [] (a single-version profile, a version the tables were not made from)"""
+    listed = shader_versions(g)
+    return [v for v in listed if v != f'v{ver}'] if ver is not None and f'v{ver}' in listed else []
+
+
+def other_version_keys(g, ver):
+    """The keys of the profile's shader_map.tsv whose source is tagged with a listed version other than the dump's: shaders only those versions have"""
+    others, keys, f = other_versions(g, ver), set(), g.dir / 'shader_map.tsv'
+    if not others or not f.is_file(): return keys
+    tagged = lambda s: any(s.startswith(f'/{v}/') or (i := s.find(f'@{v}')) >= 0 and not s[i + len(v) + 1:i + len(v) + 2].isdigit() for v in others)
+    with open(f, encoding='utf-8') as h:
+        for c in (l.rstrip('\n').split('\t') for l in h):
+            if len(c) > 4 and c[0].endswith('.bin') and tagged(c[4]): keys.add(c[3])
+    return keys
+
+
+def may_lack(g, ver=None):
+    """The keys a dump of version ver may lack: shader_optional.tsv's, and the other listed versions' own (other_version_keys)"""
+    return optional_keys(g) | other_version_keys(g, ver)
+# PEANUTS end
+
+
+def absent_optional(g, pkg, ver=None):   # PEANUTS: ver, the dump's version (may_lack)
     """The keys a split's <package>/_absent.tsv lists (split_shaders), when every one is in the profile's shader_optional.tsv; else (none, or a list naming other keys) empty"""
     f = pkg / '_absent.tsv'
     keys = {l for l in f.read_text().splitlines() if l} if f.is_file() else set()
-    return keys if keys and keys <= optional_keys(g) else set()
+    return keys if keys and keys <= may_lack(g, ver) else set()   # PEANUTS: may_lack (was optional_keys): also the shaders only another listed version has
 
 
 # PEANUTS begin: code mods (DESIGN-MODS.md "ExeFS binary patch (IPS/IPS32)"/"Code injection"), the modded variant build dev.peanuts.build.ModdedBuild
@@ -622,12 +658,12 @@ def selected_keys(profile_dir):
 
 
 # PEANUTS begin: the check of a split whose Oodle streams the ooz worker decoded (DM_OODLE_OOZ, dm/third_party/ooz/README.md)
-def ooz_split_checked(ooz, g, tmp):
+def ooz_split_checked(ooz, g, tmp, ver=None):
     """An Oodle stream carries no checksum, and the ooz decoder is not the game's own: a shader's key (the hash of its bytes, shader_split.py skey) is the only
     check there is. So the split in <tmp> counts only when its keys are exactly the profile's, but for the keys shader_optional.tsv gives to another build; one
     key missing or one key more stops the pack, and nothing of that split is used. (vk_android_build.py then hashes every record against its key again.)"""
     want, have = map_keys(g.dir / 'shader_map.tsv'), map_keys(tmp / 'shader_map.tsv')
-    lost, more = sorted(k for k in want - have if k not in optional_keys(g)), sorted(have - want)
+    lost, more = sorted(k for k in want - have if k not in may_lack(g, ver)), sorted(have - want)
     if lost or more:
         eg = lambda ks: f' (e.g. {", ".join(ks[:3])})' if ks else ''
         raise Error(f'the shaders decoded with the ooz Oodle decoder ({ooz}, DM_OODLE_OOZ) are not the profile\'s: {len(lost)} of the {len(want)} keys in its shader_map.tsv '
@@ -640,9 +676,11 @@ def ooz_split_checked(ooz, g, tmp):
 
 
 # PEANUTS begin: what a split that lacks shaders of the profile's map says. The map's rows name the file each shader comes from; shaders whose files the game
-# files do not have, in a dump without add-on content, are DLC that was not imported (Mario Kart 8 Deluxe without its Booster Course Pass: 135 of 29,785, all from
-# course files the import left out), which "another version or incomplete" did not say (2026-11-15). The phone's words: PackService.splitMatchesProfile
-def lacking_shaders(g, rd, hard, total, dlc, tmp):
+# files do not have, in a dump without add-on content, may be DLC that was not imported, which "another version or incomplete" did not say (2026-11-15). No game
+# is known to need this: the case it was written for, Mario Kart 8 Deluxe's 135 of 29,785, was the shaders of another listed version (may_lack above, checked
+# first), not DLC. So it is said only for a profile whose tables are of one version (multi: the tables are a union of versions, and a missing file is then more
+# likely another version's). The phone's words: PackService.splitMatchesProfile
+def lacking_shaders(g, rd, hard, total, dlc, tmp, multi=False):
     """The message for a split without the keys hard (sorted) of the profile's total: rd is the RomFS the split read, dlc how many add-on contents the dump has
     (None: not known). A source is a RomFS path up to its first '#', and may go on into a container: its longest part that exists decides whether the file is there"""
     src = {}
@@ -659,7 +697,7 @@ def lacking_shaders(g, rd, hard, total, dlc, tmp):
     try: gone = [k for k in hard if src.get(k, '').startswith('/') and not has(src[k])]
     except Exception: gone, dlc = [], None   # the game files cannot be asked: only what the tables say
     lack = f'the dump\'s shaders lack {len(hard)} of the {total} in the profile\'s shader_map.tsv (e.g. {", ".join(hard[:3])})'
-    if gone and dlc == 0:
+    if gone and dlc == 0 and not multi:
         return (f'{lack}: {len(gone)} of them come from files the game files do not have (e.g. {src[gone[0]]}), and the game was imported without add-on content. '
                 f'This usually means the game\'s add-on content (DLC) was not part of the import: give the DLC file to the builder too (peanuts-build: add the DLC '
                 f'.nsp to the command line, with --force-nup when the .nup is there already; a dump folder: its dlc/ folder), then build again '
@@ -688,12 +726,16 @@ def split_shaders(a, g, vdir, pkg, parts=None):   # parts: the version's (romfs,
     r = subprocess.run([py, str(SPLIT), str(rd), str(ed / 'main'), str(tmp / 'pkg'),
                         *[str(tmp / f) for f in ('shader_map.tsv', 'shader_facts.tsv', 'shader_pairs.tsv', 'pso_pairs.tsv')]], env=env)
     if r.returncode: raise Error(f'shader_split.py exit code {r.returncode}')
-    if ooz: ooz_split_checked(ooz, g, tmp)   # PEANUTS: the ooz decoder's output is taken only when the split's keys are the profile's
+    ver = getattr(a, 'pack_ver', None)   # PEANUTS: the dump's version (main), for the shaders only another listed version has (may_lack)
+    if ooz: ooz_split_checked(ooz, g, tmp, ver)   # PEANUTS: the ooz decoder's output is taken only when the split's keys are the profile's
     if (g.dir / 'shader_map.tsv').is_file():
         want, have = map_keys(g.dir / 'shader_map.tsv'), map_keys(tmp / 'shader_map.tsv')
         missing = sorted(want - have)
-        if hard := [k for k in missing if k not in optional_keys(g)]:
-            raise Error(lacking_shaders(g, rd, hard, len(want), getattr(a, 'dlc_count', None), tmp))   # PEANUTS: says when the missing shaders point at DLC that was not imported
+        if hard := [k for k in missing if k not in may_lack(g, ver)]:   # PEANUTS: may_lack (was optional_keys): the other listed versions' shaders are checked first
+            raise Error(lacking_shaders(g, rd, hard, len(want), getattr(a, 'dlc_count', None), tmp, len(shader_versions(g)) > 1))   # PEANUTS: says when the missing shaders point at DLC that was not imported
+        # PEANUTS: the one plain line for a dump of one of the versions the tables are the union of (the phone's: PackService.splitMatchesProfile)
+        if theirs := [k for k in missing if k in other_version_keys(g, ver)]:
+            print(f'shaders: {len(theirs):,} of {len(want):,} shaders in this app\'s table belong to other versions of the game ({", ".join(other_versions(g, ver))}): not needed for v{ver}', flush=True)
         for f in ('shader_map.tsv', 'shader_facts.tsv', 'shader_pairs.tsv'):
             if (g.dir / f).is_file() and (g.dir / f).read_bytes() != (tmp / f).read_bytes():
                 print(f'shaders: the dump\'s {f} differs from the profile\'s ({len(have - want)} shaders more); the library is the profile\'s, its shaders found in the package by key')
@@ -727,7 +769,7 @@ def pack_shaders(a, g, work, out, vdir, parts=None):
         if keys is not None:
             if not keys: raise Error(f'the profile\'s shader_seen.tsv names none of the shaders of its shader_map.tsv')
             print(f'shaders: the profile selects {len(keys):,} shaders (shader_seen.tsv) and the pixel shaders paired with them, as the phone builds', flush=True)
-        if absent := absent_optional(g, pkg):   # a registered build without some of the map's shaders (shader_optional.tsv): the library is built without them
+        if absent := absent_optional(g, pkg, getattr(a, 'pack_ver', None)):   # a registered build without some of the map's shaders (shader_optional.tsv; PEANUTS: or another listed version's own, may_lack): the library is built without them
             print(f'shaders: {len(absent)} of the profile\'s shaders are not in this build of the game (shader_optional.tsv); the library leaves them out '
                   '(the [RED] "not in the package" line below counts them)', flush=True)
             env['DMSH_VK_REQUIRE_ALL'] = '0'
@@ -832,6 +874,7 @@ def main():
             if (need := pack_dump.dlc_required_version(p)) > ver:
                 print(f'[RED] DLC {tid:016X} needs game version {need} or later (its content meta record); this pack is version {ver}: the game may not use it', flush=True)
         a.dlc_count = len(dlc)   # PEANUTS: for split_shaders' message (lacking_shaders): a dump without add-on content whose missing shaders come from files it does not have
+        a.pack_ver = ver   # PEANUTS: the version packed, for the shaders only another version of the profile's shader_versions has (may_lack)
         vdir = pack_dump.version_dir(folder, vers, ver)
         exe, romfs = pack_dump.version_part(folder, vers, ver, 'exefs'), pack_dump.version_part(folder, vers, ver, 'romfs')   # its own, else the base's
         if not (exe / 'main.npdm').is_file() or not romfs.is_dir(): raise Error(f'{vdir}: no exefs/main.npdm and romfs (neither its own nor the base\'s)')

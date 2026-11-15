@@ -2,7 +2,8 @@
 
 A way to drive the app from a computer, for tests and scripts: one command per `am start`, and one file that
 says what the app is doing. This is the first part: reading the state, moving between pages, building,
-preparing, playing and a few safe settings. Nothing here deletes or replaces anything.
+preparing, playing and a few safe settings. One command replaces a file: `reimport` makes a game's `.nup`
+again, and only with `-e confirm true`. Nothing else here deletes or replaces anything.
 
 ```
 adb shell am start -n <package>/dev.peanuts.ctl.Command -e cmd <name> [-e <argument> <value> ...] [-e id <token>]
@@ -56,6 +57,7 @@ rest of the file.
 | | `-e cmd nav -e to settings -e section System` | Settings, scrolled to a heading (`Library`, `Updates`, `Game defaults`, `System`, `Help`, `About`) |
 | | `-e cmd nav -e to game -e title_id 0100F2C0115B6000 -e tab storage` | A listed game's page and tab (`performance`, `game`, `saves`, `storage`) |
 | `build` | `-e cmd build -e title_id 0100F2C0115B6000` | The game sheet's Build with the files the sheet would choose: the base, the update chosen earlier (else the newest found), the DLC found, the companion as its switch stands. First build only. Refused with `wrong_version` when the sheet would ask "Build anyway?" |
+| `reimport` | `-e cmd reimport -e title_id 0100F2C0115B6000 -e confirm true` | The game sheet's Import again: the game's `.nup` is made again from its dumps (the base, the update chosen earlier or else the newest found, the DLC found now), then the game is built. The new file is written beside the old one and replaces it only when the import is complete. See below |
 | `prepare` | `-e cmd prepare -e title_id 0100F2C0115B6000` | Storage › Prepare again for a listed game, without its question. A dialog the app answers with is the refusal (`refused`, its text in `message`) |
 | `job` | `-e cmd job -e do pause` | The button of the card that shows: Stop on the build card, Pause on the Prepare card |
 | | `-e cmd job -e do resume` (or `retry`) | Resume or Retry: a stopped build builds on; a Prepare job's own button is pressed |
@@ -67,6 +69,33 @@ rest of the file.
 | `set` | `-e cmd set -e key fps_cap -e value 30 -e title_id 0100F2C0115B6000` | One of the settings below, for every game or, with `title_id`, for one |
 
 `job` takes an optional `title_id`: the command is refused (`no_job`) when the job is another game's.
+
+### `reimport`
+
+It replaces a file, so it wants `-e confirm true`, as `game` with `do=stop` does. Without it the command
+is refused with `needs_confirm`; `message` is then the question the sheet asks (what is deleted, what is
+kept, what was found) and `data` says what would be used, so a script can look before it agrees.
+
+`data`, whatever the answer: `nup` (the file to replace), `old_bytes`, `base`, `update`, `update_version`,
+`dlc` (a list of files), `need_bytes` (the dumps' sizes together: what the new file may need), `free_bytes`
+(free where the `.nup` is, null when not known), `delete_first`.
+
+| Code | Meaning |
+|---|---|
+| `not_a_nup` | The game's base is not a `.nup` (a dump folder, or a game that is not imported yet: `build` imports it) |
+| `dumps_missing` | A dump the old `.nup` was made from was not found: its base, an update at least as new as the one inside it, or one of its DLC. `message` names what is missing and the folders that were read. Nothing is changed |
+| `low_space` | The new file does not fit beside the old one. `message` says how much is needed. When deleting the old file first would make room, `-e delete_first true` is that second choice: if the import then fails or is stopped, the game has no `.nup` and cannot be played until a build has made one |
+| `needs_confirm` | See above |
+| `busy`, `unknown_title`, `not_in_app`, `no_keys`, `no_firmware`, `refused` | As `build` |
+
+`delete_first` is used only when it is needed: with room for both files the old one is kept until the new
+one is complete, whatever the argument says (`data.delete_first` tells which it was). `ok` means the import
+started; `build` shows its progress, and a pack made from the old file is built again (its shaders are
+found anew), never answered with "Already prepared".
+
+A build that stops because shaders come with DLC that was not imported ends with `build.code`
+`addon_missing` (and `job.cause` `addon_not_imported`): the app no longer goes on by itself there. Answer
+with `reimport`, or with `job` `do=try_anyway` to build without those shaders.
 
 ### Settings `set` takes
 
@@ -95,7 +124,7 @@ is old (`written` says when). What the app cannot tell for sure is null or left 
 | `app` | `package`, `version`, `build_id` (as Home's header shows it), `commit`, `keys`, `firmware`, `folders` (`game`, `update`, `dlc`, `build`, `app`: each `path` and `free` bytes, null when not set), `gpu_driver` (the default's label, or `system`), `gate` |
 | `screen` | `in_front`, `activity`, `page` (`home`, `settings`, `game`), `home` (`filter`, `find`, `show_hidden`, `scanning`), `game_page` (`title_id`, `tab`), `sheet` (`title_id` of the open game sheet), `screens_off` |
 | `library` | one row a game: `title_id`, `name`, `state` (`ready`, `build`, `building`, `not_in_app`), `listed` (it is in Home's list), `game` (the .nup, dump or file), `pack`, `has_companion`, `companion` (`package`, `version`). `library_read` says when the rows were read (at most 30 s old, read anew by `status`, a scan's end and a build's end) |
-| `job` | the Prepare job the launcher shows, from its `job.json`: `title_id`, `name`, `state` (`pending`, `running`, `paused`, `failed`, `done`), `process_alive`, `interrupted`, `paused_reason`, `step`, `counts` (per step: `state`, `done`, `total`), `percent`, `eta_s`, `eta`, `text` (the card's line), `error`, `error_detail`, `fix`, `try_anyway`, `updated`, `job_file`, `log` |
+| `job` | the Prepare job the launcher shows, from its `job.json`: `title_id`, `name`, `state` (`pending`, `running`, `paused`, `failed`, `done`), `process_alive`, `interrupted`, `paused_reason`, `step`, `counts` (per step: `state`, `done`, `total`), `percent`, `eta_s`, `eta`, `text` (the card's line), `error`, `error_detail`, `fix`, `cause` (`addon_not_imported` or null), `try_anyway`, `updated`, `job_file`, `log` |
 | `build` | the library's build of this app process: `running`, `title_id`, `name`, `step` (`import`, `prepare`, `companion`, `done`), `percent`, `detail`, `started`, and after its end `ended`, `failed`, `error`, `code` |
 | `game` | from the game's own run record: `running`, `title_id`, `name`, `pid`, `since`, `log` (a file in `files/logs`), `ended_as` (the last state the game wrote, when it no longer runs); `pack` and `mods_pack` for a game Home's Play started |
 | `last_result`, `results` | see Answers |
@@ -105,11 +134,12 @@ Ready can be `build` here.
 
 ## Not offered, and why
 
-- Deleting or replacing anything: removing a game, a job's files or a pack, storage cleanup, saves
+- Deleting or replacing anything else: removing a game, a job's files or a pack, storage cleanup, saves
   (backup, restore, import, delete), importing a pack. A typo must not cost a save or an hour's build.
+  (`reimport` replaces one `.nup` by one made from the same dumps, and asks first.)
 - Anything that puts code or host switches into the game from a file: GPU driver installs, mods, the extra
   environment, env files. (`game ctl` reaches only a game that already runs.)
-- Rebuild of a game that is built, keys, firmware and folder setup, companions, the in-game panel, pausing
+- Rebuild of a game that is built (other than by `reimport`), keys, firmware and folder setup, companions, the in-game panel, pausing
   a game, answering a dialog. These come later.
 - Installing an app update and pinning a shortcut: Android asks the user itself.
 

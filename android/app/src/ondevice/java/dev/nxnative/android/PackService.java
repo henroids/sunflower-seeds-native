@@ -486,6 +486,7 @@ public final class PackService extends Service {
         String[] argv;
         List<String> selected = null;
         String keysFrom = ShaderLibs.SELECTED;   // where the shaders step's key list comes from, for its log line
+        String otherVersionsNote = null;   // PEANUTS: the line for a dump that lacks only other listed versions' shaders (ShaderLibs.otherVersionsLine), for the step's log
         // The tools' arguments: the in-process forms (pack_android.py --in-process: the rewriter in the same Python; shader_split.py with J=1 below: no process pool;
         // vk_android_build.py with the translator and the validator as libraries, XLATE / SPIRV_VAL below; the app's process must not fork, ONDEVICE.md "No subprocesses").
         // The split is resumable by RomFS file: its scan results are kept in the app's own storage (Job.splitScan, DM_SPLIT_RESUME, shader_split.py ScanCache) and a rerun scans only the files
@@ -533,11 +534,22 @@ public final class PackService extends Service {
                 selected = selection(j);
                 // a split without some of the profile's optional shaders (shader_optional.tsv, splitMatchesProfile): the key list is the map's (or the selection's) other
                 // keys, so vk_android_build.py with DMSH_VK_REQUIRE_ALL=1 neither stops on them nor passes a shader that did not build
-                List<String> absent = j.tryAnyway() || engine.simulated() ? null : ShaderLibs.absentOptional(new File(PackNative.repo(), "dm/games/" + j.titleId()), new File(split, "shader_map.tsv"));
+                List<String> absent = j.tryAnyway() || engine.simulated() ? null : ShaderLibs.absentOptional(new File(PackNative.repo(), "dm/games/" + j.titleId()), new File(split, "shader_map.tsv"), j.version());   // PEANUTS: j.version(): also the shaders only another listed version of the game has (ShaderLibs.otherVersionKeys)
                 if (absent != null) {
                     if (selected == null) selected = new java.util.ArrayList<>(new java.util.TreeSet<>(ShaderLibs.mapKeys(new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv"))));
                     selected.removeAll(absent);
                     keysFrom = "shader_map.tsv without " + absent.size() + " of " + ShaderLibs.OPTIONAL;
+                    // PEANUTS begin: a dump of one of the versions the tables are the union of (game.tsv shader_versions): one plain line, in logcat and in the step's log
+                    File prof = new File(PackNative.repo(), "dm/games/" + j.titleId());
+                    java.util.Set<String> theirs = ShaderLibs.otherVersionKeys(prof, j.version());
+                    theirs.retainAll(absent);
+                    if (!theirs.isEmpty()) {
+                        String line = ShaderLibs.otherVersionsLine(theirs.size(), ShaderLibs.mapKeys(new File(prof, "shader_map.tsv")).size(), ShaderLibs.otherVersions(prof, j.version()), j.version());
+                        Log.i(TAG, "shaders: " + line);
+                        otherVersionsNote = line;
+                        keysFrom = "shader_map.tsv without " + absent.size() + " shaders of other versions of the game";
+                    }
+                    // PEANUTS end
                 }
                 if (selected != null && selected.isEmpty()) return "the profile's " + ShaderLibs.SELECTED + " names none of the shaders of its shader_map.tsv";
                 // a split that kept the code of another selection (DM_SPLIT_SELECTED below; an older app's set): split again
@@ -591,6 +603,7 @@ public final class PackService extends Service {
                 + tool + " " + (selected == null ? String.join(" ", argv)
                         : String.join(" ", java.util.Arrays.copyOf(argv, argv.length - selected.size())) + " <" + selected.size() + " keys of " + keysFrom + ">") + "\n";
         Files.write(log.toPath(), head.getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+        if (otherVersionsNote != null) Files.write(log.toPath(), ("shaders: " + otherVersionsNote + "\n").getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND);   // PEANUTS
         if (s.equals("shaders")) {   // a failed shader's kept result would fail every Retry the same way: those shaders are translated again (ShaderResults)
             List<ShaderResults.Failed> again = ShaderResults.dropFailed(xlate);
             StringBuilder b = new StringBuilder();
@@ -748,7 +761,7 @@ public final class PackService extends Service {
         try {
             File want = new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv");
             if (tableRows(Files.readAllBytes(want.toPath())).equals(tableRows(Files.readAllBytes(have.toPath())))) return null;   // PEANUTS: without the comment lines (shader_split.py table_rows: the header prose changed with the tool's wording on 2026-10-28, and 86 profiles carry the older prose)
-            if (ShaderLibs.absentOptional(want.getParentFile(), have) != null) return null;   // a registered build that lacks only the profile's optional shaders (the shaders step leaves them out)
+            if (ShaderLibs.absentOptional(want.getParentFile(), have, j.version()) != null) return null;   // a registered build that lacks only the profile's optional shaders (the shaders step leaves them out); PEANUTS: j.version(): or only what another listed version of the game has, checked before any message below
         } catch (IOException | RuntimeException | UnsatisfiedLinkError e) {
             // the app's own list is missing (work() refuses a game this APK does not include, so this is an app built without the profile's tables) or the split's
             String why = "cannot compare the dump's shaders with the app's list: " + e.getMessage();
@@ -798,13 +811,15 @@ public final class PackService extends Service {
             return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + ver + ", " + have.getName() + " differs). The dump may be incomplete or "
                     + "modified: dump the game again, then Retry. This also happens when the game's add-on content (DLC) was not part of the import";
         }
-        if (lack.absent > 0 && lack.addons == 0) {
+        // PEANUTS: said only for a profile whose tables are of one version. With a union of versions (shader_versions) a missing file is more likely another
+        // version's, and no game is known that needs this message: the case it was written for was another version's shaders, not DLC
+        if (lack.absent > 0 && lack.addons == 0 && lack.versions <= 1) {
             boolean nup = Nup.isNup(j.dump());
             failure = PrepareText.addonNotImported(j.name(), lack.absent, lack.total, lack.absentFile, nup, differs + ": " + lack.missing + " of its " + lack.total
                     + " shaders are missing, " + lack.absent + " of them from files that are not in " + j.dump() + " (" + lack.absentFile + "), which has no add-on content.\n" + log);
             return "the dump's shaders lack " + lack.absent + " of the " + lack.total + " this app knows for " + j.name() + " (" + ver + ") that come from files the "
                     + (nup ? "import" : "dump") + " does not have (e.g. " + lack.absentFile + "), and it has no add-on content. This usually means the game's add-on content "
-                    + "(DLC) was not part of the " + (nup ? "import: set the DLC folder in Settings, delete " + j.dump() + " and build again" : "dump: dump the game again "
+                    + "(DLC) was not part of the " + (nup ? "import: set the DLC folder in Settings, then Import again in the game's sheet (" + j.dump() + " is made again)" : "dump: dump the game again "
                     + "with its DLC, then Retry") + ". Try anyway builds without them";
         }
         if (lack.missing > 0) {
@@ -826,7 +841,7 @@ public final class PackService extends Service {
     /** What a split lacks of the profile's map: missing of total keys (key, file: the first one and its RomFS path, "" when it has none), absent of them from files the
      *  dump's RomFS does not have (absentFile: one), and how many add-on packages (DLC) the dump holds */
     private static final class Lack {
-        int missing, total, absent, addons;
+        int missing, total, absent, addons, versions;   // versions: how many the profile's tables are the union of (game.tsv shader_versions)
         String key = "", file = "", absentFile = "";
     }
 
@@ -836,6 +851,7 @@ public final class PackService extends Service {
             File want = new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv");
             Lack l = new Lack();
             l.total = ShaderLibs.mapKeys(want).size();
+            l.versions = ShaderLibs.shaderVersions(want.getParentFile()).size();
             java.util.Map<String, Boolean> there = new java.util.HashMap<>();   // each file is looked up once
             for (java.util.Map.Entry<String, String> e : ShaderLibs.missingSources(want, splitMap).entrySet()) {
                 String f = e.getValue();

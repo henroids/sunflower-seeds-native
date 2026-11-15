@@ -124,6 +124,7 @@ public final class Library {
     static final class Build {
         final int id; final String titleId, name;
         String step = "import", detail = "Starting"; int percent; boolean failed; String error = "", code = "";
+        boolean reimport;   // Import again: a stop in its import step is not resumed (Resume would build from the old .nup), the sheet is opened instead
         Build(int id, String titleId, String name) { this.id = id; this.titleId = titleId; this.name = name; }
     }
 
@@ -198,6 +199,7 @@ public final class Library {
             } else {
                 b.failed = true; b.error = message == null ? "" : message; b.code = code == null ? "" : code;
                 render();
+                if (b.reimport && !scanning) scan();   // an import again that stopped may have left another base than the one the titles name (the old .nup deleted first): read again
                 // a build the user stopped is not a refusal: the press on Stop was its feedback
                 if (inFront && !BuildListener.CANCELLED.equals(b.code)) { Haptics.play(anchor(), Haptics.Word.REJECT); if (coverChip != null) Motion.shake(coverChip); }
             }
@@ -1259,7 +1261,23 @@ public final class Library {
             // the card without a file picker of its own: open the sheet (unchanged — it already has the Version row, the re-pick chevrons and the relabeled
             // Build/"Build anyway" button, so "open the sheet" is never a dead end), or really resume the job (now implemented, below)
             Runnable openSheet = () -> { if (t != null) sheet(t); };
-            switch (b.code) {
+            String code = b.reimport && b.step.equals("import") && !BuildListener.OUT_OF_SPACE.equals(b.code) ? BuildListener.FILE_MISSING : b.code;   // an import again that stopped: the sheet has Import again; Resume would build from the old .nup
+            switch (code) {
+                case BuildListener.ADDON_MISSING: {
+                    // Prepare stopped and asks (dev.peanuts.build.AutoRelax): the shaders come with add-on content that was not imported. What mends it, by
+                    // what is there: no DLC folder set, the folder rows; DLC found for the game, Import again; else the sheet (its DLC row adds a file).
+                    // Try anyway is the other choice, asked once with what it costs
+                    boolean nup = t != null && t.base != null && t.base.isNup();
+                    if (nup && PeanutsPrefs.dlcDir(a) == null && !GameSheet.dlcFound(t))
+                        left = PUi.button(a, "Set the DLC folder", PUi.Kind.TONAL, Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.extraFolders(a)));
+                    else if (nup && GameSheet.dlcFound(t))
+                        left = PUi.button(a, "Import again with DLC", PUi.Kind.TONAL, Haptics.on(Haptics.Word.TICK, v -> GameSheet.importAgain(a, this, t, CompanionPort.forTitle(catalog, t.titleId), null)));
+                    else left = PUi.button(a, "Open the game's sheet", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> openSheet.run()));
+                    right = PUi.button(a, "Try anyway", PUi.Kind.SOFT, v -> PUi.confirmDanger(a, "Try anyway?", "This builds " + name + " without the shaders that come with its add-on "
+                            + "content (DLC): the base game runs, and what the add-on adds is drawn without those materials. Import again with the DLC makes them later. "
+                            + "Your dumps and saves are not changed.", "Try anyway", () -> tryAnyway(t)));
+                    break;
+                }
                 case BuildListener.FILE_MISSING:
                 case BuildListener.WRONG_VERSION:
                 case BuildListener.INVALID_DUMP:
@@ -1305,7 +1323,12 @@ public final class Library {
         PUi.status(buildStatus, stepWords(b), b.failed ? R.color.bn_danger : b.step.equals("done") ? R.color.bn_leaf : R.color.bn_accent);
         if (b.failed) {
             String first = b.error.split("\n")[0].trim();
-            String action = BuildListener.FILE_MISSING.equals(b.code) ? " Open the game's sheet to pick the file again."
+            LibraryScanner.Title bt = titleFor(b.titleId);
+            boolean btNup = bt != null && bt.base != null && bt.base.isNup();
+            String action = b.reimport && b.step.equals("import") && !BuildListener.OUT_OF_SPACE.equals(b.code) ? " Open the game's sheet to import again."
+                    : BuildListener.ADDON_MISSING.equals(b.code) ? (btNup && PeanutsPrefs.dlcDir(a) == null && !GameSheet.dlcFound(bt) ? " No DLC folder is set: set it below, then import again."
+                            : btNup && GameSheet.dlcFound(bt) ? " DLC for this game was found: Import again with DLC takes it." : " Add the DLC in the game's sheet (its DLC row).")
+                    : BuildListener.FILE_MISSING.equals(b.code) ? " Open the game's sheet to pick the file again."
                     : BuildListener.WRONG_VERSION.equals(b.code) ? " Open the game's sheet: tap “Build anyway” there if you want to try it, or pick the recommended update."
                     : BuildListener.INVALID_DUMP.equals(b.code) ? " The dump looks incomplete or wrong. Open the game's sheet to check the files, or dump the game again."
                     : BuildListener.OUT_OF_SPACE.equals(b.code) ? " Free up some space, then Retry."
@@ -1348,6 +1371,7 @@ public final class Library {
         String root = PeanutsPrefs.gameDir(a);
         r.gameDir = root == null ? null : new File(root);
         r.companionPackage = s.installCompanion ? s.companionPackage : null;
+        r.replaceNup = s.replaceNup; r.deleteOldFirst = s.deleteOldFirst;   // Import again (GameSheet.importAgain)
         int id = BuildPipeline.start(a, r, s.buildAnyway, new BuildListener() {   // a refusal comes back through this (id 0); a started build's listener is attached below
             @Override public void progress(String step, int percent, String detail) { listener.progress(step, percent, detail); }
             @Override public void done(boolean ok, String message, String code) {
@@ -1359,6 +1383,7 @@ public final class Library {
         });
         if (id == 0) return null;   // the pipeline says why, in its own dialog
         build = new Build(id, s.titleId, s.name);
+        build.reimport = s.replaceNup != null;
         BuildPipeline.attach(id, listener);
         render();
         // the build's notifications (its progress, and its end while the app is not in front) need the permission; asked as upstream's Prepare asks (Ondevice)
@@ -1378,6 +1403,19 @@ public final class Library {
         String why = startBuild(s);
         if (why != null) { Haptics.play(anchor(), Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Build").setMessage(why).setPositiveButton("OK", null).show(); }
         else if (building(t.titleId)) Haptics.play(anchor(), Haptics.Word.HEAVY);   // it started (a refusal by the pipeline says so in its own dialog)
+    }
+
+    /**
+     * The build card's "Try anyway" after its question (ADDON_MISSING): the same build again with the player's consent, which Prepare gives the stopped job
+     * (Prepare.run0: a failed job whose failure offers Try anyway). The control interface's job try_anyway comes the same way (CtlPort.build)
+     */
+    private void tryAnyway(LibraryScanner.Title t) {
+        if (t == null) { Haptics.play(anchor(), Haptics.Word.REJECT); Toast.makeText(a, "Open the game from Home to try it anyway.", Toast.LENGTH_LONG).show(); return; }
+        GameSheet.State s = GameSheet.resumeState(a, t, CompanionPort.forTitle(catalog, t.titleId));
+        s.buildAnyway = true;
+        String why = startBuild(s);
+        if (why != null) { Haptics.play(anchor(), Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Build").setMessage(why).setPositiveButton("OK", null).show(); }
+        else if (building(t.titleId)) Haptics.play(anchor(), Haptics.Word.HEAVY);
     }
 
     // ---- First run ----

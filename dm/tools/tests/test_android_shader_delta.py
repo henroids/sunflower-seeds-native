@@ -472,6 +472,47 @@ class Launcher(unittest.TestCase):
         split.write_text(rows('00000000000000aa', '00000000000000bb', '00000000000000cc'))
         self.assertEqual(self.java('absent', d, split), 'none', 'nothing lacking: the byte comparison decides')
 
+    def test_other_versions_shaders(self):   # PEANUTS: tables that are the union of two versions (shader_versions), a dump of one (Mario Kart 8 Deluxe 4.0.0: 135 of 29,785 are 4.0.1's)
+        d = self.tmp / 'union'; d.mkdir(exist_ok=True)
+        head = '# kind: evidence\npackage\tindex\tstage\tdm_ctl_sha16\tsource\n'
+        A, B, C, D = ('00000000000000' + k for k in ('aa', 'bb', 'cc', 'dd'))
+        srcs = {A: '/Common/a.ptcl#BNSH@0x1000#var0', B: 'main#BNSH@0x12#var0', C: '/v200/Common/a.ptcl#BNSH@0x7e3000#var113', D: 'main@v200#BNSH@0x12#var0'}
+        rows = lambda *ks: head + ''.join(f'cs_0.bin\t{i}\tcompute\t{k}\t{srcs.get(k, "src")}\n' for i, k in enumerate(ks))
+        (d / 'shader_map.tsv').write_text(rows(A, B, C, D))
+        (d / 'game.tsv').write_text('# a profile\ntitle_id\t0100000000000000\nshader_versions\tv100 v200\n')
+        split = self.tmp / 'union_split.tsv'
+        split.write_text(rows(A, B))
+        line = '2 of 4 shaders in this app\'s table belong to other versions of the game (v200): not needed for v100'
+        self.assertEqual(self.java('versions', d, split, 100), f'{C},{D} | v200 | {C},{D} | {line}', 'a dump of the first version lacks the second\'s own: no failure')
+        self.assertEqual(self.java('absent', d, split), 'none', 'without the dump\'s version nothing is optional')
+        self.assertEqual(self.java('versions', d, split, 300), 'none |  |  | none', 'a version the tables were not made from: as before')
+        split.write_text(rows(A, C))
+        self.assertEqual(self.java('versions', d, split, 100), f'none | v200 | {C},{D} | none', 'an untagged shader missing too: not explained by the versions, as before')
+        self.assertEqual(self.java('versions', d, split, 200), 'none | v100 |  | none', 'the tags do not say what a later version dropped: as before')
+        split.write_text(rows(A, B, C, D))
+        self.assertEqual(self.java('versions', d, split, 100), f'none | v200 | {C},{D} | none', 'nothing lacking: the byte comparison decides, all keys required')
+        split.write_text(rows(A, B, C))
+        self.assertEqual(self.java('versions', d, split, 100), f'{D} | v200 | {C},{D} | 1 of 4 shaders in this app\'s table belong to other versions of the game (v200): not needed for v100')
+        (d / 'shader_optional.tsv').write_text(B + '\tv100 only\n')   # what the tags cannot say, said by the profile (Super Mario Bros. Wonder)
+        split.write_text(rows(A, C, D))
+        self.assertEqual(self.java('versions', d, split, 200), f'{B} | v100 |  | none')
+        (d / 'shader_optional.tsv').unlink()
+        (d / 'game.tsv').write_text('shader_versions\tv100\n')   # one version: every shader of the map is needed
+        split.write_text(rows(A, B))
+        self.assertEqual(self.java('versions', d, split, 100), 'none |  |  | none')
+        (d / 'game.tsv').write_text('shader_versions\tv100 v2000\n')   # v200 is not v2000
+        self.assertEqual(self.java('versions', d, split, 100), 'none | v2000 |  | none')
+
+    def test_mario_kart_8_deluxe_is_two_versions(self):   # PEANUTS: the profile as it is: 135 rows are 4.0.1's own, which a dump of 4.0.0 alone may lack
+        prof = REPO / 'dm/games/0100152000022000'
+        split = self.tmp / 'mk8_split.tsv'
+        split.write_text(''.join(l + '\n' for l in (prof / 'shader_map.tsv').read_text().splitlines() if '\t/v1507328/' not in l and '@v1507328' not in l))
+        out = self.java('versions', prof, split, 1441792).split(' | ')
+        self.assertEqual(len(out[0].split(',')), 135)
+        self.assertEqual(out[1], 'v1507328')
+        self.assertEqual(out[0], out[2], 'the dump lacks exactly the other version\'s rows')
+        self.assertEqual(out[3], '135 of 29,785 shaders in this app\'s table belong to other versions of the game (v1507328): not needed for v1441792')
+
     def test_missing_sources(self):   # PEANUTS: the keys a split lacks, each with the RomFS file its row names (the DLC-not-imported message's evidence)
         head = '# kind: evidence\npackage\tindex\tstage\tdm_ctl_sha16\tsource\n'
         prof, split = self.tmp / 'miss_profile.tsv', self.tmp / 'miss_split.tsv'

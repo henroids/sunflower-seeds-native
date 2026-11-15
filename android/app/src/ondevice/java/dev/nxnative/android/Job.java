@@ -219,6 +219,7 @@ final class Job {
             o.remove("go_on");
             o.remove("error_detail");
             o.remove("fix");
+            o.remove("cause");   // PEANUTS: a failure's cause goes with it (fail below)
             o.remove("fail_apk");
         } catch (JSONException e) {
             throw new IllegalStateException(e);
@@ -230,6 +231,13 @@ final class Job {
         state("failed", null, f.text);
         try {
             o.put("error_detail", f.detail).put("fix", f.fix);
+            // PEANUTS begin: the cause of a failure the player can mend (PrepareText.Failure.cause), for the build (dev.peanuts.build.Prepare stops and asks
+            // where it would press Try anyway by itself). The counts of shaders that come with add-on content stay through the next state: when the player
+            // then chooses Try anyway, the finished pack's note says how many it lacks (dev.peanuts.build.PackNote); a failure of another cause forgets them
+            if (!f.cause.isEmpty()) o.put("cause", f.cause);
+            if (PrepareText.CAUSE_ADDON.equals(f.cause)) o.put("addon_missing", new JSONArray().put(f.lacks).put(f.of));
+            else o.remove("addon_missing");
+            // PEANUTS end
         } catch (JSONException e) {
             throw new IllegalStateException(e);
         }

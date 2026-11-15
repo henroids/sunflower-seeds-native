@@ -11,6 +11,8 @@ import android.widget.Toast;
 
 import dev.nxnative.android.R;
 import dev.peanuts.PeanutsPrefs;
+import dev.peanuts.build.PackNote;
+import dev.peanuts.build.Reimport;
 import dev.peanuts.build.SpaceEstimate;
 
 import java.io.File;
@@ -26,6 +28,10 @@ import java.util.Map;
  * game's card. Keys and firmware fonts are a one-time setup requirement (owner, 2026-11-13): without either, Build is off here, with "Add keys…"/"Choose
  * firmware…" beside it (the sheet re-renders once they land); {@link Library#startBuild} checks the same two file-presence flags again as a last line of
  * defense, so nothing but a cheap check runs on every build once setup is done. A game this app has no profile for gets Profile.missing's sentence only.
+ * <p>
+ * A game whose base is a .nup also gets Import again ({@link #importAgain}): Build and Rebuild use the .nup that is there, so this is the one way to make it
+ * anew from the dumps, with the update and DLC found now (dev.peanuts.build.Reimport says what it needs and asks first). A pack that was built without some
+ * shaders because the DLC was not imported says so above it (dev.peanuts.build.PackNote).
  */
 public final class GameSheet {
     static final int REQ_UPDATE = LibrarySettings.REQ_SHEET_UPDATE, REQ_DLC = LibrarySettings.REQ_SHEET_DLC;
@@ -46,8 +52,10 @@ public final class GameSheet {
         public String companionPackage, companionVersion; public boolean installCompanion; public File companionRoot;
         /** The catalog item (CompanionPort.Item), for the installer */
         public Object companionItem;
-        /** The player's explicit "Build anyway" for a version not in the profile's build list (P1): never set on its own */
+        /** The player's explicit "Build anyway" for a version not in the profile's build list (P1), or "Try anyway" on a build card that asked: never set on its own */
         public boolean buildAnyway;
+        /** Import again: the .nup to make anew from base/update/dlcs (null: an ordinary build), and its second choice, the old file deleted first */
+        public File replaceNup; public boolean deleteOldFirst;
     }
 
     /** The open sheet (the activity forwards the file pickers' results to it: LibrarySettings.result) */
@@ -116,9 +124,16 @@ public final class GameSheet {
         if (missing != null) { PUi.add(box, PUi.body(a, missing), 0); return; }
         boolean ready = title.status == LibraryScanner.Status.READY;
         boolean building = lib.building(title.titleId);
+        boolean nupBase = title.base != null && title.base.isNup();
         PUi.add(box, PUi.body(a, ready
-                ? "Rebuild makes the .nup and the pack again from the files below, and updates the companion. About 25 minutes, in the background."
+                ? "Rebuild makes again the parts of the built game that no longer fit this app version, and updates the companion. It is quick when little changed."
+                + (nupBase ? " It keeps the .nup: Import again makes that anew from your dumps, with the update and DLC found now." : "")
                 : "Build makes one .nup from the files below, prepares it, and installs the companion. About 25 minutes, in the background."), 0);
+        // A pack that Try anyway built without the shaders of add-on content that was not imported (PackNote, written when that build finished)
+        long[] without = nupBase ? PackNote.without(title.packDir) : null;
+        if (without != null) PUi.add(box, PUi.warnChip(a, "Built without DLC shaders", "Built without DLC shaders", String.format(Locale.getDefault(),
+                "Built without %,d of its %,d shaders: they come with add-on content (DLC) that was not in the import. The base game runs; what the add-on adds is "
+                + "drawn without those materials. Import again takes the DLC found now.", without[0], without[1])), 12);
         // Base
         LibraryScanner.Source b = title.base;
         boolean baseGone = b != null && !b.file.exists();
@@ -208,6 +223,81 @@ public final class GameSheet {
             actions.addView(PUi.button(a, "Choose firmware…", PUi.Kind.SOFT, Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickFirmwareSource(a))), lp);
         }
         PUi.add(box, actions, 14);
+        if (nupBase) {
+            View again = PUi.button(a, "Import again…", PUi.Kind.QUIET, Haptics.on(Haptics.Word.TICK, v -> importAgain(a, lib, title, companion, () -> { if (dialog != null) dialog.dismiss(); })));
+            again.setEnabled(!building);
+            PUi.add(box, again, 4, PUi.wrap());
+        }
+    }
+
+    // ---- Import again (dev.peanuts.build.Reimport) ----
+
+    /**
+     * What an import again of this title would do, from the last scan: the packages inside its .nup (the scan lists them under the title with the .nup as their
+     * file), the dumps found for it (the base's originals, the updates and DLC that are files of their own, the DLC added in the sheet), the update picked in
+     * the sheet, the folders the library reads and the free space where the .nup is. No file is read here
+     */
+    static Reimport.Plan plan(Activity a, LibraryScanner.Title t) {
+        List<Reimport.Part> inside = new ArrayList<>(), found = new ArrayList<>();
+        for (LibraryScanner.Source s : t.originals) found.add(new Reimport.Part(Reimport.BASE, s.titleId, s.version, s.file));
+        for (LibraryScanner.Source s : t.updates) (s.needsImport() ? found : inside).add(new Reimport.Part(Reimport.UPDATE, s.titleId, s.version, s.needsImport() ? s.file : null));
+        for (LibraryScanner.Source s : t.dlcs) (s.needsImport() ? found : inside).add(new Reimport.Part(Reimport.DLC, s.titleId, s.version, s.needsImport() ? s.file : null));
+        for (String d : PeanutsPrefs.chosenDlc(a, t.titleId)) {
+            File f = new File(d);
+            boolean known = false;
+            for (LibraryScanner.Source s : t.dlcs) if (s.file.equals(f)) known = true;
+            if (!known && f.isFile()) found.add(new Reimport.Part(Reimport.DLC, "", 0, f));
+        }
+        String picked = PeanutsPrefs.chosenUpdate(a, t.titleId);
+        File nup = t.base.file;
+        return Reimport.plan(nup, inside, found, picked == null ? null : new File(picked), PeanutsPrefs.roots(a), SpaceEstimate.freeBytes(nup.getParentFile()));
+    }
+
+    /** Whether the library found add-on content for this title as a file of its own (not only inside its .nup): what an import again would add */
+    static boolean dlcFound(LibraryScanner.Title t) {
+        for (LibraryScanner.Source s : t.dlcs) if (s.needsImport() && s.file.isFile()) return true;
+        return false;
+    }
+
+    /**
+     * Import again, from the sheet's button or the build card's: says what is missing and does nothing; else asks (what is deleted, what is kept, what was
+     * found), or, when the new file does not fit beside the old one, says how much is needed and offers deleting the old one first as a second question with
+     * its risk. started runs when the build was accepted
+     */
+    static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started) {
+        View anchor = a.getWindow().getDecorView();
+        if (t == null || t.base == null || !t.base.isNup()) return;
+        if (lib.building(t.titleId)) { Haptics.play(anchor, Haptics.Word.REJECT); Toast.makeText(a, "Building now: the progress is on the game's card.", Toast.LENGTH_LONG).show(); return; }
+        Reimport.Plan p = plan(a, t);
+        if (p.missing != null) { Haptics.play(anchor, Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Import again").setMessage(p.missing).setPositiveButton("OK", null).show(); return; }
+        if (p.lowSpace()) {
+            Haptics.play(anchor, Haptics.Word.REJECT);
+            AlertDialog.Builder b = new AlertDialog.Builder(a).setTitle("Not enough free space").setMessage(Reimport.lowSpace(p)).setNegativeButton("Close", null);
+            if (p.fitsWithoutOld()) b.setNeutralButton("Delete the old file first…", (d, w) -> PUi.confirmDanger(a, "Delete the old .nup first?", Reimport.deleteFirst(p, t.name),
+                    "Delete and import", () -> startImport(a, lib, t, companion, p, true, started)));
+            b.show();
+            return;
+        }
+        PUi.confirmDanger(a, "Import again?", Reimport.confirm(p, t.name), "Import again", () -> startImport(a, lib, t, companion, p, false, started));
+    }
+
+    /** The plan to the pipeline, after the player said yes: the sheet's stored choices (the companion's switch), the plan's dumps, and the .nup to replace.
+     *  Returns why it could not start, or null */
+    static String reimport(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Reimport.Plan p, boolean deleteOldFirst) {
+        State s = resumeState(a, t, companion);
+        s.base = p.base; s.needsImport = true;
+        s.update = p.update; s.updateVersion = p.updateVersion;
+        s.dlcs.clear(); s.dlcs.addAll(p.dlcs);
+        s.replaceNup = p.nup; s.deleteOldFirst = deleteOldFirst;
+        s.nup = p.nup;
+        return lib.startBuild(s);
+    }
+
+    private static void startImport(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Reimport.Plan p, boolean deleteOldFirst, Runnable started) {
+        View anchor = a.getWindow().getDecorView();
+        String why = reimport(a, lib, t, companion, p, deleteOldFirst);
+        if (why != null) { Haptics.play(anchor, Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Import again").setMessage(why).setPositiveButton("OK", null).show(); return; }
+        if (lib.building(t.titleId)) { Haptics.play(anchor, Haptics.Word.HEAVY); if (started != null) started.run(); }   // accepted (a refusal by the pipeline says so in its own dialog)
     }
 
     private static String size(long bytes) { return bytes >= 1 << 20 ? String.format(Locale.US, "%.1f MB", bytes / 1048576.0) : String.format(Locale.US, "%.0f KB", bytes / 1024.0); }

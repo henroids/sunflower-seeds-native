@@ -119,15 +119,18 @@ public final class PrepareTextJvmTest {
         check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.text.contains("Try anyway"), "shaders differ: Try anyway");
 
         // PEANUTS begin: what is missing is counted and named; shaders from files the import does not have, with no add-on content in it, point at the DLC
-        f = PrepareText.addonNotImported("Mario Kart 8 Deluxe", 135, 29785, "/Course/B3ds_WuhuTown/course.ptcl", true, "detail");
+        f = PrepareText.addonNotImported("Some Game", 12, 3400, "/Course/Extra_Town/course.ptcl", true, "detail");
         plain(f.text, "add-on content not imported");
-        check(f.text.startsWith("135 of the 29,785 shaders this app knows for Mario Kart 8 Deluxe come from files your import does not have (for example "
-                + "Course › B3ds_WuhuTown › course.ptcl). This usually means the game's add-on content (DLC) was not part of the import: set the DLC folder in Settings, "
-                + "delete the game's .nup file (Details has its path) and build again"), "add-on content: " + f.text);
+        check(f.text.startsWith("12 of the 3,400 shaders this app knows for Some Game come from files your import does not have (for example "
+                + "Course › Extra_Town › course.ptcl). This usually means the game's add-on content (DLC) was not part of the import: set the DLC folder in Settings "
+                + "(Library), then tap Import again in the game's sheet, which makes the .nup again with the DLC"), "add-on content: " + f.text);
+        check(!f.text.contains("delete the game's .nup"), "no file to delete by hand: Import again replaces it");
+        check(f.cause.equals(PrepareText.CAUSE_ADDON) && f.lacks == 12 && f.of == 3400, "add-on content: the cause and its counts, for the build to stop and ask");
         check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.text.contains("Try anyway builds without them") && !f.text.contains("dump the game again"), "add-on content: " + f.text);
-        f = PrepareText.addonNotImported("Mario Kart 8 Deluxe", 135, 29785, "/Course/B3ds_WuhuTown/course.ptcl", false, "detail");
+        f = PrepareText.addonNotImported("Some Game", 12, 3400, "/Course/Extra_Town/course.ptcl", false, "detail");
         plain(f.text, "add-on content not in a dump folder");
         check(f.text.contains("files your dump does not have") && f.text.contains("dump the game again with its DLC and tap Retry") && !f.text.contains(".nup"), "a dump folder: " + f.text);
+        check(f.cause.equals(PrepareText.CAUSE_ADDON), "a dump folder: the same cause");
         f = PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", 7, 131426, "/shader/a.bfsha", "detail");
         plain(f.text, "shaders differ, counted");
         check(f.text.contains("(update 655360): 7 of 131,426 are missing (for example from shader › a.bfsha). The dump may be incomplete or modified") && !f.text.contains("DLC"),
@@ -137,6 +140,8 @@ public final class PrepareTextJvmTest {
         plain(f.text, "shaders differ, the dump not read");
         check(f.text.startsWith(PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", "detail").text) && f.text.endsWith("add-on content (DLC) was not part of the import.")
                 && f.fix.equals(PrepareText.FIX_ANYWAY), "the dump not read: " + f.text);
+        check(f.cause.isEmpty() && PrepareText.shadersDiffer("X", "base game", 1, 2, "/a", "").cause.isEmpty() && PrepareText.crashed("Split", "x").cause.isEmpty(),
+                "only add-on content that was not imported carries a cause: the other failures are tried anyway as before");
         // PEANUTS end
 
         // The trigger: a job of a game this APK does not include gets one sentence and no Retry

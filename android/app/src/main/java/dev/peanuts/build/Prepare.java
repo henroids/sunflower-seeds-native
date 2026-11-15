@@ -35,6 +35,10 @@ import java.util.Locale;
  *     failed, or paused for a reason that stops the service (user, timeout, refused); heat and battery pauses are waited out, as the service does;</li>
  * <li>a done job's game goes into the launcher's list with its pack (Upstream.addGame = Ondevice.Panel.addGame), unless the pack is the fake engine's placeholder.</li>
  * </ol>
+ * Two things a pack folder's own note says ({@link PackNote}) change this: a pack whose game file was imported again since (stale) is never "Already prepared"
+ * and never adopted as it is; its job is left and its shaders and pack are made again from the new file. And a job that failed because the game's add-on
+ * content was not imported is not tried anyway for the player ({@link AutoRelax}): the build stops with {@link BuildListener#ADDON_MISSING}, and the card's Try
+ * anyway comes back here as consent.
  */
 final class Prepare {
     interface Progress { void on(int percent, String detail); }
@@ -89,21 +93,29 @@ final class Prepare {
                 existing = null;   // another format or damaged: a new job replaces it
             }
         }
+        // The game file was imported again since the job's pack was made (BuildService's import marked it: PackNote). The old job says nothing about the new
+        // file: it is left below, and its Try anyway with it, unless the version itself needed that (had). Without this a job that finished without the DLC's
+        // shaders answered "Already prepared" for a .nup that now has the DLC
+        boolean fresh = existing == null, reimported = false, had = anyBuild;
+        if (existing != null) {
+            try { reimported = PackNote.stale(Upstream.jobPack(existing)); } catch (ReflectiveOperationException | RuntimeException e) { /* no pack named: not stale */ }
+            if (reimported) { anyBuild = false; Log.i(TAG, "prepare: " + dump.getName() + " was imported again since its pack was made: the shaders and the pack are made again"); }
+        }
         // 2. the dump. A version this app's profile does not list (otherBuild) used to be retried silently here ("Try anyway" done for the player without asking:
         // found in review, the DQ3 HD-2D case — ~10 minutes lost on a build the sheet never warned about). Now it only goes on when the sheet's own
         // Version row got the player's explicit "Build anyway" for this request (consent); a resumed job that was already marked tryAnyway (anyBuild from the
         // existing job.json) still resumes as it was, since that choice was already made once
-        Object r = Upstream.dumpCheck(dump, existing == null, anyBuild);
+        Object r = Upstream.dumpCheck(dump, fresh, anyBuild);
         String error = (String) Upstream.get(r, "error");
         if (error != null && !anyBuild && Boolean.TRUE.equals(Upstream.get(r, "otherBuild"))) {
-            if (!consent) {
+            if (!consent && !had) {
                 String detail = Upstream.str(Upstream.get(r, "detail"));
                 throw new BuildListener.Failure("Untested game version: " + error + (detail.isEmpty() ? "" : "\n" + detail)
                         + "\nOpen the game's sheet and tap \"Build anyway\" if you want to try it (it may not start or may crash, and the first build scans every shader).",
                         BuildListener.WRONG_VERSION);
             }
             Log.i(TAG, "prepare: untested version (" + error + "), building anyway (the player chose Build anyway)");
-            Object again = Upstream.dumpCheck(dump, existing == null, true);
+            Object again = Upstream.dumpCheck(dump, fresh, true);
             if (Upstream.get(again, "error") == null) { r = again; error = null; anyBuild = true; p.on(0, "Untested game version: preparing it anyway"); }
         }
         if (error != null) {
@@ -119,6 +131,7 @@ final class Prepare {
         File dumpR = (File) Upstream.get(r, "dump");
         long version = ((Number) Upstream.get(r, "version")).longValue();
         Object job = null;
+        if (reimported) existing = null;   // the job of the old game file: step 3 takes its pack over with the shaders to make again
         if (existing != null) {
             String s = Upstream.jobState(existing);
             boolean same = Upstream.jobDump(existing).getPath().equals(dumpR.getPath()) && Upstream.jobVersion(existing) == version;
@@ -145,7 +158,10 @@ final class Prepare {
                 // ...and when main was rewritten before the rewriter kept the file's own bytes of what it changed (main.orig.bin, which a companion package's
                 // module reads: dm/peanuts/peanuts.c rt_orig). Such a pack still counts as up to date, so nothing rebuilds on its own; a build the user starts
                 // gives it the file (Octopath Traveler 0, 2026-11-14: Build again left its code as it was)
-                boolean code = blocking != null || noOrig(packDir) || Boolean.FALSE.equals(Upstream.packCode(c, pack, dumpR)), sh = shaders != null;
+                // ...and the shaders are made again when the game file was imported again since the pack was made (PackNote: the old job's pack, or this one),
+                // though the library in the pack is this APK's: it was made from the shaders the old file had
+                boolean stale = reimported || PackNote.stale(packDir);
+                boolean code = blocking != null || noOrig(packDir) || Boolean.FALSE.equals(Upstream.packCode(c, pack, dumpR)), sh = shaders != null || stale;
                 job = Upstream.jobAdopt(r, packDir, code, sh);
                 Upstream.jobSave(job);
                 Upstream.jobRemember(c, Upstream.jobFile(job));
@@ -154,7 +170,8 @@ final class Prepare {
                     Upstream.addGame(c, job);
                     return packDir;
                 }
-                Log.i(TAG, "prepare: redoing " + (code ? "code " : "") + (sh ? "shaders " : "") + "of " + packDir + (blocking != null ? " (" + blocking + ")" : "") + (shaders != null ? " (" + shaders + ")" : ""));
+                Log.i(TAG, "prepare: redoing " + (code ? "code " : "") + (sh ? "shaders " : "") + "of " + packDir + (blocking != null ? " (" + blocking + ")" : "") + (shaders != null ? " (" + shaders + ")" : "")
+                        + (stale ? " (the game file was imported again)" : ""));
             }
         }
         if (job == null) {
@@ -163,6 +180,13 @@ final class Prepare {
             Upstream.jobRemember(c, Upstream.jobFile(job));
         }
         if (anyBuild && !Upstream.jobTryAnyway(job)) { Upstream.jobTryAnyway(job, true); Upstream.jobSave(job); }
+        // The card's Try anyway for a job that stopped and asked (AutoRelax.asks: add-on content not imported): the player's own choice, made on the build card
+        // or by the control interface, arrives as this run's consent. Only a failed job whose failure offers it is relaxed
+        if (consent && job == existing && Upstream.jobState(job).equals("failed") && AutoRelax.FIX_ANYWAY.equals(Upstream.jobFix(job)) && !Upstream.jobTryAnyway(job)) {
+            Log.i(TAG, "prepare: going on with the checks relaxed (the player chose Try anyway)");
+            Upstream.jobTryAnyway(job, true);
+            Upstream.jobSave(job);
+        }
         File file = Upstream.jobFile(job);
         boolean relaxed = false;   // one restart with the checks relaxed when the job fails for something Try anyway skips
         // The translator calls at once (4 on a phone with 14 GB or more, 2 on an 8 GB one) are set by PackService from the phone's memory (BuildMemory), not by a line here:
@@ -199,12 +223,20 @@ final class Prepare {
             if (state.equals("done")) {
                 p.on(100, "Pack finished");
                 Object j = Upstream.jobRead(file);
+                note(Upstream.jobPack(j), o);
                 Upstream.addGame(c, j);
                 return Upstream.jobPack(j);
             }
             if (state.equals("failed")) {
                 String err = o.optString("error");
-                if ("anyway".equals(o.optString("fix")) && !o.optBoolean("try_anyway") && !relaxed) {   // the panel's "Try anyway…" button, pressed for the player: once
+                String fix = o.optString("fix"), cause = o.optString("cause");
+                // Not pressed for the player when the cause is theirs to mend (add-on content that was not imported): the build stops with the card's words,
+                // and the card offers Import again with the DLC, and Try anyway as a choice
+                if (AutoRelax.asks(fix, cause, o.optBoolean("try_anyway"))) {
+                    String detail = o.optString("error_detail");
+                    throw new BuildListener.Failure(err + (detail.isEmpty() ? "" : "\n" + detail), BuildListener.ADDON_MISSING);
+                }
+                if (AutoRelax.auto(fix, cause, o.optBoolean("try_anyway"), relaxed)) {   // the panel's "Try anyway…" button, pressed for the player: once
                     relaxed = true;
                     Log.i(TAG, "prepare: failed with the Try anyway fix (" + err + "): going on with the checks relaxed");
                     Object j = Upstream.jobRead(file);
@@ -251,6 +283,16 @@ final class Prepare {
         } finally {
             unbind();
         }
+    }
+
+    /**
+     * A finished job's pack gets its note (PackNote): it is of the game file that is there now, and when the job went on by Try anyway after its shaders were
+     * found to come from add-on content that was not imported (job.json's "addon_missing": the count and the total, kept from that failure), how many it lacks
+     */
+    private static void note(File pack, JSONObject job) {
+        org.json.JSONArray a = job.optBoolean("try_anyway") ? job.optJSONArray("addon_missing") : null;
+        try { PackNote.built(pack, a == null ? 0 : a.optLong(0), a == null ? 0 : a.optLong(1)); }
+        catch (IOException e) { Log.w(TAG, "prepare: the pack's note: " + e.getMessage()); }
     }
 
     /** Whether the pack fits this APK as it is: startable code of this rewriter (PackCheck.blocking / code) and this APK's shader library (PackCheck.shaders) */

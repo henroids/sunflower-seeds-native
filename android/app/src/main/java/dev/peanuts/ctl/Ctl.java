@@ -358,6 +358,7 @@ public final class Ctl {
                 case "nav": nav(a, r, res); break;
                 case "scan": scan(a, res); break;
                 case "build": build(a, res, r.titleId(true), false); break;
+                case "reimport": reimport(a, r, res); break;
                 case "prepare": prepare(a, r, res); break;
                 case "play": play(a, r, res); break;
                 case "job": job(a, r, res); break;
@@ -444,6 +445,24 @@ public final class Ctl {
         // the pipeline refused: its sentence comes through buildRefused in a moment
         buildWait = res;
         UI.postDelayed(() -> { if (buildWait == res) { buildWait = null; done(res.fail("refused", "The build did not start.")); } }, 1000);
+    }
+
+    /**
+     * The sheet's Import again: the game's .nup made anew from its dumps, then the build. It replaces a file, so it wants -e confirm true as the answer to the
+     * sheet's question; without it the refusal (needs_confirm) carries that question and data carries what would be used
+     */
+    private static void reimport(Activity a, Request r, Result res) throws Request.Bad, ReflectiveOperationException {
+        String id = r.titleId(true);
+        home(a);
+        Object job = Up.job(app);
+        if (job != null && "running".equals(Up.jobText(job, "state")) && Status.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
+        Map<String, Object> data = new LinkedHashMap<>();
+        String[] no = CtlPort.reimport(a, id, r.on("confirm"), r.on("delete_first"), data);
+        for (Map.Entry<String, Object> e : data.entrySet()) res.put(e.getKey(), e.getValue());
+        if (no != null) throw new Request.Bad(no[0], no[1]);
+        if (CtlPort.building(a, id)) { res.ok("The import started: the old .nup is replaced when the new one is complete, then the game is built. Its progress is under \"build\"."); return; }
+        buildWait = res;
+        UI.postDelayed(() -> { if (buildWait == res) { buildWait = null; done(res.fail("refused", "The import did not start.")); } }, 1000);
     }
 
     private static void watch() { dialog = null; watching = true; }

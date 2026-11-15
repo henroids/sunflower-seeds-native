@@ -19,7 +19,7 @@ public final class Request {
         public Bad(String code, String message) { super(message); this.code = code; }
     }
 
-    public static final List<String> COMMANDS = Arrays.asList("status", "list", "scan", "nav", "build", "prepare", "job", "play", "game", "screens_off", "set");
+    public static final List<String> COMMANDS = Arrays.asList("status", "list", "scan", "nav", "build", "reimport", "prepare", "job", "play", "game", "screens_off", "set");
     static final List<String> FILTERS = Arrays.asList("all", "building", "ready", "build", "not_in_app");
     static final List<String> TABS = Arrays.asList("performance", "game", "saves", "storage");
     private static final Set<String> YES = new HashSet<>(Arrays.asList("true", "1", "on", "yes")), NO = new HashSet<>(Arrays.asList("false", "0", "off", "no"));
@@ -102,6 +102,7 @@ public final class Request {
                 break;
             }
             case "build": case "prepare": case "play": titleId(true); break;
+            case "reimport": titleId(true); flag("confirm"); flag("delete_first"); break;   // the question itself is answered where the plan is known (CtlPort.reimport: needs_confirm)
             case "job": action(); titleId(false); break;
             case "game": {
                 String a = action();
@@ -120,7 +121,7 @@ public final class Request {
     /** Whether the command works on the launcher's screen (its pages, the build sheet's choices, the Prepare card), so the launcher has to be in front */
     public boolean needsScreen() throws Bad {
         switch (cmd) {
-            case "nav": case "build": case "prepare": case "play": case "scan": return true;
+            case "nav": case "build": case "reimport": case "prepare": case "play": case "scan": return true;
             case "screens_off": return on("on");
             case "job": return !"pause".equals(action());
             default: return false;

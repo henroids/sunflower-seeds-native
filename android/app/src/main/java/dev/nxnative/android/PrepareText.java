@@ -34,9 +34,21 @@ final class PrepareText {
     /** A failure: text for the card (short, plain), detail for Details (may be long), fix: FIX_* */
     static final class Failure {
         final String text, detail, fix;
+        // PEANUTS begin: why, for a failure whose cause the player can mend (CAUSE_*; "" for the others), with its counts: Job.fail keeps them in job.json, where
+        // the build reads them (dev.peanuts.build.AutoRelax: such a job is not tried anyway for the player) and the pack's note gets them (dev.peanuts.build.PackNote)
+        final String cause;
+        final long lacks, of;
 
-        Failure(String text, String detail, String fix) { this.text = text; this.detail = detail == null ? "" : detail; this.fix = fix; }
+        Failure(String text, String detail, String fix, String cause, long lacks, long of) {
+            this.text = text; this.detail = detail == null ? "" : detail; this.fix = fix; this.cause = cause; this.lacks = lacks; this.of = of;
+        }
+
+        Failure(String text, String detail, String fix) { this(text, detail, fix, "", 0, 0); }
+        // PEANUTS end
     }
+
+    /** PEANUTS: a failure's cause (Failure.cause): shaders that come from files the import does not have, in an import without add-on content (addonNotImported) */
+    static final String CAUSE_ADDON = "addon_not_imported";
 
     /** The warning Try anyway shows before it relaxes a check: what may go wrong, plainly */
     static final String ANYWAY_WARNING = "This goes on without the check that stopped it. The game may not start, may crash, or may draw parts wrongly or not at all. "
@@ -104,8 +116,9 @@ final class PrepareText {
     }
 
     // PEANUTS begin: a split that lacks some of the profile's shaders says how many and names one, and tells add-on content (DLC) that was not imported from a dump
-    // of another version: Mario Kart 8 Deluxe imported without its Booster Course Pass lacked 135 of 29,785 shaders, all from course files the import did not
-    // have, and "dump the game again" sent its owner the wrong way (2026-11-15). PackService.splitMatchesProfile gathers the evidence
+    // of another version (2026-11-15). PackService.splitMatchesProfile gathers the evidence. No game is known that needs the add-on words: the case they were
+    // written for (Mario Kart 8 Deluxe, 135 of 29,785) was the shaders of another version in the profile's shader_versions, which is no failure at all now
+    // (ShaderLibs.otherVersionKeys, checked first). They are said only for a profile whose tables are of one version, and are untested against a real game
     private static String count(long n) { return String.format(Locale.getDefault(), "%,d", n); }
 
     /** A RomFS path for the card's main text, which carries no slash: "/Course/Gu_Cloud/course.ptcl" → "Course › Gu_Cloud › course.ptcl" */
@@ -113,15 +126,16 @@ final class PrepareText {
 
     /**
      * absent of the profile's total shaders come from files (file: one of them, a RomFS path) that the import does not have, and the import has no add-on content.
-     * nup: the game is a .nup file (the app's own import, or the PC builder's), which has to be made again with the DLC; else a dump folder. No profile says
-     * whether its game has add-on content, so the cause is named as the usual one, not as a fact
+     * nup: the game is a .nup file (the app's own import, or the PC builder's), which has to be made again with the DLC (the game sheet's Import again); else a
+     * dump folder. No profile says whether its game has add-on content, so the cause is named as the usual one, not as a fact. The failure carries its cause and
+     * counts (CAUSE_ADDON): the build stops with this card and lets the player choose, where it presses Try anyway by itself for the other failures
      */
     static Failure addonNotImported(String name, long absent, long total, String file, boolean nup, String detail) {
         return new Failure(count(absent) + " of the " + count(total) + " shaders this app knows for " + name + " come from files your " + (nup ? "import" : "dump")
                 + " does not have (for example " + shown(file) + "). This usually means the game's add-on content (DLC) was not part of the " + (nup ? "import: set the DLC "
-                + "folder in Settings, delete the game's .nup file (Details has its path) and build again, so it is imported with the DLC" : "dump: dump the game again "
+                + "folder in Settings (Library), then tap Import again in the game's sheet, which makes the .nup again with the DLC" : "dump: dump the game again "
                 + "with its DLC and tap Retry") + ". Try anyway builds without them: the base game runs, and what the add-on adds is drawn without those materials.",
-                detail, FIX_ANYWAY);
+                detail, FIX_ANYWAY, CAUSE_ADDON, absent, total);
     }
 
     /** shadersDiffer with what is missing: missing of the profile's total shaders, example: a RomFS path of one, or its key */
