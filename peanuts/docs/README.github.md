@@ -140,5 +140,8 @@ by seedds (MIT). Some fixes are adapted from [nx2android](https://github.com/shi
 
 The companion runtime and package format come from [Eden Duo](https://github.com/igawa6/eden-duo).
 
+Contributors: the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`) is by [intermission88](https://github.com/intermission88)
+(pull request #13). The issue and discussion forms were set right by [ArchOwlen](https://github.com/ArchOwlen) (pull request #5).
+
 The project as a whole is licensed GPL-3.0-or-later. Frame generation (ported from Eden and lsfg-vk) and other
 components carry their own licenses; see `android/NOTICE.md` and `dm/third_party/README.md`.
