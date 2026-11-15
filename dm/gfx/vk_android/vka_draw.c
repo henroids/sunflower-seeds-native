@@ -202,7 +202,19 @@ static struct {
     int rt_cont, dread;                                  // SET_RT continued the pass; a draw of the pass sampled its depth attachment
     struct { vka_img *im, *sh; uint32_t lv, l0, nl, bw, bh; } bc[8]; int nbc;   // block-compressed targets drawn through their shadows (bcrt_attach), copied back at the pass end
     int rsc; float rsf;                                  // PEANUTS: its targets are scaled images (DM_RES_SCALE, vka_rp_rs), and the factor (1.0 when not): viewports and scissors are scaled by it
+    int ps_new;                                          // PEANUTS: a colour or depth target of it is not one the game draws into every frame (ps_mark): its draws are not skipped for a missing pipeline (DM_VK_PSO_SYNC_PASS bit 8)
 } R;
+// PEANUTS begin: a pass begins on this level and first layer of a texture: the target is marked as drawn into in this frame, whether the pass's draws are drawn or
+// skipped, and the pass noted when the target is not one drawn every frame (vka_psosync.h vkps_mark: new, or left alone for more than DM_VK_PSO_SYNC_GAP frames).
+// Named by the texture's storage address, size and format, so a texture object made again over the same storage is the same target. The recording thread's only
+static vkps_seen g_ps_seen;
+static void ps_mark(const vka_img *im, uint32_t lv, uint32_t l0) {
+    uint64_t vka_frame(void);
+    if (!(VKA_ENV("DM_VK_PSO_SYNC_PASS", VKPS_ALL) & VKPS_NEW)) return;
+    uint64_t key = vkps_key(im->mem ? (uint64_t)(uintptr_t)im->mem : im->serial, im->d.width, im->d.height, (uint32_t)im->d.format, lv, l0);
+    if (!vkps_mark(&g_ps_seen, key, vka_frame(), VKA_ENV("DM_VK_PSO_SYNC_GAP", VKPS_GAP))) R.ps_new = 1;
+}
+// PEANUTS end
 // Inline uniform updates (OP_UPDATE_UB) that came with a render pass open (DM_VK_UB_DEFER, default 1): Vulkan forbids vkCmdCopyBuffer inside a rendering pass, and ending the
 // pass for each update split Splatoon Raiders' 6400x6400 ink-map occlusion-query pass 150-1,550 times a frame (7 inline updates per query). While R.on is open, the updates are
 // recorded in g_gw at once (vka_tex_gw_update) and coalesced here: draws in the pass whose uniform buffers overlap UB bind a scratch shadow reconstructed by vka_tex_gw_read, a
@@ -596,6 +608,7 @@ static int rp_begin(const p_set_rt *rt, int has_rt, const p_scissor *sc, int has
                 R.cnl[i] = bnl; R.cext[i] = (VkExtent2D){bw, bh};
                 if (bw < w) w = bw; if (bh < h) h = bh; if (bnl < layers) layers = bnl;
                 rt_peek("compressed colour", i, t, im, R.bc[R.nbc - 1].lv, R.bc[R.nbc - 1].l0, bnl);
+                ps_mark(im, R.bc[R.nbc - 1].lv, R.bc[R.nbc - 1].l0);   // PEANUTS: the target is drawn into in this frame (DM_VK_PSO_SYNC_PASS bit 8)
                 continue;
             }
             VRED_ONCE("colour target %d (format %#x) cannot be a Vulkan colour attachment: not drawn into", i, t->d.format); rt_peek("refused colour", i, t, im, 0, 0, 0); continue; }
@@ -608,6 +621,7 @@ static int rp_begin(const p_set_rt *rt, int has_rt, const p_scissor *sc, int has
         if (!v) continue;
         ca[i].imageView = v; R.cf[i] = f.view; R.ckind[i] = f.kind; samples = im->samples; fb_im[nfb] = im; fb_lv[nfb++] = lv; s_im[i] = im; s_lv[i] = lv; s_nl[i] = nl;
         R.cim[R.nci] = im; R.clv[R.nci] = lv; R.cl0[R.nci++] = l0;
+        ps_mark(im, lv, l0);   // PEANUTS: the target is drawn into in this frame (DM_VK_PSO_SYNC_PASS bit 8)
         rt_peek("colour", i, t, im, lv, l0, nl);
         uint32_t lw = im->w >> lv ? im->w >> lv : 1, lh = im->h >> lv ? im->h >> lv : 1;
         R.cnl[i] = nl; R.cext[i] = (VkExtent2D){lw, lh};
@@ -630,6 +644,7 @@ static int rp_begin(const p_set_rt *rt, int has_rt, const p_scissor *sc, int has
                 uint32_t lw = im->w >> lv ? im->w >> lv : 1, lh = im->h >> lv ? im->h >> lv : 1;
                 R.dnl = nl; R.dext = (VkExtent2D){lw, lh};
                 rt_peek("depth", 0, rt->depth, im, lv, l0, nl);
+                ps_mark(im, lv, l0);   // PEANUTS: the target is drawn into in this frame (DM_VK_PSO_SYNC_PASS bit 8)
                 if (lw < w) w = lw; if (lh < h) h = lh; if (nl < layers) layers = nl;
                 vka_img_written(im);
             }
@@ -2686,15 +2701,16 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     PT(4);
     VkPipeline p = vka_gfx_pipeline(sh, &lay, &k);
     // PEANUTS begin: with DM_VK_PSO_ASYNC a pipeline the cache lacks is made in the background and its draws skipped until then. Not the draws whose result the game
-    // keeps or that make the whole frame (vka_psosync.h: a direct draw of a few vertices, a small target, a draw that writes memory): theirs is made now, on the frame
-    // path (Super Mario Odyssey stayed black for a whole first run). Looked at only when a pipeline is missing. DM_VK_PSO_SYNC_PASS (live, 7; 0 = every miss skipped):
-    // the kinds; DM_VK_PSO_SYNC_VERTS (live, 6): the most vertices or indices of the first kind
+    // keeps or that make the whole frame (vka_psosync.h: a direct draw of a few vertices, a small target, a draw that writes memory, a draw into a target the game
+    // does not draw into every frame: R.ps_new, ps_mark): theirs is made now, on the frame path (Super Mario Odyssey stayed black for a whole first run). Looked at
+    // only when a pipeline is missing. DM_VK_PSO_SYNC_PASS (live, 15; 0 = every miss skipped): the kinds; DM_VK_PSO_SYNC_VERTS (live, 6): the most vertices or
+    // indices of the first kind; the last kind's frame time is bounded per frame (DM_VK_PSO_SYNC_NEW_MS, vka_gfx_pipeline_now: none returned past it, so skipped)
     if (!p && !mesh) {
         int bits = VKA_ENV("DM_VK_PSO_SYNC_PASS", VKPS_ALL);
         if (bits) {
             float rf = R.rsf > 0.f ? R.rsf : 1.f;   // (the target in the game's own pixels: DM_RES_SCALE)
             vkps_draw q = {.mesh = 0, .indirect = ind != 0 || mdi != 0, .instances = dw ? dw->instances : di->instances, .writes = d->rast_discard || draw_writes(sh, d),
-                           .count = dw ? dw->count : di->count, .w = (uint32_t)(R.full_w / rf + 0.5f), .h = (uint32_t)(R.full_h / rf + 0.5f)};
+                           .count = dw ? dw->count : di->count, .w = (uint32_t)(R.full_w / rf + 0.5f), .h = (uint32_t)(R.full_h / rf + 0.5f), .fresh = R.ps_new};   // PEANUTS: fresh: a target of the pass is not drawn every frame (bit 8)
             int why = vkps_why(bits, VKA_ENV("DM_VK_PSO_SYNC_VERTS", VKPS_VERTS), &q);
             if (why) p = vka_gfx_pipeline_now(sh, why, q.indirect ? -1 : (long long)q.count, q.w, q.h);
         }

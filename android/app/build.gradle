@@ -481,6 +481,11 @@ if (nxGenericHost) {
         inputs.file(script)
         inputs.file(new File(repo, 'dm/games/game.py'))
         nxGames.each { inputs.file(new File(repo, "dm/games/$it/game.tsv")) }
+        // PEANUTS: a profile's prewarm seed is an input too (which games have one, and each one's bytes): without it a seed added or changed
+        // after the first build left the task up to date and the .seed asset empty (found 2026-11-15: ten new seeds packaged as 0 bytes)
+        def seeds = nxGames.collect { new File(repo, "dm/games/$it/vk_prewarm.bin") }.findAll { it.isFile() }
+        inputs.property('seeds', seeds.collect { it.parentFile.name }.join(','))
+        inputs.files(seeds)
         outputs.dir(genDir)
         doLast {
             def run = { List<String> args ->
