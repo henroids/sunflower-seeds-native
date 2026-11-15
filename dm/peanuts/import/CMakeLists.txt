@@ -3,7 +3,7 @@
 #     a shared library libnximport.so with the JNI (dev.peanuts.importer.Native), 16 KB page aligned like the host's libraries;
 #   - standalone on a PC for the tests: cmake -S dm/peanuts/import -B build && cmake --build build → nximport_cli (and libnximport.so).
 #   - standalone on Windows with MinGW-w64 GCC (MSYS2 UCRT64 or WinLibs): cmake -G "MinGW Makefiles" -S dm/peanuts/import -B build; MSVC is not supported.
-#     No libnximport there (its hidden-visibility export has no use on Windows): nximport_cli, comp_test and zip_test, linked -static so the .exe runs alone.
+#     No libnximport there (its hidden-visibility export has no use on Windows): nximport_cli, comp_test, zip_test, crypto_test and lz4_test, linked -static so the .exe runs alone.
 #     Needs zlib with its static library there too (MSYS2: mingw-w64-ucrt-x86_64-zlib).
 cmake_minimum_required(VERSION 3.22)
 project(nximport C)
@@ -39,6 +39,20 @@ else()
   target_include_directories(zip_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(zip_test PRIVATE ZLIB::ZLIB)
   target_compile_options(zip_test PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation)
+  # the AES and LZ4 routines alone: known answers, the hardware cipher against the portable one, the LZ4 decoder against the plain one it replaced
+  # (tests/nx_selftest.h); no keys and no game needed: ctest, or run them by hand (once under -DCMAKE_C_FLAGS=-fsanitize=address,undefined)
+  add_executable(crypto_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/crypto_test.c ${CMAKE_CURRENT_SOURCE_DIR}/nx_crypto.c)
+  add_executable(lz4_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/lz4_test.c ${CMAKE_CURRENT_SOURCE_DIR}/nx_lz4.c)
+  foreach(t crypto_test lz4_test)
+    target_include_directories(${t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_options(${t} PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation)
+    if(WIN32)
+      target_link_options(${t} PRIVATE -static)
+    endif()
+  endforeach()
+  enable_testing()
+  add_test(NAME crypto_test COMMAND crypto_test)
+  add_test(NAME lz4_test COMMAND lz4_test)
   if(WIN32)
     # MinGW's DLLs (libgcc, winpthread) and zlib are linked in, so the .exe files run from any folder (zlib's static library must be installed: MSYS2's zlib package has it)
     target_link_options(nximport_cli PRIVATE -static)

@@ -36,6 +36,7 @@ static const uint8_t SBOX[256] = {
     0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16 };
 static uint8_t INV_SBOX[256];
 static int tables_ready, backend, sha_backend;   // backend: 0 portable, 1 aesni, 2 armv8; sha_backend: 0 portable, 1 sha-ni, 2 armv8 sha2
+static int backend_found;   // what the detection chose (nx_aes_test_portable goes back to it)
 static void sha_selftest(void);
 
 static uint8_t xtime(uint8_t x) { return (uint8_t)((x << 1) ^ ((x & 0x80) ? 0x1b : 0)); }
@@ -56,10 +57,12 @@ static void tables_init(void) {
 #endif
     { const char *e = getenv("NX_AES_PORTABLE"); if (e && *e && *e != '0') backend = 0; }   // tests: force the portable cipher
     { const char *e = getenv("NX_SHA_PORTABLE"); if (e && *e && *e != '0') sha_backend = 0; }   // tests: force the portable hash
+    backend_found = backend;
     tables_ready = 1;
     sha_selftest();   // a hardware hash that fails the known answer falls back to the portable one (the .nup must not depend on the CPU)
 }
 
+void nx_aes_test_portable(int on) { tables_init(); backend = on ? 0 : backend_found; }
 const char *nx_aes_backend(void) { tables_init(); return backend == 1 ? "aesni" : backend == 2 ? "armv8" : "portable"; }
 const char *nx_sha_backend(void) { tables_init(); return sha_backend == 1 ? "sha-ni" : sha_backend == 2 ? "armv8" : "portable"; }
 
@@ -105,6 +108,7 @@ static void p_decrypt(const NxAes *a, const uint8_t in[16], uint8_t out[16]) {
 }
 
 // ---- hardware paths
+#define NX_W8(X) X(0) X(1) X(2) X(3) X(4) X(5) X(6) X(7)   // one statement per block of an 8-block step
 #if NX_HAVE_AESNI
 __attribute__((target("aes,sse2"))) static void ni_encrypt(const NxAes *a, const uint8_t in[16], uint8_t out[16]) {
     __m128i s = _mm_xor_si128(_mm_loadu_si128((const __m128i *)in), _mm_loadu_si128((const __m128i *)a->rk[0]));
@@ -119,20 +123,33 @@ __attribute__((target("aes,sse2"))) static void ni_decrypt(const NxAes *a, const
     _mm_storeu_si128((__m128i *)out, s);
 }
 __attribute__((target("aes,sse2"))) static void ni_imc(const uint8_t in[16], uint8_t out[16]) { _mm_storeu_si128((__m128i *)out, _mm_aesimc_si128(_mm_loadu_si128((const __m128i *)in))); }
-// CTR over whole blocks, 4 at a time
+// CTR over whole blocks. The counter lives in two 64-bit integers (the big-endian halves of the 16 bytes) and is byte-swapped straight into a register per
+// block; 8 blocks go through the rounds side by side, each state a named variable. An array of states indexed in a loop made the compiler keep them on the
+// stack, so every round waited on a store and a load, and the counter went through a byte buffer: together about 7 times slower than this.
 __attribute__((target("aes,sse2"))) static void ni_ctr(const NxAes *a, uint8_t ctr[16], const uint8_t *in, uint8_t *out, size_t blocks) {
     __m128i k[11]; for (int r = 0; r < 11; r++) k[r] = _mm_loadu_si128((const __m128i *)a->rk[r]);
-    uint64_t hi, lo; { uint8_t *c = ctr; hi = 0; lo = 0; for (int i = 0; i < 8; i++) { hi = hi << 8 | c[i]; lo = lo << 8 | c[8 + i]; } }
+    uint64_t hi = 0, lo = 0; for (int i = 0; i < 8; i++) { hi = hi << 8 | ctr[i]; lo = lo << 8 | ctr[8 + i]; }
     while (blocks) {
-        size_t n = blocks < 4 ? blocks : 4; __m128i s[4];
-        for (size_t j = 0; j < n; j++) {
-            uint8_t cb[16]; uint64_t h = hi, l = lo; for (int i = 7; i >= 0; i--) { cb[i] = (uint8_t)h; h >>= 8; cb[8 + i] = (uint8_t)l; l >>= 8; }
-            s[j] = _mm_xor_si128(_mm_loadu_si128((const __m128i *)cb), k[0]);
+        if (blocks >= 8 && lo <= UINT64_MAX - 7) {   // none of these 8 counters carries into the high half (the carry after the 8th is taken below)
+            const long long h = (long long)__builtin_bswap64(hi);
+#define NX_INIT(j) __m128i s##j = _mm_xor_si128(_mm_set_epi64x((long long)__builtin_bswap64(lo + j), h), k[0]);
+#define NX_ROUND(j) s##j = _mm_aesenc_si128(s##j, kr);
+#define NX_LAST(j) _mm_storeu_si128((__m128i *)(out + 16 * j), _mm_xor_si128(_mm_aesenclast_si128(s##j, k[10]), _mm_loadu_si128((const __m128i *)(in + 16 * j))));
+            NX_W8(NX_INIT)
+            for (int r = 1; r < 10; r++) { const __m128i kr = k[r]; NX_W8(NX_ROUND) }
+            NX_W8(NX_LAST)
+#undef NX_INIT
+#undef NX_ROUND
+#undef NX_LAST
+            lo += 8; if (lo < 8) hi++;
+            in += 128; out += 128; blocks -= 8;
+        } else {   // the last 1 to 7 blocks, and the blocks next to a wrap of the low half
+            __m128i s = _mm_xor_si128(_mm_set_epi64x((long long)__builtin_bswap64(lo), (long long)__builtin_bswap64(hi)), k[0]);
+            for (int r = 1; r < 10; r++) s = _mm_aesenc_si128(s, k[r]);
+            _mm_storeu_si128((__m128i *)out, _mm_xor_si128(_mm_aesenclast_si128(s, k[10]), _mm_loadu_si128((const __m128i *)in)));
             if (++lo == 0) hi++;
+            in += 16; out += 16; blocks--;
         }
-        for (int r = 1; r < 10; r++) for (size_t j = 0; j < n; j++) s[j] = _mm_aesenc_si128(s[j], k[r]);
-        for (size_t j = 0; j < n; j++) { s[j] = _mm_aesenclast_si128(s[j], k[10]); _mm_storeu_si128((__m128i *)(out + 16 * j), _mm_xor_si128(s[j], _mm_loadu_si128((const __m128i *)(in + 16 * j)))); }
-        in += 16 * n; out += 16 * n; blocks -= n;
     }
     for (int i = 7; i >= 0; i--) { ctr[i] = (uint8_t)hi; hi >>= 8; ctr[8 + i] = (uint8_t)lo; lo >>= 8; }
 }
@@ -152,18 +169,38 @@ __attribute__((target("+crypto"))) static void v8_decrypt(const NxAes *a, const 
     vst1q_u8(out, s);
 }
 __attribute__((target("+crypto"))) static void v8_imc(const uint8_t in[16], uint8_t out[16]) { vst1q_u8(out, vaesimcq_u8(vld1q_u8(in))); }
+// CTR over whole blocks, as ni_ctr does on x86: 8 states in named registers. The counter is one vector of two native 64-bit lanes (high half, low half),
+// stepped with a vector add and turned into the block's big-endian bytes by one byte reversal per lane; an integer copy of the low half only tells when it wraps.
 __attribute__((target("+crypto"))) static void v8_ctr(const NxAes *a, uint8_t ctr[16], const uint8_t *in, uint8_t *out, size_t blocks) {
     uint8x16_t k[11]; for (int r = 0; r < 11; r++) k[r] = vld1q_u8(a->rk[r]);
     uint64_t hi = 0, lo = 0; for (int i = 0; i < 8; i++) { hi = hi << 8 | ctr[i]; lo = lo << 8 | ctr[8 + i]; }
+#define NX_STEP(j) const uint64x2_t d##j = vcombine_u64(vcreate_u64(0), vcreate_u64(j));   /* adds j to the low half */
+    NX_W8(NX_STEP)
+#undef NX_STEP
+    const uint64x2_t d8 = vcombine_u64(vcreate_u64(0), vcreate_u64(8));
+    uint64x2_t c = vcombine_u64(vcreate_u64(hi), vcreate_u64(lo));
     while (blocks) {
-        size_t n = blocks < 4 ? blocks : 4; uint8x16_t s[4];
-        for (size_t j = 0; j < n; j++) {
-            uint8_t cb[16]; uint64_t h = hi, l = lo; for (int i = 7; i >= 0; i--) { cb[i] = (uint8_t)h; h >>= 8; cb[8 + i] = (uint8_t)l; l >>= 8; }
-            s[j] = vld1q_u8(cb); if (++lo == 0) hi++;
+        if (blocks >= 8 && lo <= UINT64_MAX - 7) {   // none of these 8 counters carries into the high half (the carry after the 8th is taken below)
+#define NX_INIT(j) uint8x16_t s##j = vrev64q_u8(vreinterpretq_u8_u64(vaddq_u64(c, d##j)));
+#define NX_ROUND(j) s##j = vaesmcq_u8(vaeseq_u8(s##j, kr));
+#define NX_LAST(j) vst1q_u8(out + 16 * j, veorq_u8(veorq_u8(vaeseq_u8(s##j, k[9]), k[10]), vld1q_u8(in + 16 * j)));
+            NX_W8(NX_INIT)
+            for (int r = 0; r < 9; r++) { const uint8x16_t kr = k[r]; NX_W8(NX_ROUND) }
+            NX_W8(NX_LAST)
+#undef NX_INIT
+#undef NX_ROUND
+#undef NX_LAST
+            lo += 8;
+            if (lo < 8) { hi++; c = vcombine_u64(vcreate_u64(hi), vcreate_u64(lo)); } else c = vaddq_u64(c, d8);
+            in += 128; out += 128; blocks -= 8;
+        } else {   // the last 1 to 7 blocks, and the blocks next to a wrap of the low half
+            uint8x16_t s = vrev64q_u8(vreinterpretq_u8_u64(c));
+            for (int r = 0; r < 9; r++) s = vaesmcq_u8(vaeseq_u8(s, k[r]));
+            vst1q_u8(out, veorq_u8(veorq_u8(vaeseq_u8(s, k[9]), k[10]), vld1q_u8(in)));
+            if (++lo == 0) hi++;
+            c = vcombine_u64(vcreate_u64(hi), vcreate_u64(lo));
+            in += 16; out += 16; blocks--;
         }
-        for (int r = 0; r < 9; r++) for (size_t j = 0; j < n; j++) s[j] = vaesmcq_u8(vaeseq_u8(s[j], k[r]));
-        for (size_t j = 0; j < n; j++) { s[j] = veorq_u8(vaeseq_u8(s[j], k[9]), k[10]); vst1q_u8(out + 16 * j, veorq_u8(s[j], vld1q_u8(in + 16 * j))); }
-        in += 16 * n; out += 16 * n; blocks -= n;
     }
     for (int i = 7; i >= 0; i--) { ctr[i] = (uint8_t)hi; hi >>= 8; ctr[8 + i] = (uint8_t)lo; lo >>= 8; }
 }

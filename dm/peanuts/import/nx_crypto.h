@@ -25,5 +25,8 @@ void nx_sha256_final(NxSha256 *s, uint8_t out[32]);
 void nx_sha256(const void *p, size_t n, uint8_t out[32]);
 
 const char *nx_aes_backend(void);   // "aesni", "armv8" or "portable", for messages
+// For the tests only (not thread-safe): the portable cipher in place of the hardware one (on != 0), or the detected one again (0).
+// A key must be set up again with nx_aes_init after a switch (its decryption keys differ between the two).
+void nx_aes_test_portable(int on);
 const char *nx_sha_backend(void);   // "sha-ni", "armv8" or "portable"
 #endif
