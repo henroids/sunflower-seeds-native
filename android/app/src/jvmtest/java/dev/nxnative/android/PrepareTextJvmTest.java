@@ -118,6 +118,27 @@ public final class PrepareTextJvmTest {
         plain(f.text, "shaders differ");
         check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.text.contains("Try anyway"), "shaders differ: Try anyway");
 
+        // PEANUTS begin: what is missing is counted and named; shaders from files the import does not have, with no add-on content in it, point at the DLC
+        f = PrepareText.addonNotImported("Mario Kart 8 Deluxe", 135, 29785, "/Course/B3ds_WuhuTown/course.ptcl", true, "detail");
+        plain(f.text, "add-on content not imported");
+        check(f.text.startsWith("135 of the 29,785 shaders this app knows for Mario Kart 8 Deluxe come from files your import does not have (for example "
+                + "Course › B3ds_WuhuTown › course.ptcl). This usually means the game's add-on content (DLC) was not part of the import: set the DLC folder in Settings, "
+                + "delete the game's .nup file (Details has its path) and build again"), "add-on content: " + f.text);
+        check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.text.contains("Try anyway builds without them") && !f.text.contains("dump the game again"), "add-on content: " + f.text);
+        f = PrepareText.addonNotImported("Mario Kart 8 Deluxe", 135, 29785, "/Course/B3ds_WuhuTown/course.ptcl", false, "detail");
+        plain(f.text, "add-on content not in a dump folder");
+        check(f.text.contains("files your dump does not have") && f.text.contains("dump the game again with its DLC and tap Retry") && !f.text.contains(".nup"), "a dump folder: " + f.text);
+        f = PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", 7, 131426, "/shader/a.bfsha", "detail");
+        plain(f.text, "shaders differ, counted");
+        check(f.text.contains("(update 655360): 7 of 131,426 are missing (for example from shader › a.bfsha). The dump may be incomplete or modified") && !f.text.contains("DLC"),
+                "shaders differ, counted: " + f.text);
+        check(PrepareText.shadersDiffer("X", "base game", 1, 2, "00000000000000aa", "").text.contains("(for example 00000000000000aa)"), "a shader without a file is named by its key");
+        f = PrepareText.shadersDifferUnread("Pokemon Pokopia", "update 655360", "detail");
+        plain(f.text, "shaders differ, the dump not read");
+        check(f.text.startsWith(PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", "detail").text) && f.text.endsWith("add-on content (DLC) was not part of the import.")
+                && f.fix.equals(PrepareText.FIX_ANYWAY), "the dump not read: " + f.text);
+        // PEANUTS end
+
         // The trigger: a job of a game this APK does not include gets one sentence and no Retry
         String missing = Profile.missing("0400A3A01EE4C000", "Pokemon Pokopia");
         check(missing.equals("This app version does not include Pokemon Pokopia (0400A3A01EE4C000). Install a build that includes it."), "Profile.missing: " + missing);

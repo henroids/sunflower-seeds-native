@@ -472,6 +472,18 @@ class Launcher(unittest.TestCase):
         split.write_text(rows('00000000000000aa', '00000000000000bb', '00000000000000cc'))
         self.assertEqual(self.java('absent', d, split), 'none', 'nothing lacking: the byte comparison decides')
 
+    def test_missing_sources(self):   # PEANUTS: the keys a split lacks, each with the RomFS file its row names (the DLC-not-imported message's evidence)
+        head = '# kind: evidence\npackage\tindex\tstage\tdm_ctl_sha16\tsource\n'
+        prof, split = self.tmp / 'miss_profile.tsv', self.tmp / 'miss_split.tsv'
+        rows = [('00000000000000aa', '/Common/a.ptcl#BNSH@0x1000#var0'), ('00000000000000dd', '/Course/Dlc/course.ptcl#BNSH@0xab000#var0'),
+                ('00000000000000bb', '/Common/Gfx/agl.sarc/agl_common.sharcb#BAHS@0x10080'), ('00000000000000cc', 'main#BNSH@0x128f000#var0'),
+                ('00000000000000dd', '/Course/Other/course.ptcl#BNSH@0x1#var0'), ('00000000000000ee', '/Course/Dlc/plain.bfsha')]
+        prof.write_text(head + ''.join(f'cs_0.bin\t{i}\tcompute\t{k}\t{s}\n' for i, (k, s) in enumerate(rows)))
+        split.write_text(head + 'cs_0.bin\t0\tcompute\t00000000000000aa\t/Common/a.ptcl#BNSH@0x1000#var0\n')
+        self.assertEqual(self.java('missing', prof, split), '00000000000000bb=/Common/Gfx/agl.sarc/agl_common.sharcb,00000000000000cc=,'
+                         '00000000000000dd=/Course/Dlc/course.ptcl,00000000000000ee=/Course/Dlc/plain.bfsha', 'by key, a key\'s first row, no path for main')
+        self.assertEqual(self.java('missing', prof, prof), '', 'nothing missing')
+
     def test_selection_of_profiles(self):
         """Every profile with a selected set: the Java selection is what the Mac's selected build passes (shader_seen.tsv keys in shader_map.tsv)"""
         for seen in sorted((REPO / 'dm/games').glob('*/shader_seen.tsv')):

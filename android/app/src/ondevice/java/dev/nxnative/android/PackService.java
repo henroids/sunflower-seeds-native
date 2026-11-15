@@ -756,6 +756,7 @@ public final class PackService extends Service {
                     why, PrepareText.FIX_RETRY);
             return why;
         }
+        Lack lack = lack(j, have);   // PEANUTS: what the split lacks and whether the dump has those files, read before the split's tables go
         try {
             Outputs.delete(split);   // a Retry splits again, from the start
         } catch (IOException e) {
@@ -789,11 +790,85 @@ public final class PackService extends Service {
             return "the split could not read " + skipped.size() + (skipped.size() == 1 ? " file" : " files") + " of the dump (" + skipped.get(0)
                     + "), so its shaders are not the ones this app knows for " + j.name() + ". The file may be damaged: dump the game again, then Retry";
         }
+        // PEANUTS begin: say how many shaders are missing and name one; missing with their files, in an import without add-on content, is DLC that was not imported
+        // (set the DLC folder and import again), not a dump to make again; an import that could not be asked gets the old words and the DLC as a possible cause
+        String ver = Profile.versionName(j.version()), differs = "The split's " + have.getName() + " differs from the app's dm/games/" + j.titleId() + "/shader_map.tsv";
+        if (lack == null) {
+            failure = PrepareText.shadersDifferUnread(j.name(), ver, differs + ".\n" + log);
+            return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + ver + ", " + have.getName() + " differs). The dump may be incomplete or "
+                    + "modified: dump the game again, then Retry. This also happens when the game's add-on content (DLC) was not part of the import";
+        }
+        if (lack.absent > 0 && lack.addons == 0) {
+            boolean nup = Nup.isNup(j.dump());
+            failure = PrepareText.addonNotImported(j.name(), lack.absent, lack.total, lack.absentFile, nup, differs + ": " + lack.missing + " of its " + lack.total
+                    + " shaders are missing, " + lack.absent + " of them from files that are not in " + j.dump() + " (" + lack.absentFile + "), which has no add-on content.\n" + log);
+            return "the dump's shaders lack " + lack.absent + " of the " + lack.total + " this app knows for " + j.name() + " (" + ver + ") that come from files the "
+                    + (nup ? "import" : "dump") + " does not have (e.g. " + lack.absentFile + "), and it has no add-on content. This usually means the game's add-on content "
+                    + "(DLC) was not part of the " + (nup ? "import: set the DLC folder in Settings, delete " + j.dump() + " and build again" : "dump: dump the game again "
+                    + "with its DLC, then Retry") + ". Try anyway builds without them";
+        }
+        if (lack.missing > 0) {
+            String from = lack.file.isEmpty() ? "" : " from " + lack.file;
+            failure = PrepareText.shadersDiffer(j.name(), ver, lack.missing, lack.total, lack.file.isEmpty() ? lack.key : lack.file, differs + ": " + lack.missing + " of its "
+                    + lack.total + " shaders are missing (" + lack.key + from + "; " + lack.absent + " from files that are not in the dump, which has " + lack.addons
+                    + " add-on content package(s)).\n" + log);
+            return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + ver + ", " + have.getName() + " differs: " + lack.missing + " of "
+                    + lack.total + " missing, e.g. " + lack.key + from + "). The dump may be incomplete or modified: dump the game again, then Retry";
+        }
+        // PEANUTS end
         failure = PrepareText.shadersDiffer(j.name(), Profile.versionName(j.version()), "The split's " + have.getName() + " differs from the app's dm/games/" + j.titleId()
                 + "/shader_map.tsv.\n" + log);
         return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + Profile.versionName(j.version()) + ", " + have.getName()
                 + " differs). The dump may be incomplete or modified: dump the game again, then Retry";
     }
+
+    // PEANUTS begin: the evidence for splitMatchesProfile's message (ShaderLibs.missingSources, the dump's own file list and its add-on packages)
+    /** What a split lacks of the profile's map: missing of total keys (key, file: the first one and its RomFS path, "" when it has none), absent of them from files the
+     *  dump's RomFS does not have (absentFile: one), and how many add-on packages (DLC) the dump holds */
+    private static final class Lack {
+        int missing, total, absent, addons;
+        String key = "", file = "", absentFile = "";
+    }
+
+    /** null when the tables or the dump cannot be read (the caller then says only what it knows) */
+    private static Lack lack(Job j, File splitMap) {
+        try {
+            File want = new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv");
+            Lack l = new Lack();
+            l.total = ShaderLibs.mapKeys(want).size();
+            java.util.Map<String, Boolean> there = new java.util.HashMap<>();   // each file is looked up once
+            for (java.util.Map.Entry<String, String> e : ShaderLibs.missingSources(want, splitMap).entrySet()) {
+                String f = e.getValue();
+                if (l.missing++ == 0) { l.key = e.getKey(); l.file = f; }
+                if (f.isEmpty()) continue;
+                Boolean has = there.get(f);
+                if (has == null) there.put(f, has = there.size() >= 512 || inRomfs(j.dump(), j.version(), f));   // a dump of another build lacks thousands: the rest count as there
+                if (!has && l.absent++ == 0) l.absentFile = f;
+            }
+            File dump = j.dump();
+            String[] dlc = new File(dump, "dlc").list();
+            l.addons = Nup.isNup(dump) ? Nup.open(dump).of(Nup.ADDON).size() : dlc == null ? 0 : dlc.length;
+            return l;
+        } catch (IOException | RuntimeException | UnsatisfiedLinkError e) {
+            Log.w(TAG, "split: what it lacks: " + e);
+            return null;
+        }
+    }
+
+    /** Whether the version's RomFS (the one the split read: DumpCheck.versionPath) has the file a source's path names; the path may go on into a container, so its
+     *  longest part that exists decides: a file is there, a folder (or nothing) is not */
+    private static boolean inRomfs(File dump, long version, String path) throws IOException {
+        String romfs = DumpCheck.versionPath(dump, version, "romfs");
+        Nup n = Nup.isNup(dump) ? Nup.open(dump) : null;
+        Nup.Pkg p = n == null ? null : n.find(Nup.parse(romfs).selector);
+        if (n != null && p == null) throw new IOException(dump.getName() + " has no package for " + romfs);
+        for (String s = path; !s.isEmpty(); s = s.substring(0, s.lastIndexOf('/'))) {
+            if (n != null) { Nup.Node node = n.lookup(p, "romfs" + s); if (node != null) return !node.dir; }
+            else { File f = new File(romfs + s); if (f.exists()) return f.isFile(); }
+        }
+        return false;
+    }
+    // PEANUTS end
 
     /** The files the last split left out and why: its "unreadable: <file>: <reason>" lines after the log's last "== " header (shader_split.py); empty when none or no log */
     static List<String> splitSkipped(File log) {

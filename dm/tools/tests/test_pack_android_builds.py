@@ -90,6 +90,27 @@ class SplitAbsent(unittest.TestCase):
         with self.assertRaises(pa.Error) as e: self.run_split(['k1'], ['k3'])
         self.assertIn('lack 1 of the 3', str(e.exception))
 
+    def test_missing_shaders_name_the_addon_content(self):   # PEANUTS: Mario Kart 8 Deluxe built without its DLC file was told "another version or incomplete"
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        prof, rd = root / 'profile', root / 'romfs'; prof.mkdir(); (rd / 'Common/agl.sarc').parent.mkdir(parents=True)
+        (rd / 'Common/agl.sarc').write_text('x'); (rd / 'Course').mkdir()
+        rows = [('k1', '/Common/agl.sarc/agl_common.sharcb#BAHS@0x10'), ('k2', '/Course/Dlc/course.ptcl#BNSH@0xab000#var0'), ('k3', '/Course/Dlc/course.ptcl#BNSH@0x1#var1'),
+                ('k4', 'main#BNSH@0x128f000#var0')]
+        (prof / 'shader_map.tsv').write_text('# map\npackage\tindex\tstage\tdm_ctl_sha16\tsource\n' + ''.join(f'cs_x.bin\t{i}\tcompute\t{k}\t{s}\n' for i, (k, s) in enumerate(rows)))
+        g = Profile('main', {}); g.dir = prof
+        said = pa.lacking_shaders(g, rd, ['k2', 'k3'], 4, 0, root / 'tmp')   # their file is not there, and the dump has no add-on content
+        self.assertIn('lack 2 of the 4 in the profile\'s shader_map.tsv (e.g. k2, k3): 2 of them come from files the game files do not have (e.g. /Course/Dlc/course.ptcl)', said)
+        self.assertIn('add-on content (DLC) was not part of the import', said); self.assertIn('add the DLC .nsp to the command line, with --force-nup', said)
+        self.assertNotIn('another version', said)
+        said = pa.lacking_shaders(g, rd, ['k2', 'k3'], 4, 1, root / 'tmp')   # the same with add-on content in the dump: not the DLC
+        self.assertIn('2 of them from files the game files do not have (e.g. /Course/Dlc/course.ptcl): the dump is of another version or incomplete', said)
+        self.assertNotIn('DLC', said)
+        said = pa.lacking_shaders(g, rd, ['k1', 'k4'], 4, 0, root / 'tmp')   # the container is there (its shaders differ), and main always is
+        self.assertIn('lack 2 of the 4 in the profile\'s shader_map.tsv (e.g. k1, k4): the dump is of another version or incomplete', said)
+        self.assertNotIn('DLC', said)
+        said = pa.lacking_shaders(g, rd, ['k2'], 4, None, root / 'tmp')   # how much add-on content the dump has is not known: the old words, the DLC as a possibility
+        self.assertIn('the dump is of another version or incomplete', said); self.assertIn('when the game has add-on content (DLC), it may not have been part of the import', said)
+
     def test_absent_optional(self):
         """pack_shaders builds the library without the keys of _absent.tsv only when the profile's shader_optional.tsv names every one"""
         pkg = self.run_split(['k1', 'k2'], ['k3'])

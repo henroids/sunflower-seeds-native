@@ -18,6 +18,7 @@ import java.util.List;
  * restamp &lt;pack&gt; &lt;title ID&gt; &lt;current&gt; &lt;abi&gt; &lt;stamps&gt;  → "restamp &lt;the older version taken over&gt;" or "restamp none"
  * selection &lt;profile dir&gt;                               → "selection &lt;keys, comma-separated&gt;" or "selection none" (no shader_seen.tsv)
  * absent &lt;profile dir&gt; &lt;split's shader_map.tsv&gt;         → "absent &lt;keys, comma-separated&gt;" or "absent none" (ShaderLibs.absentOptional)
+ * missing &lt;profile's shader_map.tsv&gt; &lt;split's shader_map.tsv&gt; → "missing &lt;key=RomFS path, comma-separated&gt;" (ShaderLibs.missingSources; PEANUTS)
  * </pre>
  */
 public final class ShaderLibsJvmTest {
@@ -81,6 +82,18 @@ public final class ShaderLibsJvmTest {
                     throw new RuntimeException(e);
                 }
                 System.out.println("absent " + (k == null ? "none" : String.join(",", k)));
+                break;
+            }
+            case "missing": {   // PEANUTS: the keys a split lacks and the files they come from
+                java.util.Map<String, String> m;
+                try {
+                    m = ShaderLibs.missingSources(new File(a[1]), new File(a[2]));
+                } catch (java.io.IOException e) {
+                    throw new RuntimeException(e);
+                }
+                List<String> out = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, String> e : m.entrySet()) out.add(e.getKey() + "=" + e.getValue());
+                System.out.println("missing " + String.join(",", out));
                 break;
             }
             default:

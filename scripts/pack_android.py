@@ -639,6 +639,37 @@ def ooz_split_checked(ooz, g, tmp):
 # PEANUTS end
 
 
+# PEANUTS begin: what a split that lacks shaders of the profile's map says. The map's rows name the file each shader comes from; shaders whose files the game
+# files do not have, in a dump without add-on content, are DLC that was not imported (Mario Kart 8 Deluxe without its Booster Course Pass: 135 of 29,785, all from
+# course files the import left out), which "another version or incomplete" did not say (2026-11-15). The phone's words: PackService.splitMatchesProfile
+def lacking_shaders(g, rd, hard, total, dlc, tmp):
+    """The message for a split without the keys hard (sorted) of the profile's total: rd is the RomFS the split read, dlc how many add-on contents the dump has
+    (None: not known). A source is a RomFS path up to its first '#', and may go on into a container: its longest part that exists decides whether the file is there"""
+    src = {}
+    with open(g.dir / 'shader_map.tsv', encoding='utf-8') as f:
+        for c in (l.rstrip('\n').split('\t') for l in f):
+            if len(c) > 4 and c[0].endswith('.bin') and c[3] not in src: src[c[3]] = c[4].split('#')[0]
+    there = {}
+    def has(p):
+        if p not in there:
+            parts = p.strip('/').split('/')
+            while parts and not (hit := rd / '/'.join(parts)).exists(): parts.pop()
+            there[p] = bool(parts) and hit.is_file()
+        return there[p]
+    try: gone = [k for k in hard if src.get(k, '').startswith('/') and not has(src[k])]
+    except Exception: gone, dlc = [], None   # the game files cannot be asked: only what the tables say
+    lack = f'the dump\'s shaders lack {len(hard)} of the {total} in the profile\'s shader_map.tsv (e.g. {", ".join(hard[:3])})'
+    if gone and dlc == 0:
+        return (f'{lack}: {len(gone)} of them come from files the game files do not have (e.g. {src[gone[0]]}), and the game was imported without add-on content. '
+                f'This usually means the game\'s add-on content (DLC) was not part of the import: give the DLC file to the builder too (peanuts-build: add the DLC '
+                f'.nsp to the command line, with --force-nup when the .nup is there already; a dump folder: its dlc/ folder), then build again '
+                f'(the split is in {tmp})')
+    what = f', {len(gone)} of them from files the game files do not have (e.g. {src[gone[0]]})' if gone else ''
+    maybe = ('' if dlc is not None else '; when the game has add-on content (DLC), it may not have been part of the import')
+    return (f'{lack}{what}: the dump is of another version or incomplete, and the profile\'s shader library cannot be built from it{maybe} (the split is in {tmp})')
+# PEANUTS end
+
+
 def split_shaders(a, g, vdir, pkg, parts=None):   # parts: the version's (romfs, exefs) when they are not vdir's own (pack_dump.version_part)
     """The Switch shader package from the dump, as the phone's split step makes it (the version's romfs and main, android/app PackService "split"): shader_split.py into
     <pkg> (written beside it, then renamed, so a stopped split leaves no half package). Its tables go beside the package. The library is the profile's (its shader_map.tsv
@@ -662,8 +693,7 @@ def split_shaders(a, g, vdir, pkg, parts=None):   # parts: the version's (romfs,
         want, have = map_keys(g.dir / 'shader_map.tsv'), map_keys(tmp / 'shader_map.tsv')
         missing = sorted(want - have)
         if hard := [k for k in missing if k not in optional_keys(g)]:
-            raise Error(f'the dump\'s shaders lack {len(hard)} of the {len(want)} in the profile\'s shader_map.tsv (e.g. {", ".join(hard[:3])}): the dump is of another version '
-                        f'or incomplete, and the profile\'s shader library cannot be built from it (the split is in {tmp})')
+            raise Error(lacking_shaders(g, rd, hard, len(want), getattr(a, 'dlc_count', None), tmp))   # PEANUTS: says when the missing shaders point at DLC that was not imported
         for f in ('shader_map.tsv', 'shader_facts.tsv', 'shader_pairs.tsv'):
             if (g.dir / f).is_file() and (g.dir / f).read_bytes() != (tmp / f).read_bytes():
                 print(f'shaders: the dump\'s {f} differs from the profile\'s ({len(have - want)} shaders more); the library is the profile\'s, its shaders found in the package by key')
@@ -801,6 +831,7 @@ def main():
         for tid, p in sorted(dlc.items()):   # the add-on's content meta record: the game version it needs (pack_dump.dlc_required_version)
             if (need := pack_dump.dlc_required_version(p)) > ver:
                 print(f'[RED] DLC {tid:016X} needs game version {need} or later (its content meta record); this pack is version {ver}: the game may not use it', flush=True)
+        a.dlc_count = len(dlc)   # PEANUTS: for split_shaders' message (lacking_shaders): a dump without add-on content whose missing shaders come from files it does not have
         vdir = pack_dump.version_dir(folder, vers, ver)
         exe, romfs = pack_dump.version_part(folder, vers, ver, 'exefs'), pack_dump.version_part(folder, vers, ver, 'romfs')   # its own, else the base's
         if not (exe / 'main.npdm').is_file() or not romfs.is_dir(): raise Error(f'{vdir}: no exefs/main.npdm and romfs (neither its own nor the base\'s)')

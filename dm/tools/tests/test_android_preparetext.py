@@ -41,6 +41,16 @@ class Wiring(unittest.TestCase):
         self.assertIn('j.fail(PrepareText.notIncluded(missing))', work)
         self.assertNotIn('j.state("failed"', src, 'every failure goes through Job.fail (short text, Details, the offer)')
 
+    def test_missing_shaders_name_the_addon_content(self):   # PEANUTS: Mario Kart 8 Deluxe imported without its DLC was told to dump the game again (2026-11-15)
+        src = (ONDEVICE / 'PackService.java').read_text(encoding='utf-8')
+        m = src[src.index('private String splitMatchesProfile'):src.index('static List<String> splitSkipped')]
+        self.assertLess(m.index('Lack lack = lack(j, have);'), m.index('Outputs.delete(split);'), 'the split\'s map is read before it is deleted')
+        self.assertIn('if (lack.absent > 0 && lack.addons == 0) {', m, 'files the dump does not have and no add-on content: the DLC was not imported')
+        self.assertLess(m.index('PrepareText.shadersDifferUnread('), m.index('PrepareText.addonNotImported('))
+        self.assertLess(m.index('PrepareText.addonNotImported('), m.index('PrepareText.shadersDiffer(j.name(), ver, lack.missing'))
+        self.assertIn('Nup.open(dump).of(Nup.ADDON).size()', m)
+        self.assertIn('n.lookup(p, "romfs" + s)', m, 'a file is looked up in the RomFS the split read')
+
     def test_card_offers_only_what_can_work(self):
         src = (ONDEVICE / 'Ondevice.java').read_text(encoding='utf-8')
         self.assertIn('go.setVisibility(noFix || broken ? View.GONE : View.VISIBLE)', src, 'no Retry that cannot succeed')

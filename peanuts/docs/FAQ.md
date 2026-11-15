@@ -313,6 +313,16 @@ Yes. A script prepares the game on a computer and pushes it to the device over U
 
 Put them in the game folder, or set Settings › Library › **Update folder** and **DLC folder**. They are matched to their games by title ID. The sheet shows the update it will use, the newest one found unless you chose another (**Choose another…** picks a different file), and the DLC it found (**Add…** picks more).
 
+### A build says shaders "come from files your import does not have". What now?
+
+The game was imported without its add-on content (DLC), and some of its shaders are in files that only come with the DLC. Mario Kart 8 Deluxe without its Booster Course Pass is one such game. The message names one of the files.
+
+1. Set Settings › Library › **DLC folder**, or add the DLC file in the game's sheet (**DLC** row).
+2. Delete the game's `.nup` file with a file manager. The message's details have its path. The app has no button for this, and a build reuses a `.nup` that is already there.
+3. Open the game's sheet and build again. The import now takes the DLC.
+
+**Try anyway** builds without those shaders: the base game runs, and what the add-on adds is drawn without those materials.
+
 ### How do I free up storage?
 
 - Settings › Library › **Free up space** deletes the original dump of a game that is already built. The game keeps playing from its built copy. Keep the original if you will add a later game update.

@@ -103,6 +103,40 @@ final class PrepareText {
                 + "and tap Retry, or Try anyway.", detail, FIX_ANYWAY);
     }
 
+    // PEANUTS begin: a split that lacks some of the profile's shaders says how many and names one, and tells add-on content (DLC) that was not imported from a dump
+    // of another version: Mario Kart 8 Deluxe imported without its Booster Course Pass lacked 135 of 29,785 shaders, all from course files the import did not
+    // have, and "dump the game again" sent its owner the wrong way (2026-11-15). PackService.splitMatchesProfile gathers the evidence
+    private static String count(long n) { return String.format(Locale.getDefault(), "%,d", n); }
+
+    /** A RomFS path for the card's main text, which carries no slash: "/Course/Gu_Cloud/course.ptcl" → "Course › Gu_Cloud › course.ptcl" */
+    static String shown(String romfsPath) { return romfsPath.replaceFirst("^/+", "").replace("/", " › "); }
+
+    /**
+     * absent of the profile's total shaders come from files (file: one of them, a RomFS path) that the import does not have, and the import has no add-on content.
+     * nup: the game is a .nup file (the app's own import, or the PC builder's), which has to be made again with the DLC; else a dump folder. No profile says
+     * whether its game has add-on content, so the cause is named as the usual one, not as a fact
+     */
+    static Failure addonNotImported(String name, long absent, long total, String file, boolean nup, String detail) {
+        return new Failure(count(absent) + " of the " + count(total) + " shaders this app knows for " + name + " come from files your " + (nup ? "import" : "dump")
+                + " does not have (for example " + shown(file) + "). This usually means the game's add-on content (DLC) was not part of the " + (nup ? "import: set the DLC "
+                + "folder in Settings, delete the game's .nup file (Details has its path) and build again, so it is imported with the DLC" : "dump: dump the game again "
+                + "with its DLC and tap Retry") + ". Try anyway builds without them: the base game runs, and what the add-on adds is drawn without those materials.",
+                detail, FIX_ANYWAY);
+    }
+
+    /** shadersDiffer with what is missing: missing of the profile's total shaders, example: a RomFS path of one, or its key */
+    static Failure shadersDiffer(String name, String version, long missing, long total, String example, String detail) {
+        return new Failure("Your dump's shaders are not the ones this app knows for " + name + " (" + version + "): " + count(missing) + " of " + count(total)
+                + " are missing (for example " + (example.startsWith("/") ? "from " + shown(example) : example) + "). The dump may be incomplete or modified: dump the game "
+                + "again and tap Retry, or Try anyway.", detail, FIX_ANYWAY);
+    }
+
+    /** shadersDiffer when the dump could not be asked what it lacks: the same words, and the add-on content named as a possible cause */
+    static Failure shadersDifferUnread(String name, String version, String detail) {
+        return new Failure(shadersDiffer(name, version, detail).text + " This also happens when the game's add-on content (DLC) was not part of the import.", detail, FIX_ANYWAY);
+    }
+    // PEANUTS end
+
     /** A job for a game this app version does not include (Profile.missing): nothing to retry */
     static Failure notIncluded(String sentence) { return new Failure(sentence, "", FIX_NONE); }
 

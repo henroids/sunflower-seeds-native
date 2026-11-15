@@ -320,4 +320,25 @@ final class ShaderLibs {
         absent.removeAll(have);
         return !absent.isEmpty() && optional.containsAll(absent) ? new ArrayList<>(absent) : null;
     }
+
+    // PEANUTS begin: where the shaders a split lacks come from, so a failed comparison can tell files the import does not have (add-on content that was not
+    // imported) from files that are there with other shaders (PackService.splitMatchesProfile, PrepareText.addonNotImported)
+    /**
+     * The keys of the profile's map (profileMap) that a split's map lacks → the RomFS path its row's source names, sorted by key: the source up to its first '#'
+     * ("/Course/Gu_Cloud/course.ptcl" of "/Course/Gu_Cloud/course.ptcl#BNSH@0xab000#var0"; a file inside a container keeps the container's path before its own),
+     * "" for a source that is no RomFS path (main, a run-time save)
+     */
+    static java.util.SortedMap<String, String> missingSources(File profileMap, File splitMap) throws IOException {
+        Set<String> have = mapKeys(splitMap);
+        java.util.SortedMap<String, String> out = new java.util.TreeMap<>();
+        for (String l : Files.readAllLines(profileMap.toPath(), StandardCharsets.UTF_8)) {
+            String[] c = l.split("\t", 6);
+            if (c.length <= 4 || !c[0].endsWith(".bin") || have.contains(c[3]) || out.containsKey(c[3])) continue;
+            int h = c[4].indexOf('#');
+            String src = h < 0 ? c[4] : c[4].substring(0, h);
+            out.put(c[3], src.startsWith("/") ? src : "");
+        }
+        return out;
+    }
+    // PEANUTS end
 }
