@@ -506,8 +506,8 @@ $(B)/t_android_tbuf: t_android_tbuf.c $(VKA)/vka_tbuf.h | $(B)
 android-tbuf: $(B)/t_android_tbuf
 	$(B)/t_android_tbuf
 # PEANUTS end
-# PEANUTS begin: which draws are not skipped while their pipeline is made in the background (vka_psosync.h vkps_why; vka_draw.c draw_body, DM_VK_PSO_SYNC_PASS): each
-# kind by its bit, the limits' edges, scene draws left skipped. Built with run; android-psosync builds and runs it
+# PEANUTS begin: which draws are not skipped while their pipeline is made in the background (vka_psosync.h vkps_why; vka_draw.c draw_body): small
+# targets and draws that write memory, the size limit's edges, other draws left skipped. Built with run; android-psosync builds and runs it
 run: $(B)/t_android_psosync
 $(B)/t_android_psosync: t_android_psosync.c $(VKA)/vka_psosync.h | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_psosync.c

@@ -517,7 +517,7 @@ int vka_static(VkDeviceSize n, VkDeviceSize align, vka_span *out);   // host-vis
 typedef struct { VkPipelineLayout layout; VkDescriptorSetLayout set0; int push; uint32_t ndesc; } vka_layout;
 int vka_layout_of(vka_shader *const sh[VKA_NSTAGE], int compute, vka_layout *out);   // the set-0 layout of these stages' records with the pools' set 1
 VkPipeline vka_gfx_pipeline(vka_shader *const sh[VKA_NSTAGE], const vka_layout *lay, const vka_gkey *k);
-VkPipeline vka_gfx_pipeline_now(vka_shader *const sh[VKA_NSTAGE], int why, long long count, uint32_t w, uint32_t h);   // PEANUTS: the last lookup's pipeline made on the frame path when a background thread was to make it (DM_VK_PSO_SYNC_PASS; vka_psosync.h)
+VkPipeline vka_gfx_pipeline_now(vka_shader *const sh[VKA_NSTAGE], int why, long long count, uint32_t w, uint32_t h);   // PEANUTS: the last lookup's pipeline made on the frame path when a background thread was to make it (DM_VK_PSO_ASYNC; vka_psosync.h)
 VkPipeline vka_cs_pipeline(vka_shader *cs, const vka_layout *lay);
 VkPipeline vka_cs_pipeline_img(vka_shader *cs, const vka_layout *lay, uint64_t umask, uint64_t smask);   // with vka_shader_img_module's module; VK_NULL_HANDLE = none (then the base one)
 void vka_pso_save(int force);         // the VkPipelineCache and the prewarm list to the app's files (DM_TEMP): due DM_VK_PCACHE_SAVE_S after the last save, on the saver thread; force 1 = now, on the caller's; 2 = after a slow pipeline (due DM_VK_PCACHE_SAVE_SLOW_S)

@@ -393,34 +393,22 @@ written, so they do not take the CPU's copy away); buffer textures read as 2D im
 
 `dm/gfx/vk_android/vka_psosync.h` (Peanuts-owned, test `dm/host/tests/t_android_psosync.c`, `make android-psosync`): with `DM_VK_PSO_ASYNC` on (the launcher's default) a draw
 whose pipeline the cache lacks is skipped until a background thread has made it. Super Mario Odyssey on an AYN Thor drew a black picture with only the HUD for a whole
-first run (no pipeline cache yet), and still did with every pipeline made: a skipped draw's result was kept by the game. Three kinds of draw now get a missing pipeline
-on the frame path instead, as with `DM_VK_PSO_ASYNC=0`: a direct draw of one instance and at most 6 vertices or indices (full-screen and post-processing passes), a
-draw into a target of at most 64x64 texels, and a draw that writes memory or runs with the rasterizer off. `DM_VK_PSO_SYNC_PASS=0` is the behaviour before. Not verified
-on a device yet.
+first run (no pipeline cache yet), and still did with every pipeline made: a skipped draw's result was kept by the game. One fixed rule, with no switch, on whenever
+`DM_VK_PSO_ASYNC` is: two kinds of draw get a missing pipeline on the frame path instead, as with `DM_VK_PSO_ASYNC=0`: a draw into a target of at most 64x64 of the
+game's pixels, and a draw that writes memory or runs with the rasterizer off. Verified on the AYN Thor (Odyssey's first launch is right with the first kind alone).
+Two more kinds were tried the same day and taken out with their switches: draws of at most 6 vertices (a 2D game draws everything that way: OCTOPATH TRAVELER 0
+had 99 pipelines held on the frame, frames up to 564 ms) and draws into targets not drawn every frame (no game needed it; 36 more held there).
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
-| `dm/gfx/vk_android/vka_pso.c` | 9 | the include; the stats line's buffer in `mtl_pso_line` (480 bytes, was 200: the line was cut before the new counts); the counters; `as_main` notes its thread on the entry it builds and puts its priority back after each build (2 hunks); `vka_pso_async_line`: the counts of the draws not skipped (2 hunks); `last_g` at file scope; `vka_gfx_pipeline_now` (the last lookup's queued job taken back and built on the frame path, or the frame waits for the thread that has it) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/gfx/vk_android/vka_pso.c` | 9 | the include; the stats line's buffer in `mtl_pso_line` (960 bytes, was 200: the line was cut before the new counts); the counters; `as_main` notes its thread on the entry it builds and puts its priority back after each build (2 hunks); `vka_pso_async_line`: the counts of the draws not skipped, by kind, and their frame time (2 hunks); `last_g` at file scope; `vka_gfx_pipeline_now` (the last lookup's queued job taken back and built on the frame path, or the frame waits for the thread that has it; the first of each kind logged) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
 | `dm/gfx/vk_android/vka.h` | 1 | the declaration | `// PEANUTS ...` |
 | `dm/gfx/vk_android/vka_draw.c` | 2 | the include; `draw_body`: when the pipeline lookup returns none, `vkps_why` decides and `vka_gfx_pipeline_now` makes it | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
 | `dm/host/tests/Makefile` | 1 | `android-psosync` | `# PEANUTS begin`/`end` |
-| `docs/env_switches.tsv` | 2 rows | `DM_VK_PSO_SYNC_PASS`, `DM_VK_PSO_SYNC_VERTS` | generated table, rows by hand |
 | `docs/reference/rendering.md`, `docs/agents/symptoms.md` | 1 entry, generated | "A draw skipped for its pipeline left a result the game kept (Android)" | `PEANUTS` in the Symptom text (the index copies it) |
 
-A fourth kind, bit 8 of `DM_VK_PSO_SYNC_PASS` (default now 15; 7 is the rule without it), same day, not verified on a device: a draw into a render target the game does
-not draw into every frame (a cube map or probe drawn once, a shadow atlas updated now and then, a texture drawn once and reused). A pass that begins on a target marks
-it for the frame, its draws drawn or skipped (`vka_psosync.h` `vkps_mark`, pure and tested; `vka_draw.c` `ps_mark`); a target is drawn every frame once passes began on
-it in two earlier frames, each at most `DM_VK_PSO_SYNC_GAP` (4) frames after the one before. The frame time of this kind is bounded per frame
-(`DM_VK_PSO_SYNC_NEW_MS`, 100: past it draws are skipped as before and counted), since at a scene's start every target is new.
-
-| File | Hunks | Change | Marker |
-|---|---|---|---|
-| `dm/gfx/vk_android/vka_draw.c` | 6 | the pass's `ps_new` field; `ps_mark` and its table after the pass's state; `rp_begin`: the mark at a compressed colour target, a colour target and the depth target (3 hunks); `draw_body`: the pass's answer goes into `vkps_why` (inside the block of the earlier hunk) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
-| `dm/gfx/vk_android/vka_pso.c` | 0 new | inside the earlier hunks: the buffer is 960 bytes, a fourth count, this kind's time, its longest frame and the draws its budget left skipped; `vka_gfx_pipeline_now` returns none past the frame's budget | as above |
-| `docs/env_switches.tsv` | 2 rows, 1 changed | `DM_VK_PSO_SYNC_GAP`, `DM_VK_PSO_SYNC_NEW_MS`; `DM_VK_PSO_SYNC_PASS` | generated table, rows by hand |
-
-Left as it was: a target drawn once whose missing pipelines take more than the frame's budget is still partly skipped, and so is one drawn in three or more frames in a
-row and then kept. Upstream candidate: yes, as a whole (upstream's asynchronous pipelines skip the same draws).
+Left as it was: a kept result drawn into a larger target (a cube map, a shadow atlas, a texture drawn once with scene geometry) is skipped while its pipeline is
+made. Upstream candidate: yes, as a whole (upstream's asynchronous pipelines skip the same draws).
 
 ### Round 10, texture copies go by the textures' formats (2026-11-15)
 
