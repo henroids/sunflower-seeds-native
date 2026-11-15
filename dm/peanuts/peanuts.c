@@ -705,9 +705,28 @@ static void *rt_thread(void *arg) {
     return NULL;
 }
 
+// A pack made before the rewriter wrote main.orig.bin gets the file at the game's start, on a thread of the game's screen (dev.peanuts.pack.PackUpgrade: seconds, from the
+// game's own file and main.changed.tsv). Its unfinished file, main.orig.bin.part, is made before the host starts and is gone (renamed, or removed when the file cannot be
+// made) when the work ends: while it is there and less than a minute old the runtime does not start, so rt_orig_load finds the file on the first start already. The game
+// is not held, only the companion comes that much later. Looked at ten times a second at most; a file left by a start that was killed is older and holds nothing
+static int rt_orig_pending(void) {
+    static int64_t last; static int pending;
+    const char *d = dm_main_dir(); if (!d) return 0;
+    struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m);
+    int64_t now = (int64_t)m.tv_sec * 1000 + m.tv_nsec / 1000000;
+    if (last && now - last < 100) return pending;
+    last = now;
+    char p[900]; struct stat st; snprintf(p, sizeof p, "%s/main.orig.bin.part", d);
+    int was = pending;
+    pending = !stat(p, &st) && time(NULL) - st.st_mtime < 60;
+    if (pending && !was) __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion: main.orig.bin is being made for this pack: the runtime starts when it is there");
+    return pending;
+}
+
 static void rt_tick(void) {
     if (!g_rt) {
         if (g_rt_tried || g_nmod <= 0) return;
+        if (rt_orig_pending()) return;
         rt_start();
         if (!g_rt) return;
         { pthread_condattr_t ca; pthread_condattr_init(&ca); pthread_condattr_setclock(&ca, CLOCK_MONOTONIC); pthread_cond_init(&g_tick_cv, &ca); pthread_condattr_destroy(&ca); }   // the tick's waits on the monotonic clock: a wall-clock step cannot stall the page (unused until the thread below starts)

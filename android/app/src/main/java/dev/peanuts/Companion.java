@@ -66,6 +66,8 @@ public final class Companion {
     /** Starts the game hold and, once the host has decided whether a companion loaded, shows it (or leaves the display alone). Keeps trying as displays come and go. */
     public static void start(Activity game, String gameName) {
         if (listener != null) return;
+        // A pack from before main.orig.bin gets the file now, on a thread of its own, before the host starts: the runtime waits for it (dev.peanuts.pack.PackUpgrade)
+        try { dev.peanuts.pack.PackUpgrade.atGameStart(game); } catch (RuntimeException e) { Log.w(TAG, "pack upgrade: " + e); }
         stopped = false;
         allowed = false;
         away = false;

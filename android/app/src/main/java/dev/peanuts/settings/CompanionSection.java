@@ -72,6 +72,7 @@ public final class CompanionSection {
         boolean installedKnown;
         String installedPkg, installedVersion;
         boolean installedVerified;
+        String[] packNotice;   // {title, sentence} when the pack lacks what the installed companion needs of it (dev.peanuts.pack.PackUpgrade.notice), else null
 
         Rows(Context c, SectionUi ui, String titleId, File root, LinearLayout box) {
             this.c = c; this.ui = ui; this.titleId = titleId; this.root = root; this.box = box;
@@ -106,6 +107,7 @@ public final class CompanionSection {
             installedPkg = item != null ? item.packageName : installed.isEmpty() ? null : installed.get(0);
             installedVersion = installedPkg == null ? null : Companions.installedVersion(root, installedPkg);
             installedVerified = installedPkg != null && installedVersion != null && Companions.installedVerified(root, installedPkg);
+            packNotice = installedPkg == null || installedVersion == null || root == null ? null : dev.peanuts.pack.PackUpgrade.notice(c, titleId, new File(root, installedPkg));
             installedKnown = true;
         }
 
@@ -132,6 +134,8 @@ public final class CompanionSection {
             if (hasVersions) SectionUi.add(buttons, ui.button("Versions", SectionUi.QUIET, v -> dev.peanuts.ui.CompanionVersions.open((Activity) c, titleId, () -> { installedKnown = false; render(); })), !busy);
             buttonsRow = buttons.getChildCount() > 0 ? buttons : null;
             if (buttonsRow != null) body.addView(buttons, SectionUi.lp(0, 0));
+            // A pack built before the app kept the game's original code, which the last start could not add: the companion works with less, and only this row says so
+            if (have != null && packNotice != null) body.addView(ui.setting("⚠️", packNotice[0], packNotice[1], null), SectionUi.lp(0, 0));
             String ss = secondScreen(c, titleId);
             body.addView(ui.setting("📱", "Second screen", ss.equals(OFF) ? "Off: the companion does not show" : "Physical: the companion shows on the second display",
                     v -> new AlertDialog.Builder(c).setTitle("Second screen").setSingleChoiceItems(new String[] {"Physical display", "Off"}, ss.equals(OFF) ? 1 : 0, (d, w) -> {
