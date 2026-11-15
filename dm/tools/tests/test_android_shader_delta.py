@@ -173,11 +173,11 @@ class Manifest(unittest.TestCase):
 
     def test_leaks_refused(self):
         t = delta.format_manifest('76b097613f15', GAME, '5dd843bed8d1', self.H)
-        for extra in ('/home/someone/game\t1', 'name\tDonkey', '00000000000000cc\t0123456789abcdeg', '00000000000000cc\t0123', 'version\t76b097613f15', 'from\tabc\t1'):
+        for extra in ('/data/someone/game\t1', 'name\tDonkey', '00000000000000cc\t0123456789abcdeg', '00000000000000cc\t0123', 'version\t76b097613f15', 'from\tabc\t1'):
             self.assertTrue(delta.manifest_problems(t + extra + '\n'), extra)
         self.assertTrue(delta.manifest_problems(t.replace('# The Android', '# /home/x The Android')))
         self.assertTrue(delta.manifest_problems(t.replace(f'game\t{GAME}\n', '')))
-        with self.assertRaises(ValueError): delta.format_manifest('76b097613f15', GAME, '/home/x/inputs', self.H)
+        with self.assertRaises(ValueError): delta.format_manifest('76b097613f15', GAME, '/data/x/inputs', self.H)
 
     def test_committed_manifests(self):
         """Every profile's vk_delta.tsv holds keys and hashes only, of that profile's shader map. One of an older version than this tree's is stale (a full build of this
