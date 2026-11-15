@@ -18,7 +18,7 @@ extern "C" {
 
 typedef struct pn_nup pn_nup;
 
-// 1 when spec names a .nup ("<file>.nup", "<file>.nup:<selector>[/romfs]")
+// 1 when spec names a .nup ("<file>.nup", "<file>.nup:<selector>[/romfs]") or the game's dumps ("nsp:<file>[|<file>]", peanuts_nsp.h: one layer, read where they are)
 int pn_nup_is_spec(const char *spec);
 // Opens the RomFS layers spec names; NULL with the reason in why (the first layer must open; a missing base layer is not an error)
 pn_nup *pn_nup_open(const char *spec, char *why, size_t wn);

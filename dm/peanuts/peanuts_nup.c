@@ -15,6 +15,7 @@
 #define LOG(...) do { fprintf(stderr, "[peanuts nup] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 #endif
 #include "../host/nup_image.h"
+#include "peanuts_nsp.h"   // a dump spec (DM_ROMFS=nsp:...) is one layer: the image over the dumps, whose RomFS is whole (the update's patch over the base)
 
 enum { LAYERS = 2 };   // the spec's package, then the container's base
 typedef struct { romfs_img *m; const img_ent *e; const uint8_t *z; } handle_t;   // z: the decompressed bytes a zstd entry's open holds (nup_z_get), else NULL
@@ -26,7 +27,7 @@ struct pn_nup {
     char what[320];
 };
 
-int pn_nup_is_spec(const char *spec) { return nup_is_spec(spec); }
+int pn_nup_is_spec(const char *spec) { return nup_is_spec(spec) || pn_nsp_is_spec(spec); }
 
 // The entry a RomFS path names in an image (hle_fs.c img_find: a binary search of each directory's sorted children); -1 when there is none
 static int64_t find(const romfs_img *m, const char *rest) {
@@ -55,6 +56,15 @@ static int64_t find(const romfs_img *m, const char *rest) {
 
 pn_nup *pn_nup_open(const char *spec, char *why, size_t wn) {
     char file[1100], sel[128];
+    if (pn_nsp_is_spec(spec)) {   // the host's rom: mount has checked the dumps against the running game (hle_fs.c img_open): no check here
+        pn_nup *n = calloc(1, sizeof *n);
+        if (!n) { snprintf(why, wn, "out of memory"); return NULL; }
+        pthread_mutex_init(&n->lock, NULL);
+        if (!(n->layer[0] = pn_nsp_open(spec, 0, NULL, why, wn))) { pn_nup_close(n); return NULL; }
+        n->nlayers = 1;
+        snprintf(n->what, sizeof n->what, "dumps: %.240s (%llu entries)", pn_nsp_describe(n->layer[0]), (unsigned long long)n->layer[0]->n);
+        return n;
+    }
     if (!nup_split(spec, file, sizeof file, sel, sizeof sel)) { snprintf(why, wn, "not a .nup spec"); return NULL; }
     pn_nup *n = calloc(1, sizeof *n);
     if (!n) { snprintf(why, wn, "out of memory"); return NULL; }
@@ -129,6 +139,7 @@ int64_t pn_nup_romfs_read(void *user, int handle, uint64_t off, void *buf, uint6
     if (len > x.e->b - off) len = x.e->b - off;
     if (!len) return 0;
     if (x.z) { memcpy(buf, x.z + off, (size_t)len); return (int64_t)len; }
+    if (x.e->flags & IMG_ENT_NSP) return pn_nsp_read(x.m, x.e, off, buf, (size_t)len) ? (int64_t)len : -1;   // a file of the dumps: the section reader
     if (!romfs_image_read(x.m->fd, buf, (size_t)len, (off_t)(x.e->a + off))) return -1;
     return (int64_t)len;
 }

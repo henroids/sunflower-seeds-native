@@ -15,6 +15,7 @@
 #include <stdatomic.h>
 #include "romfs_image.h"
 #include "nup_image.h"
+#include "../peanuts/peanuts_nsp.h"   // PEANUTS: DM_ROMFS=nsp:<dump>[|<dump>]: the RomFS read straight from the player's dumps (an image whose file entries have IMG_ENT_NSP)
 #include "save_sync.h"
 
 // Every take-over in this file runs on the big host stack (hle_bigstack.c): path buffers are sized by PATH_MAX and one file open takes 6-7 KB of stack, while a game's save thread can have as little as 8 KB (Super Mario 3D World + Bowser's Fury)
@@ -146,6 +147,16 @@ static int rm_tree(const char *p);
 // Reads and checks a RomFS image's header and index; NULL (and a red line) when it is not a complete image. A NUP container package
 // ("<file>.nup[:<selector>]", nup_image.h, android/NUP.md) opens as an image too
 static romfs_img *img_open(const char *path) {
+    // PEANUTS begin: a dump spec (peanuts_nsp.h) opens as an image too. The dumps must be the running game's: its application ID and its main module's build ID
+    // are checked there. Whatever cannot be read this way is one red line here and no mount (the callers fail as for a .nup that does not open)
+    if (pn_nsp_is_spec(path)) {
+        static uint64_t pid; if (!pid) { const char *e = getenv("DM_PROGRAM_ID"); pid = e ? strtoull(e, NULL, 16) : DM_GAME_PROGRAM_ID; }
+        char why[400] = ""; romfs_img *m = pn_nsp_open(path, pid, dm_main_build(), why, sizeof why);
+        if (m) LOG("fs dumps %s: %llu entries, read where they are (%s)", path, (unsigned long long)m->n, pn_nsp_describe(m));
+        else LOG("[RED] fs dumps %s: %s (errno=%d)", path, why, errno);
+        return m;
+    }
+    // PEANUTS end
     if (nup_is_spec(path)) {
         char why[256] = ""; romfs_img *m = nup_image_open(path, why, sizeof why);
         if (m) LOG("fs NUP %s: %llu entries, %llu compressed files (decompressed when opened, cache %llu MiB)", path, (unsigned long long)m->n,
@@ -252,7 +263,7 @@ static Result mount_ex(const char *name, const char *dir, int ro, int txn, int s
         // A path that is neither is a stale or mistyped one (an old run command still naming the RomFS folder a rebuild replaced with RomFS.img): stop here, not at the game's
         // first failed read (Echoes of Wisdom crashed 0.3 s after nnMain, GitHub issue #615). Add-on content and system data check their own paths before they mount
         const char *bad = NULL;
-        if (nup_is_spec(dir)) { if (!(g_mnt[g_nmnt].img = img_open(dir))) bad = "cannot be used as a NUP package (the log line above says why)"; }
+        if (nup_is_spec(dir) || pn_nsp_is_spec(dir)) { if (!(g_mnt[g_nmnt].img = img_open(dir))) bad = "cannot be used as a NUP package or as dumps (the log line above says why)"; }   // PEANUTS: or a dump spec (peanuts_nsp.h)
         else if (stat(dir, &ist) || !(S_ISDIR(ist.st_mode) || S_ISREG(ist.st_mode))) bad = "are missing: neither a folder nor a RomFS image";
         else if (S_ISREG(ist.st_mode) && !(g_mnt[g_nmnt].img = img_open(dir))) bad = "are not a complete RomFS image";
         if (bad && soft) {
@@ -466,7 +477,10 @@ static Result err_res(const char *op, const char *path) {
 HLE_FORCE("_ZN2nn2fs22QueryMountRomCacheSizeEPm", "fsp-srv; rom reads the host directory directly, the cache gets only the minimum size", Result, h_fs_QueryRomCache, size_t *out) { *out = 0x1000; return RES_OK; }
 HLE_FORCE("_ZN2nn2fs8MountRomEPKcPvm", "fsp-srv; rom → host RomFS directory", Result, h_fs_MountRom, const char *name, void *cache, size_t sz) { dm_thread_service_request();
     (void)cache; (void)sz; char b[1024];
-    Result r = mount(name, envdir("DM_ROMFS", "romfs", b, sizeof b), 1);
+    // PEANUTS: DM_NSP_ROMFS=<base dump>[|<update dump>] mounts rom from the dumps (peanuts_nsp.h, "nsp:" before the value) in place of what DM_ROMFS names: the
+    // way to try a game from its dumps before the launcher sets DM_ROMFS=nsp:... itself (its env files do not take DM_ROMFS, a path only the launcher sets)
+    char nb[1100]; const char *nd = getenv("DM_NSP_ROMFS"); if (nd && *nd) snprintf(nb, sizeof nb, "nsp:%s", nd);
+    Result r = mount(name, nd && *nd ? nb : envdir("DM_ROMFS", "romfs", b, sizeof b), 1);
     if (r == RES_OK && getenv("DM_ROMFS_OVERLAY")) {
         PATH_LOCK();
         for (int i = 0; i < g_nmnt; i++) if (!strcmp(g_mnt[i].name, name)) {
@@ -502,7 +516,7 @@ static void romfs_tables(const char *dir, size_t *ndir, size_t *dbytes, size_t *
 static size_t romfs_work_size(const char *dir) {
     size_t ndir = 1, dbytes = 0x18, nfile = 0, fbytes = 0;   // the root directory has an entry with an empty name
     struct stat st;
-    if (nup_is_spec(dir) || (!stat(dir, &st) && S_ISREG(st.st_mode))) {
+    if (nup_is_spec(dir) || pn_nsp_is_spec(dir) || (!stat(dir, &st) && S_ISREG(st.st_mode))) {   // PEANUTS: or a dump spec (peanuts_nsp.h)
         romfs_img *m = img_open(dir);
         if (!m) return 0x1000;
         for (uint64_t k = 1; k < m->n; k++) {
@@ -523,6 +537,14 @@ static int aoc_dir(char *dir, size_t n, int index) {
         char t[512]; ssize_t L = readlink(dir, t, sizeof t - 1); int fd;
         if (L > 0 && (t[L] = 0, nup_fd_spec(t, &fd) > 0)) return snprintf(dir, n, "%s:aoc/%d", t, index) < (int)n;
     }
+    // PEANUTS begin: <index>.nsp: the add-on's dump (NSP or XCI) or a link to it, read where it is (peanuts_nsp.h "nsp:<file>|aoc/<index>"); a link whose target is
+    // fd:<n>/<name> names the launcher's descriptor of a dump picked with the system file picker, as for a .nup above
+    if (base && *base && snprintf(dir, n, "%s/%d.nsp", base, index) < (int)n) {
+        if (!stat(dir, &st) && S_ISREG(st.st_mode)) return snprintf(dir, n, "nsp:%s/%d.nsp|aoc/%d", base, index, index) < (int)n;
+        char t[512]; ssize_t L = readlink(dir, t, sizeof t - 1); int fd;
+        if (L > 0 && (t[L] = 0, nup_fd_spec(t, &fd) > 0)) return snprintf(dir, n, "nsp:%s|aoc/%d", t, index) < (int)n;
+    }
+    // PEANUTS end
     if (base && *base && snprintf(dir, n, "%s/%d.img", base, index) < (int)n && !stat(dir, &st) && S_ISREG(st.st_mode)) return 1;
     return base && *base && snprintf(dir, n, "%s/%d", base, index) < (int)n && !stat(dir, &st) && S_ISDIR(st.st_mode);
 }
@@ -535,7 +557,7 @@ int dm_aoc_usable(int index) {
         LOG("[RED] aoc: add-on content %d in DM_AOC_DIR=%s is neither a folder, a RomFS image nor a .nup that is there: the game runs without it", index, base ? base : "unset");
         return 0;
     }
-    if (nup_is_spec(dir) || (!stat(dir, &st) && S_ISREG(st.st_mode))) {
+    if (nup_is_spec(dir) || pn_nsp_is_spec(dir) || (!stat(dir, &st) && S_ISREG(st.st_mode))) {   // PEANUTS: or a dump spec (peanuts_nsp.h)
         romfs_img *m = img_open(dir);   // a red line says why when it does not open
         if (!m) { LOG("[RED] aoc: add-on content %d (%s) cannot be read (the line above says why): the game runs without it", index, dir); return 0; }
         romfs_image_close(m);
@@ -855,6 +877,8 @@ static int64_t img_serve(mount_t *m, int64_t k, const char *path) {
                 nup_z_put(m->img, ent->a);
                 got_header = 1;
             }
+        } else if (ent->flags & IMG_ENT_NSP) {   // PEANUTS: a file of a dump image has no bytes at the image's descriptor (peanuts_nsp.h)
+            got_header = pn_nsp_read(m->img, ent, 0, h, 4);
         } else {
             got_header = romfs_image_read(m->img->fd, h, 4, (off_t)ent->a);
         }
@@ -928,6 +952,22 @@ HLE_FORCE("_ZN2nn2fs8ReadFileEPmNS0_10FileHandleElPvm", "fsp-srv → pread(2)", 
             *out = sz; fs_stat_note(1, f0, sz);
             return RES_OK;
         }
+        // PEANUTS begin: a file of a dump image (peanuts_nsp.h): its bytes come from the NCA section reader (decrypted, patched and decompressed as read), by any
+        // number of threads at once. A read that fails (the dump gone, a damaged block) is a red line, the first eight times, and a failed read to the game.
+        // A destination the graphics layer write-protected again during the read (EFAULT, as in the pread loop below) is prepared and read again
+        if (x->flags & IMG_ENT_NSP) {
+            romfs_img *m = g_mnt[IMG_M(h)].img; uint64_t f0 = now_ns(); int again = 0;
+            dm_guest_write_prepare(buf, sz);
+            while (!pn_nsp_read(m, x, (uint64_t)off, buf, sz)) {
+                if (errno == EFAULT && again++ < 8) { dm_guest_write_prepare(buf, sz); continue; }
+                static _Atomic int said; if (said++ < 8) LOG("[RED] fs ReadFile: cannot read %zu bytes at %lld of a file of the dumps (%s): %s", sz, (long long)off, pn_nsp_describe(m), pn_nsp_last_error());
+                return RES_FAIL;
+            }
+            *out = sz; fs_stat_note(1, f0, sz);
+            if (g_fslog) { pthread_mutex_lock(&g_fslog_lock); fprintf(g_fslog, "%.4f\t%s\t%lld\t%zu\t%p\n", (now_ns() - g_t0_ns) / 1e9, fslog_img_path(h), (long long)off, sz, buf); pthread_mutex_unlock(&g_fslog_lock); }
+            return RES_OK;
+        }
+        // PEANUTS end
     }
     uint64_t fst0 = now_ns();
     dm_guest_write_prepare(buf, sz);   // The destination may be a texture pool page write-protected by the graphics layer: a kernel write to a read-only page returns EFAULT instead of page-faulting, so unprotect and mark dirty first

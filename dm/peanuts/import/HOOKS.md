@@ -12,6 +12,15 @@ That is all the native side needs: the target is `nximport` → `libnximport.so`
 APK like the other shared libraries in the module. The source list lives in this folder's CMakeLists.txt (`NXIMPORT_SOURCES`): a new file there
 (nx_lz4.c, the compressed sections' LZ4 block decoder, 2026-11-12) needs no change upstream.
 
+## android/host/CMakeLists.txt (the reader inside the host library, 2026-11-15)
+
+The host reads a game's RomFS straight from its dumps at run time (`DM_ROMFS=nsp:...`, `dm/peanuts/peanuts_nsp.c`, `peanuts/docs/NSP-DIRECT.md`). For that
+`nx_nca.c`, `nx_crypto.c` and `nx_lz4.c` are also compiled into `libnxhost.so` (the `NSP_C` list between `# PEANUTS begin`/`end`, with `DM_NSP_DIRECT` in the
+host's definitions). Nothing of `nximport.c` (the `.nup` writer), `nx_zip.c` or the JNI goes there, and `libnximport.so` is unchanged. The host's copy is hidden
+by its version script, so the two libraries do not meet. What the run-time reader uses of the internals: `nximport_keys`, `nx_container_open_rt` (by descriptor,
+no read-ahead hint), `nx_container_titles`, `nx_nca_open`, `nx_nca_set_base`, `nx_sec_share` (the shared, locked cache of decoded LZ4 entries),
+`nx_romfs_tree`, `nx_pfs0_tree`, `nx_sec_read_tc`. A new source file the reader needs must be added to `NSP_C` as well as to `NXIMPORT_SOURCES`.
+
 ## Compressed NCA sections (nx_nca.c, nx_lz4.c)
 
 Newer titles (Echoes of Wisdom) compress their RomFS: the fs header's CompressionInfo @0x178 (table offset, size, a BucketTree header) names a table

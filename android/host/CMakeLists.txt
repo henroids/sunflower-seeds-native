@@ -73,6 +73,13 @@ file(GLOB HOST_ANDROID_C CONFIGURE_DEPENDS ${HOST}/android/*.c)
 list(APPEND HOST_C ${HOST_ANDROID_C})
 list(APPEND HOST_C ${ROOT}/dm/peanuts/peanuts.c)   # PEANUTS: the companion's reader (PEANUTS.md)
 list(APPEND HOST_C ${ROOT}/dm/peanuts/peanuts_nup.c)   # PEANUTS: the companion runtime's RomFS provider over a .nup (peanuts_nup.h)
+# PEANUTS begin: the RomFS read straight from the player's dumps (DM_ROMFS=nsp:..., dm/peanuts/peanuts_nsp.h, DM_NSP_DIRECT below): the image over the dumps and
+# the three files of the importer that read them (keys, containers, NCA sections, AES, LZ4; dm/peanuts/import). Their AES and SHA paths for arm64 are picked at
+# run time and carry their own target attributes, so no file needs a flag for them; -O2 as the importer's own build (the cipher and the decoder are the cost of a read)
+set(NSP_C ${ROOT}/dm/peanuts/peanuts_nsp.c ${ROOT}/dm/peanuts/import/nx_nca.c ${ROOT}/dm/peanuts/import/nx_crypto.c ${ROOT}/dm/peanuts/import/nx_lz4.c)
+set_source_files_properties(${NSP_C} PROPERTIES COMPILE_OPTIONS -O2)
+list(APPEND HOST_C ${NSP_C})
+# PEANUTS end
 add_subdirectory(${ROOT}/dm/peanuts/rt ${CMAKE_CURRENT_BINARY_DIR}/peanuts_rt)   # PEANUTS: the companion runtime (C++), linked into every host below
 # dm/gfx without Metal: the NVN front (hle_nvn.c and its C helpers), nn::vi, nvdrv, the CPU texture code; android_stub.c answers for nvn_mtl.m, hle_vk.m, hle_gl.m and the other .m files
 file(GLOB GFX_C CONFIGURE_DEPENDS ${GFX}/*.c ${GFX}/nvn/*.c ${GFX}/tex/*.c ${GFX}/vk_android/*.c)   # vk_android: the NVN → Vulkan replay
@@ -124,7 +131,7 @@ function(nxhost_add tgt game)
   set_target_properties(${tgt} PROPERTIES LINKER_LANGUAGE CXX)   # PEANUTS: link with the C++ driver so libc++ comes in (the host is C)
   target_include_directories(${tgt} PRIVATE ${GEN}/${game} ${GFX}/nvn/include ${TP}/vulkan-headers/include ${TP}/libvpx ${TP}/libvpx/config ${TP}/dav1d/include ${TP}/stb_vorbis ${HOST} ${NX_COOP_VENDOR_DIR})
   # DM_NUP_ZSTD: compressed files of a NUP container are decompressed with zstddec (dm/host/nup_image.h)
-  target_compile_definitions(${tgt} PRIVATE _GNU_SOURCE DM_NUP_ZSTD NX_COOP_VENDOR=${NX_COOP_VENDOR} $<$<BOOL:${NX_LSFG}>:NX_LSFG>)
+  target_compile_definitions(${tgt} PRIVATE _GNU_SOURCE DM_NUP_ZSTD DM_NSP_DIRECT NX_COOP_VENDOR=${NX_COOP_VENDOR} $<$<BOOL:${NX_LSFG}>:NX_LSFG>)   # PEANUTS: DM_NSP_DIRECT (the reader of dumps is linked: NSP_C above)
   # As the Mac host (-O1 -g -Wall -Wno-unused-function). Hidden visibility: the assembly reaches C symbols with adrp, which a shared library allows only for symbols it binds itself
   # -Wno-format: the host prints uint64_t with %ll* (unsigned long long on Darwin, unsigned long on Linux: the same 64 bits)
   target_compile_options(${tgt} PRIVATE -O1 -g -Wall -Wno-unused-function -Wno-format -fvisibility=hidden)
@@ -156,7 +163,7 @@ function(nxhost_add_generic tgt)
   target_link_libraries(${tgt} PRIVATE peanuts_rt)
   set_target_properties(${tgt} PROPERTIES LINKER_LANGUAGE CXX)
   target_include_directories(${tgt} PRIVATE ${GEN_INC} ${GEN} ${PROFILE_DIR} ${GFX}/nvn/include ${TP}/vulkan-headers/include ${TP}/libvpx ${TP}/libvpx/config ${TP}/dav1d/include ${TP}/stb_vorbis ${HOST} ${NX_COOP_VENDOR_DIR})   # (the co-op module, as the per-title hosts)
-  target_compile_definitions(${tgt} PRIVATE _GNU_SOURCE DM_NUP_ZSTD NX_COOP_VENDOR=${NX_COOP_VENDOR} $<$<BOOL:${NX_LSFG}>:NX_LSFG>)
+  target_compile_definitions(${tgt} PRIVATE _GNU_SOURCE DM_NUP_ZSTD DM_NSP_DIRECT NX_COOP_VENDOR=${NX_COOP_VENDOR} $<$<BOOL:${NX_LSFG}>:NX_LSFG>)   # PEANUTS: DM_NSP_DIRECT (the reader of dumps is linked: NSP_C above)
   target_compile_options(${tgt} PRIVATE -O1 -g -Wall -Wno-unused-function -Wno-format -fvisibility=hidden)
   file(GLOB VKA_C ${GFX}/vk_android/*.c)
   set_source_files_properties(${VKA_C} PROPERTIES COMPILE_OPTIONS -O2)

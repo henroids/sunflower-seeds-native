@@ -27,8 +27,11 @@ int nx_hex(const char *s, uint8_t *out, size_t n);       // exactly 2n hex digit
 
 // ---- containers
 typedef struct NxEntry { char name[0x100]; uint64_t off, size; } NxEntry;   // off: in the file
-typedef struct NxContainer { int fd; char path[1024]; int kind; /* 0 nsp 1 xci 2 bare nca */ NxEntry *e; int n; NxTitleKey *tik; int ntik; } NxContainer;
+typedef struct NxContainer { int fd; char path[1024]; int kind; /* 0 nsp 1 xci 2 bare nca */ NxEntry *e; int n; NxTitleKey *tik; int ntik; int personal; /* tickets passed over: personalized (their title key is wrapped for one console) */ } NxContainer;
 int nx_container_open(NxContainer *c, const char *path);
+// The same for a reader that stays open while a game runs (dm/peanuts/peanuts_nsp.c): no sequential read-ahead hint (its reads are random), and with fd >= 0 the
+// container reads a duplicate of that descriptor (the caller keeps its own; path is then only the name in messages)
+int nx_container_open_rt(NxContainer *c, const char *path, int fd);
 void nx_container_close(NxContainer *c);
 const NxEntry *nx_container_find(const NxContainer *c, const char *name);
 int nx_pread_all(int fd, void *buf, size_t n, uint64_t off);   // 0 ok (short read = error)
@@ -46,7 +49,7 @@ typedef struct NxCompEntry { uint64_t virt, end, phys; uint32_t psize; uint8_t t
 // a reader's scratch for compressed sections: the last decompressed LZ4 entry (cached = its index in comp->e) and the compressed bytes' buffer.
 // One per thread: nx_sec_read_tc(..., cache) with a thread's own; NULL uses the section's built-in one (single-threaded callers). Free with nx_comp_cache_free.
 typedef struct NxCompCache { const struct NxComp *comp; uint8_t *out, *in; size_t outcap, incap; uint32_t cached; } NxCompCache;
-typedef struct NxComp { NxCompEntry *e; uint32_t n; uint64_t total, table_off; NxCompCache cache; } NxComp;
+typedef struct NxComp { NxCompEntry *e; uint32_t n; uint64_t total, table_off; NxCompCache cache; int shared; /* nx_sec_share */ } NxComp;
 void nx_comp_cache_free(NxCompCache *c);
 typedef struct NxSection {
     int present, fs_type /* NX_FS_ROMFS 0, NX_FS_PFS0 1 */, hash_type, crypt_type /* 1 none 2 xts 3 ctr 4 bktr */;
@@ -76,6 +79,15 @@ int nx_sec_read_tc(NxNca *n, int sec, uint64_t off, void *buf, size_t len, NxCom
 int nx_sec_read_raw(NxNca *n, int sec, uint64_t off, void *buf, size_t len);   // the same without the decompression (the bytes the hash layer covers)
 // Loads a compressed section's table now (it is otherwise loaded on the first read, which is not thread-safe). 0 ok; a plain section: nothing to do.
 int nx_sec_prepare(NxNca *n, int sec);
+// A run-time reader's cache of decoded LZ4 entries: one for the process, shared by every section that asked for it and by every thread (8 shards, each with its
+// own lock and its least recently used entries; a read that covers an entry whole decodes straight into the caller's buffer and never enters it). NX_SHCACHE_BYTES
+// is its size: 16 MiB did as well as 64 MiB on a replay of Echoes of Wisdom, and 4 MiB nearly as well.
+// nx_sec_share: prepares the section and, when it is compressed, moves its partial reads to that cache; after it nx_sec_read / nx_sec_read_tc(..., NULL) on the
+// section write nothing of its state and may run on any number of threads at once (a plain section's reads always may).
+#define NX_SHCACHE_BYTES (16u << 20)
+int nx_sec_share(NxNca *n, int sec);
+void nx_shcache_budget(size_t bytes);   // the tests: another size (entries held beyond it go as their shards are next written)
+void nx_shcache_stats(uint64_t *hits, uint64_t *misses, uint64_t *held, uint64_t *entries);   // any pointer may be NULL
 // Chunking a read of [off, want_end) of a section (want_end <= limit): an end at or after want_end that does not split an LZ4 entry when one can be found
 // before limit (so parallel readers never decompress one entry twice), else want_end. A plain section: want_end.
 uint64_t nx_sec_chunk_end(NxNca *n, int sec, uint64_t off, uint64_t want_end, uint64_t limit);

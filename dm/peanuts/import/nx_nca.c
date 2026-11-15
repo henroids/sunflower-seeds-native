@@ -3,20 +3,27 @@
 // Atmosphère's fssystem (as vendored by yuzu/Eden: fssystem_nca_header.h, fssystem_compressed_storage.h, fssystem_nca_file_system_driver.cpp) for the compression layer.
 // Threads: once a section is set up (nx_nca_open, nx_nca_set_base, nx_sec_prepare) its reads only touch read-only state plus the caller's NxCompCache,
 // so nx_sec_read_tc / nx_node_read_tc may run on several threads at once (each with its own cache); the trees and nx_sec_read (built-in cache) are single-threaded.
+// A section given to the shared cache (nx_sec_share, the run-time reader) is read by any number of threads with no cache of their own: nothing of it is written then.
 #define _FILE_OFFSET_BITS 64
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include "nximport.h"
 #include "nx_internal.h"
 #include <ctype.h>
 #include <errno.h>
 #include <stdatomic.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/uio.h>
+#endif
 #include <zlib.h>
 
 static _Thread_local char nx_errbuf[512];
@@ -132,24 +139,34 @@ static int load_tickets(NxContainer *c) {
             if (body + 0x170 <= e->size && t[body + 0x141] == 0) {   // a common ticket: the title key block holds the key in the clear
                 NxTitleKey tk; memcpy(tk.key, t + body + 0x40, 16); memcpy(tk.rights, t + body + 0x160, 16);
                 NxTitleKey *nt = realloc(c->tik, sizeof *nt * (size_t)(c->ntik + 1)); if (nt) { c->tik = nt; c->tik[c->ntik++] = tk; }
-            }
+            } else if (body + 0x170 <= e->size) c->personal++;   // a personalized ticket: counted, so a reader can say why a title key is missing
         }
         free(t);
     }
     return 0;
 }
 
-int nx_container_open(NxContainer *c, const char *path) {
+// fd < 0: path is opened; else a duplicate of fd is read. stream: the importer's sequential read-ahead hint (a game's reads are random: none)
+static int container_open(NxContainer *c, const char *path, int fd, int stream) {
     memset(c, 0, sizeof *c); c->fd = -1;
     snprintf(c->path, sizeof c->path, "%s", path);
-    c->fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) c->fd = open(path, O_RDONLY | O_CLOEXEC);
+    else {
+#ifdef F_DUPFD_CLOEXEC
+        c->fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+#else
+        c->fd = dup(fd);
+#endif
+    }
     if (c->fd < 0) { nx_err("cannot open %s: %s", path, strerror(errno)); return -1; }
     struct stat st; if (fstat(c->fd, &st) || !S_ISREG(st.st_mode)) { nx_err("%s is not a file", path); goto fail; }
+    if (stream) {
 #ifdef POSIX_FADV_SEQUENTIAL
-    (void)posix_fadvise(c->fd, 0, 0, POSIX_FADV_SEQUENTIAL);   // the importer streams: a larger readahead window
+        (void)posix_fadvise(c->fd, 0, 0, POSIX_FADV_SEQUENTIAL);   // the importer streams: a larger readahead window
 #elif defined(F_RDAHEAD)
-    (void)fcntl(c->fd, F_RDAHEAD, 1);   // macOS has no posix_fadvise: its readahead switch (on by default; asked for all the same)
+        (void)fcntl(c->fd, F_RDAHEAD, 1);   // macOS has no posix_fadvise: its readahead switch (on by default; asked for all the same)
 #endif
+    }
     uint8_t h[0x400]; if ((uint64_t)st.st_size < 0x400) { nx_err("%s: too small", path); goto fail; }
     if (nx_pread_all(c->fd, h, sizeof h, 0)) goto fail;
     if (!memcmp(h, "PFS0", 4)) { c->kind = 0; if (read_fs0(c, 0, 0, NULL)) goto fail; }
@@ -178,6 +195,8 @@ int nx_container_open(NxContainer *c, const char *path) {
 fail:
     nx_container_close(c); return -1;
 }
+int nx_container_open(NxContainer *c, const char *path) { return container_open(c, path, -1, 1); }
+int nx_container_open_rt(NxContainer *c, const char *path, int fd) { return container_open(c, path, fd, 0); }
 
 void nx_container_close(NxContainer *c) { if (c->fd >= 0) close(c->fd); c->fd = -1; free(c->e); c->e = NULL; c->n = 0; free(c->tik); c->tik = NULL; c->ntik = 0; }
 
@@ -192,23 +211,37 @@ static void ctr_for(uint8_t ctr[16], const uint8_t tmpl[16], uint64_t abs_off) {
     for (int j = 0; j < 8; j++) { ctr[15 - j] = (uint8_t)o; o >>= 8; }
 }
 
+// Up to three pieces that lie one after the other in the file, in one system call where the system has preadv (Linux, Android); a short or failed
+// read is done again piece by piece (nx_pread_all loops and names the error)
+typedef struct NxIov { uint8_t *p; size_t n; } NxIov;
+static int preadv_all(int fd, const NxIov *v, int nv, uint64_t off) {
+#ifdef __linux__
+    struct iovec io[3]; size_t total = 0; ssize_t r;
+    for (int i = 0; i < nv; i++) { io[i].iov_base = v[i].p; io[i].iov_len = v[i].n; total += v[i].n; }
+    do r = preadv(fd, io, nv, (off_t)off); while (r < 0 && errno == EINTR);
+    if (r == (ssize_t)total) return 0;
+#endif
+    for (int i = 0; i < nv; i++) { if (nx_pread_all(fd, v[i].p, v[i].n, off)) return -1; off += v[i].n; }
+    return 0;
+}
+
 // Plain CTR bytes of the NCA at absolute offset abs (whole file positions), counter template tmpl, into buf; ctr_read_at: the bytes at file position abs decrypted with the
 // counter of position cabs (PEANUTS: a sparse section's data lies elsewhere in the body than the virtual position its counter counts; the two differ by a multiple of 16)
 static int ctr_read_at(NxNca *n, const uint8_t tmpl[16], uint64_t abs, uint64_t cabs, uint8_t *buf, size_t len) {
     if ((abs ^ cabs) & 15) { nx_err("%s: data at %#llx with the counter of %#llx: not 16-byte aligned to each other", n->id, (unsigned long long)abs, (unsigned long long)cabs); return -1; }
-    while (len) {
-        uint64_t blk = abs & ~15ull, cblk = cabs & ~15ull; size_t in = (size_t)(abs - blk);
-        if (in || len < 16) {
-            uint8_t t[16], ctr[16]; if (nx_pread_all(n->fd, t, 16, n->base_off + blk)) return -1;
-            ctr_for(ctr, tmpl, cblk); nx_aes_ctr(&n->key, ctr, t, t, 16);
-            size_t k = 16 - in; if (k > len) k = len; memcpy(buf, t + in, k); buf += k; abs += k; cabs += k; len -= k;
-        } else {
-            size_t k = len & ~15ull; uint8_t ctr[16];
-            if (nx_pread_all(n->fd, buf, k, n->base_off + abs)) return -1;
-            ctr_for(ctr, tmpl, cabs); nx_aes_ctr(&n->key, ctr, buf, buf, k);
-            buf += k; abs += k; cabs += k; len -= k;
-        }
-    }
+    if (!len) return 0;
+    // The 16-byte blocks that cover [abs, abs + len) in one read: a first block the range begins inside (hb), the whole blocks straight into buf, a last block it
+    // ends inside (tb). (A read that began or ended off a block boundary took one or two 16-byte reads of its own: a system call each on a game's small reads.)
+    uint8_t hb[16], tb[16], ctr[16]; size_t in = (size_t)(abs & 15), h = in ? 16 - in : 0; if (h > len) h = len;
+    size_t mid = (len - h) & ~(size_t)15, t = len - h - mid; uint64_t blk = abs - in;
+    NxIov v[3]; int nv = 0;
+    if (in) { v[nv].p = hb; v[nv++].n = 16; }
+    if (mid) { v[nv].p = buf + h; v[nv++].n = mid; }
+    if (t) { v[nv].p = tb; v[nv++].n = 16; }
+    if (preadv_all(n->fd, v, nv, n->base_off + blk)) return -1;
+    if (in) { ctr_for(ctr, tmpl, cabs - in); nx_aes_ctr(&n->key, ctr, hb, hb, 16); memcpy(buf, hb + in, h); }
+    if (mid) { ctr_for(ctr, tmpl, cabs + h); nx_aes_ctr(&n->key, ctr, buf + h, buf + h, mid); }
+    if (t) { ctr_for(ctr, tmpl, cabs + h + mid); nx_aes_ctr(&n->key, ctr, tb, tb, 16); memcpy(buf + h + mid, tb, t); }
     return 0;
 }
 static int ctr_read(NxNca *n, const uint8_t tmpl[16], uint64_t abs, uint8_t *buf, size_t len) { return ctr_read_at(n, tmpl, abs, abs, buf, len); }
@@ -426,7 +459,64 @@ fail:
 }
 
 void nx_comp_cache_free(NxCompCache *c) { free(c->out); free(c->in); memset(c, 0, sizeof *c); }
-static void comp_free(NxComp *c) { if (!c) return; free(c->e); nx_comp_cache_free(&c->cache); free(c); }
+
+// ---- the shared cache of decoded entries (nx_internal.h nx_sec_share). An entry is (its section's table, its index there); it lives in the shard its index
+// picks, so entries read one after the other spread over the shards and two threads meet on a lock only when they read entries of one shard at the same moment.
+// A shard holds at most SHC_SLOTS entries and its share of the budget; the least recently used go first. A hit copies out under the shard's lock (an entry is
+// 64 KiB at most in the titles seen: microseconds); a miss decodes outside any lock, so two threads that miss the same entry at once both decode it and the
+// second result is dropped.
+enum { SHC_SHARDS = 8, SHC_SLOTS = 128 };   // 1024 entries: 16 MiB of entries of 16 KiB, the mean of those Echoes of Wisdom reads in part
+typedef struct ShcSlot { const NxComp *comp; uint32_t idx; size_t size; uint8_t *buf; uint64_t used; } ShcSlot;
+static struct ShcShard { pthread_mutex_t lock; ShcSlot slot[SHC_SLOTS]; size_t held; uint64_t clock; } shc[SHC_SHARDS] = {
+    { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER },
+    { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER }, { .lock = PTHREAD_MUTEX_INITIALIZER } };
+static _Atomic size_t shc_budget = NX_SHCACHE_BYTES;
+static _Atomic uint64_t shc_hits, shc_misses;
+static struct ShcShard *shc_shard(const NxComp *c, uint32_t idx) { return &shc[(idx + (uint32_t)((uintptr_t)c >> 6)) % SHC_SHARDS]; }
+static void shc_drop(struct ShcShard *sh, ShcSlot *x) { sh->held -= x->size; free(x->buf); memset(x, 0, sizeof *x); }
+// 1: bytes [off, off + k) of the entry copied into buf; 0: the entry is not held
+static int shc_get(const NxComp *c, uint32_t idx, size_t off, uint8_t *buf, size_t k) {
+    struct ShcShard *sh = shc_shard(c, idx); int hit = 0;
+    pthread_mutex_lock(&sh->lock);
+    for (int i = 0; i < SHC_SLOTS; i++) { ShcSlot *x = &sh->slot[i]; if (x->buf && x->comp == c && x->idx == idx) { memcpy(buf, x->buf + off, k); x->used = ++sh->clock; hit = 1; break; } }
+    pthread_mutex_unlock(&sh->lock);
+    if (hit) shc_hits++; else shc_misses++;
+    return hit;
+}
+// Takes blk (malloc'd, the entry decoded): kept, or freed when the entry is larger than a shard's share or another thread put it in first
+static void shc_put(const NxComp *c, uint32_t idx, uint8_t *blk, size_t size) {
+    struct ShcShard *sh = shc_shard(c, idx); size_t share = shc_budget / SHC_SHARDS;
+    if (size > share) { free(blk); return; }
+    pthread_mutex_lock(&sh->lock);
+    ShcSlot *at = NULL;
+    for (int i = 0; i < SHC_SLOTS; i++) { ShcSlot *x = &sh->slot[i]; if (x->buf && x->comp == c && x->idx == idx) { pthread_mutex_unlock(&sh->lock); free(blk); return; } }
+    for (;;) {   // room: a free slot and the bytes, the least recently used entries going first
+        ShcSlot *old = NULL; at = NULL;
+        for (int i = 0; i < SHC_SLOTS; i++) { ShcSlot *x = &sh->slot[i]; if (!x->buf) { if (!at) at = x; } else if (!old || x->used < old->used) old = x; }
+        if ((at && sh->held + size <= share) || !old) break;
+        shc_drop(sh, old);
+    }
+    at->comp = c; at->idx = idx; at->size = size; at->buf = blk; at->used = ++sh->clock; sh->held += size;
+    pthread_mutex_unlock(&sh->lock);
+}
+static void shc_forget(const NxComp *c) {   // a section closing: its entries go
+    for (int s = 0; s < SHC_SHARDS; s++) {
+        pthread_mutex_lock(&shc[s].lock);
+        for (int i = 0; i < SHC_SLOTS; i++) if (shc[s].slot[i].buf && shc[s].slot[i].comp == c) shc_drop(&shc[s], &shc[s].slot[i]);
+        pthread_mutex_unlock(&shc[s].lock);
+    }
+}
+void nx_shcache_budget(size_t bytes) { shc_budget = bytes; }
+void nx_shcache_stats(uint64_t *hits, uint64_t *misses, uint64_t *held, uint64_t *entries) {
+    uint64_t h = 0, n = 0;
+    for (int s = 0; s < SHC_SHARDS; s++) { pthread_mutex_lock(&shc[s].lock); h += shc[s].held; for (int i = 0; i < SHC_SLOTS; i++) n += shc[s].slot[i].buf != NULL; pthread_mutex_unlock(&shc[s].lock); }
+    if (hits) *hits = shc_hits;
+    if (misses) *misses = shc_misses;
+    if (held) *held = h;
+    if (entries) *entries = n;
+}
+
+static void comp_free(NxComp *c) { if (!c) return; if (c->shared) shc_forget(c); free(c->e); nx_comp_cache_free(&c->cache); free(c); }
 
 static const NxCompEntry *find_comp(const NxComp *c, uint64_t v) {
     uint32_t lo = 0, hi = c->n;
@@ -435,41 +525,52 @@ static const NxCompEntry *find_comp(const NxComp *c, uint64_t v) {
 }
 
 static int comp_read(NxNca *n, int s, uint64_t voff, uint8_t *buf, size_t len, NxCompCache *cc) {   // voff: from the data level's start
-    NxSection *S = &n->sec[s]; NxComp *c = S->comp;
-    if (!cc) cc = &c->cache;
-    if (cc->comp != c) { cc->comp = c; cc->cached = UINT32_MAX; }   // a thread's scratch moving to another section
-    if (voff + len > c->total) { nx_err("%s: read past the decompressed section %d (%llu + %zu > %llu)", n->id, s, (unsigned long long)voff, len, (unsigned long long)c->total); return -1; }
+    NxSection *S = &n->sec[s]; NxComp *c = S->comp; NxCompCache own; int rc = -1;
+    memset(&own, 0, sizeof own);
+    if (!cc) cc = c->shared ? &own : &c->cache;   // shared: this call's own scratch for the compressed bytes, nothing of the section written
+    if (!c->shared && cc->comp != c) { cc->comp = c; cc->cached = UINT32_MAX; }   // a thread's scratch moving to another section
+    if (voff + len > c->total) { nx_err("%s: read past the decompressed section %d (%llu + %zu > %llu)", n->id, s, (unsigned long long)voff, len, (unsigned long long)c->total); goto out; }
     while (len) {
-        const NxCompEntry *e = find_comp(c, voff); if (!e || voff >= e->end) { nx_err("%s: offset %llu is outside the compression table", n->id, (unsigned long long)voff); return -1; }
+        const NxCompEntry *e = find_comp(c, voff); if (!e || voff >= e->end) { nx_err("%s: offset %llu is outside the compression table", n->id, (unsigned long long)voff); goto out; }
         size_t k = len, vs = (size_t)(e->end - e->virt); if (voff + k > e->end) k = (size_t)(e->end - voff);
         if (e->type == 1) memset(buf, 0, k);
-        else if (e->type == 0) { if (nx_sec_read_raw(n, s, S->data_off + e->phys + (voff - e->virt), buf, k)) return -1; }   // stored: in place
-        else {   // LZ4: the whole block; straight into buf when the read covers it all, else kept for the next read
-            uint32_t idx = (uint32_t)(e - c->e); int whole = voff == e->virt && k == vs;
-            if (whole || cc->cached != idx) {
-                if (cc->incap < e->psize) { uint8_t *i = realloc(cc->in, e->psize); if (!i) { nx_err("out of memory"); return -1; } cc->in = i; cc->incap = e->psize; }
-                if (nx_sec_read_raw(n, s, S->data_off + e->phys, cc->in, e->psize)) return -1;
-                uint8_t *dst = buf;
-                if (!whole) {
+        else if (e->type == 0) { if (nx_sec_read_raw(n, s, S->data_off + e->phys + (voff - e->virt), buf, k)) goto out; }   // stored: in place
+        else {   // LZ4: the whole block; straight into buf when the read covers it all, else kept for the next read (the shared cache, or the caller's last entry)
+            uint32_t idx = (uint32_t)(e - c->e); int whole = voff == e->virt && k == vs; size_t at = (size_t)(voff - e->virt);
+            if (!whole && c->shared && shc_get(c, idx, at, buf, k)) {}
+            else if (whole || c->shared || cc->cached != idx) {
+                if (cc->incap < e->psize) { uint8_t *i = realloc(cc->in, e->psize); if (!i) { nx_err("out of memory"); goto out; } cc->in = i; cc->incap = e->psize; }
+                if (nx_sec_read_raw(n, s, S->data_off + e->phys, cc->in, e->psize)) goto out;
+                uint8_t *dst = buf, *blk = NULL;
+                if (!whole && c->shared) { if (!(blk = malloc(vs))) { nx_err("out of memory"); goto out; } dst = blk; }
+                else if (!whole) {
                     cc->cached = UINT32_MAX;
-                    if (cc->outcap < vs) { uint8_t *o = realloc(cc->out, vs); if (!o) { nx_err("out of memory"); return -1; } cc->out = o; cc->outcap = vs; }
+                    if (cc->outcap < vs) { uint8_t *o = realloc(cc->out, vs); if (!o) { nx_err("out of memory"); goto out; } cc->out = o; cc->outcap = vs; }
                     dst = cc->out;
                 }
                 long got = nx_lz4_decompress(cc->in, e->psize, dst, vs);
-                if (got != (long)vs) { nx_err("%s: section %d: LZ4 block at %llu does not decompress to %zu bytes", n->id, s, (unsigned long long)e->phys, vs); return -1; }
-                if (!whole) cc->cached = idx;
-            }
-            if (!whole) memcpy(buf, cc->out + (voff - e->virt), k);
+                if (got != (long)vs) { free(blk); nx_err("%s: section %d: LZ4 block at %llu does not decompress to %zu bytes", n->id, s, (unsigned long long)e->phys, vs); goto out; }
+                if (blk) { memcpy(buf, blk + at, k); shc_put(c, idx, blk, vs); }
+                else if (!whole) { cc->cached = idx; memcpy(buf, cc->out + at, k); }
+            } else memcpy(buf, cc->out + at, k);
         }
         buf += k; voff += k; len -= k;
     }
-    return 0;
+    rc = 0;
+out:
+    if (cc == &own) nx_comp_cache_free(&own);
+    return rc;
 }
 
 int nx_sec_prepare(NxNca *n, int s) {
     if (s < 0 || s > 3 || !n->sec[s].present) { nx_err("%s: no section %d", n->id, s); return -1; }
     NxSection *S = &n->sec[s];
     return S->compressed && !S->comp ? comp_load(n, s) : 0;
+}
+int nx_sec_share(NxNca *n, int s) {
+    if (nx_sec_prepare(n, s)) return -1;
+    if (n->sec[s].comp) n->sec[s].comp->shared = 1;
+    return 0;
 }
 
 int nx_sec_read_tc(NxNca *n, int s, uint64_t off, void *buf, size_t len, NxCompCache *cc) {
