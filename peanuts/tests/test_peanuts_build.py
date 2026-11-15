@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""peanuts/scripts/peanuts_build.py and push-pack.py: the environment's .NET, the games refused up front, --nup as a folder, the icon beside the .nup, the one
-default folder on the device, the device paths push-pack.py refuses, and the scripts' syntax (Python 3.9's; nup-extract.py too)"""
+"""peanuts/scripts/peanuts_build.py and push-pack.py: the environment's .NET, the games refused up front, the Oodle and Unreal games this computer decodes itself
+(pc_decode, and pack_android.py's check of a split the ooz worker decoded), --nup as a folder, the icon beside the .nup, the one default folder on the device, the
+device paths push-pack.py refuses, and the scripts' syntax (Python 3.9's; nup-extract.py too)"""
 import contextlib, importlib.util, io, os, sys, tempfile, tokenize, unittest
 from collections import namedtuple
 from pathlib import Path
@@ -60,6 +61,90 @@ class Build(unittest.TestCase):
             if not tsv.is_file() or marker not in tsv.read_text(encoding='utf-8', errors='replace'): continue
             if os.environ.get('DM_GLSLC_CAPTURE') or os.environ.get('DM_UE_SHADERS'): continue
             with self.assertRaises(SystemExit): pb.check_device_steps(app, 'Game')
+            pb.check_device_steps(app, 'Game', {'DM_UE_DECODE': ''}) if marker == '/ue_shaders/' else None   # the Unreal step done here: not refused
+
+    def decode_case(self, rows, env=None, linux=True, unoodle=('/w/unoodle', ''), nxaes=('/w/pymod', '')):
+        """pc_decode for the made-up profiles {title ID: a shader_map.tsv row} with the builds stubbed -> {title ID: its settings, or the refusal's text}"""
+        keep = {k: os.environ.pop(k, None) for k in ('DM_OODLE_OOZ', 'DM_OODLE_HOST', 'DM_OODLE_MODULES', 'DM_UE_SHADERS', 'PYTHONPATH')}
+        real = pb.REPO, pb.LINUX, pb.build_unoodle, pb.build_nxaes, pb.PC_DECODE
+        out = {}
+        try:
+            with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+                pb.REPO, pb.LINUX, pb.build_unoodle, pb.build_nxaes = Path(d), linux, lambda: unoodle, lambda: nxaes
+                pb.PC_DECODE = {'0100000000000001': True, '0100000000000002': True, '0100000000000003': False}
+                os.environ.update(env or {})
+                for app, row in rows.items():
+                    g = Path(d, 'dm', 'games', app); g.mkdir(parents=True); (g / 'shader_map.tsv').write_text(row)
+                    try: out[app] = pb.pc_decode(app, 'Game')
+                    except SystemExit as e: out[app] = str(e)
+        finally:
+            pb.REPO, pb.LINUX, pb.build_unoodle, pb.build_nxaes, pb.PC_DECODE = real
+            for k, v in keep.items():
+                os.environ.pop(k, None)
+                if v is not None: os.environ[k] = v
+        return out
+
+    ROWS = {'0100000000000001': 'a\tromfs/x.gfpak#1\n', '0100000000000002': 'a\t/ue_shaders/1.ushaderbytecode\n', '0100000000000003': 'a\t/ue_shaders/2.ushaderbytecode\n',
+            '0100000000000004': 'a\t/ue_shaders/3.ushaderbytecode\n'}
+
+    def test_pc_decode(self):
+        """The listed games get the worker and, the Unreal ones, the split's own decode; a game that is not listed gets nothing"""
+        got = self.decode_case(self.ROWS)
+        self.assertEqual(got['0100000000000001'], {'DM_OODLE_OOZ': '/w/unoodle'})
+        self.assertEqual(got['0100000000000002'], {'DM_OODLE_OOZ': '/w/unoodle', 'PYTHONPATH': '/w/pymod', 'DM_UE_DECODE': ''})
+        self.assertEqual(got['0100000000000003'], {'PYTHONPATH': '/w/pymod', 'DM_UE_DECODE': ''})   # an Unreal game without Oodle streams: no worker
+        self.assertEqual(got['0100000000000004'], {})
+
+    def test_pc_decode_not_available(self):
+        """Not Linux: nothing changes. No worker: the Oodle game stops before the import, the Unreal one is left to check_device_steps' refusal. No _nxaes: the same"""
+        self.assertEqual(self.decode_case(self.ROWS, linux=False), {app: {} for app in self.ROWS})
+        got = self.decode_case(self.ROWS, unoodle=(None, 'no C++ compiler'))
+        self.assertTrue(got['0100000000000001'].startswith('[RED] ')); self.assertIn('no C++ compiler', got['0100000000000001']); self.assertIn('Build in the Peanuts app', got['0100000000000001'])
+        self.assertEqual(got['0100000000000002'], {})
+        self.assertEqual(got['0100000000000003'], {'PYTHONPATH': '/w/pymod', 'DM_UE_DECODE': ''})
+        got = self.decode_case(self.ROWS, nxaes=(None, 'no Python.h'))
+        self.assertEqual((got['0100000000000002'], got['0100000000000003']), ({}, {}))
+        # the game's own decoder is set for the Oodle game (a Mac host): the worker is not added
+        got = self.decode_case(self.ROWS, env={'DM_OODLE_HOST': 'h', 'DM_OODLE_MODULES': 'm'}, unoodle=(None, 'x'))
+        self.assertEqual(got['0100000000000001'], {})
+
+    def test_pc_decode_own_worker(self):
+        """DM_OODLE_OOZ already set: that worker, for any game and on any system (the setting stays as it is); a path that is no file stops"""
+        with tempfile.TemporaryDirectory() as d:
+            w = Path(d, 'unoodle'); w.write_text('')
+            got = self.decode_case(self.ROWS, env={'DM_OODLE_OOZ': str(w)}, linux=False, unoodle=(None, 'x'))
+            self.assertEqual(got['0100000000000001'], {})
+            self.assertEqual(got['0100000000000004'], {'PYTHONPATH': '/w/pymod', 'DM_UE_DECODE': ''})
+            got = self.decode_case(self.ROWS, env={'DM_OODLE_OOZ': str(w) + '-none'})
+            self.assertIn('is not a file', got['0100000000000004'])
+
+    def test_real_worker_build(self):
+        """build_unoodle on this machine: the worker, or a reason; never an exception. (peanuts/tests/test_unoodle.py tests the worker itself)"""
+        with contextlib.redirect_stdout(io.StringIO()): exe, why = pb.build_unoodle()
+        if exe is None: self.assertTrue(why)
+        else: self.assertTrue(os.access(exe, os.X_OK))
+
+    def test_ooz_split_checked(self):
+        """scripts/pack_android.py: a split the ooz worker decoded counts only with exactly the profile's keys (but for another build's optional ones)"""
+        try:
+            spec = importlib.util.spec_from_file_location('pack_android', REPO / 'scripts' / 'pack_android.py')
+            pa = importlib.util.module_from_spec(spec); spec.loader.exec_module(pa)
+        except ImportError as e: self.skipTest(f'pack_android.py needs the packer environment ({e.name})')
+        row = lambda k: f'cs_x.bin\t0\tcompute\t{k}\tsrc\n'
+        def check(have, optional=()):
+            with tempfile.TemporaryDirectory() as d:
+                prof, tmp = Path(d, 'profile'), Path(d, 'tmp'); prof.mkdir(); tmp.mkdir()
+                (prof / 'shader_map.tsv').write_text('package\tindex\tstage\tdm_ctl_sha16\tsource\n' + ''.join(row(k) for k in ('k1', 'k2', 'k3')))
+                (tmp / 'shader_map.tsv').write_text('package\tindex\tstage\tdm_ctl_sha16\tsource\n' + ''.join(row(k) for k in have))
+                if optional: (prof / 'shader_optional.tsv').write_text(''.join(f'{k}\t1.0.0\n' for k in optional))
+                g = type('G', (), {'dir': prof, 'id': '0100000000000001'})()
+                with contextlib.redirect_stdout(io.StringIO()) as out: pa.ooz_split_checked('/w/unoodle', g, tmp)
+                return out.getvalue()
+        self.assertIn('all 3 of the profile', check(['k1', 'k2', 'k3']))
+        self.assertIn('all 2 of the profile', check(['k1', 'k2'], optional=['k3']))
+        for have in (['k1', 'k2'], ['k1', 'k2', 'k3', 'k4'], ['k1', 'k2', 'kX']):
+            with self.assertRaises(pa.Error) as c: check(have)
+            self.assertIn('ooz Oodle decoder (/w/unoodle, DM_OODLE_OOZ)', str(c.exception)); self.assertIn('its output is not used', str(c.exception))
 
     def test_nup_folder(self):
         Plan = namedtuple('Plan', 'name app version')

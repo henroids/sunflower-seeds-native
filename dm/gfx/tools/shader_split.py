@@ -2079,7 +2079,8 @@ def oodle(comp, n):
         got = struct.unpack('<Q', p.stdout.read(8))[0]
     except (BrokenPipeError, struct.error): got = None
     if got != n:
-        err.seek(0); red(f'the game\'s decoder in the Mac host failed on a {len(comp)} → {n} byte stream; ---- host output ----\n' + err.read().decode(errors='replace')[-3000:])
+        who = 'the ooz worker (DM_OODLE_OOZ; not the game\'s own decoder)' if os.environ.get('DM_OODLE_OOZ') else 'the game\'s decoder in the Mac host'   # PEANUTS: the message names the decoder that failed
+        err.seek(0); red(f'{who} failed on a {len(comp)} → {n} byte stream; ---- host output ----\n' + err.read().decode(errors='replace')[-3000:])   # PEANUTS: who
     return p.stdout.read(n)
 
 def trinity_shaders(path, rel, packs, out):

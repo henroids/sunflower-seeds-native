@@ -69,7 +69,24 @@ Other inputs: a `.nup` (`... "Game [01006BB00C6F0000][v131072].nup" --push --des
 
 ## Games the builder refuses
 
-A game whose profile (`dm/games/<titleID>/shader_map.tsv`) has `/glslc_capture/` rows (shaders the game compiles with GLSLC at run time, for example Fire Emblem: Three Houses) or `/ue_shaders/` rows (Unreal shader archives, for example Octopath Traveler 0) needs a step that boots the game or runs the phone's decoder. The builder stops before the import with a `[RED]` message and a non-zero exit code; use Build in the Peanuts app on the device, which runs that step there. If you already have the files, set `DM_GLSLC_CAPTURE` or `DM_UE_SHADERS` to the folder that holds them and the check is skipped.
+A game whose profile (`dm/games/<titleID>/shader_map.tsv`) has `/glslc_capture/` rows (shaders the game compiles with GLSLC at run time, for example Fire Emblem: Three Houses) or `/ue_shaders/` rows (Unreal shader archives, for example TRIANGLE STRATEGY) needs a step that boots the game or runs the phone's decoder. The builder stops before the import with a `[RED]` message and a non-zero exit code; use Build in the Peanuts app on the device, which runs that step there. If you already have the files, set `DM_GLSLC_CAPTURE` or `DM_UE_SHADERS` to the folder that holds them and the check is skipped.
+
+## Oodle and Unreal games a Linux PC builds itself
+
+On Linux the builder does that step itself for four games, each checked on a PC against its profile's shader keys:
+
+| Game | What the PC does | Checked |
+|---|---|---|
+| Pokémon Legends: Arceus (`01001F5010DFA000`) | decodes its Oodle Kraken archives with `unoodle` | 12,851 of 12,851 shader keys |
+| FINAL FANTASY RESONANCE (`0100606026F12000`) | decodes its Unreal shader libraries (Oodle Mermaid) with `unoodle` | 73,496 of 73,496 keys; the shader package is the phone's byte for byte |
+| OCTOPATH TRAVELER 0 (`01005270232F2000`) | the same | its 10,596 streams and 10,324 keys; a build from its game files was not run on a PC yet |
+| DRAGON QUEST III HD-2D Remake (`01003E601E324000`) | reads its Unreal shader archives (LZ4, no Oodle) | 47,298 of 47,298 keys |
+
+- **`unoodle`** is a small worker built from the open-source ooz decoder in [`dm/third_party/ooz`](../../dm/third_party/ooz/README.md). It is GPL-3.0-or-later and a program of its own: the builder's tools start it and talk to it over a pipe (`DM_OODLE_OOZ`). The builder compiles it into `peanuts/.build/ooz` the first time such a game is built. It needs x86-64, g++ or clang++, and the `patch` program.
+- The three Unreal games also need the `_nxaes` module (AES for the pak index), which the builder compiles for its own Python into `peanuts/.build/pymod`. It needs gcc or clang and Python's headers (`python3-dev` or `python3-devel`). The split then decodes the archives itself (`DM_UE_DECODE`, into `<TITLE ID>-work/android-shaders/ue_shaders`, reused while the game's paks are the same).
+- **ooz is not the game's own decoder**, and an Oodle stream has no checksum. So the pack is made only if the shader keys that come out of the split are exactly the ones in the game's profile; each key is a hash of its shader's bytes. With one key missing or one key more the build stops with a `[RED]` message that names the ooz decoder, and nothing it decoded is used. The usual cause is game files of another version than the profile's; build on the device then.
+- Where the worker cannot be built (arm64, no compiler), the Unreal games are refused as above and Arceus stops before the import with the reason. On macOS and Windows nothing changes: these games are refused as before. Other games with Oodle-compressed files (for example Pokémon Legends: Z-A, Bayonetta 3) are not on the list, because their decode was not checked on a PC; they still stop at the shader split.
+- `DM_OODLE_OOZ` set by you (a worker you built with `dm/third_party/ooz/build.sh`) is used for any game, with the same key check.
 
 ## .NET
 
@@ -80,7 +97,7 @@ The shader translator needs .NET. The builder points the tools it starts at the 
 - The `.nup` goes beside the first input file, named `<Name> [<TITLE ID>][v<version>].nup`. Characters Windows does not allow in the name become `-`.
 - The title's icon goes beside the `.nup` as `<the .nup's name without .nup>.png` (`nximport_cli icon`, from the base file, else the update). It is written for `.nsp` / `.xci` inputs, also when the `.nup` is reused and only the PNG is missing (`--force-nup` writes it again). A failure is a warning, not an error. `--push` copies it beside the `.nup` on the phone, where the Peanuts library takes it as the game's icon (a `.nup` holds none) when the game has none yet: it must be a PNG of at most 4 MiB, and once the library has an icon for a title it keeps it.
 - The pack goes to `<folder of the .nup>/<TITLE ID>-work/android-pack`.
-- The importer is built into `peanuts/.build/nximport` (git-ignored).
+- The importer is built into `peanuts/.build/nximport`, the Oodle worker into `peanuts/.build/ooz` and `_nxaes` into `peanuts/.build/pymod` (all git-ignored).
 
 ## Status
 

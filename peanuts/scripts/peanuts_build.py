@@ -13,11 +13,14 @@
 #   peanuts_build.py "Dump folder" --dry-run --push                                                                    print the commands, write nothing
 # Keys: --keys, else NX_KEYS, else ~/.switch/prod.keys: the importer needs your own prod.keys (the import only; packs need none).
 # Importer: --importer, else NX_IMPORTER, else built into peanuts/.build/nximport (needs cmake and a C compiler).
+# Oodle and Unreal games (PC_DECODE below), on Linux: the Oodle decoding worker unoodle (dm/third_party/ooz, a GPL-3.0-or-later program of its own, built into
+# peanuts/.build/ooz with a C++ compiler and patch) and, for the Unreal ones, the _nxaes module (peanuts/.build/pymod, a C compiler and Python's headers); the pack
+# step then gets DM_OODLE_OOZ and DM_UE_DECODE. Every other game with such a step, and every other system, is refused as before (peanuts/docs/BUILDER.md).
 # --any-version packs an update the game's profile (dm/games/<titleID>/game.tsv) has no build row for. --force-nup rebuilds a .nup that is already there.
 # The icon: for .nsp/.xci inputs the title's icon is written beside the .nup as "<the .nup's name without .nup>.png" (the app and push-pack.py use it; a failure only warns).
 # Output: the .nup (beside the first input unless --nup) and the pack (<titleID>-work/android-pack beside the .nup, as pack_android.py writes it).
 # --dry-run prints each command instead of importing, packing or pushing; probing and the importer build still run. Errors print [RED] and exit 1.
-import argparse, os, re, shlex, shutil, subprocess, sys, time
+import argparse, os, platform, re, shlex, shutil, subprocess, sys, sysconfig, time
 from collections import namedtuple
 from pathlib import Path
 
@@ -26,7 +29,12 @@ IMPORT_SRC = REPO / 'dm' / 'peanuts' / 'import'
 IMPORT_BUILD = REPO / 'peanuts' / '.build' / 'nximport'
 PACK_SCRIPT = REPO / 'scripts' / 'pack_android.py'
 PUSH_SCRIPT = REPO / 'peanuts' / 'scripts' / 'push-pack.py'
+OOZ_SRC = REPO / 'dm' / 'third_party' / 'ooz'
+OOZ_BUILD = REPO / 'peanuts' / '.build' / 'ooz'
+NXAES_SRC = REPO / 'dm' / 'peanuts' / 'pack_worker' / 'nxaes.c'
+PYMOD_BUILD = REPO / 'peanuts' / '.build' / 'pymod'
 WINDOWS = sys.platform == 'win32'
+LINUX = sys.platform.startswith('linux')
 GAME_EXTS = ('.nsp', '.xci')
 DEVICE_ROOT = '/sdcard/Peanut Roms'   # the default folder on the phone; push-pack.py's --dest default is the same one (the test compares them)
 ENV = dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1')   # the children print UTF-8, unbuffered, on every OS
@@ -228,17 +236,114 @@ STEP_MARKERS = (
 )
 
 
-def check_device_steps(app, name=None):
+# The games whose Oodle or Unreal shader step this computer does itself (Linux only), each one checked on a PC against its profile's shader keys
+# (dm/third_party/ooz/README.md "Checked"). True: it has Oodle streams, which the unoodle worker decodes; False: an Unreal game whose archives need no Oodle decoder.
+PC_DECODE = {
+    '01001F5010DFA000': True,    # Pokémon Legends: Arceus (GFPAK entries, Oodle Kraken)
+    '0100606026F12000': True,    # FINAL FANTASY RESONANCE (Unreal IoStore, Oodle Mermaid)
+    '01005270232F2000': True,    # OCTOPATH TRAVELER 0 (Unreal pak, Oodle Mermaid): its streams and keys were checked, a build from its game files was not run
+    '01003E601E324000': False,   # DRAGON QUEST III HD-2D Remake (Unreal pak, LZ4)
+}
+
+
+def profile_has(app, marker):
+    tsv = REPO / 'dm' / 'games' / app / 'shader_map.tsv'
+    return tsv.is_file() and marker in tsv.read_text(encoding='utf-8', errors='replace')
+
+
+def folder_given(var, pat):
+    given = os.environ.get(var)
+    return bool(given and Path(given).expanduser().is_dir() and any(Path(given).expanduser().glob(pat)))
+
+
+def stale(out, srcs):
+    return not out.is_file() or any(s.is_file() and s.stat().st_mtime > out.stat().st_mtime for s in srcs)
+
+
+def build_unoodle():
+    """-> (peanuts/.build/ooz/unoodle, '') built by dm/third_party/ooz/build.sh when it is missing or older than its sources, or (None, why this computer has none)"""
+    if not LINUX or platform.machine().lower() not in ('x86_64', 'amd64'):
+        return None, ('the Oodle worker (dm/third_party/ooz) is built on x86-64 Linux only: its decoder uses x86 SSE2 intrinsics, '
+                      f'and this is {platform.machine() or "an unknown processor"} on {sys.platform}')
+    exe = OOZ_BUILD / 'unoodle'
+    if not stale(exe, [OOZ_SRC / f for f in ('kraken.cpp', 'stdafx.h', 'unoodle.cpp', 'ooz-port.patch', 'ooz-guards.patch', 'build.sh')]): return exe, ''
+    cxx = os.environ.get('CXX') or next((c for c in ('g++', 'clang++', 'c++') if shutil.which(c)), None)
+    if not cxx: return None, 'the Oodle worker (dm/third_party/ooz) needs a C++ compiler (g++ or clang++) on PATH'
+    if not shutil.which('patch'): return None, 'the Oodle worker (dm/third_party/ooz) needs the patch program on PATH'
+    say(f'building the Oodle worker into {OOZ_BUILD}')
+    rc, _ = run(['sh', str(OOZ_SRC / 'build.sh'), str(exe), cxx], False, 'the Oodle worker build')
+    if rc or not exe.is_file(): return None, f'the Oodle worker build failed (exit code {rc}; its messages are above)'
+    return exe, ''
+
+
+def build_nxaes():
+    """-> (peanuts/.build/pymod, '') holding _nxaes for this Python (uepak.py reads an Unreal pak's encrypted index with it off the Mac), built from
+    dm/peanuts/pack_worker/nxaes.c when it is missing or older than its source, or (None, why this computer has none)"""
+    if not LINUX: return None, 'the _nxaes module (dm/peanuts/pack_worker/nxaes.c) is built on Linux only'
+    inc, suffix = sysconfig.get_paths().get('include') or '', sysconfig.get_config_var('EXT_SUFFIX') or '.so'
+    out = PYMOD_BUILD / ('_nxaes' + suffix)
+    if not stale(out, [NXAES_SRC]): return PYMOD_BUILD, ''
+    cc = os.environ.get('CC') or next((c for c in ('gcc', 'clang', 'cc') if shutil.which(c)), None)
+    if not cc: return None, 'the _nxaes module needs a C compiler (gcc or clang) on PATH'
+    if not os.path.isfile(os.path.join(inc, 'Python.h')):
+        return None, f'the _nxaes module needs the headers of {sys.executable} (no Python.h in {inc or "its include folder"}: python3-dev or python3-devel)'
+    PYMOD_BUILD.mkdir(parents=True, exist_ok=True)
+    say(f'building _nxaes into {PYMOD_BUILD}')
+    tmp = PYMOD_BUILD / ('_nxaes.tmp' + suffix)
+    rc, _ = run([cc, '-O2', '-Wall', '-fPIC', '-shared', f'-ffile-prefix-map={NXAES_SRC.parent}=dm/peanuts/pack_worker', '-I', inc, '-o', str(tmp), str(NXAES_SRC)], False, 'the _nxaes build')
+    if rc or not tmp.is_file():
+        tmp.unlink(missing_ok=True)
+        return None, f'the _nxaes build failed (exit code {rc}; its messages are above)'
+    os.replace(tmp, out)
+    return PYMOD_BUILD, ''
+
+
+def pc_decode(app, name=None):
+    """What this computer does itself for a game whose shaders are Oodle-compressed or in Unreal archives -> the settings its pack step gets ({} = nothing: every
+    other game, and whatever check_device_steps then refuses).
+      DM_OODLE_OOZ   the unoodle worker, for a PC_DECODE game with Oodle streams on Linux when the worker builds; one already set (your own worker) is used
+                     for any game. pack_android.py takes that decoder's output only when the split's shader keys are exactly the profile's.
+      DM_UE_DECODE   for a game with /ue_shaders/ rows: the split decodes the Unreal archives itself, as the phone's does ('' here; main() names the folder);
+                     with PYTHONPATH naming the folder of _nxaes.
+    A PC_DECODE game without /ue_shaders/ rows (Arceus) whose worker cannot be had stops here, before the import, unless the game's own decoder is set (DM_OODLE_HOST)."""
+    label = f'{name or app} ({app})'
+    given = os.environ.get('DM_OODLE_OOZ')
+    if given and not Path(given).expanduser().is_file(): die(f'DM_OODLE_OOZ names {given}, which is not a file')
+    if not given and not (LINUX and app in PC_DECODE): return {}
+    ue = profile_has(app, '/ue_shaders/')
+    env = {}
+    if given:
+        say(f'{label}: Oodle streams go to the worker DM_OODLE_OOZ names ({given}); the pack is made only if every shader key is the profile\'s')
+    elif PC_DECODE[app]:
+        if not ue and os.environ.get('DM_OODLE_HOST') and os.environ.get('DM_OODLE_MODULES'): return {}   # the game's own decoder is set: nothing to add
+        exe, why = build_unoodle()
+        if not exe and ue:
+            say(f'[RED] {why}')
+            return {}
+        if not exe:
+            die(f'{label} keeps its shaders in Oodle-compressed files, and this computer has no decoder for them: {why}. '
+                'Use Build in the Peanuts app on the device: it decodes them with the game\'s own code.')
+        env['DM_OODLE_OOZ'] = str(exe)
+        say(f'{label}: its Oodle streams are decoded here by {exe} (the open-source ooz decoder, not the game\'s own; dm/third_party/ooz); '
+            'the pack is made only if every shader key is the profile\'s')
+    if ue and not folder_given('DM_UE_SHADERS', '*.ushaderbytecode'):
+        pymod, why = build_nxaes()
+        if not pymod:
+            say(f'[RED] {why}')
+            return {}
+        env['PYTHONPATH'] = str(pymod) + (os.pathsep + os.environ['PYTHONPATH'] if os.environ.get('PYTHONPATH') else '')
+        env['DM_UE_DECODE'] = ''
+    return env
+
+
+def check_device_steps(app, name=None, have=()):
     """Refuse, before any import, a game whose shaders need a step that runs the game or the phone's decoder (GLSLC capture, Unreal Oodle archives), which
     a computer cannot do here: the profile's shader_map.tsv has /glslc_capture/ or /ue_shaders/ rows. Not refused when the folder of those files is
-    given (DM_GLSLC_CAPTURE / DM_UE_SHADERS)"""
-    tsv = REPO / 'dm' / 'games' / app / 'shader_map.tsv'
-    if not tsv.is_file(): return
-    text = tsv.read_text(encoding='utf-8', errors='replace')
+    given (DM_GLSLC_CAPTURE / DM_UE_SHADERS), nor for the Unreal step when this computer does it itself (have: pc_decode's settings with DM_UE_DECODE)"""
     for marker, step, var, folder, pat, why in STEP_MARKERS:
-        if marker not in text: continue
-        given = os.environ.get(var)
-        if given and Path(given).expanduser().is_dir() and any(Path(given).expanduser().glob(pat)): continue
+        if not profile_has(app, marker): continue
+        if folder_given(var, pat): continue
+        if var == 'DM_UE_SHADERS' and 'DM_UE_DECODE' in have: continue
         die(f'{name or app} ({app}) needs a step this computer cannot run: {step} ({why}). Use Build in the Peanuts app on the device: '
             f'it runs that step there. (To make the pack here anyway, set {var} to a folder that holds the {pat} files.)')
 
@@ -391,7 +496,8 @@ def main():
         say('probing the inputs')
         titles = probe(importer, keys, files)
         plan = choose(titles, args)
-        check_device_steps(plan.app, plan.name)
+        pc = pc_decode(plan.app, plan.name)
+        check_device_steps(plan.app, plan.name, pc)
         check_profile(plan.app, plan.version, args.any_version)
         app = plan.app
         nup = nup_path(args, plan, files[0])
@@ -405,7 +511,8 @@ def main():
         target = nup
         m = TITLE_IN_NAME.search(nup.name)
         app = m.group(1).upper() if m else None
-        if app: check_device_steps(app)
+        pc = pc_decode(app) if app else {}
+        if app: check_device_steps(app, None, pc)
         pack_extra = list(extra)
         if args.update is not None: say('[RED] --update is ignored for a .nup: it holds the updates it was made with')
     else:
@@ -413,11 +520,19 @@ def main():
         target = dump
         m = TITLE_IN_NAME.search(dump.name)
         app = m.group(1).upper() if m else None
-        if app: check_device_steps(app)
+        pc = pc_decode(app) if app else {}
+        if app: check_device_steps(app, None, pc)
         pack_extra = list(extra)
         if args.update is not None and '--version' not in pack_extra:
             pack_extra += ['--version', str(parse_version(args.update))]
 
+    if 'DM_UE_DECODE' in pc:   # the folder the split decodes the Unreal archives into, kept beside the shader package and reused while the paks are the same
+        ue = target.resolve().parent / f'{app}-work' / 'android-shaders' / 'ue_shaders'
+        pc['DM_UE_DECODE'] = str(ue)
+        if not args.dry_run: ue.parent.mkdir(parents=True, exist_ok=True)
+    for k, v in pc.items():
+        ENV[k] = v
+        say(f'  {k}={v}')
     t = time.monotonic()
     done = pack(target, pack_extra, args.dry_run)
     timings['pack'] = time.monotonic() - t

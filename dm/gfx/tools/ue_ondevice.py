@@ -29,6 +29,13 @@ class DeviceOodle(uepak.OodleHost):
         self.n = 0
 
 
+class OozWorker(uepak.OodleHost):
+    """uepak.OodleHost with the PC builder's worker from the open-source ooz decoder (DM_OODLE_OOZ, dm/third_party/ooz); a failure names it, not the game's decoder"""
+    def __call__(self, comp, n):
+        try: return super().__call__(comp, n)
+        except ValueError as e: raise ValueError(str(e).replace('the game\'s Oodle in the Mac host', 'the ooz worker (DM_OODLE_OOZ; not the game\'s own decoder)')) from None
+
+
 def stamp(romfs):
     """The paks and containers under the RomFS with their sizes (the NSP script's ue_stamp)"""
     out = []
@@ -61,7 +68,7 @@ def decode(romfs, main_nso, out):
     # requests (uepak.OodleHost's protocol; it ignores its arguments) instead of the game's own decoder. Its output counts only once the split's tables are the profile's
     ooz = os.environ.get('DM_OODLE_OOZ', '')
     Host = DeviceOodle
-    if ooz: cmd, lib, mods, Host = ooz, 'the ooz worker ' + ooz, '-', lambda c, l, m: uepak.OodleHost(c, m)
+    if ooz: cmd, lib, mods, Host = ooz, 'the ooz worker ' + ooz, '-', lambda c, l, m: OozWorker(c, m)
     dec = None
     try:
         if uepak.io_shader_tocs(romfs):
@@ -72,7 +79,7 @@ def decode(romfs, main_nso, out):
         listing, n = uepak.job(romfs, main_nso, work, decode=dec)
         if not listing: raise ValueError(f'the RomFS has Unreal paks, but none under {romfs} holds a shader code archive')
         print('ue: ' + '; '.join(f'{x["name"]} {x["shaders"]:,} shaders' + (f' ({x["compression"]})' if x.get('compression') else '') for x in listing)
-              + (f'; decoding {n:,} with the game\'s Oodle in {lib}' if n else ''), flush=True)
+              + (f'; decoding {n:,} with ' + (lib if ooz else f'the game\'s Oodle in {lib}') if n else ''), flush=True)
         if n:
             if not cmd or not lib or not mods: raise ValueError('Oodle-compressed shaders and no host to decode them (DM_UE_HOST, DM_UE_HOST_LIB, DM_UE_MODULES)')
             dec = dec or Host(cmd, lib, mods)   # PEANUTS: DM_OODLE_OOZ, above

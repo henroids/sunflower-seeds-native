@@ -407,8 +407,20 @@ on a device yet.
 | `docs/env_switches.tsv` | 2 rows | `DM_VK_PSO_SYNC_PASS`, `DM_VK_PSO_SYNC_VERTS` | generated table, rows by hand |
 | `docs/reference/rendering.md`, `docs/agents/symptoms.md` | 1 entry, generated | "A draw skipped for its pipeline left a result the game kept (Android)" | `PEANUTS` in the Symptom text (the index copies it) |
 
-Left as it was: a kept result drawn with ordinary geometry into a larger target (a cube map, a shadow atlas, a texture drawn once with scene geometry) is still skipped
-while its pipeline is made. Upstream candidate: yes, as a whole (upstream's asynchronous pipelines skip the same draws).
+A fourth kind, bit 8 of `DM_VK_PSO_SYNC_PASS` (default now 15; 7 is the rule without it), same day, not verified on a device: a draw into a render target the game does
+not draw into every frame (a cube map or probe drawn once, a shadow atlas updated now and then, a texture drawn once and reused). A pass that begins on a target marks
+it for the frame, its draws drawn or skipped (`vka_psosync.h` `vkps_mark`, pure and tested; `vka_draw.c` `ps_mark`); a target is drawn every frame once passes began on
+it in two earlier frames, each at most `DM_VK_PSO_SYNC_GAP` (4) frames after the one before. The frame time of this kind is bounded per frame
+(`DM_VK_PSO_SYNC_NEW_MS`, 100: past it draws are skipped as before and counted), since at a scene's start every target is new.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_draw.c` | 6 | the pass's `ps_new` field; `ps_mark` and its table after the pass's state; `rp_begin`: the mark at a compressed colour target, a colour target and the depth target (3 hunks); `draw_body`: the pass's answer goes into `vkps_why` (inside the block of the earlier hunk) | `// PEANUTS ...`, `// PEANUTS begin`/`end` |
+| `dm/gfx/vk_android/vka_pso.c` | 0 new | inside the earlier hunks: the buffer is 960 bytes, a fourth count, this kind's time, its longest frame and the draws its budget left skipped; `vka_gfx_pipeline_now` returns none past the frame's budget | as above |
+| `docs/env_switches.tsv` | 2 rows, 1 changed | `DM_VK_PSO_SYNC_GAP`, `DM_VK_PSO_SYNC_NEW_MS`; `DM_VK_PSO_SYNC_PASS` | generated table, rows by hand |
+
+Left as it was: a target drawn once whose missing pipelines take more than the frame's budget is still partly skipped, and so is one drawn in three or more frames in a
+row and then kept. Upstream candidate: yes, as a whole (upstream's asynchronous pipelines skip the same draws).
 
 ### Round 10, texture copies go by the textures' formats (2026-11-15)
 
@@ -427,3 +439,25 @@ learned view formats off for the game was written first and taken out again: the
 
 Not audited: other operations that take an image's format where the texture's is meant (the DLSS stand-in's blit, clears outside a pass). Upstream candidate: yes
 (upstream's `copy_t2t` judges by the images the same way).
+
+### Round 10, Oodle and Unreal games built on a Linux PC (2026-11-15)
+
+The PC builder refused every game with Unreal shader archives, and Pokémon Legends: Arceus stopped at its shader split: a PC has neither the Mac host nor the
+phone's host library to run the game's own Oodle decoder. `dm/third_party/ooz` now holds the open-source ooz decoder (powzix/ooz `05038060`: `kraken.cpp` and
+`stdafx.h` byte for byte, GPL-3.0-or-later by the notice in `kraken.cpp`) with `unoodle`, a worker program around it that answers `DM_OODLE_SERVE`'s requests.
+`peanuts_build.py` builds it on x86-64 Linux and sets `DM_OODLE_OOZ` and `DM_UE_DECODE` for the four games it lists (`PC_DECODE`: Arceus, FINAL FANTASY RESONANCE,
+OCTOPATH TRAVELER 0, DRAGON QUEST III HD-2D Remake, the last without the worker). The worker is a program of its own behind a pipe, linked with no MIT file, and is
+not in the APK. Its output is taken only when the split's shader keys are exactly the profile's.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `scripts/pack_android.py` | 3 | `ooz_split_checked`: with `DM_OODLE_OOZ` the split counts only when its keys are the profile's (one missing or one more stops the pack, the message names the ooz decoder); `split_shaders` calls it and refuses a profile without a `shader_map.tsv` | `# PEANUTS begin`/`end`, `# PEANUTS ...` |
+| `dm/gfx/tools/shader_split.py` | 1 | `oodle`: a failed stream's message names the ooz worker when `DM_OODLE_OOZ` is set (it said "the game's decoder in the Mac host") | `# PEANUTS ...` |
+| `dm/third_party/README.md` | 1 row | `ooz/` | `[PEANUTS]` in the row |
+| `docs/env_switches.tsv` | 1 row | `DM_OODLE_OOZ`: who sets it, and the key check | generated table, rows by hand |
+| `dm/third_party/ooz/` | new folder | `README.md`, `build.sh`, `unoodle.cpp`, `ooz-port.patch`, `ooz-guards.patch` (each marked `PEANUTS` at its top); `kraken.cpp`, `stdafx.h` and `COPYING` are in `peanuts/upstream-unmarked.txt` (kept byte for byte) | see left |
+
+Peanuts-owned, no marker needed: `peanuts/scripts/peanuts_build.py` (`pc_decode`, `build_unoodle`, `build_nxaes`), `dm/gfx/tools/ue_ondevice.py` (`OozWorker`, the log
+line), `peanuts/tests/test_unoodle.py`, `peanuts/tests/test_peanuts_build.py`, `peanuts/docs/BUILDER.md`. Not touched: the shader library version chains
+(`dmsh_chain.py` `FILES`, `vk_android_build.py` `VK_FILES`), the Android app. Upstream candidate: no (upstream builds on a Mac, which has the game's decoder; and
+ooz has no licence file upstream, `dm/third_party/ooz/README.md`).
