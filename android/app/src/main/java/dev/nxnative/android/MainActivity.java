@@ -69,7 +69,7 @@ public final class MainActivity extends Activity {
         setContentView(frame);
         PadFocus.watch(getWindow());   // a controller: the focus frame (PadFocus)
         build();
-        if (saved == null) { setIntent(gated(getIntent())); fromIntent(getIntent()); }   // start() reads no_pause from getIntent() too
+        if (saved == null) { setIntent(gated(getIntent())); fromIntent(getIntent()); dev.peanuts.GameReturn.back(this, getIntent()); /* PEANUTS: Home made anew by the app's icon while a game runs (GameReturn) */ }   // start() reads no_pause from getIntent() too
         GpuGl.probe(this, () -> { if (!isFinishing() && settingsGame != null) gameSettingsAgain(); });   // the GPU's name and, before any readiness check, the system driver's facts for the recommendations
         Updater.onStart(this);   // the release app: a newer release on GitHub opens the update popup (once per process start: not on a resume or a rotation)
         dev.peanuts.ctl.Ctl.attach(this);   // PEANUTS: control commands that waited for this screen run now (they come from dev.peanuts.ctl's own queue, never from this intent)
@@ -370,6 +370,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onNewIntent(Intent i) {
         super.onNewIntent(i);
+        if (dev.peanuts.GameReturn.back(this, i)) return;   // PEANUTS: the app's icon while a game runs: back to the game, not Home (the launcher's start closed the game's screen above this singleTask root)
         fromIntent(i);
         dev.peanuts.ctl.Ctl.attach(this);   // PEANUTS: as in onCreate
     }
@@ -1360,6 +1361,7 @@ public final class MainActivity extends Activity {
         Intent intent = new Intent(this, GameActivity.class).putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", g.packDir);
         if (getIntent().getBooleanExtra("no_pause", false)) intent.putExtra("no_pause", true);
         dev.peanuts.ctl.Ctl.started(g.titleId, g.gameDir, g.packDir);   // PEANUTS: a control command's Play learns that the game was started, and with which pack
+        dev.peanuts.GameReturn.remember(this, g.titleId, g.name, g.gameDir, g.packDir);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
         startActivity(intent);
     }
 

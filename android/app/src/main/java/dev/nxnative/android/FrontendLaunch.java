@@ -160,6 +160,7 @@ public final class FrontendLaunch extends Activity {
         // PEANUTS end
         startActivity(new Intent(this, GameActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", pack).putExtra("frontend", true));   // PEANUTS: pack, not g.packDir
+        dev.peanuts.GameReturn.remember(this, g.titleId, g.name, g.gameDir, pack);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
         finish();
     }
 
