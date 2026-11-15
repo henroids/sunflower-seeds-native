@@ -269,11 +269,34 @@ public final class LibrarySettings {
         File out = PeanutsPrefs.fontsDir(a);
         out.mkdirs();
         new Thread(() -> {
+            // The importer reads the firmware's files with the user's keys: loaded here when this process has not loaded them yet (GitHub issues #18, #22: "keys not
+            // loaded" unless prod.keys had been picked in the same session), and a plain line when there are none
+            if (!ImporterPort.ensureKeys(a)) {
+                if (deleteAfter != null) deleteAfter.delete();
+                UI.post(() -> { fontsState = "Firmware not added: add your prod.keys first (Keys, above), then choose the firmware again."; fontsLanded(a); });
+                return;
+            }
             int r = imp.firmwareFonts(source, out.getPath());
             String err = imp.lastError();
             if (deleteAfter != null) deleteAfter.delete();
             UI.post(() -> { fontsState = r == 0 ? null : "Firmware not added: " + err; fontsLanded(a); });
         }, "peanuts-fonts").start();
+    }
+
+    private static boolean triedMoreFonts;
+
+    /**
+     * A firmware added before the app read its Chinese and Korean fonts too (cjk_sc.ttf and the others beside standard.ttf: a game in those languages drew "?"
+     * without them): read once more from the folder or zip it came from, when that is still there. Once per app process; nothing is asked, and a firmware that
+     * is gone leaves the two fonts as they are (choosing the firmware again adds the rest)
+     */
+    public static void addMissingFonts(Activity a) {
+        if (triedMoreFonts) return;
+        triedMoreFonts = true;
+        File d = PeanutsPrefs.fontsDir(a);
+        String src = PeanutsPrefs.firmwareDir(a);
+        if (src == null || !new File(d, "standard.ttf").isFile() || new File(d, "cjk_sc.ttf").isFile() || !src.startsWith("/") || !new File(src).exists()) return;
+        extractFonts(a, src, null);
     }
 
     private static void fontsLanded(Activity a) {

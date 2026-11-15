@@ -44,7 +44,7 @@ dm/games/010099A00BC1E000/shader_facts.tsv	a whole profile this fork added (Resi
 dm/games/010099A00BC1E000/shader_map.tsv	a whole profile this fork added (Resident Evil 4, provisional, from a survey of the game files): every line is Peanuts'
 dm/games/010099A00BC1E000/shader_map.tsv.conflicts.tsv	a whole profile this fork added (Resident Evil 4, provisional, from a survey of the game files): every line is Peanuts'
 dm/games/010099A00BC1E000/shader_pairs.tsv	a whole profile this fork added (Resident Evil 4, provisional, from a survey of the game files): every line is Peanuts'
-dm/games/01008DB008C2C000/README.md	one sentence of the game's note now names its patches.py (the title screen cuts, nx2android's); a marker would show in the rendered note
+dm/games/01008DB008C2C000/README.md	one sentence of the game's note now names its patches.py (the title screen cuts, nx2android's), and the Android section at its end is marked PEANUTS in its text; a marker comment would show in the rendered note
 dm/games/README.md	three rows of the profile table (Shining Pearl, Resident Evil 4, Skyward Sword HD): a table row cannot carry a marker
 dm/gfx/nvn/dmsh_chain.h	generated from this tree (dmsh_chain.py --header / tool_lock's fingerprints) after the translator change of 2026-11-15; a comment would be overwritten
 dm/gfx/tools/dmsh_chain.lock	generated from this tree (dmsh_chain.py --header / tool_lock's fingerprints) after the translator change of 2026-11-15; a comment would be overwritten

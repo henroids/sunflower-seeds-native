@@ -452,7 +452,9 @@ final class Prefs {
 
     /** Whether the launcher takes the adb control commands of the intents that start it (AdbControl: add a game, start Prepare, install or pick a GPU driver, export or
      *  import a pack; android/TESTING.md): a test build always; a play or release build only while Settings › Help › ADB control (debug) is on, off by default */
-    static boolean adbControl(Context c) { return AdbControl.allowed(BuildConfig.NX_PLAY, of(c).getBoolean("adb_control", false)); }
+    // PEANUTS: the Peanuts Native release counts as a release here too. It is built with -PnxApp=peanuts, which made it a "test build" for this gate: its exported
+    // MainActivity took the control extras (add a game, start Prepare, import a pack, install a GPU driver from a zip) from any app on the device, in 0.1.0 and 0.1.1
+    static boolean adbControl(Context c) { return AdbControl.allowed(BuildConfig.NX_PLAY || BuildConfig.NX_RELEASE, of(c).getBoolean("adb_control", false)); }
     static void adbControl(Context c, boolean on) { of(c).edit().putBoolean("adb_control", on).commit(); }
 
     /** Keep the screen on while a game is prepared (Settings › System, on by default): Home keeps it on while the job runs and its card shows (Ondevice) */

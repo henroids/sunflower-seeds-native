@@ -144,8 +144,22 @@ public final class FrontendLaunch extends Activity {
     }
 
     private void play(Game g) {
+        // PEANUTS begin: a shortcut or a frontend plays the build with mods too, as Home's Play does (MainActivity.launch): it started the normal pack, so a game
+        // with code mods on ran without them (GitHub issue #12: a Luminescent Platinum save read by the unmodded game). The same rule as there: the variant when
+        // it is built and fits, else the normal pack and a line that says so
+        String pack = g.packDir;
+        String modPack = dev.peanuts.settings.ModsSection.packToPlay(this, g.titleId, g.gameDir, g.packDir,
+                () -> android.widget.Toast.makeText(this, "Code mods are on but their build is not ready: the game starts without them (hold the cover \u203a Game \u203a Mods shows the build)", android.widget.Toast.LENGTH_LONG).show());
+        if (modPack != null && !modPack.equals(g.packDir)) {
+            java.io.File mp = new java.io.File(modPack);
+            boolean refuse;
+            try { refuse = PackCheck.blocking(this, Pack.read(mp), new java.io.File(g.gameDir)) != null || Pack.libraryProblem(mp, g.titleId) != null; } catch (java.io.IOException e) { refuse = true; }
+            if (!refuse) pack = modPack;
+            else android.widget.Toast.makeText(this, "The build with mods no longer fits this game: it starts without its code mods (hold the cover \u203a Game \u203a Mods \u203a Rebuild with mods)", android.widget.Toast.LENGTH_LONG).show();
+        }
+        // PEANUTS end
         startActivity(new Intent(this, GameActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", g.packDir).putExtra("frontend", true));
+                .putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", pack).putExtra("frontend", true));   // PEANUTS: pack, not g.packDir
         finish();
     }
 

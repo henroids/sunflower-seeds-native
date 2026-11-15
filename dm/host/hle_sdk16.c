@@ -156,6 +156,24 @@ static font_t font_resolve(int t) {
     if (t == 0) f = font_first("DM_SHARED_FONT", FONT_TYPE[0].file, SYSTEM_FONT);
     else if (t == 5) f = font_first("DM_SHARED_FONT_EXT", FONT_TYPE[5].file, NULL);
     else if (!getenv("DM_SHARED_FONT") || !*getenv("DM_SHARED_FONT")) f = font_first(NULL, FONT_TYPE[t].file, FONT_TYPE[t].sys);
+    // PEANUTS begin: with DM_SHARED_FONT set (the app sets it to the firmware's standard font) the Chinese and Korean types got that font, which has only the
+    // characters Japanese shares: the rest drew as "?" (Pokemon Shield in Chinese). The firmware's own fonts for these types, when they lie beside the standard
+    // one (the importer writes cjk_sc.ttf, cjk_sc_ext.ttf, cjk_tc.ttf, cjk_kr.ttf there), come first
+    if (!f.p && t >= 1 && t <= 4) {
+        const char *sf = getenv("DM_SHARED_FONT"), *sl = sf ? strrchr(sf, '/') : NULL;
+        const char *cand[2] = {t == 2 ? "cjk_sc_ext.ttf" : FONT_TYPE[t].file, t == 2 ? FONT_TYPE[t].file : NULL};
+        for (int i = 0; sl && i < 2 && !f.p; i++) {
+            char p[1024];
+            if (!cand[i] || (size_t)(sl - sf) + 2 + strlen(cand[i]) > sizeof p) continue;
+            snprintf(p, sizeof p, "%.*s/%s", (int)(sl - sf), sf, cand[i]);
+            font_t g = font_map(p);
+            if (!g.p) continue;
+            const char *why = font_unusable(&g);
+            if (why) { LOG("shared font (%s): %s not used: %s", cand[i], p, why); munmap(g.p, g.n); continue; }
+            f = g;
+        }
+    }
+    // PEANUTS end
     if (!f.p && t) { f = font_resolve(0); fallback = 1; }
     else if (f.p) for (int u = 0; u < t; u++) if (type_f[u].p && !strcmp(type_f[u].src, f.src)) { munmap(f.p, f.n); f = type_f[u]; break; }
     type_f[t] = f;

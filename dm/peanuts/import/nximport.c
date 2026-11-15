@@ -451,7 +451,28 @@ fail:
 }
 
 // ---------------------------------------------------------------- firmware fonts
-typedef struct FontJob { int got_std, got_ext; const char *out_dir; int found_ncas; } FontJob;
+typedef struct FontJob { int got_std, got_ext; const char *out_dir; int found_ncas; int got_cjk[4]; } FontJob;   // got_cjk: cjk_sc, cjk_sc_ext, cjk_tc, cjk_kr (optional)
+// The firmware's Chinese and Korean shared fonts, written beside the two the app needs: a game set to one of those languages asks the console for them (types 1 to 4 of
+// the shared font service) and drew most characters as "?" with the standard font (Pokemon Shield with a Chinese save). FontKorean 0100000000000812 (one file),
+// FontChineseTraditional 0100000000000813 (one file), FontChineseSimple 0100000000000814 (the base file and an "ext" one). Not required: a firmware without them still gives the two
+static int write_bfttf(const NxNode *f, const char *out_path);
+static int font_all(const FontJob *fj) { return fj->got_std && fj->got_ext && fj->got_cjk[0] && fj->got_cjk[1] && fj->got_cjk[2] && fj->got_cjk[3]; }   // nothing left to look for
+static void font_try_cjk(FontJob *fj, NxNca *n) {
+    int base = n->title_id == 0x0100000000000814ull ? 0 : n->title_id == 0x0100000000000813ull ? 2 : n->title_id == 0x0100000000000812ull ? 3 : -1;
+    if (base < 0) return;
+    int s = nx_nca_find_section(n, NX_FS_ROMFS); NxNode *root = s >= 0 ? nx_romfs_tree(n, s) : NULL;
+    if (!root) return;
+    static const char *names[4] = {"cjk_sc.ttf", "cjk_sc_ext.ttf", "cjk_tc.ttf", "cjk_kr.ttf"};
+    for (int i = 0; i < root->nkids; i++) {
+        NxNode *k = root->kids[i]; size_t l = strlen(k->name);
+        if (k->is_dir || l < 6 || strcmp(k->name + l - 6, ".bfttf")) continue;
+        int slot = base == 0 && strstr(k->name, "ext_") != NULL ? 1 : base;   // the simplified Chinese title holds two: ..._org_zh-cn_... and ..._ext_zh-cn_...
+        if (fj->got_cjk[slot]) continue;
+        char out[1200]; snprintf(out, sizeof out, "%s/%s", fj->out_dir, names[slot]);
+        if (!write_bfttf(k, out)) fj->got_cjk[slot] = 1;
+    }
+    nx_node_free(root);
+}
 
 static int write_bfttf(const NxNode *f, const char *out_path) {
     uint8_t *b = NULL; int rc = -1;
@@ -476,6 +497,7 @@ static int font_try_nca_fd(FontJob *fj, int fd, uint64_t off, uint64_t size) {
     NxNca n; fj->found_ncas++;
     if (nx_nca_open(&n, &c, &e)) return 0;   // header didn't decrypt to NCA3/NCA2, or too small: not a readable NCA, skip quietly
     int rc = 0;
+    if (n.key_ok) font_try_cjk(fj, &n);
     if (n.key_ok && (n.title_id == 0x0100000000000810ull || n.title_id == 0x0100000000000811ull)) {
         int std = n.title_id == 0x0100000000000811ull;
         if (!(std ? fj->got_std : fj->got_ext)) {
@@ -501,7 +523,7 @@ static int font_try_nca(FontJob *fj, const char *path) {
 
 static int font_scan(FontJob *fj, const char *dir, int depth) {
     DIR *d = opendir(dir); if (!d) return 0; struct dirent *e; int rc = 0;
-    while (!rc && (fj->got_std + fj->got_ext < 2) && (e = readdir(d))) {
+    while (!rc && (!font_all(fj)) && (e = readdir(d))) {
         if (e->d_name[0] == '.') continue;
         char p[1200]; snprintf(p, sizeof p, "%s/%s", dir, e->d_name); struct stat st; if (stat(p, &st)) continue;
         size_t l = strlen(e->d_name); int is_nca = l > 4 && !strcasecmp(e->d_name + l - 4, ".nca");
@@ -555,7 +577,7 @@ static int font_try_zip_deflate(FontJob *fj, int zip_fd, uint64_t data_off, uint
 static int font_scan_zip(FontJob *fj, const char *zip_path, const char *out_dir) {
     NxZip z; if (nx_zip_open(&z, zip_path)) return -1;
     int rc = 0;
-    for (int i = 0; i < z.n && !rc && fj->got_std + fj->got_ext < 2; i++) {
+    for (int i = 0; i < z.n && !rc && !font_all(fj); i++) {
         const NxZipEntry *e = &z.e[i];
         if (e->method == 0) rc = font_try_nca_fd(fj, z.fd, e->data_off, e->size);
         else if (e->method == 8) rc = font_try_zip_deflate(fj, z.fd, e->data_off, e->comp_size, out_dir);

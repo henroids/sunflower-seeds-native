@@ -299,7 +299,7 @@ public final class MainActivity extends Activity {
         help.addView(new Ui.Setting(this, "📨", "Share log", v -> shareLog()).value("The newest log").chevron(this).view);
         help.addView(new Ui.Setting(this, "🧰", "Tester settings", null).toggle(this, Prefs.testerRows(this), (b, on) -> Prefs.testerRows(this, on))
                 .says("Showing the rows made for testing: Advanced resolution, Upscaler and Dynamic resolution", "Hidden: a game with Resolution choices shows just those").view);   // (Prefs.simpleRes)
-        if (BuildConfig.NX_PLAY) {   // a test build always takes adb's commands (Prefs.adbControl)
+        if (BuildConfig.NX_PLAY || BuildConfig.NX_RELEASE) {   // a test build always takes adb's commands (Prefs.adbControl); PEANUTS: the Peanuts release has the switch too
             Ui.Setting adb = new Ui.Setting(this, "🛠", "ADB control (debug)", null)
                     .value("Lets adb commands add games, start Prepare and install GPU drivers. Off: only you, in the app");
             adb.toggle(this, Prefs.adbControl(this), (b, on) -> {

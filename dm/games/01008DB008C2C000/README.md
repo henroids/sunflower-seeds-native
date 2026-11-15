@@ -24,3 +24,7 @@ The same keys as Sword's profile, for the same reasons ([Sword, What it needs](.
 - From a fresh save (`DM_KBD` answers the name; without it the keyboard counts as cancelled and the game goes back to the photo), A at the language (about frame 600), the photo and the name reach the opening; A presses lead through it to the living room in Postwick, and the stairs to the bedroom with the Bag.
 - `run/save_ref` is a save in the bedroom with the Bag taken, the same place as Sword's: Sword's route out of the front door (`LDown~0.8 LLeft~2.5 LRight~0.5 LDown~2.5 LLeft~0.3 LDown~2`, `run/route_out.sh`) works unchanged.
 - The route checked on the Mac: the first boot's language, photo and name choices, the opening (the Champion's broadcast, the stadium), Postwick (the house, Hop's visit, the bedroom and the Bag), a save, and out of the front door to Hop.
+
+## Android (Peanuts Native)
+
+PEANUTS: packed on Linux with both add-on contents (41,516 shaders, all valid) and played on an AYN Thor (Adreno 740, Turnip) from a shared save at the Isle of Armor station: 60 fps by the frame time row, the companion's town map and live party on the second screen. With a Chinese save most characters drew as "?" until the firmware's Chinese shared fonts were served (`dm/host/hle_sdk16.c`, the importer's `cjk_*.ttf`).

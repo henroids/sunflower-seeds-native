@@ -269,6 +269,7 @@ public final class Library {
             else if (!build.failed) build = null;   // the service ended while no listener heard it
         }
         Haptics.refresh(a); Motion.refresh(a);
+        LibrarySettings.addMissingFonts(a);   // a firmware added before the Chinese and Korean fonts were read
         watch(a);
         l.render();
         preloadIcons(a);
@@ -683,6 +684,7 @@ public final class Library {
         boolean buildCard = b != null && !(b.step.equals("prepare") && pc != null && !b.failed);   // during Prepare upstream's own card is the card
         int building = (pc != null ? 1 : 0) + (buildCard ? 1 : 0);
         if (building == 0 && filter == BUILDING) filter = ALL;   // the last job finished: the filter goes away
+        if (building == 0) ScreensOff.hide();   // nothing builds any more: the screens come back by themselves
         int all = rows.size(), ready = 0, toBuild = 0, noProfile = 0;
         List<Row> bl = new ArrayList<>(), rd = new ArrayList<>(), bd = new ArrayList<>(), np = new ArrayList<>();
         for (Row r : rows) {
@@ -789,7 +791,9 @@ public final class Library {
             if (pc != null) full.add(pc);
             if (buildCard) full.add(buildCard(b));
             grid(full, fullColumns(), PUi.GAP);
-            PUi.add(box, PUi.small(a, "When a build finishes, its game moves to Ready and this filter goes away."), 10);
+            // a long build with a card that hardly changes marks an OLED panel: both screens black until a tap (ScreensOff)
+            PUi.add(box, PUi.button(a, "Screens off while it builds", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> ScreensOff.show(a))), 10);
+            PUi.add(box, PUi.small(a, "When a build finishes, its game moves to Ready and this filter goes away. Screens off keeps the build going with both screens black; a tap brings them back."), 10);
             afterRender(chipRow, keep, page, scrollY, user, firstRow);
             return;
         }

@@ -46,6 +46,7 @@ asks before building any other.
 | Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes | 60 fps |
 | Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Not checked | 60 fps; new, little tested |
 | Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes | 60 fps (30 on Switch) |
+| Pokémon Shield | `01008DB008C2C000` | 1.3.2 | Yes | 60 fps (30 on Switch); new, little tested |
 | The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.9.0 | Yes | 60 fps (30 on Switch); new, little tested |
 | FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No | 45 to 60 fps; new, little tested |
 | The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Not checked | 60 fps; new, little tested |
