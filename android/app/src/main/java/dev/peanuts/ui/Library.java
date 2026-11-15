@@ -252,6 +252,22 @@ public final class Library {
         });
     }
 
+    // ---- Screens off (Home's header, left of the Settings gear) ----
+
+    private static android.widget.Button screensOffB;
+
+    /**
+     * The "Screens off" button of Home's header (MainActivity.buildHome puts it left of the Settings gear): shown only while a build runs or waits. A long build
+     * with a card that hardly changes marks an OLED panel, so it turns every screen black until a tap (ScreensOff); render() shows and hides it
+     */
+    public static View screensOffButton(Activity a) {
+        android.widget.Button b = PUi.button(a, "Screens off", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> ScreensOff.show(a)));
+        b.setContentDescription("Screens off while a build runs");
+        b.setVisibility(View.GONE);
+        screensOffB = b;
+        return b;
+    }
+
     // ---- The hook ----
 
     /**
@@ -348,6 +364,7 @@ public final class Library {
             // follows in its own post, and only its badges wait for it
             UI.post(() -> {
                 lastTitles = t; everScanned = true;
+                dev.peanuts.ctl.Ctl.libraryChanged();
                 if (current != this) return;
                 titles = t; gen++; scanning = false; companions.clear();
                 if (box != null && box.isAttachedToWindow()) refresh.run(); else render();   // upstream's list again too (Prepare and the add above put games into it)
@@ -616,6 +633,28 @@ public final class Library {
         return null;
     }
 
+    // ---- The control interface (dev.peanuts.ctl, through CtlPort): Home's view state read and set, the build without the sheet ----
+
+    static final String[] FILTER_NAMES = {"all", "building", "ready", "build", "not_in_app"};   // by ALL, BUILDING, READY, BUILD, NO_PROFILE
+
+    /** The library of this activity, null when its Home was never drawn */
+    static Library of(Activity a) { return current != null && current.a == a ? current : null; }
+    static Library now() { return current; }
+    static Build buildNow() { return build; }
+    static List<CompanionPort.Item> catalogNow() { return catalog; }
+    String filterName() { return FILTER_NAMES[filter]; }
+    String findText() { return find; }
+    boolean hiddenShown() { return showHidden; }
+    boolean scanningNow() { return scanning; }
+    LibraryScanner.Title title(String titleId) { return titleFor(titleId); }
+
+    /** Sets the filter chip and the Find text (null: as it is) and draws Home again; the Building filter exists only while something builds (render puts All back) */
+    void view(String filterName, String findText) {
+        if (filterName != null) for (int i = 0; i < FILTER_NAMES.length; i++) if (FILTER_NAMES[i].equals(filterName)) filter = i;
+        if (findText != null) find = findText;
+        render();
+    }
+
     // ---- Home ----
 
     /** One cover of the grid: upstream's game or a scanned title, or both when they are the same game */
@@ -674,6 +713,7 @@ public final class Library {
      */
     private void render() {
         if (box == null) return;
+        dev.peanuts.ctl.Ctl.screen();   // the control interface's status file follows the filter, Find and what builds
         View pc = ondeviceCard;
         boolean setup = PeanutsPrefs.gameDir(a) == null || !PeanutsPrefs.setupDone(a);
         List<Row> rows = rows();
@@ -685,6 +725,7 @@ public final class Library {
         int building = (pc != null ? 1 : 0) + (buildCard ? 1 : 0);
         if (building == 0 && filter == BUILDING) filter = ALL;   // the last job finished: the filter goes away
         if (building == 0) ScreensOff.hide();   // nothing builds any more: the screens come back by themselves
+        if (screensOffB != null) screensOffB.setVisibility(building > 0 ? View.VISIBLE : View.GONE);   // Home's header shows it only while something builds
         int all = rows.size(), ready = 0, toBuild = 0, noProfile = 0;
         List<Row> bl = new ArrayList<>(), rd = new ArrayList<>(), bd = new ArrayList<>(), np = new ArrayList<>();
         for (Row r : rows) {
@@ -791,9 +832,7 @@ public final class Library {
             if (pc != null) full.add(pc);
             if (buildCard) full.add(buildCard(b));
             grid(full, fullColumns(), PUi.GAP);
-            // a long build with a card that hardly changes marks an OLED panel: both screens black until a tap (ScreensOff)
-            PUi.add(box, PUi.button(a, "Screens off while it builds", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> ScreensOff.show(a))), 10);
-            PUi.add(box, PUi.small(a, "When a build finishes, its game moves to Ready and this filter goes away. Screens off keeps the build going with both screens black; a tap brings them back."), 10);
+            PUi.add(box, PUi.small(a, "When a build finishes, its game moves to Ready and this filter goes away."), 10);
             afterRender(chipRow, keep, page, scrollY, user, firstRow);
             return;
         }
@@ -1313,6 +1352,7 @@ public final class Library {
             @Override public void progress(String step, int percent, String detail) { listener.progress(step, percent, detail); }
             @Override public void done(boolean ok, String message, String code) {
                 if (build != null) { listener.done(ok, message, code); return; }
+                if (dev.peanuts.ctl.Ctl.buildRefused(message)) return;   // a control command asked for this build: the refusal is its answer, not a dialog
                 Haptics.play(anchor(), Haptics.Word.REJECT);
                 new AlertDialog.Builder(a).setTitle("Build").setMessage(message).setPositiveButton("OK", null).show();
             }

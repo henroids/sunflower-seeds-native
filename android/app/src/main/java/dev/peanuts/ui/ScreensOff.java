@@ -55,11 +55,14 @@ public final class ScreensOff {
                 android.util.Log.w("peanuts", "screens off: display " + d.getDisplayId() + ": " + e);
             }
         }
+        dev.peanuts.ctl.Ctl.screen();   // the control interface's status file says whether the screens are off
     }
 
     public static void hide() {
+        if (shown.isEmpty()) return;
         List<Dialog> l = new ArrayList<>(shown);
         shown.clear();
+        dev.peanuts.ctl.Ctl.screen();
         for (Dialog d : l) try { d.dismiss(); } catch (RuntimeException e) { /* its activity is gone */ }
     }
 

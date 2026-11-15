@@ -22,13 +22,19 @@ final class FontGate {
         return false;
     }
 
+    /** Brings the game's env up to date for a start and says why the game should not start as it is, null when it can (the control interface's Play reports the sentence) */
+    static String refusal(Activity a, String titleId, String name) {
+        if (PeanutsPrefs.hasFonts(a)) { GameEnv.ensureFonts(a, titleId); return null; }
+        GameEnv.ensureDefaults(a, titleId);   // without the fonts too: a line retired from the game's env is out before this start (ensureFonts does it above)
+        return needs(titleId) ? name + " stops at startup with Android's fonts. Add your firmware first (Settings › Library › Firmware), then play." : null;
+    }
+
     /** Runs {@code go} at once when the game can start; else a dialog with "Choose firmware…" and "Play anyway" (which runs it) */
     static void check(Activity a, String titleId, String name, Runnable go) {
-        if (PeanutsPrefs.hasFonts(a)) { GameEnv.ensureFonts(a, titleId); go.run(); return; }
-        GameEnv.ensureDefaults(a, titleId);   // without the fonts too: a line retired from the game's env is out before this start (ensureFonts does it above)
-        if (!needs(titleId)) { go.run(); return; }
+        String why = refusal(a, titleId, name);
+        if (why == null) { go.run(); return; }
         new AlertDialog.Builder(a).setTitle("Firmware needed")
-                .setMessage(name + " stops at startup with Android's fonts. Add your firmware first (Settings › Library › Firmware), then play.")
+                .setMessage(why)
                 .setPositiveButton("Choose firmware…", (d, w) -> LibrarySettings.pickFirmwareSource(a))
                 .setNeutralButton("Play anyway", (d, w) -> go.run())
                 .setNegativeButton("Cancel", null).show();

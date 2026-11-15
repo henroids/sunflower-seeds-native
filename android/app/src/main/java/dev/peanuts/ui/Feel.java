@@ -162,6 +162,7 @@ public final class Feel {
 
     /** A choice dialog was made (PadFocus.Builder.create): a tap or A on one of its list's items is CLICK, then the dialog's own listener. The dialog opens and closes as it did */
     public static void dialog(AlertDialog d) {
+        dev.peanuts.ctl.Ctl.dialog(d);   // a control command that led to this dialog (Play, Prepare again) reports it as its answer
         ListView list = d.getListView();
         if (list == null || !ready(d.getContext())) return;
         AdapterView.OnItemClickListener was = list.getOnItemClickListener();

@@ -72,6 +72,7 @@ public final class MainActivity extends Activity {
         if (saved == null) { setIntent(gated(getIntent())); fromIntent(getIntent()); }   // start() reads no_pause from getIntent() too
         GpuGl.probe(this, () -> { if (!isFinishing() && settingsGame != null) gameSettingsAgain(); });   // the GPU's name and, before any readiness check, the system driver's facts for the recommendations
         Updater.onStart(this);   // the release app: a newer release on GitHub opens the update popup (once per process start: not on a resume or a rotation)
+        dev.peanuts.ctl.Ctl.attach(this);   // PEANUTS: control commands that waited for this screen run now (they come from dev.peanuts.ctl's own queue, never from this intent)
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
@@ -173,11 +174,21 @@ public final class MainActivity extends Activity {
             View v = PadFocus.first(PadFocus.focusables(frame));
             if (v != null) v.requestFocus();
         });
+        dev.peanuts.ctl.Ctl.screen();   // PEANUTS: the control interface's status file names the page that shows
     }
 
     private void buildHome(LinearLayout content) {
         overlayRow = null;
-        content.addView(Ui.header(this, Ui.badge(this, 44), "Peanuts Native", Prefs.buildId(), Ui.iconButton(this, R.drawable.ic_settings, "Settings", Ui.Kind.TONAL, v -> page(true))));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
+        // PEANUTS begin: "Screens off" left of the Settings gear, shown only while a build runs (dev.peanuts.ui.Library.screensOffButton)
+        LinearLayout trailing = new LinearLayout(this);
+        trailing.setOrientation(LinearLayout.HORIZONTAL);
+        trailing.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams sop = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        sop.setMarginEnd(Ui.dp(this, 12));
+        trailing.addView(dev.peanuts.ui.Library.screensOffButton(this), sop);
+        trailing.addView(Ui.iconButton(this, R.drawable.ic_settings, "Settings", Ui.Kind.TONAL, v -> page(true)));
+        // PEANUTS end
+        content.addView(Ui.header(this, Ui.badge(this, 44), "Peanuts Native", Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
         accessCard = accessCard();
         Ui.add(content, accessCard, 16);
         Ondevice.attach(this, content, content.getChildCount());   // a game being prepared and its progress (hidden when there is none)
@@ -360,6 +371,7 @@ public final class MainActivity extends Activity {
     @Override protected void onNewIntent(Intent i) {
         super.onNewIntent(i);
         fromIntent(i);
+        dev.peanuts.ctl.Ctl.attach(this);   // PEANUTS: as in onCreate
     }
 
     /** adb: am start -n dev.nxnative.android/.MainActivity --es game <game folder> [--es pack <pack folder>] [--es save <save folder>] [--ez run true] adds the game without
@@ -1347,6 +1359,7 @@ public final class MainActivity extends Activity {
         Game.touch(this, g);   // the entry played last is the one kept if the list ever holds this game twice
         Intent intent = new Intent(this, GameActivity.class).putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", g.packDir);
         if (getIntent().getBooleanExtra("no_pause", false)) intent.putExtra("no_pause", true);
+        dev.peanuts.ctl.Ctl.started(g.titleId, g.gameDir, g.packDir);   // PEANUTS: a control command's Play learns that the game was started, and with which pack
         startActivity(intent);
     }
 

@@ -79,6 +79,7 @@ public final class GameSheet {
         GameSheet s = new GameSheet(a, t, companion, lib);
         current = s;
         s.open();
+        dev.peanuts.ctl.Ctl.screen();   // the control interface's status file names the open sheet
     }
 
     private void open() {
@@ -86,7 +87,7 @@ public final class GameSheet {
         box.setOrientation(LinearLayout.VERTICAL);
         render();
         dialog = PUi.sheet(a, title.name, box).setNegativeButton("Close", null).create();
-        dialog.setOnDismissListener(d -> { if (current == this) current = null; });
+        dialog.setOnDismissListener(d -> { if (current == this) current = null; dev.peanuts.ctl.Ctl.screen(); });
         Motion.sheet(dialog);
         Haptics.quiet(200);   // the focus that lands inside the sheet is silent: the press that opened it was the feedback
         dialog.show();
@@ -442,6 +443,27 @@ public final class GameSheet {
         List<String> l = new ArrayList<>();
         for (File f : extraDlc) l.add(f.getPath());
         PeanutsPrefs.chosenDlc(a, title.titleId, l);
+    }
+
+    /** The title of the open sheet, null when none is open (dev.peanuts.ctl's status file) */
+    static String openTitle() { GameSheet s = current; return s == null ? null : s.title.titleId; }
+
+    /** The update a build without a sheet uses (as {@link #resumeState} picks it): the one chosen earlier, else the newest found; null when the title has none */
+    static LibraryScanner.Source storedUpdate(Activity a, LibraryScanner.Title t) {
+        String picked = PeanutsPrefs.chosenUpdate(a, t.titleId);
+        for (LibraryScanner.Source u : t.updates) if (picked != null && u.file.getPath().equals(picked)) return u;
+        return t.updates.isEmpty() ? null : t.updates.get(0);
+    }
+
+    /**
+     * Whether Build would ask "Build anyway?" for this title with no sheet open: the version of {@link #storedUpdate} (else the base's) is not one of the
+     * profile's builds. The same rule as {@link #chosenVersionState}, from the stored choices.
+     */
+    static boolean wouldAsk(Activity a, LibraryScanner.Title t) {
+        if (t.supportedBuilds.isEmpty()) return false;
+        LibraryScanner.Source chosen = storedUpdate(a, t);
+        long have = chosen != null ? chosen.version : (t.base != null ? t.base.version : 0);
+        return !t.supportedBuilds.containsKey(have);
     }
 
     private static String versionText(long v) { return v == 0 ? "v0" : (v & 0xFFFF) == 0 ? "v" + (v >> 16) : "v" + v; }
