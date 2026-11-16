@@ -806,3 +806,17 @@ rows they carry no version tag, so `may_lack` could not tell they belong to 4.0.
 Run: the 4.0.1 dump packed (`shaders: 134 … shader_optional.tsv`, library `v-4d3a924dcd04` of 29,651 shaders) and played on an AYN Thor (Adreno 740,
 Turnip 27.0.0-R2) for about 4 minutes: 59.6-59.7 fps, every frame on screen for one refresh. Not run: the system driver, a 4.0.0 dump. `shader_optional.tsv`
 is not a shader-cache input, so no library version moves. Upstream candidate: yes (Banana Native's profile has the same gap).
+
+### Round 16, a firmware that waits instead of failing (2026-11-16)
+
+GitHub issue #42 ("Firmware not added") and a fresh install on an Android 17 phone: the firmware was picked before the keys, or before All files access was
+given, the row said "not added", and it kept saying so after the keys or the access came, until the firmware was picked a second time.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `onResume` calls `dev.peanuts.ui.LibrarySettings.resume`: back from Android's All files access page, a firmware that waited for the access is read | `// PEANUTS:` |
+
+Peanuts-owned (`dev/peanuts/ui/LibrarySettings.java`): a firmware folder picked without All files access waits for it; a firmware that is set but not
+read is read when the keys are accepted, when the access is given, and once at the row's drawing; the zip picker also offers a zip the phone labels with
+another type than `application/zip`. Seen on an AYN Thor (Android 13): access taken away and given back, keys taken away and picked again, each time the
+firmware read by itself. The release 0.1.3 on a OnePlus (Android 17) adds a firmware zip once the keys are in. Upstream candidate: no.

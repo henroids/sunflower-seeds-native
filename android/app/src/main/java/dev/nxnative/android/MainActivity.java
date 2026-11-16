@@ -431,6 +431,7 @@ public final class MainActivity extends Activity {
         onResumeViews();
         Ondevice.resume(this);
         Updater.resume(this);   // back from "Install unknown apps" with an update download waiting
+        dev.peanuts.ui.LibrarySettings.resume(this);   // PEANUTS: back from Android's All files access page: a firmware folder picked before the access is read now (GitHub issue #42)
         ExitWatch.resume(this);
         updateTick();   // a game that ended unexpectedly: "The game stopped unexpectedly", once (and every 2 s while a game runs and Home shows)
     }
