@@ -778,3 +778,16 @@ the Mac's split of the same game found them.
 Run: `build.sh <work dir> python`, then on the AYN Thor with `dm_pack_cli`, `shader_split.unsized()` on linked and independent-block LZ4 frames: both
 open; with `lz4/frame` moved away, the same `[RED]` line as the failed Prepare. Not run: a whole Prepare of the game on the phone (it needs the full
 stage, `build.sh … tools`, and an APK built with it). No shader-chain file is changed. Upstream candidate: yes (upstream's `build.sh` has the same gap).
+
+### Round 14, one upstream fix taken ahead of the next update (2026-11-16)
+
+Banana Native `4299044a` (v0.3.22-test1), asked for in issues #24 and #39: on Exynos Xclipse the game's start showed Android's "isn't responding" because the
+Vulkan device was made on the UI thread (over 10 s inside the driver) and the audio port list was read there too. The commit is taken as it is; the fork is still
+on v0.3.21 otherwise (upstream is at v0.3.26, 128 commits on).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 3 | the audio device callback is registered on its own thread, and dropped if the screen went meanwhile | `PEANUTS(backport)` |
+| `dm/gfx/vk_android/vka_present.c` | 1 | no `vka_init()` on the UI thread: the host thread's first Vulkan call makes the device | `PEANUTS(backport)` |
+
+The markers go when the fork takes upstream's v0.3.22 or later: the lines are then upstream's own.

@@ -39,7 +39,10 @@ static void *selftest_main(void *arg);
 void nxhost_set_window(ANativeWindow *w) {
     static int first = 1;
     if (w) ANativeWindow_acquire(w);
-    vka_init();
+    // PEANUTS(backport): Banana Native 4299044a (v0.3.22-test1), gone at the next upstream update
+    // No vka_init() here: this runs on the launcher's UI thread (Native.start, surfaceCreated), and creating the device inside the driver can take over 10 s
+    // (issue 251: Exynos Xclipse RADV, ioctl in vkCreateDevice), which Android reports as an ANR. The host thread's first Vulkan call makes the device; the present
+    // thread starts with it and takes the window from g_win_new (window_take), so a window that came first waits there.
     pthread_mutex_lock(&g_pmu);
     if (g_win_new) ANativeWindow_release(g_win_new);   // never taken by the present thread
     g_win_new = w; uint64_t gen = ++g_win_gen;
