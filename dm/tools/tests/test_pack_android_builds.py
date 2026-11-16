@@ -153,7 +153,11 @@ class SplitAbsent(unittest.TestCase):
         self.assertEqual(len(pa.other_version_keys(g, 1441792)), 135)
         self.assertEqual(len(pa.map_keys(g.dir / 'shader_map.tsv')), 29785)
         self.assertEqual(pa.other_version_keys(g, 1507328), set(), 'what 4.0.1 dropped of 4.0.0 is not in the tags')
-        self.assertFalse((g.dir / 'shader_optional.tsv').exists())
+        # ... so shader_optional.tsv names it: 134 effect shaders of 4.0.0's common.ptcl that 4.0.1's rebuilt file no longer has (a 4.0.1 dump packs)
+        named = {l.split('\t')[0] for l in (g.dir / 'shader_optional.tsv').read_text().splitlines() if l and not l.startswith('#')}
+        self.assertEqual(len(named), 134)
+        self.assertTrue(named <= pa.map_keys(g.dir / 'shader_map.tsv'))
+        self.assertFalse(named & pa.other_version_keys(g, 1441792), 'none of them is one of 4.0.1\'s own')
 
     def test_super_mario_bros_wonder_names_both_sides(self):   # its shader_optional.tsv already names each version's own keys: the tags agree with it
         g = pa.game.load('010015100B514000')
