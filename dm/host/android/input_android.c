@@ -291,11 +291,14 @@ void nxhost_user_select_callback(nxhost_user_select_fn fn, void *ctx) {
     atomic_store(&g_us_ctx, ctx); atomic_store(&g_us_fn, fn);
     LOG("input: the user selector goes to the launcher's picker%s", fn ? "" : " (none: the preselected user)");
 }
+__attribute__((weak)) void dm_thread_native_wait(int entering);   // PEANUTS: hle_thread.c; absent in the unit tests of this file, which have no game threads
 int android_user_select(const char *const *names, const int *offered, int n, int def) {
     nxhost_user_select_fn fn = atomic_load(&g_us_fn);
     if (!fn) return -2;
     input_hold(1);
+    if (dm_thread_native_wait) dm_thread_native_wait(1);   // PEANUTS: the game's thread waits for the player here (a native wait, as hle_nvn.c's pacing sleeps): a stop of all threads does not wait the screen out
     int r = fn(atomic_load(&g_us_ctx), names, offered, n, def);
+    if (dm_thread_native_wait) dm_thread_native_wait(0);   // PEANUTS
     input_hold(0);
     return r;
 }
@@ -345,8 +348,12 @@ int android_controller_support(const void *arg, int *count) {
     LOG("controller applet: the join screen opens for %d to %d players%s, %d already joined", g_join.min, g_join.max, g_join.a.take_over ? "" : " (no take over)", pad_join_count(&g_join));
     pthread_mutex_unlock(&g_mu);
     fn(atomic_load(&g_ctrl_ctx), 1);
+    if (dm_thread_native_wait) dm_thread_native_wait(1);   // PEANUTS: the wait for the join screen is a native wait of the game's thread, as the user selector's above
     pthread_mutex_lock(&g_mu);
     while (!g_join.done) pthread_cond_wait(&g_join_cv, &g_mu);
+    pthread_mutex_unlock(&g_mu);
+    if (dm_thread_native_wait) dm_thread_native_wait(0);   // PEANUTS: left without the lock (the leave waits out a stop under way); done stays set until this thread clears the screen below
+    pthread_mutex_lock(&g_mu);
     int ok = g_join.done == 1;
     if (ok) { join_apply(); if (count) *count = pad_join_count(&g_join); }
     g_joining = 0;
