@@ -766,6 +766,7 @@ static uint64_t mem_hash(const uint8_t *p, uint64_t n) { uint64_t h = 1469598103
 enum { GW_COPY, GW_FILL, GW_UPDATE, GW_OPAQUE };
 typedef struct { uint64_t lo, hi, src, seq, fence; uint32_t kind, value; uint8_t *data; } gw_t;
 static gw_t *g_gw; static int g_ngw, g_gwcap; static uint64_t g_gwseq = 1, g_gw_over, g_gw_late;
+static uint64_t g_gw_done;   // PEANUTS: (under g_tmu) vka_done() as the last vka_tex_prepare read it for the done writes it dropped (vka_tex_gw_tbuf_pending)
 static _Atomic int g_gw_tb;   // PEANUTS: the entries of g_gw that are a storage texel buffer's stores (GW_OPAQUE with value 1: vka_tex_gw_tbuf), so vka_tex_gw_tbuf_pending need not look when there is none. Changed under g_tmu
 static void gw_add(int kind, uint64_t dst, uint64_t n, uint64_t src, uint32_t value, const void *data) {
     if (!n) return;
@@ -804,7 +805,10 @@ int vka_tex_gw_tbuf_pending(uint64_t addr, uint64_t n) {
     // are recorded by the thread that asks, so a count read as 0 here is 0)
     if (!atomic_load_explicit(&g_gw_tb, memory_order_relaxed)) return 0;
     pthread_mutex_lock(&g_tmu);
-    uint64_t done = vka_done();
+    // The newest completed fence as this submission's prepare read it (g_gw_done), not as it is now: the fence watcher raises it at any moment, and an answer that
+    // went from 1 to 0 while a submission was recorded sent a draw to bytes that are uploaded again only at the next prepare (where the write is dropped and the
+    // textures over it are re-uploaded). So the answer changes at a prepare, or by a store this thread records
+    uint64_t done = g_gw_done;
     for (int i = g_ngw - 1; i >= 0 && !r; i--) r = vka_tbuf_gw_pending(g_gw[i].lo, g_gw[i].hi, g_gw[i].fence, g_gw[i].kind == GW_OPAQUE && g_gw[i].value, addr, addr + n, done);
     pthread_mutex_unlock(&g_tmu);
     return r;
@@ -3533,6 +3537,7 @@ void vka_tex_prepare(VkCommandBuffer cb) {
         // pool can change) is checked at each use, and the scan's reach (maxsz) is the largest of those that take part, as before; images at one address keep an order qsort
         // does not promise either way
         static vka_img **by; static int bycap, nall; static uint64_t by_gen = ~0ull; int nby = 0; uint64_t maxsz = 0, done = vka_done(); int k = 0, any = 0;
+        g_gw_done = done;   // PEANUTS: what counts as done until the next prepare (vka_tex_gw_tbuf_pending)
         int keep = VKA_ENV("DM_VK_GW_SORT_KEEP", 1) != 0;
         #define GW_TAKES(im) ((im)->from_mem && !(im)->gpu_owned && (im)->mem && !(im)->vpool && !img_pool_dead(im))
         for (int i = 0; i < g_ngw && !any; i++) any = g_gw[i].fence && g_gw[i].fence <= done;
