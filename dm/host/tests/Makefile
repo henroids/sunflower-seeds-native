@@ -690,6 +690,14 @@ peanuts-sync-control: $(B)/t_peanuts_syncstress_old
 	! SYNC_STALL_S=3 $(B)/t_peanuts_syncstress_old 60 > $(B)/t_peanuts_syncstress_old.log 2>&1
 	grep -a "was pushed and never taken\|stalled at" $(B)/t_peanuts_syncstress_old.log
 peanuts-host: peanuts-sync
+# t_peanuts_nroarena: loader.c's load_modules as the Android host runs it (the module arena) over a pack with NROs (nro.tsv): the game's modules back to back in
+# the arena, each NRO in a mapping of its own
+.PHONY: peanuts-nro
+peanuts-nro: $(B)/t_peanuts_nroarena
+	$(B)/t_peanuts_nroarena "$(abspath $(B))" 2> $(B)/t_peanuts_nroarena.log
+peanuts-host: peanuts-nro
+$(B)/t_peanuts_nroarena: t_peanuts_nroarena.c ../loader.c ../hle.h ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -Istub_android -I.. $(GINC) -o $@ t_peanuts_nroarena.c -lpthread -lm
 $(B)/t_peanuts_syncstress: t_peanuts_syncstress.c ../hle_thread.c ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -I.. $(GINC) -o $@ t_peanuts_syncstress.c -lpthread -lm
 $(B)/t_peanuts_syncstress_old: t_peanuts_syncstress.c ../hle_thread.c ../dm.h $(GAME_H) | $(B)
