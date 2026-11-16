@@ -409,7 +409,7 @@ public final class Ctl {
         }
     }
 
-    /** Settings is one scrolling page: the heading with this text (Library, Updates, Game defaults, System, Help, About) is scrolled to the top */
+    /** Settings is one scrolling page: the heading with this text (Library, Updates, Display, Controls, Performance and picture, System, Help, About) is scrolled to the top */
     private static boolean scrollTo(Activity a, String heading) {
         TextView t = findText(a.getWindow().getDecorView(), heading);
         if (t == null) return false;
