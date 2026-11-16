@@ -3370,7 +3370,7 @@ int vka_tex_id_storage_pending(int id) {
 }
 int vka_tex_id_pending(int id) {
     pthread_mutex_lock(&g_tmu);
-    int r = id > 0 && id < g_ntreg && g_treg[id].t.serial && (g_treg[id].t.d.target != NVN_TEXTURE_TARGET_BUFFER || !VKA_ENV("DM_VK_TBUF", 1)) && !map_get(g_treg[id].t.serial);   // (a buffer texture never gets an image here: vka_tbuf.c)
+    int r = id > 0 && id < g_ntreg && g_treg[id].t.serial && (g_treg[id].t.d.target != NVN_TEXTURE_TARGET_BUFFER || VKA_ENV("DM_VK_TBUF", 1)) && !map_get(g_treg[id].t.serial);   // PEANUTS: a buffer texture gets its row image here (img_create_), made outside the pass as any other image, unless they are off (upstream, whose img_create_ makes none: never)
     pthread_mutex_unlock(&g_tmu);
     return r;
 }

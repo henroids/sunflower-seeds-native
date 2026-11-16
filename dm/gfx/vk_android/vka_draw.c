@@ -1433,6 +1433,27 @@ static void tbuf_gw_note(const vka_shader *sh, const vka_res *r, uint64_t addr, 
          path == VKTB_PLACE ? "in place" : path == VKTB_GPU ? "through a copy made on the GPU before the dispatch" : "through the CPU's copy all the same, which may be stale: it cannot be viewed in place and is bound to a draw or is not in placed memory");
 }
 // PEANUTS end
+// PEANUTS begin: which image a buffer texture read through an image binding reads. This fork's is a 2D image of rows in the texture cache, made of the CPU's bytes
+// when the draw is recorded and uploaded again only where the CPU wrote (vka_tex.c img_create_, tbuf_rows_copy); its view is of the shader's numeric class
+// (class_twin). Upstream's (vka_tbuf.c) is a copy the GPU makes of the guest memory when it runs the draw, every frame, with a view of the texture's own format.
+// The choice is vka_tbuf_path's for texel buffers: the CPU's bytes at recording, unless stores through a storage texel buffer over the range are in work that is not
+// done (vka_tex_gw_tbuf_pending: the CPU does not have those bytes), and only then upstream's copy. Read when the GPU runs, a buffer the game has refilled for its
+// next frame by then shows the next frame's half-written data (the note on DM_VK_TBUF_COPY above), and Three Houses' light and decal lists were 16.8 MB copied a frame.
+// 1 only when upstream's copy can be made and read: the switches on, a shape it reads (1D, 2D rows), a format of the binding's numeric class (its view has no class
+// twin), an image the device takes, the elements in placed memory on the texel grid. Asked for each such binding of a draw: with no such store kept it is one load
+static int tbuf_img_gpu(int tid, uint8_t dim) {
+    if (!vka_tex_gw_tbuf_pending(0, UINT64_MAX) || !VKA_ENV("DM_VK_TBUF_GW", 1) || !VKA_ENV("DM_VK_TBUF", 1)) return 0;
+    if ((dim & (DMSH_VK_DIM_ARRAY | DMSH_VK_DIM_MS | DMSH_VK_DIM_DEPTH)) || (dim & DMSH_VK_DIM_MASK) > 1) return 0;
+    uint64_t addr; uint32_t elems; int format; vka_fmt f;
+    if (!vka_tex_id_buffer(tid, &addr, &elems, &format) || !elems || !vka_fmt_of(format, &f) || f.bw != 1 || f.bh != 1 || f.kind >= 3 || !f.bpb) return 0;
+    int want = dim & DMSH_VK_DIM_SINT ? 2 : dim & DMSH_VK_DIM_UINT ? 1 : 0, have = f.kind == 1 ? 1 : f.kind == 2 ? 2 : 0;
+    if (want != have) return 0;
+    if ((dim & DMSH_VK_DIM_MASK) == 1 && (elems + 16383) / 16384 > V.props.limits.maxImageDimension2D) return 0;
+    uint64_t bytes = (uint64_t)elems * f.bpb; VkBuffer b; VkDeviceSize o;
+    if (!vka_tex_gw_tbuf_pending(addr, bytes)) return 0;
+    return vka_addr_run(addr, bytes, &b, &o) >= bytes && !(o % f.bpb);
+}
+// PEANUTS end
 static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, int storage) {
     uint64_t addr, bytes; VkFormat f; uint32_t texel; int want = r->dim & DMSH_VK_DIM_SINT ? 2 : r->dim & DMSH_VK_DIM_UINT ? 1 : 0;
     if (!vka_tex_id_tbuf(tid, want, storage, &addr, &bytes, &f, &texel)) {
@@ -1569,14 +1590,14 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
             VkImageView v = VK_NULL_HANDLE; VkSampler s = VK_NULL_HANDLE; VkImageLayout lay = VK_IMAGE_LAYOUT_GENERAL;
             if (r[i].desc != VK_DESCRIPTOR_TYPE_SAMPLER) {
                 int tid = r[i].what == VKA_R_TEX || r[i].what == VKA_R_IMG ? r[i].tid : 0;
-                if (tid && vka_tex_id_is_buffer(tid)) {   // a buffer texture read as an image: its copy (vka_tbuf.c, made in make_images); as a storage image, not done
-                    if (!storage) v = vka_tbuf_image_view(tid, r[i].dim);
-                    if (!storage && !v) v = vka_tex_id_view_rec(tid, g_cb, r[i].dim, 0, &lay);   // PEANUTS: no copy on the GPU to read (storage that is not placed, an offset off the texel grid): the row image made of the CPU's bytes (vka_tex.c img_create_; made outside the pass, make_images)
-                    else { static _Atomic int k; if (atomic_fetch_add(&k, 1) < 8) VRED("shader %016llx binding %u: buffer texture ID %d bound as a storage image: not done, it reads and writes nothing", (unsigned long long)sh->key, r[i].binding, tid); }
-                    if (!v && !V.null_desc) v = placeholder(r[i].dim, storage);
-                    if (!v && !V.null_desc) { VRED_ONCE("an unbound image of shape %#x and no null descriptors: the draw is skipped", r[i].dim); g_skip_dev[VKS_FEATURE]++; return 0; }
+                // PEANUTS begin: a buffer texture read as an image is this fork's row image, by the texture's ID as any other texture's (below), and upstream's copy on the
+                // GPU (vka_tbuf.c, made in make_images) only where tbuf_img_gpu says so; as a storage image it is not done (upstream's words)
+                if (tid && storage && vka_tex_id_is_buffer(tid)) {
+                    static _Atomic int k; if (atomic_fetch_add(&k, 1) < 8) VRED("shader %016llx binding %u: buffer texture ID %d bound as a storage image: not done, it reads and writes nothing", (unsigned long long)sh->key, r[i].binding, tid);
                     tid = 0;
-                } else if (tid) v = vka_tex_id_view_rec(tid, g_cb, r[i].dim, wbf_view_of_binding(storage, r[i].flags, DMSH_VK_BF_RW), &lay);   // (a shader image only read: not a GPU write)
+                } else if (tid && vka_tex_id_is_buffer(tid) && tbuf_img_gpu(tid, r[i].dim) && (v = vka_tbuf_image_view(tid, r[i].dim))) tid = 0;
+                // PEANUTS end
+                else if (tid) v = vka_tex_id_view_rec(tid, g_cb, r[i].dim, wbf_view_of_binding(storage, r[i].flags, DMSH_VK_BF_RW), &lay);   // (a shader image only read: not a GPU write)
                 if (tid && v) class_note(sh, st, &r[i], tid, storage);
                 if (tid) tex_peek(sh->key, st, &r[i], v, storage);
                 if (tid && g_rtl_pass && rtl_room()) {   // PEANUTS: DM_VK_RT_LOG: each draw's textures, in order with its draw lines (the tex peek line is logged once per texture)
@@ -1814,14 +1835,16 @@ static int make_images(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], in
         if (!sh[st]) continue;
         const vka_res *r = g_wk.r[st];
         for (int i = 0; i < g_wk.n[st]; i++) if ((r[i].what == VKA_R_TEX || r[i].what == VKA_R_IMG) && r[i].tid && r[i].desc != VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER   // PEANUTS: a texel buffer is no image (tbuf_view)
+                                                 && !(vka_tex_id_is_buffer(r[i].tid) && (r[i].desc == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE || tbuf_img_gpu(r[i].tid, r[i].dim)))   // PEANUTS: nor is a buffer texture bind_sets reads through upstream's copy (below), or leaves unbound (a storage image)
                                                  && (vka_tex_id_pending_rec(r[i].tid, r[i].dim) || (r[i].what == VKA_R_IMG && vka_tex_id_storage_pending(r[i].tid)))) {   // (an image remade with storage use copies its content: outside the pass)
             any = 1; if (dry) return 1;
             vka_tex_id_view(r[i].tid, g_cb, r[i].dim, wbf_view_of_binding(r[i].what == VKA_R_IMG, r[i].flags, DMSH_VK_BF_RW), NULL);
         }
-        for (int i = 0; i < g_wk.n[st]; i++) if (r[i].what == VKA_R_TEX && r[i].tid && vka_tbuf_pending(r[i].tid, r[i].dim)) {   // a buffer texture read as an image: its copy (vka_tbuf.c), outside the pass
+        for (int i = 0; i < g_wk.n[st]; i++) if (r[i].what == VKA_R_TEX && r[i].tid && r[i].desc != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && vka_tex_id_is_buffer(r[i].tid) && tbuf_img_gpu(r[i].tid, r[i].dim)   // PEANUTS: only where the choice is upstream's copy (tbuf_img_gpu)
+                                                 && vka_tbuf_pending(r[i].tid, r[i].dim)) {   // a buffer texture read as an image: its copy (vka_tbuf.c), outside the pass
             any = 1; if (dry) return 1;
             vka_tbuf_refresh(r[i].tid, r[i].dim, g_cb);
-            if (!vka_tbuf_image_view(r[i].tid, r[i].dim)) vka_tex_id_view(r[i].tid, g_cb, r[i].dim, 0, NULL);   // PEANUTS: none made: the row image of the CPU's bytes instead (bind_sets reads it), made and uploaded here, outside the pass
+            if (!vka_tbuf_image_view(r[i].tid, r[i].dim)) vka_tex_id_view(r[i].tid, g_cb, r[i].dim, 0, NULL);   // PEANUTS: none made after all (the image's memory): the row image instead, which bind_sets then reads, made here, outside the pass
         }
     }
     return any;
@@ -3479,7 +3502,8 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
         }
       } }
   ndsr_net:
-    for (int i = 0; i < g_wk.n[5]; i++) if (g_wk.r[5][i].what == VKA_R_TEX && g_wk.r[5][i].tid && vka_tbuf_pending(g_wk.r[5][i].tid, g_wk.r[5][i].dim))
+    for (int i = 0; i < g_wk.n[5]; i++) if (g_wk.r[5][i].what == VKA_R_TEX && g_wk.r[5][i].tid && g_wk.r[5][i].desc != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && vka_tex_id_is_buffer(g_wk.r[5][i].tid)
+                                            && tbuf_img_gpu(g_wk.r[5][i].tid, g_wk.r[5][i].dim) && vka_tbuf_pending(g_wk.r[5][i].tid, g_wk.r[5][i].dim))   // PEANUTS: only where the choice is upstream's copy (tbuf_img_gpu)
         vka_tbuf_refresh(g_wk.r[5][i].tid, g_wk.r[5][i].dim, g_cb);   // buffer textures read as images: their copies (vka_tbuf.c; no pass is open)
     { g_tbuf_disp = 1; int ok = bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_COMPUTE, &c0); g_tbuf_disp = 0; tbuf_gcopy_end();   // PEANUTS: + the barrier after the texel buffer copies the GPU makes for this dispatch (tbuf_view), whether it is recorded or not
       if (!ok) { g_skipped++; return; } }
