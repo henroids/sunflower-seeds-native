@@ -165,7 +165,7 @@ static romfs_img *img_open(const char *path) {
         // where it is through the dumps' reader (peanuts_nsp.h "nsp:<file>|aoc/<index>"; <file> may be fd:<n>/<name>, the launcher's descriptor)
         if (!m) { const char *c = strstr(path, ".nsp:aoc/"); char alt[1100];
             if (c && !strstr(c + 1, ".nsp:") && snprintf(alt, sizeof alt, "nsp:%.*s|%s", (int)(c + 4 - path), path, c + 5) < (int)sizeof alt) {
-                LOG("fs NUP %s: %s: not a plaintext NSP, read as the add-on's dump", path, why);
+                LOG("fs NUP %s: upstream's reader of plaintext NSPs did not take it (%s); read as the add-on's own dump instead", path, why);
                 return img_open(alt); } }
         // PEANUTS end
 #endif
@@ -578,7 +578,15 @@ static int aoc_dir(char *dir, size_t n, int index) {
         if (!(base && *base && snprintf(dir, n, "%s/%d.%s", base, index, ext) < (int)n)) break;
         if (!stat(dir, &st) && S_ISREG(st.st_mode)) return snprintf(dir, n, "%s/%d.%s:aoc/%d", base, index, ext, index) < (int)n;
         char t[512]; ssize_t L = readlink(dir, t, sizeof t - 1); int fd;
-        if (L > 0 && (t[L] = 0, nup_fd_spec(t, &fd) > 0)) return snprintf(dir, n, "%s:aoc/%d", t, index) < (int)n;
+        if (L > 0 && (t[L] = 0, nup_fd_spec(t, &fd) > 0)) {
+            int ok = snprintf(dir, n, "%s:aoc/%d", t, index) < (int)n;
+#ifdef DM_NSP_DIRECT
+            // PEANUTS: <index>.nsp linked to the launcher's descriptor of a dump whose name does not end in ".nsp" (an XCI, "DLC.NSP"): no spec of upstream's reader
+            // (nup_is_spec), so img_open's second try never came; the dumps' reader takes the descriptor itself (peanuts_nsp.h "nsp:<file>|aoc/<index>")
+            if (ok && x && !nup_is_spec(dir)) ok = snprintf(dir, n, "nsp:%s|aoc/%d", t, index) < (int)n;
+#endif
+            return ok;
+        }
     }
     // PEANUTS: an <index>.nsp that is the add-on's own dump (encrypted, not upstream's plaintext NSP) is found by the loop above too and read through the dumps'
     // reader where the plaintext reader refuses it (img_open)
@@ -598,6 +606,8 @@ int dm_aoc_usable(int index) {
         romfs_img *m = img_open(dir);   // a red line says why when it does not open
         if (!m) { LOG("[RED] aoc: add-on content %d (%s) cannot be read (the line above says why): the game runs without it", index, dir); return 0; }
         romfs_image_close(m);
+    } else if (stat(dir, &st)) {   // PEANUTS: what aoc_dir named is neither a spec nor a path that is there (a link to a descriptor no reader takes): not owned, where it counted as owned and then did not mount
+        LOG("[RED] aoc: add-on content %d (%s) is neither a package, a dump nor a folder that is there: the game runs without it", index, dir); return 0;
     }
     return 1;
 }
