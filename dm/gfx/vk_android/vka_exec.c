@@ -1227,10 +1227,14 @@ static void copy_t2t(const p_copy_t2t *c) {
         VkImageCopy r = {ss, {c->sr.xoffset, c->sr.yoffset, s3 ? c->sr.zoffset : 0}, ds, {c->dr.xoffset, c->dr.yoffset, d3 ? c->dr.zoffset : 0}, {(uint32_t)c->sr.width, (uint32_t)c->sr.height, s3 ? (uint32_t)nz : 1}};
         vk.vkCmdCopyImage(g_cb, s->img, VK_IMAGE_LAYOUT_GENERAL, d->img, VK_IMAGE_LAYOUT_GENERAL, 1, &r);
     } else {   // a scaled, mirrored or format-changing copy: a blit (filtered with LINEAR_FILTER), or a draw into a depth format that is no blit destination (vka_t2tpath.h)
-        VkFormatProperties dp; vk.vkGetPhysicalDeviceFormatProperties(V.pd, d->f.vk, &dp);
+        // PEANUTS: the format the blit writes, which is asked for BLIT_DST: the destination's image, or the scratch image of the destination texture's format the copy
+        // goes through below (a texture whose image has another format, or an sRGB destination of a linear source: sconv_image, one layer of a 2D colour texture)
+        VkFormat bdf = d->f.vk;
+        if (sa == VK_IMAGE_ASPECT_COLOR_BIT && !s3 && !d3 && nz == 1 && (fd || (tsf.srgb != tdf.srgb && tdf.srgb))) bdf = tdf.srgb ? tdf.view : tdf.vk;
+        VkFormatProperties dp; vk.vkGetPhysicalDeviceFormatProperties(V.pd, bdf, &dp);   // PEANUTS: bdf (upstream: d->f.vk)
         int path = t2t_path(0, tsf.kind, tdf.kind, tsf.bw > 1 || tdf.bw > 1, s->samples > 1 || d->samples > 1, (dp.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) != 0);   // PEANUTS: tsf / tdf (above), the textures' formats where upstream asks the images'
         if (path == T2T_NONE) {
-            VRED_ONCE("texture copy %#x → %#x needs a draw (integer, compressed, multisampled, stencil, or into a format that is no blit destination, VkFormat %d)", c->src->d.format, c->dst->d.format, d->f.vk); return; }
+            VRED_ONCE("texture copy %#x → %#x needs a draw (integer, compressed, multisampled, stencil, or into a format that is no blit destination, VkFormat %d)", c->src->d.format, c->dst->d.format, bdf); return; }   // PEANUTS: bdf
         int x0 = c->sr.xoffset, x1 = x0 + c->sr.width, y0 = c->sr.yoffset, y1 = y0 + c->sr.height, t;
         if (c->flags & NVN_COPY_FLAGS_MIRROR_X_BIT) { t = x0; x0 = x1; x1 = t; }
         if (c->flags & NVN_COPY_FLAGS_MIRROR_Y_BIT) { t = y0; y0 = y1; y1 = t; }
