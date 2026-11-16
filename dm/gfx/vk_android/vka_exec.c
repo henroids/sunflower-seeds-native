@@ -1310,6 +1310,13 @@ static void copy_t2t(const p_copy_t2t *c) {
                 }
             }
         }
+        // PEANUTS: the blit goes into the destination's image after all (no scratch image was to be had, or none was needed for these two): BLIT_DST was asked
+        // of the scratch image's format above, so it is asked of the image's here, and a format that is no blit destination is left as the rule above leaves it
+        if (bdf != d->f.vk) {
+            VkFormatProperties ip; vk.vkGetPhysicalDeviceFormatProperties(V.pd, d->f.vk, &ip);
+            if (!(ip.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)) {
+                VRED_ONCE("texture copy %#x → %#x: no scratch image for the conversion, and the destination's image (VkFormat %d) is no blit destination: not done", c->src->d.format, c->dst->d.format, d->f.vk); return; }
+        }
         vk.vkCmdBlitImage(g_cb, s->img, VK_IMAGE_LAYOUT_GENERAL, d->img, VK_IMAGE_LAYOUT_GENERAL, 1, &r, fl);
     }
 done:
