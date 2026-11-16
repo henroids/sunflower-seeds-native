@@ -112,6 +112,17 @@ class Targeted(unittest.TestCase):
         self.assertIn("targeted split: its tables are the profile's, byte for byte", said)
         self.same(full, t)
 
+    def test_older_comment_lines_still_take_the_targeted_scan(self):   # Orbitals Deluxe Edition: its map's first line named the title ID; the split now writes the game's name
+        full, _ = self.split('full', False); self.profile_from(full)
+        m = self.prof / 'shader_map.tsv'
+        m.write_text(''.join('# an older split wrote this line\n' if ln.startswith('#') else ln for ln in m.read_text().splitlines(keepends=True)))
+        t, said = self.split('targeted', True)
+        self.assertIn("targeted split: its tables are the profile's, byte for byte", said)
+        self.same(full, t)
+        m.write_text(m.read_text().replace('\t0\t', '\t9\t', 1))   # a data line that differs still sends the dump to the full scan
+        t, said = self.split('targeted2', True)
+        self.assertIn("made a shader_map.tsv that differs from the profile's", said)
+
     def test_a_copy_that_pairs_anew_takes_the_full_scan(self):
         self.write('Zdup/cross.bnsh', bnsh(vs(1), ps(2)))   # no shader of its own, but a pair no other file has
         full, _ = self.split('full', False); self.profile_from(full)

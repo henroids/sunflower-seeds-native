@@ -103,6 +103,7 @@ Game-specific findings; the general host changes they led to are listed under [F
 ## Found on this game
 
 - **Resolved: button icons as "?" on Android** ("Press ? + ? to start"): [Button icons drawn as "?" on Android](../../../docs/reference/services.md#button-icons-drawn-as--on-android).
+- **One save file only:** its save files are per user, and a new one is made for a user the user selector offers without a save; the host had one user. [More than one user, each with a save of its own](../../../docs/reference/services.md#more-than-one-user-each-with-a-save-of-its-own) (the launcher's Settings › Users); not yet checked in the game.
 
 - [Offline pipeline archive missing for the device GPU](../../../docs/reference/shaders.md#offline-pipeline-archive-missing-for-the-device-gpu): archive targets can follow profile metadata while iOS Metal 4 remains opt-in; [the probe above](#offline-pipeline-archive-probe) records the build evidence and open device checks.
 General host changes first needed here; each applies to every game:

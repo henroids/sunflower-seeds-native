@@ -936,7 +936,12 @@ OP_MEMORY_BARRIER, OP_COMPOSITE_CONSTRUCT, OP_TYPE_FUNCTION_ = 225, 80, 33
 OP_VECTOR_SHUFFLE, OP_ATOMIC_COMPARE_EXCHANGE, OP_LOOP_MERGE, OP_SELECTION_MERGE, OP_BRANCH, OP_BRANCH_CONDITIONAL, OP_SWITCH = 79, 230, 246, 247, 249, 250, 251
 GLSL_FMA, GLSL_PACK_HALF_2X16, GLSL_UNPACK_HALF_2X16 = 50, 58, 62
 OP_ATOMIC_STORE = 228
-NO_RESULT_OPS = {OP_STORE, OP_CONTROL_BARRIER, OP_MEMORY_BARRIER, OP_RETURN, OP_RETURN_VALUE, 246, 247, 249, 250, 251, 252, OP_FUNCTION_END}
+# Instructions with no result id, so their ids start at operand 1: OpImageWrite (99) was missing, and a promoted load's use as its image or coordinate was
+# not rewritten (promote_locals left 'ID … has not been defined': Orbitals' 189 compute shaders writing a buffer image at a coordinate kept in a local), and
+# its coordinate was taken for an instruction's result. The others with id operands: OpCopyMemory (63), OpCopyMemorySized (64), the geometry stream
+# instructions (218..221), OpAtomicStore (228), OpEmitMeshTasksEXT (5294), OpSetMeshOutputsEXT (5295)
+NO_RESULT_OPS = {OP_STORE, OP_CONTROL_BARRIER, OP_MEMORY_BARRIER, OP_RETURN, OP_RETURN_VALUE, 246, 247, 249, 250, 251, 252, OP_FUNCTION_END,
+                 63, 64, OP_IMAGE_WRITE, 218, 219, 220, 221, 228, 5294, 5295}
 
 
 def _remap_operands(x, remap):

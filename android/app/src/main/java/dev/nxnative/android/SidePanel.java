@@ -492,7 +492,7 @@ final class SidePanel extends FrameLayout {
         Overlay.rows(act, box, null);
     }
 
-    /** Controls: Player 1, the on-screen controls, rumble and the Button mapping shortcut */
+    /** Controls: Player 1, the on-screen controls, rumble, the phone's Motion sensitivity and the Button mapping shortcut */
     private void controls() {
         playerOneRow();
 
@@ -505,13 +505,48 @@ final class SidePanel extends FrameLayout {
         rum.setOnCheckedChangeListener((b, on) -> { if (act instanceof GameActivity) ((GameActivity) act).rumble(on); else Prefs.rumble(act, game(), on); });
         box.addView(rum);
 
+        TextView motionHead = head("Motion sensitivity");   // the phone's gyro scale (Prefs.MOTION_PCT), applied at each step and kept for the game (the same setting as Game settings › Controls)
+        box.addView(StepSlider.view(act, "Motion sensitivity", Prefs.MOTION_NAMES, Prefs.motionSens(act, game()), "Slower", "Faster", motionHead::setText,
+                i -> { Prefs.motionSens(act, game(), i); Native.motionSens(Prefs.MOTION_PCT[i] / 100f); }));
+
         nextStartRows();
+    }
+
+    /**
+     * Cheats: the cheats this run started with (GameActivity.cheats: the profile's file and the player's imported ones, merged), one switch each, live in the host
+     * (Native.cheatSet, hle_cheats.c nxhost_cheat_set) and kept per game (Prefs.cheatOn). Only when the game started with Game settings › Cheats on: otherwise the
+     * list is empty and the section is not shown (Cheats.panel). Grouped by the file's sections
+     */
+    private void cheatRows() {
+        if (!(act instanceof GameActivity)) return;
+        java.util.List<Cheats.Entry> list = ((GameActivity) act).cheats();
+        if (list.isEmpty()) return;
+        head(act.getString(R.string.cheats_title));
+        note(act.getString(R.string.cheats_caution));
+        java.util.Set<String> on = Prefs.cheatsOn(act, game());
+        String sec = null;
+        for (Cheats.Entry e : list) {
+            if (!e.section.equals(sec)) {
+                sec = e.section;
+                if (!sec.isEmpty()) { TextView s = note(sec); s.setTypeface(Typeface.DEFAULT_BOLD); }
+            }
+            android.widget.CheckBox b = new android.widget.CheckBox(act);
+            b.setText(e.name);
+            b.setChecked(on.contains(e.key));
+            b.setOnCheckedChangeListener((v, x) -> {
+                Prefs.cheatOn(act, game(), e.key, x);
+                int r = Native.cheatSet(e.key, x);
+                if (r != 1) Native.note("[RED] [nxlaunch] cheat \"" + e.key + "\" " + (x ? "on" : "off") + ": the host did not take it (" + r + (r == 0 ? ": no plain cheat, see the cheats lines above" : r == -1 ? ": no such cheat" : ": not in this host") + ")");
+            });
+            box.addView(b);
+        }
     }
 
     /** General: the panel's own look, Pause, Stop and Back to the game */
     private void general() {
         note("The game runs on behind this panel; every change applies now and is kept, except those marked for the next start.");
         panelRows();
+        cheatRows();
 
         Button pause = new Button(act);   // the game suspended (clock, graphics, threads, audio) until a tap on the screen, or A / Start: GameActivity.pause
         pause.setText("Pause the game");
@@ -541,7 +576,7 @@ final class SidePanel extends FrameLayout {
     /**
      * Resolution: this game's Game resolution (the same choices and the same setting as Game settings › Game resolution), only for a game whose profile has a lever
      * (Profile.hasResolution). A game with graphics_scale rows changes now: the host takes the choice's graphics scale and operation mode and posts the console's change
-     * notifications, which the game answers by querying them again and resizing its scenes (Native.graphicsModeSet, hle_oe.c nxhost_graphics_mode_set). A window_fn or res_levels
+     * notifications, which the game answers by querying them again and resizing its scenes (Native.graphicsSet, hle_oe.c nxhost_graphics_mode_set). A window_fn or res_levels
      * game takes it at the next start. A game with one docked and one handheld row gets those two as radio buttons instead (Profile.modes).
      * A game with Resolution presets (ResPresets) gets them instead: the preset's window changes now, its 3D scene at the next start (the RomFS overlay is read at boot);
      * under Advanced the window row follows as before.
@@ -567,7 +602,7 @@ final class SidePanel extends FrameLayout {
                     Prefs.resPreset(act, game(), w < ps.size() ? ps.get(w).id : ResPresets.ADVANCED);   // the game's own setting: the next start takes it too
                     if (now) {
                         int[] m = p.resolutionLive(Prefs.startWindow(act, game()));
-                        if (m != null && !Native.graphicsModeSet(m[0], m[1])) Native.note("Resolution: this host cannot change the window live; it applies at the next start");
+                        if (m != null && !Native.graphicsSet(m)) Native.note("Resolution: this host cannot change the window live; it applies at the next start");
                     }
                     d.dismiss();
                     restyle(ID_RES_PRESET);
@@ -588,7 +623,7 @@ final class SidePanel extends FrameLayout {
                 if (!ps.isEmpty()) Prefs.resPreset(act, game(), ResPresets.ADVANCED);   // a window chosen under Advanced keeps Advanced
                 if (now) {
                     int[] m = p.resolutionLive(Prefs.gameWindow(act, game()));
-                    if (m != null && !Native.graphicsModeSet(m[0], m[1])) Native.note("Game resolution: this host cannot change it live; it applies at the next start");
+                    if (m != null && !Native.graphicsSet(m)) Native.note("Game resolution: this host cannot change it live; it applies at the next start");
                 }
                 restyle(id);
             });
@@ -606,7 +641,7 @@ final class SidePanel extends FrameLayout {
                 if (!ps.isEmpty()) Prefs.resPreset(act, game(), ResPresets.ADVANCED);   // a window chosen under Advanced keeps Advanced
                 if (now) {
                     int[] m = p.resolutionLive(Prefs.gameWindow(act, game()));
-                    if (m != null && !Native.graphicsModeSet(m[0], m[1])) Native.note("Game resolution: this host cannot change it live; it applies at the next start");
+                    if (m != null && !Native.graphicsSet(m)) Native.note("Game resolution: this host cannot change it live; it applies at the next start");
                 }
                 d.dismiss();
                 restyle(ID_RES);

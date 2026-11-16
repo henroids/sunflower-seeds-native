@@ -189,8 +189,14 @@ class Manifest(unittest.TestCase):
             self.assertEqual(delta.manifest_problems(text), [], f)
             m = delta.parse_manifest(text)
             self.assertEqual(m['game'], f.parent.name, f)
-            self.assertEqual(set(m['hashes']), profile_keys(f.parent), f'{f}: not the keys a phone builds (its shader_map.tsv, or its shader_seen.tsv with their pairs)')
             hdr = (REPO / 'dm/gfx/nvn/dmsh_chain_vk.h').read_text()
+            # only a manifest of this tree's version must hold exactly the keys a phone builds: an older one serves no phone (it is a full build until it is published again),
+            # and its profile may have gained keys since (shader_seen.tsv) that only a build of that older version could hash
+            # (an excuse-only manifest, hashes none and every row "-": it names the shaders that do not build, so the phone's REQUIRE_ALL step excuses them, and gives no entry to
+            # reuse; written for a version whose full Mac build was not made, Forgejo #339. It is not a published delta, and a phone translates everything else as before)
+            excuse_only = bool(m['hashes']) and set(m['hashes'].values()) == {'-'}
+            if f'"{m["version"]}"' in hdr and not excuse_only:
+                self.assertEqual(set(m['hashes']), profile_keys(f.parent), f'{f}: not the keys a phone builds (its shader_map.tsv, or its shader_seen.tsv with their pairs)')
             if f'"{m["version"]}"' not in hdr: print(f'\n{f} is of version {m["version"]}, older than this tree\'s: phones make a full build until it is published again', file=sys.stderr)
             self.assertNotIn(m['version'], m['from'])
 
@@ -560,6 +566,17 @@ class RequireAll(unittest.TestCase):
         self.assertEqual(delta.not_built_there(self.M, ['00000000000000aa', '00000000000000bb', '00000000000000cc']), {'00000000000000bb'},
                          'a shader the Mac built, or one the manifest lacks, still fails the step')
         self.assertEqual(delta.not_built_there(None, ['00000000000000bb']), set(), 'no manifest of this version: every shader must build')
+
+    def test_manifest_of_a_game_with_unbuilt_shaders_is_of_the_current_chain(self):
+        """Mario Kart World's compute 078997bf631992c5 does not build (Ampere 0x481). A manifest of an older version excuses nothing (load_manifest: not of this version), so
+        the phone's step stopped at 96 % with "1 of 11603 shaders did not build" once the chain moved (0.3.25, Forgejo #339). A game whose manifest has a "-" row needs one
+        of the current chain; it may hold nothing but those rows (the entries a phone can reuse need a full Mac build)"""
+        chain = re.search(r'DMSH_VK_CHAIN "([0-9a-f]{12})"', (REPO / 'dm/gfx/nvn/dmsh_chain_vk.h').read_text()).group(1)
+        for f in sorted((REPO / 'dm/games').glob('*/vk_delta.tsv')):
+            m = delta.parse_manifest(f.read_text())
+            if '-' in m['hashes'].values():
+                self.assertEqual(m['version'], chain, f'{f.parent.name}: has shaders that do not build, so its manifest must be of DMSH_VK_CHAIN {chain} (a build of '
+                                 'this tree excuses them only then): publish it (vk_android_build.py --publish-delta), or write the "-" rows alone')
 
     def test_entry_as_manifest(self):
         self.assertTrue(delta.entry_as_manifest('-', None), 'not built here, not built on the Mac: as the manifest has it')

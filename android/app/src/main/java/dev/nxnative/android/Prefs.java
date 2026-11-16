@@ -21,6 +21,10 @@ final class Prefs {
     static boolean overlay(Context c) { return of(c).getBoolean("overlay", true); }
     static void overlay(Context c, boolean on) { of(c).edit().putBoolean("overlay", on).commit(); }
 
+    /** The bananas popped on the launcher's background (BananaBackgroundView), all time; shown in Settings › About */
+    static long bananasPopped(Context c) { return of(c).getLong("bananas_popped", 0); }
+    static long addBananaPopped(Context c) { long n = bananasPopped(c) + 1; of(c).edit().putLong("bananas_popped", n).commit(); return n; }
+
     /** One item of the overlay (Overlay.ITEMS); all on by default, shown only while the overlay is on */
     static boolean overlayItem(Context c, String key) { return of(c).getBoolean("overlay_" + key, true); }
     static void overlayItem(Context c, String key, boolean on) { of(c).edit().putBoolean("overlay_" + key, on).commit(); }
@@ -147,7 +151,7 @@ final class Prefs {
     /** The recommended frame rate cap as the launcher stores it (Recommend.cap), null for none */
     static Integer recCap(Context c, String titleId) { return Recommend.cap(rec(c, titleId, Recommend.FPS_CAP), limited(titleId)); }
     /** Game settings › Reset to defaults: every choice of the game's own back to the main screen's default (Extra environment's lines stay) */
-    static final String[] GAME_SETTINGS = {"window", "render_pct", "gfx_quality", "fps_cap", "gpu_driver", "gpu_ts", "pause_return", "ndsr_choice2", "ndsr_sharp", "drs2", "ram_saver", "decouple", "hold60", "full_vegetation", "gsr2_clarity", "dlss_sharp", "dlss_mode", "scene_res", "res_preset", "aspect", "console_mode", "res_scale"};   // PEANUTS: console_mode (ScreenMode), res_scale (ResScale)
+    static final String[] GAME_SETTINGS = {"window", "render_pct", "gfx_quality", "fps_cap", "gpu_driver", "gpu_ts", "pause_return", "ndsr_choice2", "ndsr_sharp", "drs2", "ram_saver", "decouple", "hold60", "full_vegetation", "gsr2_clarity", "dlss_sharp", "dlss_mode", "scene_res", "res_preset", "aspect", "cheats", "console_mode", "res_scale"};   // PEANUTS: console_mode (ScreenMode), res_scale (ResScale)
     static void resetGame(Context c, String titleId) {
         SharedPreferences.Editor e = of(c).edit();
         for (String k : GAME_SETTINGS) e.remove(gameKey(k, titleId));
@@ -416,6 +420,23 @@ final class Prefs {
     static boolean ownFpsCap(Context c, String titleId) { return of(c).contains(gameKey("fps_cap", titleId)); }
 
     /** Pause on return (per game, on by default): the game's screen coming back from the background shows it paused, suspended until a tap (GameActivity.onStart) */
+    /** Game settings › Controls › Motion sensitivity: how far the phone's gyro turns the game's aim, a step of MOTION_PCT (100 % = the real turn, as on a console); DM_MOTION_SENS, always
+     *  passed (default 50 %: a held phone is heavier and less steady than a Switch); stored as the percentage, so the steps can change */
+    static final int[] MOTION_PCT = {10, 20, 30, 40, 50, 60, 75, 100, 125, 150};
+    static final String[] MOTION_NAMES = {"10%", "20%", "30%", "40%", "50%", "60%", "75%", "100%", "125%", "150%"};
+    static final int MOTION_DEFAULT = 4;
+    static boolean ownMotionSens(Context c, String titleId) { return of(c).contains(gameKey("motion_pct", titleId)); }
+    static int motionSens(Context c, String titleId) {
+        int pct = of(c).getInt(gameKey("motion_pct", titleId), MOTION_PCT[MOTION_DEFAULT]);
+        int best = MOTION_DEFAULT;
+        for (int i = 0; i < MOTION_PCT.length; i++) if (Math.abs(MOTION_PCT[i] - pct) < Math.abs(MOTION_PCT[best] - pct)) best = i;
+        return best;
+    }
+    static float motionFactor(Context c, String titleId) { return MOTION_PCT[motionSens(c, titleId)] / 100f; }
+    /** null removes the game's own choice */
+    static void motionSens(Context c, String titleId, Integer v) {
+        if (v == null) of(c).edit().remove(gameKey("motion_pct", titleId)).commit(); else of(c).edit().putInt(gameKey("motion_pct", titleId), MOTION_PCT[v]).commit();
+    }
     static boolean pauseOnReturn(Context c, String titleId) { return of(c).getBoolean(gameKey("pause_return", titleId), true); }
     static void pauseOnReturn(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("pause_return", titleId), on).commit(); }
     /** Game settings › Speedhack: Turn off hidden layers (experimental), for a game whose profile names such layers (game.tsv skip_layers): draws of those pixel shaders are
@@ -424,6 +445,19 @@ final class Prefs {
     static String skipLayersKeys(String titleId) { Profile p = Profile.of(titleId); return p == null ? "" : p.skipLayers; }
     static boolean skipLayers(Context c, String titleId) { return of(c).getBoolean(gameKey("vk_skip_layers", titleId), Recommend.bool(rec(c, titleId, Recommend.SKIP_LAYERS), false)); }
     static void skipLayers(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("vk_skip_layers", titleId), on).commit(); }
+    /** Game settings › Cheats (Experimental), for a game whose profile has cheat files (Profile.cheats): off by default; while off the launcher passes no DM_CHEATS and the
+     *  in-game panel has no Cheats section (Cheats.env, Cheats.panel). Reset to defaults turns it off; the toggles below stay */
+    static boolean cheatsGame(String titleId) { Profile p = Profile.of(titleId); return p != null && p.cheats; }
+    static boolean cheats(Context c, String titleId) { return cheatsGame(titleId) && of(c).getBoolean(gameKey("cheats", titleId), false); }
+    static void cheats(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("cheats", titleId), on).commit(); }
+    /** The cheats turned on in the in-game panel, by key (Cheats.Entry.key), kept per game and written into &lt;build&gt;.enabled before each start (Cheats.install) */
+    static java.util.Set<String> cheatsOn(Context c, String titleId) { return Cheats.decodeOn(of(c).getString(gameKey("cheats_on", titleId), "")); }
+    static void cheatsOn(Context c, String titleId, java.util.Set<String> on) { of(c).edit().putString(gameKey("cheats_on", titleId), Cheats.encodeOn(on)).commit(); }
+    static void cheatOn(Context c, String titleId, String key, boolean on) {
+        java.util.Set<String> s = cheatsOn(c, titleId);
+        if (on) s.add(key); else s.remove(key);
+        cheatsOn(c, titleId, s);
+    }
     /** Game settings › Instanced draws (DM_VK_INSTANCE): runs of draws that repeat one mesh drawn as one instanced draw. Off by default (a GPU loss on Adreno 830 with Turnip, open) */
     static boolean instancedDraws(Context c, String titleId) { return of(c).getBoolean(gameKey("vk_instance", titleId), false); }
     static void instancedDraws(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("vk_instance", titleId), on).commit(); }
@@ -472,6 +506,13 @@ final class Prefs {
         if (v == null) of(c).edit().remove(key).commit();
         else of(c).edit().putString(key, v).commit();
     }
+
+    /**
+     * The user clock the next game start gets: "YYYY-MM-DDTHH:MM[:SS]" (the host's DM_TIME), "" = the phone's clock. A DM_TIME or
+     * DM_TIME_OFFSET line in env.txt still wins for a run; DM_FIXED_TIME= overrides both (deterministic replays).
+     */
+    static String timeOverride(Context c) { return of(c).getString("time_override", ""); }
+    static void timeOverride(Context c, String v) { put(c, "time_override", v == null || v.isEmpty() ? null : v); }
 
     /**
      * Folders the user picked (main screen, Folders…), as /storage paths; null = the default. Kept in the app's preferences, so an APK update keeps them (an

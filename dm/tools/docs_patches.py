@@ -74,6 +74,9 @@ HOST_BINDING = [
     ('', '', 'e25c90c1c136638885659fd55bf8a03b', {'what': 'Donkey Kong Bananza camera and layout aspect callback in main v458752', 'now': 'build', 'goal': 'game', 'purpose': 'rendering',
      'why': "the callback reads the scene camera updater's aspect and fovy and the layout draw info's projection at fixed offsets, and the gates sit at fixed addresses of this build; the projection update and the layout setup are plain code a function fingerprint could find",
      'blocked': 'one build on hand'}),
+    ('', '', '250a510a934129cb38e930c9a29082b6', {'what': 'Mario Tennis Fever scene size callback in nro0 1.1.1 (Phone 540p)', 'now': 'build', 'goal': 'game', 'purpose': 'rendering',
+     'why': "the callback writes the scene's size record the game's own size function fills, a layout of this build at a fixed gate address",
+     'blocked': 'one build on hand; the join of the size function could be found by function fingerprint (the 4/5 and 2/3 multiplies after GetCurrentGraphicsScale)'}),
     ('', '', 'd00e4f399e411d0613aa8d26b1c02fef', {'what': 'Mario Kart World camera and 2D layer aspect callback in main 1.8.0', 'now': 'build', 'goal': 'game', 'purpose': 'rendering',
      'why': "the callback reads sead's PerspectiveProjection fields and nn::ui2d's DrawInfo matrix, the same in every title of this engine, but its five gates (two camera aspect stores, two projection getter calls and one rows read) are fixed addresses of this build",
      'blocked': 'one build on hand; the aspect stores and the getter calls could be found by function fingerprint'}),
@@ -132,6 +135,8 @@ SWITCH_BINDING = [
     ('draw_barriers', '', {'what': 'draw passes ordered by the game\'s own barriers', 'now': 'game', 'goal': 'host', 'purpose': 'frame rate', 'why': f'what NVN specifies: {DEFAULT_SOON}'}),
     ('android_window', '1920x1080', {'what': "the Android launcher's default Game resolution, the launcher's own default written out", 'now': 'game', 'goal': 'game', 'purpose': 'rendering',
      'why': "the same default as without the key (Phone 1080p), named in the profile so that one line changes the game's default output (Fire Emblem Fortune's Weave: handheld; original would give docked)"}),
+    ('android_window', 'original', {'what': "the Android launcher's default Game resolution: the game's own size", 'now': 'game', 'goal': 'game', 'purpose': 'rendering',
+     'why': "a game with graphics_scale rows whose start is not Phone 1080p keeps that start as its default (Mario Tennis Fever: console scale 1, 2048x1152), so adding the rows changes no player's picture"}),
     ('android_window', '', {'what': "the Android launcher's default Game resolution", 'now': 'game', 'goal': 'host', 'purpose': 'frame rate',
      'why': "a workaround while the game's upscaler is too slow on Adreno with Turnip at 1080p: the faster upscaler makes it unneeded"}),
     ('mem_map_limit', '', {'what': 'MapPhysicalMemory limited to the application pool', 'now': 'game', 'goal': 'host', 'purpose': 'memory',
@@ -229,6 +234,8 @@ def build_rows(gs):   # {build ID: [(game, display version, module)]}
         for b in g.builds().values():
             for mod, bid in b.items():
                 if mod != 'display': out.setdefault(bid, []).append((g, b['display'], mod))
+        for ver, *mods in g.values('nro_build'):   # a version's NROs (game.tsv nro_build rows), shown with that version's display version
+            for mod, bid in (x.split('=', 1) for x in mods): out.setdefault(bid, []).append((g, g.builds().get(ver, {}).get('display', ver), mod))
     return out
 
 

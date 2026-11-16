@@ -125,6 +125,13 @@ def body(n, data):
     if len(logs) > 1 and len(kinds) == 1:
         parts += [f"{'Both' if len(logs) == 2 else f'All {len(logs)}'} logs end the same way: **{logs[0]['digest']['verdict']['label']}**.", '']
     parts += [f'- {summary_line(lg)}' for lg in logs]
+    advs = [(lg, lg['digest'].get('adv')) for lg in logs]
+    advs = [(lg, a) for lg, a in advs if a is not None]
+    if advs:   # what the player changed from the defaults (the log's [adv] lines): near the top, as the first thing a maintainer asks
+        parts += ['', f'**{I.log_digest.ADV_TITLE}**', '']
+        for lg, a in advs:
+            lab = where_label(lg) if len(logs) > 1 else None
+            parts += [f'- {lab + ": " if lab else ""}' + ('none' if not a else ', '.join(f'`{x}`' for x in a[:12]) + (f' (+{len(a) - 12} more, in the digest below)' if len(a) > 12 else ''))]
     tips = list(dict.fromkeys(lg['digest']['verdict']['meaning'] for lg in logs if lg['digest']['verdict'].get('meaning')))
     if tips: parts += ['', '**What you can try**', ''] + [f'- {t}' for t in tips]
     refs = list(dict.fromkeys(r for lg in logs for r in references(lg['digest'])))

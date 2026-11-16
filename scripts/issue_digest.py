@@ -114,7 +114,7 @@ def report(n, since=0, as_json=False):
         assets(c.get('assets'), where, d, logs, others)
         o += [f"-- comment {c['id']} by {c['user']['login']} {c['created_at']}", text]
     if others: o.append('-- other attachments'); o += [f'  {x}' for x in others]
-    digests, seen = [], {}
+    digests, seen, advs = [], {}, []
     for p, src in logs:
         try: head = tuple(l.rstrip('\r\n') for l in p.read_text(encoding='utf-8', errors='replace').split('\n')[:200] if l.strip())
         except OSError: head = None
@@ -129,9 +129,14 @@ def report(n, since=0, as_json=False):
         txt = log_digest.render(dg)
         (p.parent / (p.name + '.digest')).write_text(txt, encoding='utf-8')
         poster, link = who.get(p.name.split('-', 1)[0], (None, None))
+        if dg.get('adv') is not None: advs.append((p.name, log_digest.adv_lines(dg['adv'])))
         digests.append({'file': str(p), 'source': src, 'poster': poster, 'link': link, 'digest': dg})
         o.append(f'-- log {p.name} ({src})')
         o.append(txt.rstrip('\n'))
+    if advs:   # what the player changed from the defaults, near the top (after the issue's title lines), once for each log
+        top = []
+        for name, lines in advs: top += [lines[0] + f' [{name}]'] + lines[1:]
+        o[2:2] = top
     if as_json: return json.dumps({'issue': n, 'title': iss['title'], 'dir': str(d), 'text': body, 'logs': digests}, indent=1, ensure_ascii=False) + '\n'
     return '\n'.join(o) + '\n'
 

@@ -784,7 +784,7 @@ final class Ondevice {
                 }
             }
             StringBuilder m = new StringBuilder("Deleted:\n· the working files in " + dir + " (rewritten code, split and translated shaders, the job's progress)"
-                    + "\n· the split's kept progress, a copy in the app's own storage");
+                    + "\n· the split's kept progress and the translated shaders kept in the app's own storage");
             if (pk != null) m.append(inside(pk, dir) ? " with the pack inside it" : "\n· the prepared pack and its shader library in " + pk);
             m.append("\n\nKept: your dump (" + j.dump() + ") and your saves").append(save != null ? " (" + save + ")" : "")
                     .append(pk == null ? ", and the pack (" + j.pack() + ")" : "").append(". Saves are never deleted here.");
@@ -794,6 +794,7 @@ final class Ondevice {
                 new Thread(() -> {
                     for (File g : gone) Job.deleteTree(g);
                     Job.deleteTree(j.splitScan(a));   // the split's kept scan results, in the app's own storage
+                    j.deleteResults(a);   // the shaders step's results, in the app's own storage
                     h.post(() -> {
                         wait.dismiss();
                         Job.remember(a, null);

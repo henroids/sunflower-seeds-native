@@ -17,6 +17,7 @@
 #include "vka_prepass.h"
 #include "vka_psosync.h"   // PEANUTS: which draws are not skipped while their pipeline is made in the background (draw_body)
 #include "vka_tbuf.h"   // PEANUTS: how a texel buffer is read: in place, through the CPU's copy or through a copy the GPU makes (tbuf_view)
+#include "vka_wbfollow.h"
 #include <math.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -165,7 +166,7 @@ void vka_draw_sub_begin(VkCommandBuffer cb, unsigned slot) {
     g_cur_dp[g_slot] = 0;
     vka_pso_save(0);
     static int ph; VkImageView placeholder(uint8_t dim, int storage);
-    if (!V.null_desc && !ph && statics()) {   // no null descriptors: the placeholders are made here, outside any pass (their first use records a clear)
+    if (!ph && statics()) {   // the placeholders are made here, outside any pass (their first use records a clear): for a device without null descriptors, and for sets (set_no_nulls)
         ph = 1; static const uint8_t dims[] = {1, 2, 3, 1 | DMSH_VK_DIM_ARRAY, 3 | DMSH_VK_DIM_ARRAY};
         for (size_t i = 0; i < sizeof dims; i++) for (int c = 0; c < 3; c++) placeholder(dims[i] | (c == 1 ? DMSH_VK_DIM_SINT : c == 2 ? DMSH_VK_DIM_UINT : 0), 0);
     }
@@ -1386,7 +1387,7 @@ VkImageView placeholder(uint8_t dim, int storage) {
 static uint64_t g_pt_last, g_pt[9], g_ps[6], g_pt_n, g_pt_tot; static int g_pt_ph;
 static inline uint64_t cntvct(void) { uint64_t v; __asm__ volatile("mrs %0, cntvct_el0" : "=r"(v)); return v; }
 // ---------- Set 0 from the walk ----------
-typedef struct { VkWriteDescriptorSet w[512]; VkDescriptorBufferInfo bi[512]; VkDescriptorImageInfo ii[512]; VkBufferView bv[512]; uint64_t ad[512]; uint32_t n; } writes_t;   // ad: a guest buffer's address (0 = other)
+typedef struct { VkWriteDescriptorSet w[512]; VkDescriptorBufferInfo bi[512]; VkDescriptorImageInfo ii[512]; VkBufferView bv[512]; uint64_t ad[512]; uint8_t dim[512]; uint32_t n; } writes_t;   // ad: a guest buffer's address (0 = other); dim: the shape the shader declares (set_no_nulls)
 static writes_t g_w;
 // A texture or image read by a shader that declares it in another numeric class (float / uint / sint) than the view the game binds: logged once per shader, stage and binding
 // (the first 64), with the texture. Such a binding is read through a view of the shader's class of the same texel size (vka_tex.c class_twin) unless its module is retyped
@@ -1526,7 +1527,7 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
         if (g_w.n == 512) { VRED_ONCE("more than 512 descriptors in one draw"); return 0; }
         uint32_t k = g_w.n;
         VkWriteDescriptorSet *w = &g_w.w[k]; VkDescriptorBufferInfo *bi = &g_w.bi[k]; VkDescriptorImageInfo *ii = &g_w.ii[k];
-        g_w.ad[k] = r[i].what == VKA_R_BUF ? r[i].addr : 0;
+        g_w.ad[k] = r[i].what == VKA_R_BUF ? r[i].addr : 0; g_w.dim[k] = r[i].dim;
         *w = (VkWriteDescriptorSet){VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = r[i].binding, .dstArrayElement = r[i].elem, .descriptorCount = 1, .descriptorType = (VkDescriptorType)r[i].desc};
         int ok = 1;
         switch (r[i].desc) {
@@ -1568,7 +1569,14 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
             VkImageView v = VK_NULL_HANDLE; VkSampler s = VK_NULL_HANDLE; VkImageLayout lay = VK_IMAGE_LAYOUT_GENERAL;
             if (r[i].desc != VK_DESCRIPTOR_TYPE_SAMPLER) {
                 int tid = r[i].what == VKA_R_TEX || r[i].what == VKA_R_IMG ? r[i].tid : 0;
-                if (tid) v = vka_tex_id_view_rec(tid, g_cb, r[i].dim, storage, &lay);
+                if (tid && vka_tex_id_is_buffer(tid)) {   // a buffer texture read as an image: its copy (vka_tbuf.c, made in make_images); as a storage image, not done
+                    if (!storage) v = vka_tbuf_image_view(tid, r[i].dim);
+                    if (!storage && !v) v = vka_tex_id_view_rec(tid, g_cb, r[i].dim, 0, &lay);   // PEANUTS: no copy on the GPU to read (storage that is not placed, an offset off the texel grid): the row image made of the CPU's bytes (vka_tex.c img_create_; made outside the pass, make_images)
+                    else { static _Atomic int k; if (atomic_fetch_add(&k, 1) < 8) VRED("shader %016llx binding %u: buffer texture ID %d bound as a storage image: not done, it reads and writes nothing", (unsigned long long)sh->key, r[i].binding, tid); }
+                    if (!v && !V.null_desc) v = placeholder(r[i].dim, storage);
+                    if (!v && !V.null_desc) { VRED_ONCE("an unbound image of shape %#x and no null descriptors: the draw is skipped", r[i].dim); g_skip_dev[VKS_FEATURE]++; return 0; }
+                    tid = 0;
+                } else if (tid) v = vka_tex_id_view_rec(tid, g_cb, r[i].dim, wbf_view_of_binding(storage, r[i].flags, DMSH_VK_BF_RW), &lay);   // (a shader image only read: not a GPU write)
                 if (tid && v) class_note(sh, st, &r[i], tid, storage);
                 if (tid) tex_peek(sh->key, st, &r[i], v, storage);
                 if (tid && g_rtl_pass && rtl_room()) {   // PEANUTS: DM_VK_RT_LOG: each draw's textures, in order with its draw lines (the tex peek line is logged once per texture)
@@ -1594,12 +1602,17 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
             *ii = (VkDescriptorImageInfo){s, v, lay};
             w->pImageInfo = ii; if (g_prof) { g_ps[4] += cntvct() - ti_; g_ps[5]++; }
             break; }
-        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-            // PEANUTS: a buffer texture bound to a texel buffer slot is a view of its elements in guest memory (tbuf_view); no texture or no view reads as a null texel buffer (zeros)
-            g_w.bv[k] = (r[i].what == VKA_R_TBUF || r[i].what == VKA_R_IMG) && r[i].tid ? tbuf_view(sh, r[i].tid, &r[i], r[i].desc == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) : VK_NULL_HANDLE;
-            if (!g_w.bv[k] && !V.null_desc) { VRED_ONCE("a texel buffer binding without a buffer and no null descriptors: the draw is skipped"); g_skip_dev[VKS_FEATURE]++; return 0; }
-            w->pTexelBufferView = &g_w.bv[k];
-            break;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: {   // a buffer texture over guest memory (vka_tbuf.c)
+            int storage = r[i].desc == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+            // PEANUTS: a buffer texture bound to a texel buffer slot is a view of its elements in guest memory, this fork's first (tbuf_view: the CPU's copy of a small read-only
+            // buffer, a copy the GPU makes of one it wrote, an offset the device cannot view in place); upstream's view in place (vka_tbuf_view) where that has none to give
+            // and for a texture record. No texture or no view reads as a null texel buffer (zeros)
+            int tm = VKA_ENV("DM_VK_TBUF", 1), tb = tm && !(storage && tm == 2);   // PEANUTS: upstream's switch holds for this fork's view too (0: none bound, 2: none written)
+            VkBufferView bv = tb && (r[i].what == VKA_R_TBUF || r[i].what == VKA_R_IMG) && r[i].tid ? tbuf_view(sh, r[i].tid, &r[i], storage) : VK_NULL_HANDLE;   // PEANUTS
+            if (!bv && (r[i].what == VKA_R_TBUF || r[i].what == VKA_R_TEX || r[i].what == VKA_R_IMG) && r[i].tid) bv = vka_tbuf_view(r[i].tid, storage);
+            if (!bv && !V.null_desc) { VRED_ONCE("an unbound texel buffer and no null descriptors: the draw is skipped"); g_skip_dev[VKS_FEATURE]++; return 0; }
+            g_w.bv[k] = bv; w->pTexelBufferView = &g_w.bv[k];
+            break; }
         default: VRED_ONCE("descriptor type %u in a binding record", r[i].desc); return 0;
         }
         g_w.n++;
@@ -1700,6 +1713,27 @@ static int push_same(VkPipelineBindPoint bp, VkPipelineLayout layout) {
     return 0;
 }
 static int g_sets_dry, g_dry_pool;   // DM_VK_INSTANCE: bind_sets only builds the writes (g_w) when g_sets_dry is set, and sets_push binds them later
+// A set written with vkUpdateDescriptorSets (a layout with more descriptors than maxPushDescriptors) gets no null descriptor: an unbound image takes a placeholder (the
+// 1x1 zero images of a device without null descriptors, placeholder()), an unbound buffer the zero or sink span. Null descriptors are valid there with robustness2's
+// nullDescriptor, but Qualcomm's driver (Adreno 740, 1.3.128 build 69e13475cb) dereferences a null image view or buffer in vkUpdateDescriptorSets (SIGSEGV at 0x48,
+// vkUpdateDescriptorSets+376: issue #249, Ocarina of Time in water and at area transitions) and takes the compositor down with it; its push descriptors take the same
+// nulls. A workaround for that driver, made for every driver since it is valid everywhere and reads the same zeros: pushed sets keep their null descriptors.
+// Texel buffers (bound only as null here) and 1D or multisampled images (no placeholder) stay null. DM_VK_SET_NULLS=1 writes null descriptors into sets as before
+static void set_no_nulls(void) {
+    static int on = -1; if (on < 0) on = !VKA_ENV("DM_VK_SET_NULLS", 0);
+    if (!on || !V.null_desc) return;   // (without null descriptors stage_writes already wrote placeholders)
+    VkImageView placeholder(uint8_t dim, int storage);
+    for (uint32_t k = 0; k < g_w.n; k++) {
+        VkWriteDescriptorSet *w = &g_w.w[k];
+        if (w->pImageInfo && w->descriptorType != VK_DESCRIPTOR_TYPE_SAMPLER && !w->pImageInfo->imageView) {
+            VkImageView v = placeholder(g_w.dim[k], w->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            if (v) { g_w.ii[k].imageView = v; g_w.ii[k].imageLayout = VK_IMAGE_LAYOUT_GENERAL; w->pImageInfo = &g_w.ii[k]; }
+        } else if (w->pBufferInfo && !w->pBufferInfo->buffer) {
+            int st = w->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            g_w.bi[k] = (VkDescriptorBufferInfo){st ? g_sink.buf : g_zero.buf, st ? g_sink.off : g_zero.off, 65536}; w->pBufferInfo = &g_w.bi[k];
+        }
+    }
+}
 // The writes of g_w bound: pushed (only what changed since the last push) or as a set, and the texture pool set
 static int sets_push(const vka_layout *lay, VkPipelineBindPoint bp, int any_pool) {
     uint64_t t2_ = g_prof ? cntvct() : 0;
@@ -1710,6 +1744,7 @@ static int sets_push(const vka_layout *lay, VkPipelineBindPoint bp, int any_pool
         g_pd[bp == VK_PIPELINE_BIND_POINT_COMPUTE].n = 0;   // set 0 bound as a set: the last push is no longer what the draws see
         VkDescriptorSet set = set_alloc(lay->set0); if (!set) return 0;
         for (uint32_t i = 0; i < g_w.n; i++) g_w.w[i].dstSet = set;
+        set_no_nulls();
         if (g_w.n) vk.vkUpdateDescriptorSets(V.dev, g_w.n, g_w.w, 0, NULL);
         vk.vkCmdBindDescriptorSets(g_cb, bp, lay->layout, 0, 1, &set, 0, NULL);
     }
@@ -1781,7 +1816,12 @@ static int make_images(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], in
         for (int i = 0; i < g_wk.n[st]; i++) if ((r[i].what == VKA_R_TEX || r[i].what == VKA_R_IMG) && r[i].tid && r[i].desc != VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER   // PEANUTS: a texel buffer is no image (tbuf_view)
                                                  && (vka_tex_id_pending_rec(r[i].tid, r[i].dim) || (r[i].what == VKA_R_IMG && vka_tex_id_storage_pending(r[i].tid)))) {   // (an image remade with storage use copies its content: outside the pass)
             any = 1; if (dry) return 1;
-            vka_tex_id_view(r[i].tid, g_cb, r[i].dim, r[i].what == VKA_R_IMG, NULL);
+            vka_tex_id_view(r[i].tid, g_cb, r[i].dim, wbf_view_of_binding(r[i].what == VKA_R_IMG, r[i].flags, DMSH_VK_BF_RW), NULL);
+        }
+        for (int i = 0; i < g_wk.n[st]; i++) if (r[i].what == VKA_R_TEX && r[i].tid && vka_tbuf_pending(r[i].tid, r[i].dim)) {   // a buffer texture read as an image: its copy (vka_tbuf.c), outside the pass
+            any = 1; if (dry) return 1;
+            vka_tbuf_refresh(r[i].tid, r[i].dim, g_cb);
+            if (!vka_tbuf_image_view(r[i].tid, r[i].dim)) vka_tex_id_view(r[i].tid, g_cb, r[i].dim, 0, NULL);   // PEANUTS: none made: the row image of the CPU's bytes instead (bind_sets reads it), made and uploaded here, outside the pass
         }
     }
     return any;
@@ -2594,6 +2634,15 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     // Images first used by this draw are made (cleared or uploaded) outside the render pass, then the pass opens over the bound targets
     PT(2);
     walk_all(d, sh);
+    {   // DM_VK_BIND_LOG: a draw whose vertex or pixel shader is one of those keys logs its stages' bindings too, as a dispatch does (the first 12 draws in all)
+        const char *bl = getenv("DM_VK_BIND_LOG"); static _Atomic int nb; int hit = 0;
+        for (const char *q = bl; q && *q && !hit;) { char *e; unsigned long long k = strtoull(q, &e, 16); if (e == q) break; hit = (sh[0] && k == sh[0]->key) || (sh[1] && k == sh[1]->key); q = *e == ',' ? e + 1 : e; }
+        if (hit && atomic_fetch_add(&nb, 1) < 12)
+            for (int st = 0; st < VKA_NSTAGE; st++) if (sh[st]) for (int i = 0; i < g_wk.n[st]; i++) { const vka_res *x = &g_wk.r[st][i]; char why[320] = "";
+                if ((x->what == VKA_R_TEX || x->what == VKA_R_IMG) && x->tid) vka_tex_id_desc(x->tid, why, sizeof why);
+                VLOG("bindings of draw %016llx stage %d: binding %u elem %u what %u desc %u dim %#x flags %#x tid %d sid %d addr %#llx size %#llx %s", (unsigned long long)sh[st]->key, st,
+                     x->binding, x->elem, x->what, x->desc, x->dim, x->flags, x->tid, x->sid, (unsigned long long)x->addr, (unsigned long long)x->size, why); }
+    }
     if (make_images(d, sh, 1)) { vka_rp_end(); make_images(d, sh, 0); }
     if (vka_rs_on()) rs_fetch_fix(sh, d);   // PEANUTS: DM_RES_SCALE: a shader that fetches by pixel sees its 2D textures at one scale
     if (R.on && R.bar_pending && bar_hazard(sh, d)) { g_bar_late++; vka_rp_end(); }   // the game barrier taken inside the pass is needed here: the pass ends (its full barrier) first
@@ -3332,7 +3381,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
         return;
     }
     vka_layout lay; if (!vka_layout_of(sh, 1, &lay)) SKIP("dispatch skipped: no pipeline layout");
-    VkPipeline p = vka_cs_pipeline(sh[5], &lay);
+    VkPipeline p = vka_cs_pipeline_frame(sh[5], &lay);   // (VK_NULL_HANDLE while being made in the background, DM_VK_CS_ASYNC: the dispatch skipped)
     if (vka_nan_on()) vka_tex_watch_dispatch(sh[5]->key);
     if (!p) { g_skipped++; g_skip_dev[VKS_PIPELINE]++; return; }
     d->b.dispatch[0] = (uint32_t)dp->x; d->b.dispatch[1] = (uint32_t)dp->y; d->b.dispatch[2] = (uint32_t)dp->z; d->b.nvn2 = (uint32_t)vka_nvn2();
@@ -3430,6 +3479,8 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
         }
       } }
   ndsr_net:
+    for (int i = 0; i < g_wk.n[5]; i++) if (g_wk.r[5][i].what == VKA_R_TEX && g_wk.r[5][i].tid && vka_tbuf_pending(g_wk.r[5][i].tid, g_wk.r[5][i].dim))
+        vka_tbuf_refresh(g_wk.r[5][i].tid, g_wk.r[5][i].dim, g_cb);   // buffer textures read as images: their copies (vka_tbuf.c; no pass is open)
     { g_tbuf_disp = 1; int ok = bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_COMPUTE, &c0); g_tbuf_disp = 0; tbuf_gcopy_end();   // PEANUTS: + the barrier after the texel buffer copies the GPU makes for this dispatch (tbuf_view), whether it is recorded or not
       if (!ok) { g_skipped++; return; } }
     if (dp->ind && c0.buf) {   // the group counts the GPU wrote, into c0's dispatch words before the dispatch reads them (nvn_mtl.m g_c0_dim_buf); NVN2 reads them at c0 + 4 too

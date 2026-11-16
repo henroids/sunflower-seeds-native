@@ -46,6 +46,22 @@ class Game:
     def pairs(self, key):   # "a=b c=d" → [(a, b), (c, d)]
         return [tuple(w.split('=', 1)) for w in self.words(key)]
 
+    def cheats(self):
+        """The profile's cheat files (cheats rows, a path relative to the profile folder each): [Path]. Each is an Atmosphère-format file named as dmnt and the host's
+        engine (dm/host/hle_cheats.c) pick it, the first 16 hex digits of a main build ID in upper case + .txt, and that build must be one of the profile's build rows:
+        the name is the file's build gate (a file of another build never loads). Raises ValueError naming the row otherwise"""
+        mains = {b['main'][:16].upper() for b in self.builds().values() if len(b.get('main', '')) >= 16}
+        out = []
+        for row in self.values('cheats'):
+            rel = row[0] if row else ''
+            p = (self.dir / rel).resolve()
+            if not rel or self.dir not in p.parents: raise ValueError(f'{self.id}: cheats {rel!r}: a file in the profile folder')
+            if not re.fullmatch(r'[0-9A-F]{16}\.txt', p.name): raise ValueError(f'{self.id}: cheats {rel}: the name must be the main build ID\'s first 16 hex digits, upper case, + .txt')
+            if p.stem not in mains: raise ValueError(f'{self.id}: cheats {rel}: build {p.stem} is none of the profile\'s main builds ({", ".join(sorted(mains)) or "none"})')
+            if not p.is_file(): raise ValueError(f'{self.id}: cheats {rel}: no such file')
+            out.append(p)
+        return out
+
 
 def extra_dirs():   # profile folders outside the repository (DM_GAMES_DIR), searched after dm/games
     return [Path(p) for p in os.environ.get('DM_GAMES_DIR', '').split(':') if p]
@@ -124,6 +140,8 @@ def header(g):
     if not fl.isdigit() or int(fl) and not 10 <= int(fl) <= 60: sys.exit(f'{g.id}: fps_limit must be 0 (none) or 10 to 60 frames a second: {fl}')
     fh = g.get('fps_hold', 'on')   # whether the frame step may hold a frame longer than the cap's vsyncs when frames come late (hle_nvn.c fstep_tick): on / off
     if fh not in ('on', 'off'): sys.exit(f'{g.id}: fps_hold must be on or off: {fh}')
+    try: g.cheats()   # the cheat files' names (their build gate): the host does not compile them in, but a wrong name would never load
+    except ValueError as e: sys.exit(str(e))
     utp = g.get('ue_texture_pool', '0')   # Unreal's r.Streaming.PoolSize in MB, raised to this on the Mac (hle_uecvar.c; DM_UE_TEXTURE_POOL overrides, and turns it on for iOS): 0 = the game's own pool
     if not utp.isdigit(): sys.exit(f"{g.id}: ue_texture_pool must be megabytes (0 = the game's own pool): {utp}")
     ufc = g.get('ue_fps_cvar', 't.MaxFPS')   # the Unreal console variable the host writes fps_target into (hle_fpslock.c; found by name by the rewriter, ue_cvar.py NAMES): a game's own frame limit its settings apply to t.MaxFPS

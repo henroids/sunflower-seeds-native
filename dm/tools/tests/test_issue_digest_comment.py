@@ -33,6 +33,16 @@ class Body(unittest.TestCase):
     def render(self, text):
         return unittest.mock.patch.object(I.log_digest, 'render', lambda d: text)
 
+    def test_settings_changed_near_the_top(self):
+        lg = log('attached in issue: A.log'); lg['digest']['adv'] = ['DM_X=1 (Advanced, global)']
+        with self.render('== log digest\n'):
+            b = C.body(82, {'logs': [lg]})
+        self.assertIn('**Settings changed from the defaults**\n\n- `DM_X=1 (Advanced, global)`', b)
+        self.assertLess(b.index('Settings changed'), b.index('What you can try'))
+        lg['digest']['adv'] = []
+        with self.render('x'):
+            self.assertIn('**Settings changed from the defaults**\n\n- none', C.body(82, {'logs': [lg]}))
+
     def test_no_log_no_comment(self):
         self.assertIsNone(C.body(1, {'logs': []}))
 

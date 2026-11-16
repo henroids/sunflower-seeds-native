@@ -4,6 +4,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 
 ## Containers by engine
 
+### One scrambled archive indexed by the NRO
+
+- **Symptom:** the split finds no shaders (on macOS also `OSError: [Errno 22]`, a single read of the whole file over 2 GiB), and the RomFS is one huge file with a short name (`42`) whose bytes look random past a table at its start (magic `CRA.`).
+- **Cause:** [Mario Tennis Fever](../../dm/games/0400D4201C6EA000/README.md)'s engine keeps its 8,671 files in that archive, listed only in the game's code: a file table in read-only data of an NRO that `main` decodes at run time. Each file is scrambled in 16-byte blocks with a key from its name, and most are NARC containers (the DS's format) whose members are packed by their first byte (LZ4, zstd, deflate, an LZ of the game's own, or chunks of these). The shaders are BNSH in the FSHA, VFXB and SARC members, one FSHA per model, and 40 more in the NRO's own data.
+- **Fix:** `dm/gfx/tools/cra.py` (from nxnative `b6dbb851`) finds the table from the code that reads it and reads a file as the game does; the game's checksum of each file catches a wrong key. `shader_split.py` (`cra_jobs`) reads the NRO from `DM_NRO_DIR`, else from `main` ([Prepare stops at the split of a game whose code a boot stub packs into `main`](packing.md#prepare-stops-at-the-split-of-a-game-whose-code-a-boot-stub-packs-into-main)), scans each file but sound and movies (by their magics) in ranges by its own offsets, and expands NARC members in `scan_blob`. `DM_NRO_DIR` is part of the resume cache's key. The NRO is decoded from `main` by `nro_collect.py` ([The game's code packed into `main` by a boot stub](services.md#the-games-code-packed-into-main-by-a-boot-stub)); its output folder is a `DM_NRO_DIR`.
+- **Check:** `dm/tools/tests/test_split_cra.py`. On 1.1.1 the split makes the profile's four tables byte for byte (35,045 shaders).
+- **Found on:** [Mario Tennis Fever](../../dm/games/0400D4201C6EA000/README.md).
+
 ### Sumo Ninty_NX shaders and MuxFDMR streams
 
 - **Symptom:** the split finds no shaders in `main` or RomFS, while reporting control sections in `main` with no code area. The game has `.sp4` resources and loose `.nvnbin` files rather than BNSH archives or whole GLSLC outputs.
@@ -385,6 +393,27 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **How it is stored:** the desktop renderer (`SF_GLSL_SWITCH`) with the same `LSLG` records, but no archive in the pak: the two libraries are IoStore shader libraries in `FFRS-Switch.ucas`, whose shader groups are Oodle-compressed as a whole ([01](../agents/01-extract.md)). Each shader entry packs its frequency (bits 0–3), group (4–33) and offset in the group's decoded bytes (from bit 34), and a shader runs to the next one's offset.
 - **Reader:** `uepak.py` writes them out as version 2 archives, so the split reads them as any other.
 - **Found on:** [FINAL FANTASY RESONANCE](../../dm/games/0100606026F12000/README.md) (Unreal Engine 5.6.1): 73,496 unique shaders (9,253 vertex, 61,305 pixel, 2,934 compute, 4 geometry).
+
+### Images whose handle is in the game's uniform buffer
+
+- **Symptom:** the Android library build fails compute shaders with `NotSupportedException: SUATOM handle in bank 3` (and `SURED handle in bank 3`), and its summary counts many more under `shaders with a binding whose slot was not decoded`, as `IMG cp_i_cb3_0_`, `cp_i_cb3_2_` … (`fp_i_cb3_…` in pixel shaders): images the replay would bind as null.
+- **Cause:** Unreal Engine 5.6 on the Switch 2 keeps the handle of every image a compute shader writes in the game's first uniform buffer, `c[3]` (bank 3), one 32-bit word each, and the shader reads it there, as `TEX_UBO`'s textures. The translator took the bank of a SULD's or SUST's handle (`ATexHandle`) but refused SUATOM and SURED with another bank than 2, and the Android ABI had no kind for an image named by a uniform buffer: `decode_tex` reads bank 2's image slots only.
+- **Fix:** three parts. The translator passes the bank on for SUATOM and SURED as for SULD and SUST (`InstEmitAmpereMem.cs` `ASuatom` / `ASured`, `InstEmitSurface.cs` `EmitSuatom` / `EmitSured`; upstream nxnative does the same). The library build files `<stage>_i<type>_cb<3..16>_<handle>` as `IMG_UBO` (`vk_android_build.py` `ubo_img`: uniform slot bank − 3, byte offset the handle's word × 4; flags `ATOMIC` and `RW` as `IMG`'s). The replay reads the handle at bind time and binds the storage image of its texture ID with the pool base, as `TEX_UBO` and upstream's Metal `IMGU` do (`vka_bind.c`). The kind moves `DMSH_VK_ABI`; the previous ABI is a row of `vka_abi_compat.h` with no differences, since none of its libraries holds the kind, so they keep playing until their update.
+- **Found on:** [Orbitals](../../dm/games/040032B023CA4000/README.md): 1,034 compute shaders refused (1,006 SUATOM, 28 SURED), 2,871 bindings with no slot in 2,820 compute, 50 pixel and 1 vertex shader (handles at `c[3]` words 0 to 0xE). With the fix, 7,044 `img_ubo` bindings and no binding without a slot.
+
+### An image write's coordinate lost by promote_locals
+
+- **Symptom:** the Android library build fails shaders with `spirv-val failed  error: line …: ID '…' has not been defined`, the undefined id the coordinate (or the image) of an `OpImageWrite`; the translator's own module validates.
+- **Cause:** `promote_locals` (`vk_android_spv.py`) replaces the loads of a single-store Function variable with the stored value, deletes the loads, and rewrites their uses with `_remap_operands`, which takes an instruction's ids from operand 3 unless its opcode is in `NO_RESULT_OPS`. `OpImageWrite` has no result, so its image and coordinate are operands 1 and 2, and it was not in the set: a coordinate kept in a local (the translator's temporary for a buffer image's index) lost its load. The same set tells the passes which instructions define their operand 2, so the write was also taken for the coordinate's definition.
+- **Fix:** `NO_RESULT_OPS` holds every instruction with no result and id operands the modules have: `OpImageWrite`, `OpCopyMemory`, `OpCopyMemorySized`, the geometry stream instructions, `OpAtomicStore`, `OpEmitMeshTasksEXT`, `OpSetMeshOutputsEXT` (`dm/gfx/tests/test_vk_image_ops.py` `PromoteImageWrite`).
+- **Found on:** [Orbitals](../../dm/games/040032B023CA4000/README.md): 189 compute shaders.
+
+### Shared memory with a buffer's array stride
+
+- **Symptom:** `spirv-val failed  error: line …: [VUID-StandaloneSpirv-None-10684] Invalid explicit layout decorations on type '…[%_arr_uint_uint_8]', the Workgroup storage class has an explicit layout from the ArrayStride decoration`, in the translator's own module.
+- **Cause:** the translator's SPIR-V generator reuses an identical type, so a shared (or local) memory of 8 words took the support buffer's `uint[8]`, which carries `ArrayStride 16`; Workgroup and Private variables may have no explicit layout.
+- **Fix:** shared and local memory arrays get a type of their own (`CodeGen/Spirv/Declarations.cs` `DeclareMemories`, `TypeArray(…, forceIdAllocation: true)`).
+- **Found on:** [Orbitals](../../dm/games/040032B023CA4000/README.md): 24 compute shaders.
 
 ### IoStore patch containers keep their shader groups in the base container
 
@@ -1774,6 +1803,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Fix:** a table of older ABIs the host also plays, outside the digest: `dm/gfx/vk_android/vka_abi_compat.h` (`674db0a4ff79` with `VKA_ABI_LOG_PAGES`). Its rows hold for the host ABI it names (`VKA_ABI_COMPAT_FOR`); when `DMSH_VK_ABI` moves again, no row is used until they are checked against the headers' diff and that line is raised (`t_android_shlib` and `test_android_shader_delta` fail meanwhile). `vka_shlib_check` takes a library of such an ABI as `by_abi` 2 with its differences; `lib_load` (`vka_shader.c`) plays one only when the pack has none of the host's own ABI, the newest, with a line naming the ABI. The write log's two formats are in `vka_gml.h`: each log buffer is allocated at the larger size, bound at the playing library's size (`vka_tex_gml_take`, and the fallback in `vka_draw.c` `gmem_log`), and `gml_poll` reads that format (pages back to 4 KiB opaque writes, as before a319e773). The launcher takes the list as `BuildConfig.NX_DMSH_VK_ABI_COMPAT` (`build.gradle`, empty when the table is for another ABI) and `ShaderLibs.playable` takes such a library after any of its own ABI ([android/SHADERS.md, Delta updates](../../android/SHADERS.md#delta-updates)). Checks: `t_android_shlib` (the table, `by_abi`, both log formats written as the modules write them), `test_android_shader_delta` (`test_compat_table_is_for_this_abi`, `test_playable_older_abi`).
 - **Open:** not run on the phone yet. Entry 0's sink must stay intact for the old modules: the hint loop in `gmem_map` also writes word 6 of entry 0 for a 2 MiB chunk whose number is a multiple of 8,192 (a guest address at a multiple of 16 GiB), which the new modules' sink needs fixed as well (being fixed on another branch).
 - **Found on:** [Donkey Kong Bananza](../../dm/games/040074A01BF12000/README.md#found-on-this-game): phones with the `v-d64f157175fd` library when the APKs of `228b73bd10f6` came.
+
+### The Mac host read the raw-memory write log in its old layout
+
+- **Symptom:** `make -C dm/host` stops at `nvn_mtl.m: use of undeclared identifier 'DMSH_GMEM_LOG_LOG2'`: the Mac host does not build, so neither the NSP script's heap check nor its address region check can run.
+- **Cause:** the change above made the write log a bitmap of pool-table entries (`dmsh_abi.h`, Ryujinx `GlobalToStorage.GmemLogCbOffset`) and removed `DMSH_GMEM_LOG_LOG2`; the Vulkan replay read it the new way (`vka_gml.h`), the Mac's `gml_read` still read a hash set of guest pages, so it would also have read the shaders' bits as page numbers.
+- **Fix:** `gml_read` reads the bitmap: each set bit names an entry of the pool table the draw was encoded with (`gml_take` keeps that table with the log), whose range gives the pool; the log cannot run out of slots any more, so its overflow handling is gone. The table carries no lookup hints, which the format allows (a hint of 0 makes the shader search).
+- **Check:** the Mac host builds and boots Super Mario Bros. Wonder's program 1 to its heap request and 15 s into `nnMain`; no game was played on the Mac with it.
+- **Found on:** [Super Mario Bros. Wonder - Nintendo Switch 2 Edition](../../dm/games/040015100B514001/README.md), whose heap check needed the Mac host.
 
 ### A shader package of another split gives shaders other shaders' code
 

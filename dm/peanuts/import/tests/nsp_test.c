@@ -31,6 +31,7 @@ static _Atomic int g_prep_calls; static int g_prep_unprotect_at;   // the test o
 void dm_guest_write_prepare(void *a, size_t n) { if (++g_prep_calls == g_prep_unprotect_at) mprotect(a, n, PROT_READ | PROT_WRITE); }
 static module_t g_main; module_t *g_mod = &g_main; int g_nmod = 1;
 int dm_main_imports(const char *prefix) { (void)prefix; return 0; }
+int dm_game_imports(const char *prefix) { (void)prefix; return 0; }   // (hle_fs.c asks this one since Banana Native v0.3.22)
 int dm_mii_standin(const char *dir) { (void)dir; return 0; }
 void dm_thread_service_request(void) {}
 uint64_t plat_clock_ns(clockid_t c) { struct timespec t; clock_gettime(c, &t); return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec; }
