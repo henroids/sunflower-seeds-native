@@ -411,6 +411,7 @@ static void rt_heap_range(void *u, uint64_t *base, uint64_t *open_len) { (void)u
 static uint64_t rt_code_block_find(size_t size);
 // The block is guest code for the host's thread pause from now on (hle_thread.c dm_guest_code_range): a game thread running the helper is stopped as one running the game
 void dm_guest_code_range(uint64_t lo, uint64_t hi);
+__attribute__((weak)) int dm_account_start_save_dir(const char *base, char *out, size_t cap);   // hle_account.c; absent in this file's PC test
 static uint64_t rt_code_block(void *u, size_t size) {
     (void)u;
     uint64_t at = rt_code_block_find(size);
@@ -751,7 +752,14 @@ static void rt_start(void) {
     if (!data_dir[0]) snprintf(data_dir, sizeof data_dir, "%s/peanuts-rt", getenv("DM_TEMP") ? getenv("DM_TEMP") : "/data/local/tmp");
     mkdir(data_dir, 0700);
     c.data_dir = data_dir;
+    // The save folder of the user the game starts with (upstream's users, Settings › Users: the first user's is DM_SAVE, another's DM_SAVE_user_<uid>,
+    // hle_account.c). A game that lets the player pick another user later, in its own selector, still shows the companion the starting user's save
     c.save_dir = getenv("DM_SAVE");
+    { static char sd[1100]; size_t L = c.save_dir ? strlen(c.save_dir) : 0;
+      if (L && dm_account_start_save_dir) {
+          char base[1024]; while (L > 1 && c.save_dir[L - 1] == '/') L--;
+          if (L < sizeof base) { memcpy(base, c.save_dir, L); base[L] = 0;
+              if (!dm_account_start_save_dir(base, sd, sizeof sd)) { LOG("[peanuts] companion: the save folder is the starting user's, %s", sd); c.save_dir = sd; } } } }
     c.memory.read = rt_mem_read; c.memory.write = rt_mem_write; c.memory.pointer_at = rt_mem_pointer; c.memory.heap_range = rt_heap_range;
     c.pad.set_button = rt_pad_button; c.pad.set_stick = rt_pad_stick; c.pad.read = rt_pad_read;
     c.ui.publish_ui = rt_ui_publish; c.ui.publish_ui_partial = rt_ui_publish_partial;

@@ -72,6 +72,9 @@ int dm_account_save_dir(const void *uid, const char *base, char *out, size_t cap
     snprintf(out, cap, "%s_user_%s", base, h);
     return 0;
 }
+// PEANUTS: the save directory of the user the game starts with (DM_USER, else the first), as dm_account_save_dir names it: what the companion runtime reads as the
+// game's save (dm/peanuts/peanuts.c rt_start), which read the first user's whoever played
+int dm_account_start_save_dir(const char *base, char *out, size_t cap) { users(); return dm_account_save_dir(&g_users[g_def].uid, base, out, cap); }
 // How many users the console has (DM_USERS, else the one fixed user): hle_fs.c frees a save's mount name on Unmount only when there is more than one
 int dm_account_users(void) { users(); return g_nusers; }
 
