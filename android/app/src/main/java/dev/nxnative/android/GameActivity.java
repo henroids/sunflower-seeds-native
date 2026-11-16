@@ -663,7 +663,13 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (build == null) { unknownNotes.add("[nxlaunch] Cheats: the pack names no main build; this start runs without cheats"); return; }
         File folder = CheatsUi.folder(this, id), shipped = Cheats.packFile(packDir, build);
         try {
-            List<Cheats.Entry> l = ModCheats.install(shipped, folder, build, Prefs.cheatsOn(this, id), cheatMods);   // PEANUTS: was Cheats.install: the enabled mods' cheat files are in the one list too (ModCheats)
+            // PEANUTS begin: was Cheats.install(shipped, folder, build, Prefs.cheatsOn(this, id)): the enabled mods' cheat files are in the one list too (ModCheats),
+            // the cheats a mod's own .enabled turns on are on the first time they are listed, and a mod's file that cannot be read is a note, not a start without cheats
+            java.util.Set<String> con = Prefs.cheatsOn(this, id); int con0 = con.size(); List<String> cnotes = new ArrayList<>();
+            List<Cheats.Entry> l = ModCheats.install(shipped, folder, build, con, cheatMods, cnotes);
+            if (con.size() != con0) Prefs.cheatsOn(this, id, con);
+            for (String n : cnotes) unknownNotes.add("[nxlaunch] Cheats: " + n);
+            // PEANUTS end
             if (l == null) { unknownNotes.add("[nxlaunch] Cheats: no cheat file for build " + build + (shipped == null ? " in the pack (Prepare again brings the game's own) and none imported" : "")); return; }
             env.addAll(Cheats.env(true, true, folder));
             cheatsMerged = true;   // PEANUTS: the mods' cheats are in this folder: no second DM_CHEATS line (start)
@@ -730,6 +736,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             } catch (java.io.FileNotFoundException e) {   // an APK built without fontTools: the host's [YELLOW] line says so
             } catch (IOException e) { unknownNotes.add("[nxlaunch] the button-icon font is not placed (" + e.getMessage() + "): button icons in game text draw as '?'"); }
             String gpuNote = settingsEnv(id, env);
+            cheatsMerged = false;   // PEANUTS: decided anew at each start (this screen's object may start a game again)
             cheatMods = dev.peanuts.mods.ModRuntime.cheatsDirs(game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: for cheatsEnv (ModCheats)
             cheatsEnv(id, pack, packDir, env);
             // The 3D scene (Game settings › Resolution, ResPresets; Advanced › 3D scene, SceneRes): the chosen RomFS overlay in the pack, made by the pack step from the player's files,

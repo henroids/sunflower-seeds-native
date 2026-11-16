@@ -20,12 +20,15 @@ public final class ModCheatsTest {
     public static void main(String[] a) throws Exception {   // shipped-or-"-" folder build on(comma) modCheatsDir...
         List<File> dirs = new ArrayList<>();
         for (int i = 4; i < a.length; i++) dirs.add(new File(a[i]));
-        List<Cheats.Entry> l = ModCheats.install(a[0].equals("-") ? null : new File(a[0]), new File(a[1]), a[2],
-                new LinkedHashSet<>(a[3].isEmpty() ? new ArrayList<String>() : Arrays.asList(a[3].split(","))), dirs);
+        java.util.Set<String> on = new LinkedHashSet<>(a[3].isEmpty() ? new ArrayList<String>() : Arrays.asList(a[3].split(",")));
+        List<String> notes = new ArrayList<>();
+        List<Cheats.Entry> l = ModCheats.install(a[0].equals("-") ? null : new File(a[0]), new File(a[1]), a[2], on, dirs, notes);
         if (l == null) { System.out.println("none"); return; }
         StringBuilder sb = new StringBuilder();
         for (Cheats.Entry e : l) if (e.toggles()) sb.append(e.key).append('|');
         System.out.println(sb);
+        System.out.println(String.join("|", on));
+        System.out.println(String.join("|", notes));
     }
 }
 '''
@@ -45,10 +48,12 @@ class ModCheats(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def run_install(self, shipped, folder, on, dirs):
+    def run_install(self, shipped, folder, on, dirs, full=False):
         r = subprocess.run(['java', '-cp', str(self.out), 'dev.nxnative.android.ModCheatsTest', str(shipped) if shipped else '-', str(folder), BUILD, ','.join(on), *map(str, dirs)],
                            capture_output=True, text=True, check=True)
-        return r.stdout.strip()
+        lines = r.stdout.split('\n')
+        if lines[0] == 'none' or not full: return lines[0]
+        return lines[0].strip('|').split('|'), [k for k in lines[1].split('|') if k], [n for n in lines[2].split('|') if n]
 
     def case(self, name):
         d = self.tmp / name; d.mkdir()
@@ -67,27 +72,63 @@ class ModCheats(unittest.TestCase):
         m1 = self.mod(d, 'First Mod', f'{BUILD}.txt', '[Moon Jump]\n04000000 00000010 00000002\n[Speed]\n04000000 00000030 00000002\n')
         self.mod(d, 'First Mod', 'FEDCBA9876543210.txt', '[Other Build]\n04000000 00000040 00000001\n')
         m2 = self.mod(d, 'second', f'{BUILD.lower()}.txt', '[Speed]\n04000000 00000030 00000004\n')
-        keys = self.run_install(shipped, folder, ['Moon Jump', 'Speed'], [m1, m2]).strip('|').split('|')
-        self.assertEqual(keys, ['Moon Jump', 'Coins', 'Moon Jump (imported)', 'Speed', 'Speed (imported)'], 'the profile\'s, the imported, then each mod\'s; a name taken gets its suffix')
+        keys, on, notes = self.run_install(shipped, folder, ['Moon Jump', 'Speed (second)'], [m1, m2], full=True)
+        self.assertEqual(keys, ['Moon Jump', 'Coins', 'Moon Jump (First Mod)', 'Speed (First Mod)', 'Speed (second)'], 'the profile\'s, the imported, then each mod\'s under the mod\'s name')
+        self.assertEqual(notes, [])
         merged = (folder / f'{BUILD}.txt').read_text(encoding='utf-8')
         self.assertIn('[--SectionStart:Imported: mod First Mod: ' + BUILD + '--]', merged)
         self.assertIn('[--SectionStart:Imported: mod second: ' + BUILD.lower() + '--]', merged)
         self.assertNotIn('Other Build', merged, 'a mod\'s file of another build is left out')
-        self.assertEqual((folder / f'{BUILD}.enabled').read_text(encoding='utf-8').split('\n')[:-1], ['Moon Jump', 'Speed'], 'the toggles the player set, by key: a mod\'s cheat is off until it is turned on')
+        self.assertEqual((folder / f'{BUILD}.enabled').read_text(encoding='utf-8').split('\n')[:-1], ['Moon Jump', 'Speed (second)'], 'the toggles the player set, by key')
         self.assertEqual(sorted(p.name for p in folder.iterdir()), [f'{BUILD}.enabled', f'{BUILD}.txt', 'imported'], 'one merged file and its toggles')
+        # the first mod turned off: the second mod's cheat keeps its key, and with it its toggle (the key was "Speed (imported)" while the first mod was on, "Speed" without it)
+        keys, on, _ = self.run_install(shipped, folder, ['Moon Jump', 'Speed (second)'], [m2], full=True)
+        self.assertEqual(keys, ['Moon Jump', 'Coins', 'Speed (second)'])
+        self.assertEqual((folder / f'{BUILD}.enabled').read_text(encoding='utf-8').split('\n')[:-1], ['Moon Jump', 'Speed (second)'])
+
+    def test_a_mods_own_toggles_count_once(self):
+        d = self.case('own')
+        m = self.mod(d, 'm', f'{BUILD}.txt', '{Master}\n04000000 00000000 00000001\n[A]\n04000000 00000010 00000001\n[B]\n04000000 00000020 00000001\n[A]\n04000000 00000030 00000001\n')
+        (m / f'{BUILD}.enabled').write_text('B\r\nNo Such Cheat\n', encoding='utf-8')
+        folder = d / 'cheats'
+        keys, on, _ = self.run_install(None, folder, [], [m], full=True)
+        self.assertEqual(keys, ['A (m)', 'B (m)', 'A (m) (imported)'])
+        self.assertEqual(on, ['B (m)'], 'what the mod turns on is on the first time its cheats are listed')
+        self.assertEqual((folder / f'{BUILD}.enabled').read_text(encoding='utf-8'), 'B (m)\n')
+        self.assertEqual((folder / 'mods.seen').read_text(encoding='utf-8'), 'B (m)\n')
+        keys, on, _ = self.run_install(None, folder, [], [m], full=True)   # the player turned it off since
+        self.assertEqual(on, [], 'and not again: the player\'s toggles decide from then on')
+        self.assertEqual((folder / f'{BUILD}.enabled').read_text(encoding='utf-8'), '')
+        self.assertTrue((folder / 'mods.seen').is_file(), 'what was offered is kept across starts (install clears only .txt and .enabled)')
+
+    def test_a_mod_file_that_cannot_be_read_is_left_out(self):
+        d = self.case('bad')
+        shipped = d / f'{BUILD}.txt'; shipped.write_text('[A]\n04000000 00000010 00000001\n', encoding='utf-8')
+        m = self.mod(d, 'big', f'{BUILD}.txt', '[Huge]\n' + '04000000 00000010 00000001\n' * 12000)   # over Cheats.MAX_FILE
+        g = self.mod(d, 'good', f'{BUILD}.txt', '[G]\n04000000 00000010 00000001\n')
+        (m / 'unreadable.txt').mkdir()   # a folder named as a cheat file: reading it fails
+        keys, on, notes = self.run_install(shipped, d / 'cheats', [], [m, g], full=True)
+        self.assertEqual(keys, ['A', 'G (good)'], 'the profile\'s cheats and the other mod\'s are installed')
+        self.assertEqual(len(notes), 2, notes)
+        self.assertTrue(all('is left out' in n and 'big' in n for n in notes), notes)
+
+    def test_a_long_name_keeps_the_mods_name(self):
+        d = self.case('long')
+        m = self.mod(d, 'm', f'{BUILD}.txt', '[' + 'x' * 127 + ']\n04000000 00000010 00000001\n')
+        keys, _, _ = self.run_install(None, d / 'cheats', [], [m], full=True)
+        self.assertEqual(keys, ['x' * 123 + ' (m)'])
 
     def test_a_game_with_only_a_mods_cheats(self):
         d = self.case('modonly')
         m = self.mod(d, 'm', f'{BUILD}.txt', '[Only]\n04000000 00000010 00000001\n')
-        self.assertEqual(self.run_install(None, d / 'cheats', ['Only'], [m]), 'Only|')
-        self.assertEqual((d / 'cheats' / f'{BUILD}.enabled').read_text(encoding='utf-8'), 'Only\n')
+        self.assertEqual(self.run_install(None, d / 'cheats', ['Only (m)'], [m]), 'Only (m)|')
+        self.assertEqual((d / 'cheats' / f'{BUILD}.enabled').read_text(encoding='utf-8'), 'Only (m)\n')
 
     def test_without_mods_it_is_upstreams_install(self):
         d = self.case('plain')
         shipped = d / f'{BUILD}.txt'; shipped.write_text('[A]\n04000000 00000010 00000001\n', encoding='utf-8')
         self.assertEqual(self.run_install(shipped, d / 'cheats', [], []), 'A|')
         self.assertEqual(self.run_install(None, d / 'none', [], [d / 'no such folder']), 'none')
-
 
 if __name__ == '__main__':
     unittest.main()
