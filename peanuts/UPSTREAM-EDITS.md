@@ -300,7 +300,7 @@ included by `vka_tex.c`, since it works on the texture cache's tables under its 
 | `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `console_mode`, `res_scale` in `GAME_SETTINGS` (Reset to defaults) | trailing `// PEANUTS: ...` |
 | `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 2 | `ScreenMode.env`, `ResScale.env` in `settingsEnv` | trailing `// PEANUTS: ...` on each line |
 | `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 2 | `ScreenMode.row`, `ResScale.row` in Picture | trailing `// PEANUTS: ...` on each line |
-| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | `ScreenMode.defaultRow`, `ResScale.defaultRow` in Game defaults | trailing `// PEANUTS: ...` on each line |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | `ScreenMode.defaultRow`, `ResScale.defaultRow` in Game defaults (since Round 17: the card Performance and picture, upstream's Settings has no Game defaults any more) | trailing `// PEANUTS: ...` on each line |
 
 Upstream candidate: the host side as a whole is general (nothing in it names a game or Peanuts), but it is a first slice (see the header of
 `vka_resscale.inc` for what scales and what falls back) and has not run on a device yet; not proposed upstream until it has.
@@ -869,7 +869,7 @@ Adapted to upstream's new code:
 | | `mod_build` rows | with upstream's `dlc_index` and its `program` rows |
 | `dm/gfx/nvn/dmsh_abi_vk.h`, `dm/gfx/tools/vk_android_build.py`, `dm/gfx/vk_android/vka_abi_compat.h` | `TEX_DYN` 23, `SAMP_DYN` 24 | upstream's `IMG_UBO` is 25 here; the table's ABI is this tree's (`cb5a89b39291`), with a row for the fork's releases (`d9c33f6111c1`, no difference) before upstream's two. Upstream's own ABI of v0.3.22 to v0.3.26 (`4fbeb79f5ab7`) is no row |
 | `dm/gfx/vk_android/vka_draw.c` | `tbuf_view` (texel buffer bindings; Round 10's texel buffers the GPU writes) | upstream has its own buffer textures now (`vka_tbuf.c`). A texel buffer binding takes the fork's view first and upstream's `vka_tbuf_view` where that has none and for a texture record; upstream's `DM_VK_TBUF` (0, 2) holds for both. `vka_dispatch` refreshes upstream's images, then binds inside the fork's `g_tbuf_disp` bracket |
-| `dm/gfx/vk_android/vka_tex.c`, `vka_draw.c` | buffer textures as 2D images of rows | a buffer texture read as an image is upstream's copy on the GPU (`vka_tbuf_refresh`); where that has no image to give, the fork's row image of the CPU's bytes is made (`make_images`) and read (`bind_sets`) |
+| `dm/gfx/vk_android/vka_tex.c`, `vka_draw.c` | buffer textures as 2D images of rows | upstream has its own image of a buffer texture now (`vka_tbuf.c`: a copy the GPU makes of the guest memory when it runs, every frame, viewed in the texture's own format). The fork's row image stays the one a shader reads (made of the CPU's bytes when the draw is recorded, uploaded where the CPU wrote, viewed in the shader's numeric class), outside the pass as before: `vka_tex_id_pending` counts a buffer texture again. Upstream's copy is taken only where `tbuf_img_gpu` (vka_draw.c) says so: stores through a storage texel buffer over the range are in work that is not done, and the copy can be made and read (a shape and a format of the binding's class, placed memory). The first form of this merge took upstream's copy whenever it could be made, which read the game's next frame out of a buffer it had refilled (the race of `DM_VK_TBUF_COPY`'s note) and copied Three Houses' lists every frame; corrected in the same round. A buffer texture bound as a storage image is not done, in upstream's words |
 | `dm/gfx/vk_android/vka_tex.c` | `rw_pend` in the prune | with upstream's `nkids`, `vktl_skip_ws` and `g_psi_shrink` |
 | | the 3D view's slice range | after upstream's `l0 += im->lvk` (level children) |
 | | `img_storage_upgrade`: `rsc`, `rb_holds` | after upstream's refusal of a level child or its parent |
@@ -879,7 +879,7 @@ Adapted to upstream's new code:
 | `dm/gfx/vk_android/vka_pso.c` | `as_main` notes its thread | upstream's compute jobs go through the same queue; the line is the same for both |
 | `dm/gfx/vk_android/vka.h`, `vka_mem.c`, `dm/host/dm_input.h`, `dm/host/hle_oe.c` | declarations and includes | beside upstream's new ones |
 | `dm/host/hle_sdk16.c` | `font_skip`'s runtime branch | upstream's `dm_game_imports` (was `dm_main_imports`) |
-| `dm/host/hle_fs.c` | Round 10: `<index>.nsp` in `aoc_dir`, a dump spec in `mount_ex` | upstream's `aoc_dir` finds `<index>.nsp` itself and reads it as a plaintext NSP; the fork's own lookup is gone, and `img_open` reads one that is not a plaintext NSP through the dumps' reader (`#ifdef DM_NSP_DIRECT`). `mount_ex` uses upstream's `g_mnt[s]` |
+| `dm/host/hle_fs.c` | Round 10: `<index>.nsp` in `aoc_dir`, a dump spec in `mount_ex` | upstream's `aoc_dir` finds `<index>.nsp` itself and names it for its reader of plaintext NSPs. The fork's own lookup is gone. An add-on's own dump is still read: `img_open` hands a `.nsp` spec upstream's reader does not take to the dumps' reader, and `aoc_dir` names a link to a descriptor whose name does not end in `.nsp` (an XCI, `DLC.NSP`) for the dumps' reader itself, both under `DM_NSP_DIRECT`; `dm_aoc_usable` no longer counts a name that is neither a spec nor a path that is there. `mount_ex` uses upstream's `g_mnt[s]` |
 | `dm/tools/env_switches.py` | the fork's rows | before upstream's families |
 
 New with this update:
@@ -900,5 +900,27 @@ same in both forms). The profile keys upstream added are read by the launcher's 
 
 The on-device stage must be made again for this tree: `lib/libdmsh_xlate.so` (the translator's sources changed; `xlate_tree.py --check-lib` refuses the old one) and
 `lib/libcra.so` (new upstream, `android/ondevice/build.sh`); the rest of the stage is as it was.
+
+What an installed game needs after this update. Nothing is forced. A library of this fork's releases still plays (the row of `vka_abi_compat.h`), and since no
+delta manifest of the new version says how to update it in the background, the launcher only offers the update: the card "Shader update available" on the game's
+page (`Pack.shaderUpdateAvailable`, upstream's since v0.3.22), whose button opens this fork's build sheet. The pack's code reads as an earlier rewriter's
+(`dm/tools/sdk_patches.py` has two more rows) and is redone by the next build; it runs as it is until then. The pack format is the same.
+
+Found by review after the merge, and corrected in this round:
+
+| File | Change | Marker |
+|---|---|---|
+| `dm/host/loader.c` | an NRO is mapped outside the module arena (`module_mmap`): upstream's packer writes `nro.tsv` and the NROs into Android packs since v0.3.22, and `preload_nros` mapped each into the arena, which is sized for the game's start modules only: the host stopped at "do not fit in the module arena (0 left)" for every pack with NROs. Test: `dm/host/tests/t_peanuts_nroarena.c` (`make peanuts-nro`, part of `peanuts-host`), `load_modules` as the Android host runs it over a pack with an `nro.tsv` | a comment above `module_mmap`, the two calls as before |
+| `dm/host/android/input_android.c` | upstream's user selector and controller join screen block the game's thread until the player answers: both waits are native waits (`dm_thread_native_wait`), as Round 11's in `hle_nvn.c`, so a stop of all threads does not time out while they show | `// PEANUTS:` |
+| `dm/host/hle_account.c`, `dm/peanuts/peanuts.c` | `dm_account_start_save_dir`: the companion runtime's save folder is the starting user's (upstream's users: `DM_SAVE_user_<uid>`), not always the first user's | `// PEANUTS:` |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java`, `ModCheats.java` (new, Peanuts-owned in upstream's package) | one `DM_CHEATS`: with the game's Cheats switch on, the enabled mods' cheat files of the build are merged into upstream's list (after the imported ones, each under its own section), so the panel lists and toggles what the host runs; without upstream's list the mods' folder is passed as before | `// PEANUTS:` |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java`, `MainActivity.java` | the card "Shader update available" names the app by `R.string.app_name`, and `updateShaders` opens the build sheet (`dev.peanuts.ui.GameSheet`) | `// PEANUTS:` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java`, `GameActivity.java` | `start`: the fork's hooks (`Ctl.started`, `GameReturn.remember`, `RecentGames.touch` through the extra `peanuts_list_id`) get the title ID the list holds when upstream's edition switch starts program 1; `WIKI_URL` and the two controls that open it name this fork's questions and answers | `// PEANUTS:`, `// PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/SaveUi.java` | Delete save data says whose save it deletes when there is more than one user | inside the fork's block |
+| `dm/gfx/vk_android/vka_exec.c` | `copy_t2t`: BLIT_DST is asked of the format the blit writes (the scratch image of the texture's format on the fork's paths) | `// PEANUTS:` |
+| `dm/gfx/tools/shader_split.py` | `direct_file` reads a large file under upstream's `LARGE_LOCK`; a Python without `_nxaes` gets a plain line for an encrypted pak index | `# PEANUTS` |
+
+Peanuts-owned: `dev.peanuts.ctl.Up` (the page `advanced`; `Up.page` closes upstream's Advanced page first), `dev.peanuts.mods.ModRuntime.cheatsDirs`,
+`peanuts/docs/CONTROL.md`, `peanuts/tests/test_ctl.py`, `dm/peanuts/import/tests/nsp_test.c` (links to `fd:<n>/dlc6.xci` and `fd:<n>/DLC7.NSP`).
 
 Not run on a device. Checked on a PC: see the commit messages of this round.

@@ -22,7 +22,7 @@
 
 typedef struct { const char *abi; unsigned differs; } vka_abi_compat_row;
 static const vka_abi_compat_row vka_abi_compat[] = {
-    // PEANUTS: this fork's releases (its ABI from 2026-11-14 on; Vulkan chains 4ccbdc391b15 to 4d3a924dcd04): the headers differ only in the kind added since
+    // PEANUTS: this fork's releases (its ABI from 2026-11-14 on; Vulkan chains c3959e8b8f88 to 4d3a924dcd04): the headers differ only in the kind added since
     // (dmsh_abi_vk.h DMSH_VK_KIND_IMG_UBO, 25 here, dmsh_abi.h DMSH_KIND_IMG_UBO), which no library of that ABI holds; TEX_DYN and SAMP_DYN keep their numbers
     {"d9c33f6111c1", 0},
     // Before the image handles in uniform buffers (2026-11-13; Vulkan chains up to 65883461079b): the headers differ only in the kind added (dmsh_abi_vk.h

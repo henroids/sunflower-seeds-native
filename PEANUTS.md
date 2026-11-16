@@ -85,7 +85,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   Mods row and there is no Play with mods button: every start of a game uses the mods that are on (`ModsSection.packToPlay`). A code mod that hooks the
   game through an `.ips` and a module of its own builds and loads (`dm/tools/xmod.py`, Luminescent Platinum on Pokémon Brilliant Diamond; its own memory
   numbers in `dm/peanuts/profile/mod_memory.tsv`). Delete save data on the Saves tab (backed up first). Console mode (`ScreenMode`, `DM_OPMODE`) and
-  Resolution scale (`ResScale`, `DM_RES_SCALE`, a first version) in Settings › Game defaults and each game's Picture settings; Console mode also live in
+  Resolution scale (`ResScale`, `DM_RES_SCALE`, a first version) in Settings › Performance and picture (Game defaults before the update to Banana Native v0.3.26) and each game's Picture settings; Console mode also live in
   the in-game panel. The app says Firmware, not Firmware fonts. Pokémon Sword and Shield at 60 fps by their profiles; no controller style before the game
   sets its supported styles (`DM_HID_STYLE_EARLY=1` is the behaviour before). The PC builder runs end to end on Linux (`peanuts/docs/BUILDER.md`).
 - Next: haptics → vibrator; guest calls; a play app id of its own; upstream the `vka_tex.c`, `vka_draw.c` and `hle_audren.c` changes; verify launcher
