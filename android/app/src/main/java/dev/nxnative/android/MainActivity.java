@@ -802,11 +802,12 @@ public final class MainActivity extends Activity {
             Boolean ok = null;
             if (problem == null) try { ok = PackCheck.code(this, Pack.read(new File(g.packDir)), new File(g.gameDir)); } catch (IOException e) { ok = null; }
             Boolean code = ok;
-            boolean own = Boolean.FALSE.equals(ok) && Ondevice.ownPack(new File(g.gameDir), new File(g.packDir), g.titleId);   // the app's own pack, its code from older tools
+            boolean variant = dev.peanuts.build.ModdedBuild.isVariantPack(new File(g.packDir));   // PEANUTS: a build with code mods (a variant's pack): only its own build remakes it (dev.peanuts.build.Prepare.runModded); upstream's background jobs would rewrite it as the game's own pack, without the mods
+            boolean own = !variant && Boolean.FALSE.equals(ok) && Ondevice.ownPack(new File(g.gameDir), new File(g.packDir), g.titleId);   // the app's own pack, its code from older tools   // PEANUTS: !variant
             runOnUiThread(() -> {
                 if (info.getParent() == null) return;
                 // An APK update's new shaders: made in the background with no question when the pack's older library is one the delta manifest knows (Ondevice.autoUpdate)
-                if (problem != null && problem.shadersOnly && problem.prepare) Ondevice.autoUpdate(this, new File(g.gameDir), new File(g.packDir), g.titleId);
+                if (!variant && problem != null && problem.shadersOnly && problem.prepare) Ondevice.autoUpdate(this, new File(g.gameDir), new File(g.packDir), g.titleId);   // PEANUTS: !variant (above)
                 if (problem == null) Ui.status(st, "Ready", R.color.bn_leaf);
                 else if (problem.playable && Pack.deltaShaders(new File(g.packDir), g.titleId) < 0) Ui.status(st, "Ready · update", R.color.bn_accent);   // an optional shader update: the game's page offers it (GameSettings.shaderUpdateCard)
                 else if (problem.playable) { Ui.status(st, "Ready · updating shaders", R.color.bn_leaf); updating.put(st, g); updateTick(); }   // the count follows (updateTick)
