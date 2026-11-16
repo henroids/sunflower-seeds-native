@@ -62,6 +62,9 @@ brief, these are listed here rather than marked:
 `dm/gfx/tools/vk_android_delta.py` is untouched; it is an exception by the same rule if a future change
 touches it.
 
+Since the update to Banana Native v0.3.26 (Round 17) `dm/gfx/nvn/dmsh_abi_vk.h` also differs from upstream's in one number: upstream's new kind
+`DMSH_VK_KIND_IMG_UBO` is 25 here (23 upstream), because 23 and 24 are this fork's `TEX_DYN` and `SAMP_DYN` in every library its releases built.
+
 ## Marker status of every upstream file we touch
 
 Legend: **marked** = every igawa6 hunk in the file now carries a `PEANUTS`/`PEANUTS(upstream-candidate)`
@@ -750,6 +753,9 @@ The update popup for 0.1.2 closed the app on an AYN Thor (Android 13): `NoSuchMe
 
 Upstream candidate: yes (Banana Native's `ReleaseNotes.java` has the same call and the same `minSdk`).
 
+Gone with the update to Banana Native v0.3.26 (Round 17): upstream made the same change ("Android 13: the release page no longer crashes the app"), so the
+line is upstream's own and carries no marker.
+
 ### Round 12, after it: releases the broken versions do not see, and an update page that cannot close the app (2026-11-16)
 
 0.1.1 and 0.1.2 are in people's hands with the fault of round 12, and they check for a release at every start. A release they can see closes them on
@@ -779,6 +785,8 @@ Run: `build.sh <work dir> python`, then on the AYN Thor with `dm_pack_cli`, `sha
 open; with `lz4/frame` moved away, the same `[RED]` line as the failed Prepare. Not run: a whole Prepare of the game on the phone (it needs the full
 stage, `build.sh … tools`, and an APK built with it). No shader-chain file is changed. Upstream candidate: yes (upstream's `build.sh` has the same gap).
 
+Still needed after the update to Banana Native v0.3.26 (Round 17): upstream's `build.sh` builds `lz4` and `lz4.block` only, so the block stays, marked as before.
+
 ### Round 14, one upstream fix taken ahead of the next update (2026-11-16)
 
 Banana Native `4299044a` (v0.3.22-test1), asked for in issues #24 and #39: on Exynos Xclipse the game's start showed Android's "isn't responding" because the
@@ -791,6 +799,8 @@ on v0.3.21 otherwise (upstream is at v0.3.26, 128 commits on).
 | `dm/gfx/vk_android/vka_present.c` | 1 | no `vka_init()` on the UI thread: the host thread's first Vulkan call makes the device | `PEANUTS(backport)` |
 
 The markers go when the fork takes upstream's v0.3.22 or later: the lines are then upstream's own.
+
+Done with the update to Banana Native v0.3.26 (Round 17): both files hold upstream's lines, and no `PEANUTS(backport)` marker is left in the tree.
 
 ### Round 15, Mario Kart 8 Deluxe 4.0.1 dumps and 4.0.0's own effect shaders (2026-11-16)
 
@@ -820,3 +830,75 @@ Peanuts-owned (`dev/peanuts/ui/LibrarySettings.java`): a firmware folder picked 
 read is read when the keys are accepted, when the access is given, and once at the row's drawing; the zip picker also offers a zip the phone labels with
 another type than `application/zip`. Seen on an AYN Thor (Android 13): access taken away and given back, keys taken away and picked again, each time the
 firmware read by itself. The release 0.1.3 on a OnePlus (Android 17) adds a firmware zip once the keys are in. Upstream candidate: no.
+
+## Round 17 (2026-11-16): the update to Banana Native v0.3.26
+
+`upstream/android` at v0.3.26 (`0fa3de18`: 128 commits, about 500 files after v0.3.21) merged into the fork as a merge commit, 36 files resolved by hand. What
+follows is what happened to the hunks of the rounds above, and the hunks the update added. A hunk not named here merged as it was.
+
+Now upstream's own (the fork's lines and markers are gone):
+
+| File | Was | Now |
+|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/ReleaseNotes.java` | Round 12: `htmlImages` collects into a `StringBuffer` | upstream's line |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java`, `dm/gfx/vk_android/vka_present.c` | Round 14: upstream `4299044a` taken ahead | upstream's lines |
+| `android/app/src/ondevice/java/dev/nxnative/android/Job.java`, `PackService.java` | `Job.xlate`: the shaders step's results in the app's own storage (`xlate/<title ID>`) | upstream's `Job.results` / `deleteResults` (`Outputs.results`: the same folder; a job an earlier app began beside the job finishes there). `Job.ueShaders` and its delete stay, marked |
+| `dm/gfx/tools/shader_split.py` | `table_rows`: the targeted split's tables compared without their comment lines | upstream's `tables_data`; the `DM_SPLIT_DIFF_DIR` dump stays, marked |
+| `dm/host/hle_misc.c` | Round 10: `aoc_load` counts `<index>.nsp` | upstream's line (it reads a plaintext NSP there) |
+| `dm/gfx/tools/vk_android_spv.py` | `_remap_operands`: OpImageWrite and OpAtomicStore | upstream lists both in `NO_RESULT_OPS` now; the fork's two branches stay in front of that one (OpImageWrite's image operands mask, a literal, is not taken for an id), `OP_ATOMIC_STORE` stays |
+
+Adapted to upstream's new code:
+
+| File | Hunk | What changed |
+|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | the page width (900) | upstream's condition gained `!advancedOpen`; the Advanced page is 900 wide here too |
+| | "Screens off" in Home's header | upstream's header buttons are a function now (`headerButtons`: the wiki, Settings); the fork's row holds "Screens off" and that function's view |
+| | `ScreenMode.defaultRow`, `ResScale.defaultRow` | upstream split the card into Display, Controls and Performance and picture; both rows follow the Frame rate cap into Performance and picture |
+| | `launch`: code mods | upstream's edition switch (`Edition`) comes first, then the fork's block on the game it chose |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | `Companion.start`, `RecentGames.touch`; the host's name in the log | beside upstream's `CtrlScreen.screen` / `UserPicker.screen` and its cheat note |
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | `GAME_SETTINGS` | upstream's `cheats` and the fork's `console_mode`, `res_scale` |
+| `android/app/build.gradle` | `handheldGames` | before upstream's `cheatsOf` / `timeOfDayOf` and its longer profile row |
+| `dm/gfx/tools/shader_split.py` | `_pool_init`, `pool` | `direct` before upstream's `large_lock`; `pool` takes upstream's named arguments and `direct`, gives the process pool upstream's lock, and the phone's pipe workers none (its Python cannot make one) |
+| | `plain_blob` | upstream's whole-file read is `scan_whole` behind its large-file lock; `plain_blob` answers `'shn'` for upstream's new SHN archives, asked where upstream asks |
+| | `oodle` | upstream split it into `oodle_ask` / `oodle_red` / `oodle_supposed`; the fork's worker choice is in `oodle_ask`, its name of the decoder that failed in `oodle_red` |
+| | `DM_UE_DECODE` | `uepak.unreal_paks` takes upstream's `mains`; AppleDouble names are left out of the decoded list too |
+| | `cpk_jobs(names=…)` | beside upstream's `by_head` list for the archives found by their first bytes |
+| `scripts/pack_android.py` | the fork's blocks before `split_shaders`; `peanuts_env`, the ooz check | `split_shaders` has upstream's `aoc` and `nros` arguments and `DM_NRO_DIR` |
+| | `a.dlc_count`, `a.pack_ver` | before upstream's `--program` branch |
+| | `rewrite(…, xmod_files)`, `upgrade_keys(…, xmod_files)` | with upstream's collected NROs (`srcs \| nros`); an NRO has no layout file and is rewritten as upstream rewrites it |
+| | `mod_build` rows | with upstream's `dlc_index` and its `program` rows |
+| `dm/gfx/nvn/dmsh_abi_vk.h`, `dm/gfx/tools/vk_android_build.py`, `dm/gfx/vk_android/vka_abi_compat.h` | `TEX_DYN` 23, `SAMP_DYN` 24 | upstream's `IMG_UBO` is 25 here; the table's ABI is this tree's (`cb5a89b39291`), with a row for the fork's releases (`d9c33f6111c1`, no difference) before upstream's two. Upstream's own ABI of v0.3.22 to v0.3.26 (`4fbeb79f5ab7`) is no row |
+| `dm/gfx/vk_android/vka_draw.c` | `tbuf_view` (texel buffer bindings; Round 10's texel buffers the GPU writes) | upstream has its own buffer textures now (`vka_tbuf.c`). A texel buffer binding takes the fork's view first and upstream's `vka_tbuf_view` where that has none and for a texture record; upstream's `DM_VK_TBUF` (0, 2) holds for both. `vka_dispatch` refreshes upstream's images, then binds inside the fork's `g_tbuf_disp` bracket |
+| `dm/gfx/vk_android/vka_tex.c`, `vka_draw.c` | buffer textures as 2D images of rows | a buffer texture read as an image is upstream's copy on the GPU (`vka_tbuf_refresh`); where that has no image to give, the fork's row image of the CPU's bytes is made (`make_images`) and read (`bind_sets`) |
+| `dm/gfx/vk_android/vka_tex.c` | `rw_pend` in the prune | with upstream's `nkids`, `vktl_skip_ws` and `g_psi_shrink` |
+| | the 3D view's slice range | after upstream's `l0 += im->lvk` (level children) |
+| | `img_storage_upgrade`: `rsc`, `rb_holds` | after upstream's refusal of a level child or its parent |
+| | `rb_written_locked` in `vka_img_written_at` | before upstream's `img_wb_kind` |
+| `dm/gfx/vk_android/vka_exec.c` | `copy_t2t`: `tsf` / `tdf` | upstream's `t2t_path` (a depth draw where a blit cannot write) is asked with the textures' formats |
+| | `vka_draw_unplaced` in the statistics | after upstream's `vka_memu_stop_stats` |
+| `dm/gfx/vk_android/vka_pso.c` | `as_main` notes its thread | upstream's compute jobs go through the same queue; the line is the same for both |
+| `dm/gfx/vk_android/vka.h`, `vka_mem.c`, `dm/host/dm_input.h`, `dm/host/hle_oe.c` | declarations and includes | beside upstream's new ones |
+| `dm/host/hle_sdk16.c` | `font_skip`'s runtime branch | upstream's `dm_game_imports` (was `dm_main_imports`) |
+| `dm/host/hle_fs.c` | Round 10: `<index>.nsp` in `aoc_dir`, a dump spec in `mount_ex` | upstream's `aoc_dir` finds `<index>.nsp` itself and reads it as a plaintext NSP; the fork's own lookup is gone, and `img_open` reads one that is not a plaintext NSP through the dumps' reader (`#ifdef DM_NSP_DIRECT`). `mount_ex` uses upstream's `g_mnt[s]` |
+| `dm/tools/env_switches.py` | the fork's rows | before upstream's families |
+
+New with this update:
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `docs/advanced_settings.tsv` | 42 rows | upstream's table for Settings › Advanced needs a row for every switch of `docs/env_switches.tsv`; the fork's switches got theirs from `dm/tools/advanced_switches.py` (tier `developer`: shown by name behind "Show developer options") | generated, in `peanuts/upstream-unmarked.txt` |
+| `dm/tools/tests/test_wiki.py` | 1 | the fork's three setting rows that upstream's player wiki does not name (Build again, Delete save data, Resolution scale) are listed as not documented there | `# PEANUTS begin`/`end` |
+| `dm/games/0400C3F00006E000/vk_delta.tsv` | 1 row | Mario Kart World's manifest names one shader that does not build; it excuses it only for the library version it names, so the version is this tree's (`b09844b02acf`; upstream's file says `19662e4c4a25`). To be written again whenever the version moves (`test_android_shader_delta.py` says so) | in `peanuts/upstream-unmarked.txt` |
+| `dm/gfx/tools/dmsh_xlate_bin/*.dll`, `dm/gfx/tools/dmsh_chain.lock`, `dm/gfx/nvn/dmsh_chain.h`, `dm/gfx/nvn/dmsh_chain_vk.h` | generated | the PC translator rebuilt on Linux (.NET 10.0.114) from the merged sources (upstream's newer translator with the fork's `ReadsWritableMemory` rule), and the versions that follow: `DMSH_CHAIN` 20aaebbe3106, `DMSH_VK_CHAIN` b09844b02acf, `DMSH_VK_ABI` cb5a89b39291. The lock's Apple and spirv-cross lines are upstream's (not measurable on Linux) | generated |
+
+Peanuts-owned files changed for it: `dm/gfx/vk_android/vka_readback.inc` (a level child is not read back: its image is its parent's) and the stand-in struct of
+`dm/peanuts/rt/test/vka_readback_test.c`; `dm/peanuts/import/tests/nsp_test.c` (`dm_game_imports`).
+
+No new field in the generic host's profile: upstream's `dm/games/game.py` writes the same `DM_GAME_*` macros as at v0.3.21 (`check-runtime-profile.sh`: 151 profiles the
+same in both forms). The profile keys upstream added are read by the launcher's build (`time_of_day`, `cheats`: two more columns of `NX_PROFILES`) and by the packer
+(`cheats`, `nro_build`), which the generic host's build shares.
+
+The on-device stage must be made again for this tree: `lib/libdmsh_xlate.so` (the translator's sources changed; `xlate_tree.py --check-lib` refuses the old one) and
+`lib/libcra.so` (new upstream, `android/ondevice/build.sh`); the rest of the stage is as it was.
+
+Not run on a device. Checked on a PC: see the commit messages of this round.

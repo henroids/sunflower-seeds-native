@@ -3420,7 +3420,7 @@ def plain_blob(path, rel, head):
     if head[:4] == ZSTD_MAGIC: d = unzs(path)
     else:
         with open(path, 'rb') as f: d = f.read()
-    if d[:4] == b'SHN!': return d, 'shn'   # upstream's shader archive of its own reader (shn_shaders), asked before the gzip probe as upstream's scan_whole asked
+    if d[:4] == b'SHN!': return d, 'shn'   # PEANUTS: upstream's shader archive of its own reader (shn_shaders), asked before the gzip probe as upstream's scan_whole asked
     if d[:3] == b'\x1f\x8b\x08': d = ungzip(d, '/' + rel); head = d[:16]
     if head[4:5] == b'\x78' and path.endswith('.gz') and (z := gust_gz(d)) is not None: d = z
     if d[:4] in (b'HCPS', b'xbc1', b'DRSM') or d[:8] == b'cmp\0zlib': return d, 'monolith'
