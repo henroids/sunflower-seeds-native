@@ -10,7 +10,10 @@ DMSH_VK_PROGRESS	developer	Diagnostics			text			both
 DMSH_VK_RAW	developer	Diagnostics			text			both						
 DMSH_VK_REQUIRE_ALL	developer	Packing			text			both						
 DMSH_VK_RESULTS	developer	Diagnostics			text			both						
+DMSH_VK_WORKER	developer	Diagnostics			text			both						
+DMSH_VK_WORKERS	developer	Packing			text			both						
 DMSH_VK_XLATE_J	developer	Packing			text			both						
+DMSH_VK_ZSTD_LEVEL	developer	Packing			text			both						
 DM_AB	developer	Diagnostics			text			both						
 DM_ALIAS_SIZE	internal	Diagnostics			text			both						Mac or iOS only
 DM_ALIAS_WINDOWS	developer	Diagnostics			text			both						
@@ -21,9 +24,11 @@ DM_APP_POOL_MB	developer	Diagnostics			text			both
 DM_APP_VERSION	developer	Game			text			both						
 DM_AUDIO	internal	Audio			text			both						Mac or iOS only
 DM_AUDIO_DUMP	developer	Diagnostics			text			both						
+DM_AUDIO_FEED	developer	Audio			text			both						
 DM_AUDIO_MUTE	internal	Audio			text			both						Mac or iOS only
 DM_AUDIO_STALL_MS	developer	Diagnostics			text			both						
 DM_AUDREN_TRACE	developer	Diagnostics			text			both						
+DM_AUDREN_WAIT	developer	Game			text			both						
 DM_AV1_DAV1D	developer	Diagnostics			text			both						
 DM_AV1_DAV1D_FP	developer	Game			text			both						
 DM_AV1_MC_FAIL	developer	Diagnostics			text			both						
@@ -107,6 +112,7 @@ DM_GUEST_SPAWN_TEST	developer	Diagnostics			text			both
 DM_HID_LOG	developer	Diagnostics			text			both						
 DM_HID_MAP	internal	Input			text			both						Mac or iOS only
 DM_HID_PADS	internal	Input			text			both						Mac or iOS only
+DM_HID_STYLE_EARLY	developer	Input			text			both						
 DM_HITCH_DUMP	developer	Diagnostics			text			both						
 DM_HLECOUNT	developer	Diagnostics			text			both						
 DM_HLECOUNT_AT	developer	Diagnostics			text			both						
@@ -140,6 +146,8 @@ DM_MEM_FILEBACK_KINDS	developer	Memory			text			both
 DM_MEM_FILEBACK_MB	developer	Memory			text			both						
 DM_METAL_CAPTURE	internal	Diagnostics			text			both						Mac or iOS only
 DM_METAL_HUD	internal	Game			text			both						Mac or iOS only
+DM_MODULE_ARENA	developer	Game			text			both						
+DM_MOD_INIT_ARRAY	developer	Diagnostics			text			both						
 DM_MOTION	developer	Input			text			both						
 DM_MOTION_ACC_SIGN	developer	Input			text			both						
 DM_MOTION_AXES	developer	Input			text			both						
@@ -156,6 +164,7 @@ DM_NICK	developer	Game			text			both
 DM_NRO	developer	Game			text			both						
 DM_NRO_COLLECT_J	developer	Game			text			both						
 DM_NRO_DIR	developer	Diagnostics			text			both						
+DM_NSP_ROMFS	developer	Diagnostics			text			both						
 DM_NUP_CACHE_MB	developer	Diagnostics			text			both						
 DM_NUP_DISK_MB	developer	Diagnostics			text			both						
 DM_NUP_FD	developer	Diagnostics			text			both						
@@ -264,10 +273,12 @@ DM_NVN_WAITS	developer	Diagnostics			text			both
 DM_NVN_XV	developer	Graphics			text			both						
 DM_NVN_ZBLOCK	developer	Diagnostics			text			both						
 DM_NVN_ZSKIP	developer	Graphics			text			both						
+DM_NX_KEYS	developer	Diagnostics			text			both						
 DM_OE_SCRIPT	developer	Diagnostics			text			both						
 DM_OODLE_HOST	internal	Diagnostics			text			both						Mac or iOS only
 DM_OODLE_JOB	developer	Diagnostics			text			both						
 DM_OODLE_MODULES	internal	Diagnostics			text			both						Mac or iOS only
+DM_OODLE_OOZ	internal	Diagnostics			text			both						Mac or iOS only
 DM_OODLE_SERVE	developer	Game			text			both						
 DM_OOT_FPS_UNLOCK	developer	Performance			text			both						
 DM_OOT_MAX_RESOLUTION	developer	Game			text			both						
@@ -311,6 +322,8 @@ DM_PROBE_LIVE	developer	Diagnostics			text			both
 DM_PROBE_POLL	developer	Diagnostics			text			both						
 DM_PROBE_WATCH	developer	Diagnostics			text			both						
 DM_PROBE_X2	developer	Diagnostics			text			both						
+DM_PROFILE_PATH	developer	Diagnostics			text			both						
+DM_PROFILE_SEED	developer	Diagnostics			text			both						
 DM_PROGRAM_ID	developer	Memory			text			both						
 DM_PSO_ARCHIVE	internal	Diagnostics			text			both						Mac or iOS only
 DM_PSO_BUNDLE	internal	Diagnostics			text			both						Mac or iOS only
@@ -347,6 +360,8 @@ DM_RESOURCE_SHADERS	internal	Diagnostics			text			both						Mac or iOS only
 DM_RESOURCE_TITLE	developer	Game			text			both						
 DM_RESOURCE_VERSION	developer	Game			text			both						
 DM_RES_CHECK	developer	Diagnostics			text			both						
+DM_RES_SCALE	developer	Game			text			both						
+DM_RES_SCALE_POT	developer	Diagnostics			text			both						
 DM_REWRITE_J	developer	Game			text			both						
 DM_ROMFS	internal	Diagnostics			text			both						Mac or iOS only
 DM_ROMFS_OVERLAY	developer	Diagnostics			text			both						
@@ -357,6 +372,7 @@ DM_ROOT	developer	Diagnostics			text			both
 DM_RT	developer	Diagnostics			text			both						
 DM_RT_COMP	developer	Game			text			both						
 DM_RT_POOL_MB	developer	Diagnostics			text			both						
+DM_RT_VALUES	developer	Diagnostics			text			both						
 DM_RUMBLE	advanced	Input	Rumble		toggle			game		Settings > Rumble				
 DM_RUMBLE_GAIN	developer	Input			text			both						
 DM_RUMBLE_LOG	developer	Diagnostics			text			both						
@@ -375,12 +391,15 @@ DM_SLOWFRAME	developer	Diagnostics			text			both
 DM_SPIN	developer	Performance			text			both						
 DM_SPIN_LIST	developer	Diagnostics			text			both						
 DM_SPIN_POLL	developer	Performance			text			both						
+DM_SPLIT_DIFF_DIR	developer	Diagnostics			text			both						
+DM_SPLIT_DIRECT	developer	Packing			text			both						
 DM_SPLIT_FILES	developer	Diagnostics			text			both						
 DM_SPLIT_LARGE	developer	Diagnostics			text			both						
 DM_SPLIT_RESUME	internal	Diagnostics			text			both						Mac or iOS only
 DM_SPLIT_SELECTED	developer	Packing			text			both						
 DM_SPLIT_SPILL	developer	Diagnostics			text			both						
 DM_SPLIT_TARGETED	developer	Packing			text			both						
+DM_SPLIT_WORKER	developer	Diagnostics			text			both						
 DM_SVC	developer	Diagnostics			text			both						
 DM_SYMCHECK	developer	Diagnostics			text			both						
 DM_TBUF_ALIGN	internal	Diagnostics			text			both						Mac or iOS only
@@ -416,7 +435,11 @@ DM_TOUCH_HAPTICS	developer	Input			text			both
 DM_TOUCH_LOG	developer	Diagnostics			text			both						
 DM_TZ	developer	Game			text			both						
 DM_UDC_SELFTEST	developer	Diagnostics			text			both						
+DM_UE_DECODE	internal	Diagnostics			text			both						Mac or iOS only
 DM_UE_FREE_CHECK	developer	Diagnostics			text			both						
+DM_UE_HOST	developer	Diagnostics			text			both						
+DM_UE_HOST_LIB	developer	Diagnostics			text			both						
+DM_UE_MODULES	developer	Diagnostics			text			both						
 DM_UE_SHADERS	developer	Diagnostics			text			both						
 DM_UE_TEXTURE_POOL	internal	Memory			text			both						Mac or iOS only
 DM_USER	developer	Game			text			both						
@@ -529,6 +552,7 @@ DM_VK_HANG_S	developer	Graphics			text			both
 DM_VK_HOOKDIR	developer	Diagnostics			text			both						
 DM_VK_IMGMEM	developer	Memory			text			both						
 DM_VK_IMG_DIAG	developer	Diagnostics			text			both						
+DM_VK_IMG_DUMP	developer	Diagnostics			text			both						
 DM_VK_IMG_LIMIT_MB	advanced	Memory	Texture cache limit	the game is killed for memory (lower it) or textures keep reloading (raise it)	number	512..8192 MiB|1024,2048,3072,4096	Measured from free memory	both	Too high a limit lets Android kill the game.					
 DM_VK_IMG_PSI	advanced	Memory	Memory pressure guard	textures reload and stutter although the phone has free memory (Off gives the older behaviour)	toggle	Off=0;On=1	On: the texture cache shrinks when Android stalls on memory	both						
 DM_VK_IMG_PSI_EASE	developer	Diagnostics			text			both						
@@ -544,6 +568,7 @@ DM_VK_LC_GLOBAL	developer	Graphics			text			both
 DM_VK_LEVEL_SHARE	developer	Graphics			text			both						
 DM_VK_LOG	internal	Diagnostics			text			both						Mac or iOS only
 DM_VK_LOW_RAM	developer	Memory			text			both						
+DM_VK_LRZ_TOUCH	developer	Input			text			both						
 DM_VK_MAPS	developer	Graphics			text			both						
 DM_VK_MAPS_BUDGET	developer	Graphics			text			both						
 DM_VK_MAPS_CACHE	developer	Diagnostics			text			both						
@@ -584,6 +609,7 @@ DM_VK_ONE_LANE_BASE	developer	Graphics			text			both
 DM_VK_OQ_SPLIT_PASS	developer	Diagnostics			text		1 with Qualcomm's driver when the game profile asks for it, 0 otherwise	both						
 DM_VK_OVERLAY	developer	Graphics			text			both						
 DM_VK_PACE_LOG	developer	Diagnostics			text			both						
+DM_VK_PACE_PANEL	developer	Performance			text			both						
 DM_VK_PACE_PROF	developer	Diagnostics			text			both						
 DM_VK_PARTLOG	developer	Diagnostics			text			both						
 DM_VK_PASS_CLEARS	developer	Graphics			text			both						
@@ -602,11 +628,13 @@ DM_VK_PLACE_JOIN_MB	developer	Diagnostics			text			both
 DM_VK_PLACE_LAZY	developer	Graphics			text			both						
 DM_VK_PLACE_PART_MB	developer	Diagnostics			text			both						
 DM_VK_PLACE_SHADER_POOLS	developer	Memory			text			both						
+DM_VK_POOL_EAGER	developer	Memory			text			both						
 DM_VK_POOL_FB	developer	Memory			text			both						
 DM_VK_POOL_FB_EARLY	developer	Diagnostics			text			both						
 DM_VK_POOL_SLOT_BIND	developer	Diagnostics			text			both						
 DM_VK_PREFAULT	developer	Diagnostics			text			both						
 DM_VK_PRESENT_GATE_WAIT	developer	Performance			text		30 ms with Turnip, 0 (off) with other drivers	both						
+DM_VK_PRESENT_GRID	developer	Performance			text			both						
 DM_VK_PRESENT_NEAREST	developer	Performance			text			both						
 DM_VK_PRESENT_OWNFMT	developer	Diagnostics			text			both						
 DM_VK_PRESENT_PREWAIT	developer	Diagnostics			text			both						
@@ -636,13 +664,20 @@ DM_VK_RANGE_WATCH_LINES	developer	Diagnostics			text			both
 DM_VK_RC_LOG	developer	Diagnostics			text			both						
 DM_VK_RC_LOG_FROM	developer	Diagnostics			text			both						
 DM_VK_RC_QUERY_MEM	developer	Diagnostics			text			both						
+DM_VK_RD_SPLIT	developer	Packing			text			both						
+DM_VK_RD_TOUCH	developer	Input			text			both						
+DM_VK_READBACK_LOG	developer	Diagnostics			text			both						
 DM_VK_READTEXELS	developer	Graphics			text			both						
+DM_VK_RED_REPEAT	developer	Graphics			text			both						
+DM_VK_RELEASE_PART	developer	Graphics			text			both						
 DM_VK_REMAP_SPV	internal	Diagnostics			text			both						test harness
 DM_VK_REPLAY_NICE	developer	Graphics			text			both						
 DM_VK_ROWS	developer	Graphics			text			both						
 DM_VK_RP_AREA	developer	Graphics			text			both						
 DM_VK_RT_LOG	developer	Diagnostics			text			both						
 DM_VK_RT_LOG_LINES	developer	Diagnostics			text			both						
+DM_VK_SAMP_LOG	developer	Diagnostics			text			both						
+DM_VK_SAMP_SLOTS	developer	Diagnostics			text			both						
 DM_VK_SB_PEEK	developer	Diagnostics			text			both						
 DM_VK_SB_PEEK_AT	developer	Diagnostics			text			both						
 DM_VK_SB_PEEK_FROM	developer	Diagnostics			text			both						
@@ -651,6 +686,7 @@ DM_VK_SB_WATCH	developer	Diagnostics			text			both
 DM_VK_SET_NULLS	developer	Diagnostics			text			both						
 DM_VK_SHADER_STATS	developer	Diagnostics			text			both						
 DM_VK_SHARED_SPILL_MB	developer	Graphics			text			both						
+DM_VK_SHARE_MISS	developer	Diagnostics			text			both						
 DM_VK_SHLIB	developer	Diagnostics			text			both						
 DM_VK_SHLIB_ALL	internal	Diagnostics			text			both						test harness
 DM_VK_SHLIB_CHECK	developer	Diagnostics			text			both						
@@ -674,8 +710,12 @@ DM_VK_SUBGROUP_PIN	developer	Performance			text			both
 DM_VK_SWAP_RB	developer	Diagnostics			text			both						
 DM_VK_SYNCLOG	developer	Diagnostics			text			both						
 DM_VK_TBUF	developer	Graphics			text			both						
+DM_VK_TBUF_COPY	developer	Graphics			text			both						
+DM_VK_TBUF_GW	developer	Graphics			text			both						
+DM_VK_TBUF_LOG	developer	Diagnostics			text			both						
 DM_VK_TEST_HANG	developer	Diagnostics			text			both						
 DM_VK_TEXU_ELEM	developer	Diagnostics			text			both						
+DM_VK_TEX_LINGER	developer	Graphics			text			both						
 DM_VK_TEX_MEMO	developer	Memory			text			both						
 DM_VK_TEX_PEEK	developer	Diagnostics			text			both						
 DM_VK_TEX_PEEK_FROM	developer	Diagnostics			text			both						
@@ -697,6 +737,7 @@ DM_VK_UBWC	developer	Graphics			text			both
 DM_VK_UB_DEFER	developer	Graphics			text			both						
 DM_VK_UB_PEEK	developer	Diagnostics			text			both						
 DM_VK_UB_PEEK_AT	developer	Diagnostics			text			both						
+DM_VK_UB_PEEK_DONE	developer	Diagnostics			text			both						
 DM_VK_UNPLACE_REMAP	developer	Diagnostics			text			both						
 DM_VK_UPLOAD_BATCH	developer	Graphics			text			both						
 DM_VK_UPLOAD_BATCH_MB	developer	Graphics			text			both						
@@ -713,6 +754,7 @@ DM_VK_VIN_SKIP	developer	Graphics			text			both
 DM_VK_WB_FOLLOW	developer	Graphics			text			both						
 DM_VK_WORKER	developer	Graphics			text			both						
 DM_VK_WORKER_FRAMES	developer	Memory			text			both						
+DM_VK_XFB	developer	Graphics			text			both						
 DM_VK_XP_SCISSOR	developer	Diagnostics			text			both						
 DM_VK_XP_TS	developer	Diagnostics			text			both						
 DM_VK_XP_TS_SEL	developer	Diagnostics			text			both						
@@ -736,3 +778,6 @@ DM_XCODE_PROJECT_DIR	developer	Diagnostics			text			both
 DM_XV_FILE	developer	Diagnostics			text			both						
 DM_YIELD_BACKOFF	developer	Game			text			both						
 DM_ZBIC_LIB	developer	Diagnostics			text			both						
+NXIMPORT_THREADS	developer	Performance			text			both						
+NX_DEBUG	developer	Diagnostics			text			both						
+PN_BUILD_ID	developer	Diagnostics			text			both						

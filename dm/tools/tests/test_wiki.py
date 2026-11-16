@@ -14,6 +14,11 @@ SETTING = re.compile(r'new Ui\.Setting\(\s*\w+\s*,\s*"[^"]*"\s*,\s*"([^"]+)"')
 UNDOCUMENTED = {
     'Extra environment': 'testers only (env lines)',
     'ADB control (debug)': 'a debug switch for developers and testers, off for players',
+    # PEANUTS begin: this fork's own rows. The wiki is Banana Native's (published to its Forgejo wiki); Peanuts Native describes them in peanuts/docs
+    'Build again': 'Peanuts Native: the game sheet\'s build (peanuts/docs/FAQ.md)',
+    'Delete save data': 'Peanuts Native: a row of its Saves tab',
+    'Resolution scale': 'Peanuts Native: DM_RES_SCALE (ResScale.java, PEANUTS.md)',
+    # PEANUTS end
 }
 BAD_CHARS = set('›⋯−✕')   # > as a single quote, midline ellipsis, minus sign, multiplication X: Forgejo flags them as ambiguous
 
