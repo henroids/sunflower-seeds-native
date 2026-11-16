@@ -19,8 +19,9 @@ public final class Request {
         public Bad(String code, String message) { super(message); this.code = code; }
     }
 
-    public static final List<String> COMMANDS = Arrays.asList("status", "list", "scan", "nav", "build", "reimport", "prepare", "job", "play", "game", "screens_off", "set");
+    public static final List<String> COMMANDS = Arrays.asList("status", "list", "scan", "nav", "build", "reimport", "prepare", "job", "play", "game", "screens_off", "set", "companion");
     static final List<String> FILTERS = Arrays.asList("all", "building", "ready", "build", "not_in_app");
+    static final List<String> COMPANION_ACTIONS = Arrays.asList("list", "install", "update", "remove");
     static final List<String> TABS = Arrays.asList("performance", "game", "saves", "storage");
     private static final Set<String> YES = new HashSet<>(Arrays.asList("true", "1", "on", "yes")), NO = new HashSet<>(Arrays.asList("false", "0", "off", "no"));
 
@@ -79,7 +80,7 @@ public final class Request {
 
     public boolean on(String key) throws Bad { return Boolean.TRUE.equals(flag(key)); }
 
-    /** What the job and game commands are asked to do (job's stop is given back as pause); null for the other commands */
+    /** What the job, game and companion commands are asked to do (job's stop is given back as pause); null for the other commands */
     public String action() throws Bad {
         if (cmd.equals("job")) {
             need("do");
@@ -87,7 +88,15 @@ public final class Request {
             return "stop".equals(a) ? "pause" : a;   // one button: the build card calls it Stop, the Prepare card Pause
         }
         if (cmd.equals("game")) { need("do"); return word("do", Arrays.asList("stop", "ctl")); }
+        if (cmd.equals("companion")) { need("do"); return word("do", COMPANION_ACTIONS); }
         return null;
+    }
+
+    /** A game's companion against the catalog: none (the catalog has none and none is installed), not_installed, installed, update */
+    public static String companionState(String catalog, String installed) {
+        if (catalog == null) return installed == null ? "none" : "installed";
+        if (installed == null) return "not_installed";
+        return installed.equals(catalog) ? "installed" : "update";
     }
 
     /** Refuses a command this version does not have, or one whose arguments are missing or malformed */
@@ -118,6 +127,12 @@ public final class Request {
             }
             case "screens_off": if (flag("on") == null) throw new Bad("bad_args", "screens_off needs -e on true or -e on false"); break;
             case "set": need("key"); need("value"); titleId(false); break;
+            case "companion": {
+                String a = action();
+                titleId(!a.equals("list"));
+                if (a.equals("remove") && !on("confirm")) throw new Bad("needs_confirm", "companion remove deletes the game's companion package: add -e confirm true");
+                break;
+            }
             default: break;
         }
     }

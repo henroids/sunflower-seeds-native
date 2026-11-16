@@ -1,13 +1,20 @@
 # Control over adb
 
 A way to drive the app from a computer, for tests and scripts: one command per `am start`, and one file that
-says what the app is doing. This is the first part: reading the state, moving between pages, building,
-preparing, playing and a few safe settings. One command replaces a file: `reimport` makes a game's `.nup`
-again, and only with `-e confirm true`. Nothing else here deletes or replaces anything.
+says what the app is doing: reading the state, moving between pages, building, preparing, playing, a few
+safe settings and a game's companion. Two commands delete or replace something, and only with
+`-e confirm true`: `reimport` makes a game's `.nup` again, and `companion` with `do=remove` deletes a
+companion package. Nothing else here deletes or replaces anything.
 
-What was checked: `status` on an AYN Thor. The other commands have not been run on a device yet; which commands
-and arguments are taken or refused, and the JSON that is written, are covered by PC tests
-(`peanuts/tests/test_ctl.py`).
+What was checked on an AYN Thor (2026-11-16): `status`, `list`, `scan`, `nav` (home with a filter and Find,
+settings with a section, a game's page with a tab), every key of `set` with a value and back (for every
+game and for one), `companion` (list, install, install and update of one that is the newest, remove, and
+its refusals), `play`, `game` (`ctl`, `stop`), and the refusals of `build` (a game that is built),
+`reimport` (dumps not found), `screens_off` and `job` (nothing builds), a command that needs the screen
+while a game runs, and an unknown command. `build` and `job` pause and resume were run on an earlier
+version. Not run on a device: `prepare`, a `reimport` that goes through, `screens_off` during a build,
+`job` `retry` and `try_anyway`. Which commands and arguments are taken or refused, and the JSON that is
+written, are covered by PC tests (`peanuts/tests/test_ctl.py`).
 
 ```
 adb shell am start -n <package>/dev.peanuts.ctl.Command -e cmd <name> [-e <argument> <value> ...] [-e id <token>]
@@ -71,8 +78,35 @@ rest of the file.
 | | `-e cmd game -e do ctl -e line "A~0.5"` | One line into the running game's live control file (the lines of `android/TESTING.md`, "Live control"). Its answer is in the run's log |
 | `screens_off` | `-e cmd screens_off -e on true` | The black cover while a build runs; `-e on false` lifts it |
 | `set` | `-e cmd set -e key fps_cap -e value 30 -e title_id 0100F2C0115B6000` | One of the settings below, for every game or, with `title_id`, for one |
+| `companion` | `-e cmd companion -e do list` | The catalog against the library: one row a game in `data.companions` (below). With `title_id`, that game alone |
+| | `-e cmd companion -e do install -e title_id 0100F2C0115B6000` | The catalog's newest companion for the game, downloaded and checked as the catalog screen does. One that is installed and older is replaced |
+| | `-e cmd companion -e do update -e title_id 0100F2C0115B6000` | The same, refused (`not_installed`) when the game has none |
+| | `-e cmd companion -e do remove -e title_id 0100F2C0115B6000 -e confirm true` | Deletes the game's companion package. The game and its saves stay |
 
 `job` takes an optional `title_id`: the command is refused (`no_job`) when the job is another game's.
+
+### `companion`
+
+It reads the catalog from the network and downloads a package, so its answer comes later: `last_result` is
+`pending` until the work has ended (a list takes a second or two, an install as long as the download).
+Nothing is installed that the catalog screen would not install: the package's digest must match the
+catalog's, and its runtime must not be newer than the app's.
+
+`data.companions` of a list: `title_id`, `name`, `package`, `installed` (a version, `?` when the package
+does not record one, null), `catalog` (the newest version, null when the catalog has none for the game),
+`state` (`installed`, `update`, `not_installed`, `none`) and `built` (a companion goes beside the game's
+pack: without a pack nothing can be installed). `data` of an install or update: `package`, `version`,
+`was` (the version before, null for a first install), `changed` (false when it was the newest already).
+After a change the library rows in `status.json` are read anew in the same write as the answer.
+
+| Code | Meaning |
+|---|---|
+| `needs_confirm` | `remove` without `-e confirm true` |
+| `unknown_title` | The game is not in the library |
+| `not_built` | The game has no pack yet |
+| `no_companion` | The catalog has no companion for the game |
+| `not_installed` | `remove` or `update` of a game that has none |
+| `failed` | The app's installer refused or could not finish: `message` has its reason (a game runs, no network, the download does not match the catalog, the package needs a newer app) |
 
 ### `reimport`
 
@@ -143,8 +177,8 @@ Ready can be `build` here.
   (`reimport` replaces one `.nup` by one made from the same dumps, and asks first.)
 - Anything that puts code or host switches into the game from a file: GPU driver installs, mods, the extra
   environment, env files. (`game ctl` reaches only a game that already runs.)
-- Rebuild of a game that is built (other than by `reimport`), keys, firmware and folder setup, companions, the in-game panel, pausing
-  a game, answering a dialog. These come later.
+- Rebuild of a game that is built (other than by `reimport`), keys, firmware and folder setup, a game's second-screen
+  choice, the in-game panel, pausing a game, answering a dialog. These come later.
 - Installing an app update and pinning a shortcut: Android asks the user itself.
 
 Upstream's own adb extras on the launcher (`android/TESTING.md`) are a separate, older door with its own

@@ -636,4 +636,19 @@ $(B)/t_peanuts_padgate: t_peanuts_padgate.c t_hid.c t_peanuts_hid_stubs.c ../hle
 	$(CLANG) -O1 -g -Wall -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -I.. $(GINC) -o $@ t_peanuts_padgate.c t_peanuts_hid_stubs.c ../hle_haptics.c -lpthread -lm
 $(B)/t_peanuts_host: t_peanuts_host.c stub_android/android/log.h ../../peanuts/peanuts.c ../../peanuts/peanuts.h ../../peanuts/rt/peanuts_rt.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -Istub_android -I.. $(GINC) -o $@ t_peanuts_host.c -lpthread -lm
+# t_peanuts_syncstress: a hunt for lost wake-ups in hle_thread.c's waits and signals with real threads (single cases, then a storm of SYNC_SECS seconds; with --stops the
+# game is stopped and resumed throughout): make GAME=<id> peanuts-sync [SYNC_SECS=300] [SYNC_ARGS=--stops]. peanuts-sync-control builds the host's old condition
+# variable order (-DDM_TEST_CV_OLD_ORDER, a lost wake-up that is known) and passes when the test catches it
+SYNC_SECS ?= 3
+.PHONY: peanuts-sync peanuts-sync-control
+peanuts-sync: $(B)/t_peanuts_syncstress
+	$(B)/t_peanuts_syncstress $(SYNC_SECS) $(SYNC_ARGS)
+peanuts-sync-control: $(B)/t_peanuts_syncstress_old
+	! SYNC_STALL_S=3 $(B)/t_peanuts_syncstress_old 60 > $(B)/t_peanuts_syncstress_old.log 2>&1
+	grep -a "was pushed and never taken\|stalled at" $(B)/t_peanuts_syncstress_old.log
+peanuts-host: peanuts-sync
+$(B)/t_peanuts_syncstress: t_peanuts_syncstress.c ../hle_thread.c ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -I.. $(GINC) -o $@ t_peanuts_syncstress.c -lpthread -lm
+$(B)/t_peanuts_syncstress_old: t_peanuts_syncstress.c ../hle_thread.c ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -DDM_TEST_CV_OLD_ORDER -I.. $(GINC) -o $@ t_peanuts_syncstress.c -lpthread -lm
 # PEANUTS end

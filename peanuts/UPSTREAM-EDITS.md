@@ -722,3 +722,19 @@ as game code, and the render thread's pacing waits counted as waits.
 `hle_nvn.c` are two calls around waits and feed nothing a shader key is made of.
 Upstream candidate: the `paused` line of `SetThreadActivity` yes (a stale flag after "paused inside an SVC, resumed before the SVC ended"); the rest no
 (upstream has no companion runtime).
+
+### Round 11, three faults in the host's waits, and what a thread dump says (2026-11-16)
+
+Found while looking for a lost wake-up behind a rare freeze of Echoes of Wisdom (none was found in these paths: the condition variable, mutex, event,
+address and exit paths read as the kernel's and held through twenty minutes of a stress test with real threads, which does catch the old
+"release the mutex, then write the key" order within a second).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_thread.c` | 14 | (1) a native wait entered inside another counted down instead of up (the stack-address line of the round above had taken the `else`): the outer leave then stopped the process; (2) `thr_runnable` took a thread held by a stop of all threads for a blocked one, so the thread that woke a higher-priority peer on its core ran beside it after the stop; the game's own `SetThreadActivity` pause still counts as blocked; (3) on Android a guest wait's timeout is measured on the monotonic clock: on the wall clock, a clock set back during play left a timed wait asleep for that long; (4) `svc_thread_dump` adds three lines a thread: `wait:` (how long, the timeout, for `WaitSynchronization` each handle's kind and whether it is signalled, a pending cancel), `sched:` (runnable or why not, whose handoffs hold it, whom its own handoff waits for) and `history:` (its last eight synchronisation calls: age, call, two arguments, result, time blocked, who ended the wait, how many threads it woke) | `PEANUTS` in each hunk |
+| `dm/host/tests/Makefile` | 1 | `peanuts-sync` (part of `peanuts-host`, 3 s) and `peanuts-sync-control` (the old order must fail) | inside the `PEANUTS begin`/`end` block |
+| `dm/host/tests/t_peanuts_syncstress.c` (new) | whole file | the three faults (each fails on the code before), then a storm: pool waiters and signallers with the SDK's "signal only if the key is not 0", events signalled from a host thread and a game thread against waits with and without timeouts, cancels, address waits, threads made and ended, mixed core masks, optionally stops of all threads throughout | `PEANUTS` on its first line |
+
+Run on a Linux PC only (also under TSan). The Mac's tests of the scheduler (`t_preempt`, `t_system_event`, `t_notify_sched`) were not run and should be,
+since `thr_runnable` changed for threads held by a stop of all threads. No shader-chain file is changed. Upstream candidate: (3) yes; (4) the `wait:`
+and `history:` lines yes; (1) and (2) no (they are in code only this fork has).

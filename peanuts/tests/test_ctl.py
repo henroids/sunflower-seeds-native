@@ -74,6 +74,10 @@ public final class CtlTest {
                 System.out.print(Json.write(ExitRecord.game(ExitRecord.parse(a[2].replace('|', '\n')), a[1].equals("1"))));
                 break;
             }
+            case "companion_state":   // catalog version against the installed one: (none, none) (none, 1.0.0) (1.0.1, none) (1.0.1, 1.0.1) (1.0.1, 1.0.0)
+                System.out.println(Request.companionState(null, null) + " " + Request.companionState(null, "1.0.0") + " " + Request.companionState("1.0.1", null)
+                        + " " + Request.companionState("1.0.1", "1.0.1") + " " + Request.companionState("1.0.1", "1.0.0"));
+                break;
             default: throw new IllegalArgumentException(a[0]);
         }
     }
@@ -128,6 +132,19 @@ class CtlTest(unittest.TestCase):
         self.assertEqual(self.request('cmd=screens_off', 'on=true'), 'ok screens_off null true null')
         self.assertEqual(self.request('cmd=screens_off', 'on=off'), 'ok screens_off null false null')
         self.assertEqual(self.request('cmd=set', 'key=overlay', 'value=off'), 'ok set null false null')
+
+    def test_the_companion_command(self):   # no screen: the catalog is read and a package installed on the command's own thread
+        self.assertEqual(self.request('cmd=companion', 'do=list'), 'ok companion null false null')
+        self.assertEqual(self.request('cmd=companion', 'do=list', 'title_id=' + TITLE), 'ok companion null false ' + TITLE)
+        self.assertEqual(self.request('cmd=companion', 'do=install', 'title_id=' + TITLE, 'id=c1'), 'ok companion c1 false ' + TITLE)
+        self.assertEqual(self.request('cmd=companion', 'do=UPDATE', 'title_id=' + TITLE.lower()), 'ok companion null false ' + TITLE)
+        self.assertEqual(self.request('cmd=companion', 'do=remove', 'title_id=' + TITLE, 'confirm=true'), 'ok companion null false ' + TITLE)
+        self.assertEqual(self.request('cmd=companion'), 'bad bad_args')                                     # no do
+        self.assertEqual(self.request('cmd=companion', 'do=delete', 'title_id=' + TITLE), 'bad bad_args')    # not one of its words
+        self.assertEqual(self.request('cmd=companion', 'do=install'), 'bad bad_args')                        # which game
+        self.assertEqual(self.request('cmd=companion', 'do=remove', 'title_id=' + TITLE), 'bad needs_confirm')
+        self.assertEqual(self.request('cmd=companion', 'do=remove', 'title_id=' + TITLE, 'confirm=no'), 'bad needs_confirm')
+        self.assertEqual(self.run_cmd('companion_state').split(), ['none', 'installed', 'not_installed', 'installed', 'update'])
 
     def test_refusals(self):
         self.assertEqual(self.request(), 'bad bad_args')

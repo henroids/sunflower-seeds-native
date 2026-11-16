@@ -260,6 +260,11 @@ public final class Ctl {
             case "screens_off": ScreensOff.hide(); res.ok("The screens are back."); break;
             case "job": pause(r, res); break;
             case "game": if (r.action().equals("stop")) stopGame(res); else gameCtl(r, res); break;
+            case "companion": {   // pending until its thread has the answer; a change is in the library rows of the write that follows
+                boolean changes = !r.action().equals("list");
+                CompanionCmd.start(app, r, res, () -> UI.post(() -> { done(res); if (changes) libraryChanged(); }));
+                break;
+            }
             default: throw new Request.Bad("unknown_command", r.cmd);
         }
     }
