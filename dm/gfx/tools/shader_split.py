@@ -3482,6 +3482,7 @@ def direct_file(args, targets, keys):
     map says, a reader's error: the whole scan then says what is wrong, as before). keys: the map's keys of this file; a result without every one of them (a container that moved,
     a variation the reader files elsewhere) is dropped and the file scanned whole, so a mismatch costs that file's whole scan and never the tables' comparison"""
     path, rel = args
+    large = False   # PEANUTS: this read holds upstream's lock for large files (LARGE_LOCK, scan_file_in), as the whole scan's read of the same file does
     try:
         with open(path, 'rb') as f: head = f.read(16)
         found = Shaders()
@@ -3493,6 +3494,8 @@ def direct_file(args, targets, keys):
         else:
             if any(k == 'IDRK' for _, k, _ in targets): return None
             if head[:4] in (BND2, SPKG, RFRM, b'BERG', MTARC, SCNE, b'BMSG', b'SRYK') or head[:3] == b'PAK' or head[:8] == GFPAK or ue3_package(head) or head[:4] == b'\0\0\1\0' and path.endswith('.gz'): return None
+            large = head[:4] != ZSTD_MAGIC and LARGE_LOCK is not None and os.path.getsize(path) >= LARGE_FILE   # PEANUTS (see large above)
+            if large: LARGE_LOCK.acquire()   # PEANUTS
             d, kind = plain_blob(path, rel, head)
             if kind or d[:3] == b'XNB' or d[:8] == b'UnityFS\0' or (d[8:11] == b'\0\0\0' and __import__('unityfs').is_serialized(d)): return None
             if not direct_blob(d, '/' + rel, {m: [(k, o) for _, k, o in g] for m, g in __import__('itertools').groupby(targets, key=lambda t: t[0])}, found):
@@ -3505,6 +3508,8 @@ def direct_file(args, targets, keys):
     except (Exception, SystemExit) as e:
         print(f'direct: /{rel}: {str(e).removeprefix("[RED] ")}; the file is scanned whole', flush=True)
         return None
+    finally:
+        if large: LARGE_LOCK.release()   # PEANUTS (see large above): before the whole scan of a file this one gave up takes it again
 
 def direct_blob(d, label, targets, found):
     """The recorded containers of a blob into found: targets = {member path: [(kind, offset)]}, '' the blob itself. A Yaz0 blob is decoded; the members are those of a SARC, taken in its
@@ -3814,11 +3819,14 @@ def main():
         # Unreal Engine shader code archives decoded on the Mac (uepak.py): <version dir>/ue_shaders, or DM_UE_SHADERS; needed when the RomFS has Unreal paks
         ued = os.environ.get('DM_UE_SHADERS') or os.path.join(os.path.dirname(os.path.abspath(romfs)), 'ue_shaders')
         names = sorted(f for f in os.listdir(ued) if f.endswith('.ushaderbytecode') and not f.startswith('._')) if os.path.isdir(ued) else []   # AppleDouble metadata, not decoded shader archives
-        if not names and os.environ.get('DM_UE_DECODE') and uepak.unreal_paks(romfs, inline=False, mains=[mainnso]):   # PEANUTS: the phone decodes them here (ue_ondevice.py; the Mac's NSP script did)
+        def ue_paks():   # PEANUTS: uepak.unreal_paks with the mains reads an encrypted index, off the Mac with the builder's _nxaes module: a Python without it stopped with a traceback
+            try: return uepak.unreal_paks(romfs, inline=False, mains=[mainnso])
+            except ImportError as e: red(f'the RomFS has Unreal paks whose index is encrypted, and this Python has no AES to read it with ({e}): the Peanuts builder makes the module (peanuts-build, peanuts/docs/BUILDER.md); pack_android.py run by hand needs its folder in PYTHONPATH')
+        if not names and os.environ.get('DM_UE_DECODE') and ue_paks():   # PEANUTS: the phone decodes them here (ue_ondevice.py; the Mac's NSP script did)
             import ue_ondevice
             ued = ue_ondevice.decode(romfs, mainnso, os.environ['DM_UE_DECODE'])
             names = sorted(f for f in os.listdir(ued) if f.endswith('.ushaderbytecode') and not f.startswith('._'))   # PEANUTS
-        if not names and uepak.unreal_paks(romfs, inline=False, mains=[mainnso]): red(f'the RomFS has Unreal paks, but there are no decoded shader code archives in {ued} (the NSP script writes them)')
+        if not names and ue_paks(): red(f'the RomFS has Unreal paks, but there are no decoded shader code archives in {ued} (the NSP script writes them)')
         for nm in names: found += ue_shaders(open(os.path.join(ued, nm), 'rb').read(), f'/ue_shaders/{nm}')
         results.append(('main', last_entries(found), var_pairs(found), {}))
     for romfs in dlc_v:
