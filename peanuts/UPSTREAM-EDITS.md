@@ -1040,3 +1040,11 @@ profiles and known omitted add-on content, and run only for matching package-bui
 The shared probe and native regression harness live in Peanuts-owned paths. No shader-chain files changed.
 The general remap probe is an upstream candidate. It passed on AYN Thor/Turnip V39; Mali/PanVK rendering
 and the exported fallback on that device remain unverified, as described in the memory reference.
+
+### Round 14, -PnxAppId (2026-11-16)
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/build.gradle` | 2 | `-PnxAppId=<suffix>` (default `nxApp`) names the application ID `dev.nxnative.android.<suffix>`, so a development build installs beside the app | `// PEANUTS` on each line |
+
+Upstream candidate: no (it serves `-PnxApp=peanuts`).
