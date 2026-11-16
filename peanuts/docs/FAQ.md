@@ -256,6 +256,8 @@ The app rewrites all of the game's code and translates every shader on the devic
 
 Yes. The build goes on if you leave the app. You cannot build a second game at the same time. Some builds start the game once to capture shaders, so close any running game first.
 
+While a build runs or waits, the home screen has a **Screens off** button left of the Settings gear. It makes every screen black at the lowest brightness and keeps the device awake, so a long build does not wear an OLED panel. A tap on a screen brings the app back, and the cover goes away by itself when the build ends. It is new in 0.1.2 and little tested.
+
 ### What notifications does a build show?
 
 - While it builds: **Building** and the game's name, with the current step, a progress bar and a **Cancel** action. It is silent.
