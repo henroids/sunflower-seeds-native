@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="status" src="https://img.shields.io/badge/release-0.1.1-brightgreen">
+  <img alt="status" src="https://img.shields.io/badge/release-0.1.2-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
 </p>
@@ -26,9 +26,11 @@ too.
 
 ## Supported games
 
-These are the Switch 1 games this app version includes. All but the last two build and play on an AYN Thor with
-their companion. Use the game update listed. The app shows which update you have and which one a game supports, and
-asks before building any other.
+These are the Switch 1 games this app version includes. The last column says what was seen on an AYN Thor: a game
+marked "new" was played there for a short time only, and the last two have not been run on a device yet. Kirby's
+Return to Dream Land Deluxe was run by its contributor on their own AYN Thor only. The
+Companion column says whether the game has a companion that was checked with it. Use the game update listed. The app
+shows which update you have and which one a game supports, and asks before building any other.
 
 | Game | Title ID | Game update | Companion | Runs at |
 |---|---|---|---|---|
@@ -44,9 +46,15 @@ asks before building any other.
 | Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes | 60 fps |
 | OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes | 60 fps |
 | Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes | 60 fps |
+| Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Not checked | 60 fps; new, little tested |
 | Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes | 60 fps (30 on Switch) |
+| Pokémon Shield | `01008DB008C2C000` | 1.3.2 | Yes | 60 fps (30 on Switch); new, little tested |
 | The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.9.0 | Yes | 60 fps (30 on Switch); new, little tested |
-| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested |
+| FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No | 45 to 60 fps; new, little tested |
+| The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Not checked | 60 fps; new: right indoors, the fog outdoors is not checked and may draw wrong |
+| Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No | 30 fps, as on Switch; new, little tested |
+| Resident Evil 4 | `010099A00BC1E000` | v131072 | Not checked | 60 fps; new, a first profile: the first scenes only |
+| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested: its first stage, by its contributor |
 | Super Mario Bros. Wonder | `010015100B514000` | 1.0.0, 1.0.1, 1.2.1 | Not checked | Not tested on a device yet |
 | DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Not tested on a device yet |
 
@@ -92,7 +100,9 @@ After an app update, rebuilding every game is strongly recommended: hold the cov
 - **Saves**: back up, restore, import and **Delete save data** on the game's **Saves** tab.
 
 A game can also be built on a computer and pushed to the device: see [BUILDER.md](peanuts/docs/BUILDER.md). The builder is tested
-on macOS and Linux. Windows is written but not tested yet.
+on macOS and Linux. Windows is written but not tested yet. On Linux it also builds four games whose shaders are
+Oodle-compressed or in Unreal archives; for the Oodle ones it compiles a separate open-source decoder (ooz,
+GPL-3.0-or-later), which is used on the computer only and is not part of the app.
 
 ## Companions
 
@@ -133,6 +143,10 @@ real work of running Switch games natively on Android and is built on [nxnative]
 by seedds (MIT). Some fixes are adapted from [nx2android](https://github.com/shirai91/nx2android) (MIT).
 
 The companion runtime and package format come from [Eden Duo](https://github.com/igawa6/eden-duo).
+
+Contributors: the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`) is by [intermission88](https://github.com/intermission88)
+(pull request #13), and so are the profile of Kirby's Return to Dream Land Deluxe and the guide for adding a game
+(`peanuts/docs/NEW-GAME.md`, pull request #34). The issue and discussion forms were set right by [ArchOwlen](https://github.com/ArchOwlen) (pull request #5).
 
 The project as a whole is licensed GPL-3.0-or-later. Frame generation (ported from Eden and lsfg-vk) and other
 components carry their own licenses; see `android/NOTICE.md` and `dm/third_party/README.md`.
