@@ -55,7 +55,7 @@ final class GameSettings {
         LinearLayout card = Ui.add(content, Ui.card(a), 12);
         card.setPadding(Ui.dp(a, 14), Ui.dp(a, 12), Ui.dp(a, 14), Ui.dp(a, 12));
         card.addView(Ui.text(a, "Shader update available", 15, R.color.bn_text, 700));
-        TextView t = Ui.add(card, Ui.small(a, "Optional: the game plays as it does now. This version of Banana Native makes shaders with an updated translator. "
+        TextView t = Ui.add(card, Ui.small(a, "Optional: the game plays as it does now. This version of " + a.getString(R.string.app_name) + " makes shaders with an updated translator. "   // PEANUTS: the app's own name (upstream: "Banana Native")
                 + "Updating makes this game's shaders again on the phone, which can take a long time for a big game: keep the phone charging."), 6);
         t.setTextSize(13);
         Ui.add(card, Ui.action(a, 0, "Update shaders", Ui.Kind.PRIMARY, v -> a.updateShaders(g)), 10);

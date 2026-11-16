@@ -248,7 +248,7 @@ public final class MainActivity extends Activity {
     private String poppedLine(long n) { return "Bananas Popped: " + java.text.NumberFormat.getIntegerInstance().format(n); }
 
     /** The player wiki (its pages are written and kept up to date on the project's site, so the app links to it and keeps no copy) */
-    static final String WIKI_URL = "https://git.eden-emu.dev/moceure/BananaNative/wiki";
+    static final String WIKI_URL = "https://github.com/igawa6/peanuts-native/blob/main/peanuts/docs/FAQ.md";   // PEANUTS: this fork's questions and answers (upstream: Banana Native's player wiki, which describes that app's screens and games)
 
     /** Home's header buttons: the wiki, then Settings */
     private View headerButtons() {
@@ -257,8 +257,8 @@ public final class MainActivity extends Activity {
         LinearLayout wiki = new LinearLayout(this);   // the book with a small WIKI under it, so the button says what it opens
         wiki.setOrientation(LinearLayout.VERTICAL);
         wiki.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        wiki.addView(Ui.iconButton(this, R.drawable.ic_wiki, "Player wiki", Ui.Kind.TONAL, v -> openLink(WIKI_URL)));
-        TextView label = Ui.text(this, "WIKI", 10, R.color.bn_text_2, 700);
+        wiki.addView(Ui.iconButton(this, R.drawable.ic_wiki, "Questions and answers", Ui.Kind.TONAL, v -> openLink(WIKI_URL)));   // PEANUTS: was "Player wiki" (WIKI_URL)
+        TextView label = Ui.text(this, "FAQ", 10, R.color.bn_text_2, 700);   // PEANUTS: was "WIKI" (WIKI_URL)
         label.setPadding(0, Ui.dp(this, 2), 0, 0);
         label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);   // the button already says "Player wiki"
         label.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
@@ -325,8 +325,8 @@ public final class MainActivity extends Activity {
         LinearLayout upd = settingsCard(content);
         updateRow = new Ui.Setting(this, "🔄", "Check for updates", v -> Updater.checkNow(this)).chevron(this);
         upd.addView(updateRow.view);
-        upd.addView(new Ui.Setting(this, "📖", "Player wiki", v -> openLink(WIKI_URL)).chevron(this)
-                .value("Guides, what every setting does, a page for each game (opens the browser)").view);
+        upd.addView(new Ui.Setting(this, "📖", "Questions and answers", v -> openLink(WIKI_URL)).chevron(this)   // PEANUTS: was "Player wiki" (WIKI_URL)
+                .value("Building, playing, updating and what to try when something fails (opens the browser)").view);   // PEANUTS
 
         Ui.add(content, Ui.section(this, "Display"), Ui.SECTION_GAP);
         LinearLayout play = settingsCard(content);
@@ -865,7 +865,9 @@ public final class MainActivity extends Activity {
     void manageGame(Game g) { manage(g); }
 
     /** The optional shader update from the game's page: Home, then Prepare (Ondevice asks first and says what it will make) */
-    void updateShaders(Game g) { page(false); Ondevice.prepare(this, new File(g.gameDir), true); }
+    // PEANUTS: the card's Update shaders opens this fork's build sheet, as the Build again row does (upstream: Ondevice.prepare(this, new File(g.gameDir), true)): a build
+    // from the sheet keeps the pack's note, its companion and its builds with mods in step (dev.peanuts.build.Prepare), which upstream's own Prepare card does not know
+    void updateShaders(Game g) { page(false); dev.peanuts.ui.GameSheet.open(this, g.titleId); }
 
     /** A game's page (a tap or long press on its tile; GameSettings): its settings, saves and storage under tabs, Play in its header */
     private void manage(Game g) { GameSettings.open(this, g); }
@@ -1500,8 +1502,16 @@ public final class MainActivity extends Activity {
         Game.touch(this, g);   // the entry played last is the one kept if the list ever holds this game twice
         Intent intent = new Intent(this, GameActivity.class).putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", g.packDir);
         if (getIntent().getBooleanExtra("no_pause", false)) intent.putExtra("no_pause", true);
-        dev.peanuts.ctl.Ctl.started(g.titleId, g.gameDir, g.packDir);   // PEANUTS: a control command's Play learns that the game was started, and with which pack
-        dev.peanuts.GameReturn.remember(this, g.titleId, g.name, g.gameDir, g.packDir);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
+        // PEANUTS begin: the title ID the list holds for this game. A card whose edition switch is on starts program 1 as a game of its own (Edition.forPlay: another
+        // title ID, the same game folder), which the list does not hold: a shortcut, the way back to the game and a control command's Play name the list's entry
+        String listId = g.titleId;
+        { boolean held = false; String byDir = null;
+          for (Game x : Game.load(this)) { if (x.titleId.equalsIgnoreCase(g.titleId)) held = true; else if (x.gameDir.equals(g.gameDir) && byDir == null) byDir = x.titleId; }
+          if (!held && byDir != null) listId = byDir; }
+        if (!listId.equals(g.titleId)) intent.putExtra("peanuts_list_id", listId);
+        // PEANUTS end
+        dev.peanuts.ctl.Ctl.started(listId, g.gameDir, g.packDir);   // PEANUTS: a control command's Play learns that the game was started, and with which pack
+        dev.peanuts.GameReturn.remember(this, listId, g.name, g.gameDir, g.packDir);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
         startActivity(intent);
     }
 

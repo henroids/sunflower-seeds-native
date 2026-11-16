@@ -18,6 +18,7 @@ UNDOCUMENTED = {
     'Build again': 'Peanuts Native: the game sheet\'s build (peanuts/docs/FAQ.md)',
     'Delete save data': 'Peanuts Native: a row of its Saves tab',
     'Resolution scale': 'Peanuts Native: DM_RES_SCALE (ResScale.java, PEANUTS.md)',
+    'Questions and answers': 'Peanuts Native: the row that opens its own FAQ (peanuts/docs/FAQ.md) where upstream\'s opens this wiki',
     # PEANUTS end
 }
 BAD_CHARS = set('›⋯−✕')   # > as a single quote, midline ellipsis, minus sign, multiplication X: Forgejo flags them as ambiguous

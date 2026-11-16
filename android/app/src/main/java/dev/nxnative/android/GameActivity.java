@@ -183,7 +183,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         setContentView(root);
         immersive();
         dev.peanuts.Companion.start(this, getIntent().getStringExtra("name"));   // PEANUTS: the companion on the second display
-        dev.peanuts.launch.RecentGames.touch(this, id, getIntent().getStringExtra("name"));   // PEANUTS: last-3-played dynamic shortcuts (LAUNCHERS.md)
+        dev.peanuts.launch.RecentGames.touch(this, getIntent().getStringExtra("peanuts_list_id") != null ? getIntent().getStringExtra("peanuts_list_id") : id, getIntent().getStringExtra("name"));   // PEANUTS: last-3-played dynamic shortcuts (LAUNCHERS.md), by the title ID the list holds (an edition's start: MainActivity.start)
         TextInput.screen(this);
         CtrlScreen.screen(this);   // the controller applet's join screen shows on this screen (again, when the game was waiting on it as the screen was recreated)
         UserPicker.screen(this);   // the user selector shows on this screen, as the input box   // the keyboard applet's input box shows on this screen (again, when the game was waiting on it as the screen was recreated)
@@ -651,6 +651,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     // folder with the toggles as <build>.enabled, passed as DM_CHEATS; the in-game panel lists cheatList. Switch off: nothing passed, nothing listed ----
     private List<Cheats.Entry> cheatList = java.util.Collections.emptyList();
     private String cheatNote;   // the log line of the cheats this run started with (after the start, with the save's)
+    private List<File> cheatMods; private boolean cheatsMerged;   // PEANUTS: the enabled mods' cheats folders of this start (ModCheats); whether cheatsEnv merged them into upstream's folder
     /** The cheats this run started with, for the in-game panel's Cheats section: empty while Game settings › Cheats is off (Cheats.panel) */
     List<Cheats.Entry> cheats() { return cheatList; }
 
@@ -662,9 +663,10 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (build == null) { unknownNotes.add("[nxlaunch] Cheats: the pack names no main build; this start runs without cheats"); return; }
         File folder = CheatsUi.folder(this, id), shipped = Cheats.packFile(packDir, build);
         try {
-            List<Cheats.Entry> l = Cheats.install(shipped, folder, build, Prefs.cheatsOn(this, id));
+            List<Cheats.Entry> l = ModCheats.install(shipped, folder, build, Prefs.cheatsOn(this, id), cheatMods);   // PEANUTS: was Cheats.install: the enabled mods' cheat files are in the one list too (ModCheats)
             if (l == null) { unknownNotes.add("[nxlaunch] Cheats: no cheat file for build " + build + (shipped == null ? " in the pack (Prepare again brings the game's own) and none imported" : "")); return; }
             env.addAll(Cheats.env(true, true, folder));
+            cheatsMerged = true;   // PEANUTS: the mods' cheats are in this folder: no second DM_CHEATS line (start)
             cheatList = Cheats.panel(true, true, l);
             cheatNote = "[nxlaunch] cheats: " + cheatList.size() + " cheats for build " + build + (shipped == null ? " (imported only: the pack has no profile cheat file)" : "") + ", " + Prefs.cheatsOn(this, id).size() + " on";
         } catch (IOException e) { unknownNotes.add("[nxlaunch] Cheats: not set up (" + e.getMessage() + "); this start runs without cheats"); }
@@ -728,6 +730,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             } catch (java.io.FileNotFoundException e) {   // an APK built without fontTools: the host's [YELLOW] line says so
             } catch (IOException e) { unknownNotes.add("[nxlaunch] the button-icon font is not placed (" + e.getMessage() + "): button icons in game text draw as '?'"); }
             String gpuNote = settingsEnv(id, env);
+            cheatMods = dev.peanuts.mods.ModRuntime.cheatsDirs(game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: for cheatsEnv (ModCheats)
             cheatsEnv(id, pack, packDir, env);
             // The 3D scene (Game settings › Resolution, ResPresets; Advanced › 3D scene, SceneRes): the chosen RomFS overlay in the pack, made by the pack step from the player's files,
             // or the chosen game arguments (scene_arg); a DM_ROMFS_OVERLAY or DM_GAME_ARGS_ADD line of the user's comes later and wins
@@ -759,7 +762,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             String modOverlay = dev.peanuts.mods.ModRuntime.romfsOverlayEnv(this, game.isDirectory() ? game : game.getParentFile(), id, sceneOverlay, packDir);   // PEANUTS: mods beside the game; packDir: a code mod's files only with its build
             if (modOverlay != null) env.add(modOverlay);
             String modCheats = dev.peanuts.mods.ModRuntime.cheatsEnv(this, game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: mods beside the game; a code mod's cheats only with its build
-            if (modCheats != null) env.add(modCheats);
+            if (modCheats != null && !cheatsMerged) env.add(modCheats);   // PEANUTS: not beside upstream's own DM_CHEATS, which holds the mods' cheats then (cheatsEnv, ModCheats): the later line won, and the panel listed cheats the host did not run
             String resNote = resPresets.isEmpty() ? null   // the choice in force, for the log: which preset (or Advanced), and the window and scene it gave
                     : "[nxlaunch] resolution " + Prefs.resolutionChoice(this, id) + (Prefs.resPreset(this, id).isEmpty() ? " (nothing chosen: the earlier settings' match or the default)" : "")
                     + ": window " + Prefs.startWindow(this, id) + ", scene " + (sceneName.isEmpty() ? "the game's own palette" : sceneName);
