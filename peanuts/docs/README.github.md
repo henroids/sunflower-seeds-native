@@ -27,7 +27,8 @@ too.
 ## Supported games
 
 These are the Switch 1 games this app version includes. The last column says what was seen on an AYN Thor: a game
-marked "new" was played there for a short time only, and the last two have not been run on a device yet. The
+marked "new" was played there for a short time only, and the last two have not been run on a device yet. Kirby's
+Return to Dream Land Deluxe was run by its contributor on their own AYN Thor only. The
 Companion column says whether the game has a companion that was checked with it. Use the game update listed. The app
 shows which update you have and which one a game supports, and asks before building any other.
 
@@ -53,7 +54,7 @@ shows which update you have and which one a game supports, and asks before build
 | The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Not checked | 60 fps; new: right indoors, the fog outdoors is not checked and may draw wrong |
 | Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No | 30 fps, as on Switch; new, little tested |
 | Resident Evil 4 | `010099A00BC1E000` | v131072 | Not checked | 60 fps; new, a first profile: the first scenes only |
-| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested |
+| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested: its first stage, by its contributor |
 | Super Mario Bros. Wonder | `010015100B514000` | 1.0.0, 1.0.1, 1.2.1 | Not checked | Not tested on a device yet |
 | DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Not tested on a device yet |
 
@@ -144,7 +145,8 @@ by seedds (MIT). Some fixes are adapted from [nx2android](https://github.com/shi
 The companion runtime and package format come from [Eden Duo](https://github.com/igawa6/eden-duo).
 
 Contributors: the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`) is by [intermission88](https://github.com/intermission88)
-(pull request #13). The issue and discussion forms were set right by [ArchOwlen](https://github.com/ArchOwlen) (pull request #5).
+(pull request #13), and so are the profile of Kirby's Return to Dream Land Deluxe and the guide for adding a game
+(`peanuts/docs/NEW-GAME.md`, pull request #34). The issue and discussion forms were set right by [ArchOwlen](https://github.com/ArchOwlen) (pull request #5).
 
 The project as a whole is licensed GPL-3.0-or-later. Frame generation (ported from Eden and lsfg-vk) and other
 components carry their own licenses; see `android/NOTICE.md` and `dm/third_party/README.md`.
