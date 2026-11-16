@@ -141,7 +141,10 @@ final class UpdateCheck {
         String tag() { return release.tag; }
     }
 
-    private static final Pattern TAG = Pattern.compile("[vV]?(\\d{1,6})\\.(\\d{1,6})\\.(\\d{1,6})");
+    // PEANUTS: a tag may end in "-<number>" (v0.1.3-1). Peanuts Native 0.1.1 and 0.1.2 close on Android 13 and older when their update page opens (ReleaseNotes
+    // called an API 34 method), and they take only a bare vX.Y.Z: a release tagged with the suffix is one they do not see, so it cannot close them. Every Peanuts
+    // release from 0.1.3 on is tagged so. The suffix is not part of the version; "-rc1" and other words are still not releases
+    private static final Pattern TAG = Pattern.compile("[vV]?(\\d{1,6})\\.(\\d{1,6})\\.(\\d{1,6})(?:-\\d{1,4})?");
     private static final Pattern APP = Pattern.compile("[vV]?(\\d{1,6})\\.(\\d{1,6})\\.(\\d{1,6})(?:[^0-9].*)?");
     private static final Pattern HEX = Pattern.compile("[0-9a-fA-F]{64}");
 

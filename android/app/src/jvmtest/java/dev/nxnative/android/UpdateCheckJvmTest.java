@@ -202,6 +202,11 @@ public final class UpdateCheckJvmTest {
         eq("0.1.4", v(UpdateCheck.tagVersion("0.1.4")), "bare tag");
         eq("1.20.300", v(UpdateCheck.tagVersion("V1.20.300")), "upper-case V, several digits");
         eq(null, v(UpdateCheck.tagVersion("v0.1.4-rc1")), "rc tag");
+        eq("0.1.3", v(UpdateCheck.tagVersion("v0.1.3-1")), "PEANUTS: a numeric suffix (the tag form 0.1.1 and 0.1.2 do not see)");
+        eq("0.1.4", v(UpdateCheck.tagVersion("0.1.4-12")), "PEANUTS: a numeric suffix on a bare tag");
+        eq(null, v(UpdateCheck.tagVersion("v0.1.3-")), "PEANUTS: a dash alone");
+        eq(null, v(UpdateCheck.tagVersion("v0.1.3-1-2")), "PEANUTS: two suffixes");
+        eq(null, v(UpdateCheck.tagVersion("v0.1.3-1a")), "PEANUTS: a suffix with a letter");
         eq(null, v(UpdateCheck.tagVersion("v0.1")), "two parts");
         eq(null, v(UpdateCheck.tagVersion("nightly")), "name");
         eq(null, v(UpdateCheck.tagVersion("v0.1.4.1")), "four parts");

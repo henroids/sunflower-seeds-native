@@ -282,7 +282,14 @@ final class Updater {
     private static void msg(Activity a, String title, String msg) { new PadFocus.Builder(a).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show(); }
 
     /** The release page (ReleasePage): version, the release notes with their pictures, size; Later, Update */
-    static void popup(Activity a, UpdateCheck.Update u) { ReleasePage.show(a, u, version(a), () -> download(a, u)); }
+    static void popup(Activity a, UpdateCheck.Update u) {
+        try { ReleasePage.show(a, u, version(a), () -> download(a, u)); }
+        catch (Throwable e) {   // PEANUTS: the page is shown at every start when a release is newer, so nothing in it may close the app (0.1.1 and 0.1.2 did, on Android 13: a NoSuchMethodError in the notes)
+            Log.e(TAG, "the update page did not open for " + u.tag(), e);
+            try { Toast.makeText(a, "Version " + UpdateCheck.text(u.version) + " is available, but its page could not be shown. Get it from the project's releases page.", Toast.LENGTH_LONG).show(); }
+            catch (Throwable ignored) { }
+        }
+    }
 
     /** ReleaseNotes' blocks as styled text: headings bold and larger, bullets and numbers indented by their level, code monospace, links as their text */
     static CharSequence styled(Context c, List<ReleaseNotes.Block> blocks) {

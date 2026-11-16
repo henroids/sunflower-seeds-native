@@ -1,12 +1,13 @@
 # Peanuts Native FAQ
 
-For version 0.1.2. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
+For version 0.1.3. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
 
 ## Quick answers
 
 - **Build is off, or a game stops at startup:** add your keys and firmware in Settings › Library (**Keys**, **Firmware**), then build or play again. See [Keys and firmware](#keys-and-firmware).
 - **Black screen, wrong picture or a crash at start:** pick another GPU driver in Settings › **GPU driver**, then run Settings › **Readiness check**. See [GPU drivers](#gpu-drivers).
 - **A cover says Wrong version:** the update you have is not one this app version supports. See [What does "Wrong version" mean?](#what-does-wrong-version-mean-and-how-do-i-fix-it)
+- **The app closes as soon as it opens, on version 0.1.1 or 0.1.2:** on Android 13 or older those two versions close when they find a newer release. Install 0.1.3 or later by hand from the project's [releases page](https://github.com/igawa6/peanuts-native/releases); your games, saves and settings stay. Until then the app opens with Wi-Fi off.
 - **The companion is empty or keeps waiting after an app update:** hold the game's cover, open **Storage**, tap **Build again**, then **Rebuild**.
 
 ## First run, step by step
@@ -715,7 +716,7 @@ No. An update keeps the app's storage, and saves are in it. Uninstalling can del
 
 ### How do I tell which version I have?
 
-The build name is under the app's title on the home screen and in Settings › **About**. A release build reads `peanuts-native-0.1.2`. Every log starts with it too.
+The build name is under the app's title on the home screen and in Settings › **About**. A release build reads `peanuts-native-0.1.3`. Every log starts with it too.
 
 ## Credits
 

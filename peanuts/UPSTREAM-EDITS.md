@@ -749,3 +749,16 @@ The update popup for 0.1.2 closed the app on an AYN Thor (Android 13): `NoSuchMe
 | `android/app/src/main/java/dev/nxnative/android/ReleaseNotes.java` | 1 | `htmlImages` collects into a `StringBuffer`, whose forms exist on every API level | `PEANUTS(upstream-candidate)` |
 
 Upstream candidate: yes (Banana Native's `ReleaseNotes.java` has the same call and the same `minSdk`).
+
+### Round 12, after it: releases the broken versions do not see, and an update page that cannot close the app (2026-11-16)
+
+0.1.1 and 0.1.2 are in people's hands with the fault of round 12, and they check for a release at every start. A release they can see closes them on
+Android 13 and older; neither can be mended from outside.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/UpdateCheck.java` | 1 | a release tag may end in `-<number>` (`v0.1.3-1`): the old versions take only a bare `vX.Y.Z`, so a release tagged with the suffix is invisible to them. Every Peanuts release from 0.1.3 on is tagged so | `// PEANUTS:` |
+| `android/app/src/main/java/dev/nxnative/android/Updater.java` | 1 | `popup` catches whatever the release page throws and says where to get the version instead | `// PEANUTS:` |
+| `android/app/src/jvmtest/java/dev/nxnative/android/UpdateCheckJvmTest.java` | 1 | the suffix's cases | `PEANUTS` in each line |
+
+Upstream candidate: the catch in `popup`, yes. The tag suffix, no (it answers this fork's two releases).
