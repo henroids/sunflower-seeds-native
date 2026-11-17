@@ -4,7 +4,7 @@
 
 Update 1.0.15 (v983040) on the base game. SDK 8.2.0. Vicarious Visions' Alchemy engine (build name Octane) with NVN graphics, Havok, FMOD and Bink 2. Modules `main`, `subsdk0` (the game's own GLSLC) and `sdk`.
 
-**Status (current): packs on the PC, not run on a device yet.** The split finds 1,945 shaders and all of them translate to Vulkan. The profile is a provisional one: its memory layout is the survey's guess, and the game has not booted in this host. Two things are known to be missing before it can play, both below: the shaders it compiles at run time, and a second audio renderer.
+**Status (current): packs on the PC, not run on a device yet.** The split finds 1,945 shaders and all of them translate to Vulkan. The profile is a provisional one: its memory layout is the survey's guess, and the game has not booted in this host. The shaders it compiles at run time are still missing, below.
 
 ## Builds
 
@@ -36,9 +36,9 @@ No rewriter cut and no host rule of its own.
 
 `main` holds 5 GLSL sources and imports `glslcCompile`, so some shaders exist in no game file. They are not in the tables: the split prints `[RED] main holds GLSL sources and imports glslcCompile, but there are no captured GLSLC outputs`. A profile of this game in a fork of nxnative reports 2 of them compiled, a vertex and a pixel shader, and only after the first button press on the title screen (nothing in 200 s without input). To add them: run the game with `DM_GLSLC_CAPTURE=<folder>` and press A on the title screen, then split again with that folder (`/glslc_capture/=runtime` goes into `shader_groups`).
 
-## Audio (open)
+## Audio (not yet run)
 
-The game opens two audio renderers, one at 32 kHz at boot and one at 48 kHz as its intro starts. A host that drives one stops presenting a few seconds later (`[RED] audren: a second renderer`).
+The game opens two audio renderers, one at 32 kHz at boot and one at 48 kHz as its intro starts. A host that drives one stops presenting a few seconds later (`[RED] audren: a second renderer`). The host now drives up to 4 ([audio.md](../../../docs/reference/audio.md#a-game-with-more-than-one-renderer)); not yet heard on this game.
 
 ## Frame rate
 
@@ -55,6 +55,6 @@ From the survey, before any rewrite:
 ## Open
 
 - A first boot on a device, on the system driver and on Turnip.
-- The run-time shaders and the second audio renderer, above.
+- The run-time shaders, above, and the two audio renderers heard on a device.
 - The memory keys are not measured.
 - The companion on the second screen.
