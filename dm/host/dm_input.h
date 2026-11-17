@@ -44,6 +44,7 @@ void dm_motion_clear(int player);   // clears GameController motion; another fre
 // Passive controller HID, already in the Switch frame (G, rad/s). sample_ns is the sample's host now_ns() time, not the packet's arrival; stale / reordered samples are ignored.
 // Kept separate from GameController and the phone; used while GameController supplies no fresh motion for that player. DM_MOTION_AXES / ACC_SIGN apply only to GameController.
 void dm_motion_set_hid(int player, const float acc[3], const float rot[3], uint64_t sample_ns);
+void dm_motion_set_switch_at(int player, const float acc[3], const float rot[3], uint64_t sample_ns);   // PEANUTS: dm_motion_set_switch with the sample's own time on the host clock (now_ns; 0: now), so samples that arrive together keep their real spacing
 void dm_motion_clear_hid(int player);
 uint32_t dm_player_npad(int player);  // the npad id the game reads player p + 1 on: Handheld (0x20) or No1 (0) for player 1, No n (id n - 1) for player n
 
