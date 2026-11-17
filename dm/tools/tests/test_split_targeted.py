@@ -193,7 +193,7 @@ class Targeted(unittest.TestCase):
 
     def test_the_full_zip_probe_prints_progress(self):   # the full scan's probe of every file counts them for the phone's card ('progress: <done>/<total>')
         files = [(str(self.rom / 'Shader/a.bnsh'), f'f{i}') for i in range(1000)]
-        clock = iter(range(0, 10 ** 6))
+        clock = iter(range(10 ** 6))   # PEANUTS(upstream-candidate): range already starts at zero.
         out = io.StringIO()
         with mock.patch.object(ss.time, 'monotonic', lambda: next(clock)), contextlib.redirect_stdout(out): ss.zip_jobs(files)
         lines = out.getvalue().splitlines()

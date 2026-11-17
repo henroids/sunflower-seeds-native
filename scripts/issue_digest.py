@@ -60,7 +60,7 @@ LOG_START = re.compile(r'^(```[\w-]*)?\[?(nxlaunch|dm)\] ')
 LOG_END = re.compile(r'^(### |</?details>|<summary>|```\s*$)')
 
 
-def split_body(text, where, d, logs):
+def split_body(text: str | None, where, d, logs):   # PEANUTS(upstream-candidate): issue text is optional prose, not a literal-only string.
     """The text with each pasted log (a run of [nxlaunch] / [dm] lines, fenced or not, up to a heading, </details> or a closing fence) saved to a file and
     replaced by a pointer"""
     lines, out, i = (text or '').replace('\r\n', '\n').split('\n'), [], 0

@@ -27,9 +27,8 @@ too.
 ## Supported games
 
 These are the Switch 1 games this app version includes. The last column says what was seen on an AYN Thor: a game
-marked "new" was played there for a short time only, and the last two have not been run on a device yet. Kirby's
-Return to Dream Land Deluxe and Super Mario 3D World + Bowser's Fury were run by their contributor on their own
-AYN Thor only. The
+marked "new" was played there for a short time only; rows marked untested have no device run. Kirby's
+Return to Dream Land Deluxe was run by its contributor on their own AYN Thor only. The
 Companion column says whether the game has a companion that was checked with it. Use the game update listed. The app
 shows which update you have and which one a game supports, and asks before building any other.
 
@@ -55,11 +54,11 @@ shows which update you have and which one a game supports, and asks before build
 | The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Not checked | 60 fps; new: right indoors, the fog outdoors is not checked and may draw wrong |
 | Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No | 30 fps, as on Switch; new, little tested |
 | Resident Evil 4 | `010099A00BC1E000` | v131072 | Not checked | 60 fps; new, a first profile: the first scenes only |
-| Kirby and the Forgotten Land | `01004D300C5AE000` | 1.1.0 | Not checked | 30 fps, as on Switch, with dips to 15 to 20; new, little tested: the start of the game, by its contributor |
 | Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested: its first stage, by its contributor |
-| Super Mario 3D World + Bowser's Fury | `010028600EBDA000` | 1.2.2 | Not checked | 60 fps; new, little tested: the start of the game, by its contributor |
-| Super Mario Bros. Wonder | `010015100B514000` | 1.0.0, 1.0.1, 1.2.1 | Not checked | Not tested on a device yet |
-| DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Not tested on a device yet |
+| Super Mario Bros. Wonder | `010015100B514000` | 1.0.0, 1.0.1, 1.2.1 | Yes (1.2.1) | 1.2.1 on AYN Thor: title, menus and map reached; first course at 56 to 60 fps (average 58), occasional doubled frames; sound, saving and later courses untested |
+| DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Packs on Linux; device validation pending |
+| Chained Echoes | `0100C510166F0000` | 1.41 | Not checked | AYN Thor, Turnip: title and opening scenes at about 60 fps with a 2 GB application pool; battles, saving/loading, sound and extended play untested |
+| Yoru, Tomosu | `0100C2901153C000` | Base game | Log unreadable | Opening at 60 fps on AYN Thor; companion log text is unreadable |
 
 ## What you need
 

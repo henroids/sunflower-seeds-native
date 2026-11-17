@@ -56,7 +56,7 @@ def problems(head, rows, adv, log_rules, kinds):
     seen = set()
     for r in rows:
         k, n = r['rule_id'], r['advanced_id']
-        def no(msg): bad.append(f'{k} -> {n}: {msg}')
+        def no(msg, k=k, n=n): bad.append(f'{k} -> {n}: {msg}')   # PEANUTS(upstream-candidate): bind this row's labels
         if (k, n) in seen: no('listed twice')
         seen.add((k, n))
         if k.startswith(EXIT):

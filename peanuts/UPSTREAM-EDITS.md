@@ -94,6 +94,8 @@ not edited (see table above).
 | `dm/games/01008CF01BAAC000/game.tsv` + `README.md` | **fixed this pass** | no (per-game data row) |
 | `dm/games/0100BA4026E94000/game.tsv` | marked (pre-existing, Castlevania `mem_map_limit off`) | no |
 | `dm/games/01006B601380E000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Kirby's Return to Dream Land Deluxe |
+| `dm/games/0100A0F00DA68000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Monster Sanctuary (provisional: packed on a PC, not run on a device) |
+| `dm/games/0100B63016916000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for My Time at Sandrock (provisional: packed on a PC, not run on a device) |
 | `dm/gfx/tools/shader_split.py` | **fixed this pass** (header note + 6 def-site tags covering DM_SPLIT_DIRECT/WORKER, DM_UE_DECODE) | **yes** — the on-device process-pool split and the comment-insensitive table comparison (`table_rows`) are general infra, not game-specific |
 | `dm/gfx/tools/uepak.py` | marked (`_nxaes` off-Mac AES path) | **yes** — lets the packer run without CommonCrypto/OpenSSL, general portability fix |
 | `dm/gfx/vk_android/vka_draw.c` | **fixed this pass** | **yes** — indirect quad/line-loop draws read on CPU instead of being skipped (Three Houses) |
@@ -936,6 +938,61 @@ Peanuts-owned: `dev.peanuts.ctl.Up` (the page `advanced`; `Up.page` closes upstr
 `peanuts/docs/CONTROL.md`, `peanuts/tests/test_ctl.py`, `dm/peanuts/import/tests/nsp_test.c` (links to `fd:<n>/dlc6.xci` and `fd:<n>/DLC7.NSP`).
 
 Not run on a device. Checked on a PC: see the commit messages of this round.
+### Round 18, what stopped new games in the PC tools (2026-11-16)
+
+Found while making first profiles for My Time at Sandrock, The Binding of Isaac: Afterbirth+, Crash Team Racing Nitro-Fueled and Diablo III on a Linux PC
+(`peanuts/docs/NEW-GAME.md`). Each row is one commit with its test in `dm/tools/tests`; none is a shader-cache input (`dmsh_chain.py` `FILES`), so no library
+version moves. Nothing here was run on a device: the tools run on the PC.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/unityfs.py` | 2 | `SHADER_2021_3` in `KNOWN_TREES` (type hash `f0c18427…`): the Shader of Unity 2021.3.26f1, for a game whose files and bundles all come without type trees (My Time at Sandrock). The 2021.2 layout plus the player subprograms, the parameter blob indices and the stage counts. Node for node the type tree of AssetRipper's TypeTreeDumps `2021.3.26f1.dump` (2,304 nodes), whose type hash is the key; all 287 Shader objects of the game read to their exact ends and their 8,075 blob entries are code or parameter entries, none else. Other releases with the same hash were not looked up. Test: `test_unity_shader_2021_3.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/tools/shader_split.py` | 1 | `unity_compute`: a compute kernel variant with 0 bytes of code is left out and counted in one line (`unity compute: N kernel variant(s) without code left out`), where `unity_program` raised and the scan dropped the whole file as unreadable (My Time at Sandrock's `shader` bundle: `SkyboxCompute`'s `CubemapFilteringSecondPassCS`, and 152 Shader objects with it). Code that is there and wrong still stops. Test: `test_unity_compute_empty.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `scripts/build_ipa_from_nsp.py` | 2 | `survey_nros`: the survey lists the NRO files under `romfs_nro`, not every path that ends in `.nro`. The Binding of Isaac: Afterbirth+ keeps its two NROs in a RomFS folder named `.nro`, which `rglob('*.nro')` matched too; `profile_guess.nro_modules` read the folder as a module and the survey stopped with `IsADirectoryError` before writing `survey.md`. Run: the game's survey now ends with exit 0. Test: `test_nsp_survey_nros.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `scripts/pack_android.py` | 3 | `shader_work`: the library build's temporary folder (`WORK`, and Windows' `keys.txt`) is beside the cache `--shader-cache` names, where it was always `<title ID>-work/android-shaders/work` beside the game. A pack of a `.nup` read in place on another drive, with `--out` and `--shader-cache` elsewhere, still made that folder beside the `.nup` (Crash Team Racing Nitro-Fueled's trial pack). Without `--shader-cache` nothing moves. Test: `test_pack_android_shader_work.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/tools/shader_split.py` | 3 | `unity_shaders`: the same for a Shader's subprograms: a blob entry of 0 bytes, or one whose program code is 0 bytes, is left out and counted (`unity shaders: N subprogram(s) without code left out`). No game was met with one; reading it would have cost the file as the compute kernel did. Test: `test_unity_shader_empty.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+
+Local integration review: Windows selected-shader builds use a unique temporary selection folder under `shader_work`, removed after the translator exits.
+Sibling `--shader-cache` paths share a work parent; a fixed `keys.txt` there let concurrent games overwrite each other's shader selection.
+`test_pack_android_shader_work.py` overlaps two children and checks their distinct selections and cleanup. No device claim.
+
+Local lint cleanup after integrating v0.3.26: 36 added findings in 14 files, separate from the 268 findings already present before the update.
+The lint baseline and checker configuration are unchanged. No shader-chain file changes.
+
+| Files | Change | Marker |
+|---|---|---|
+| `dm/gfx/tools/shader_split.py` | version-bound `ue_paks` defaults; explicit non-null lock guards; one narrow type-checker annotation for the two/three-element unreadable-result tuples produced by `scan_file` and `ue_packages` | `PEANUTS` |
+| `dm/tools/advanced_fix.py`, `dm/tools/advanced_switches.py` | bind the current row in diagnostic helpers | `PEANUTS(upstream-candidate)` |
+| `dm/tools/nsp.py` | describe PFS offset/size pairs and the package output table; descriptor casts document the existing open-reader contract and change no close behavior; pass each package's table explicitly to its helper | `PEANUTS(upstream-candidate)`, `PEANUTS` |
+| `scripts/pack_android.py` | initialize the version path's type before both branches replace it | `PEANUTS(upstream-candidate)` |
+| `scripts/cheat_log_check.py`, `scripts/nup_meta.py` | empty description when module documentation is stripped | `PEANUTS(upstream-candidate)` |
+| `dm/tools/tests/test_android_img_ubo.py`, `test_android_shader_delta.py`, `test_cheat_log_check.py`, `test_issue_digest_comment.py`, `test_nsp.py`, `test_nup_meta.py`, `test_pack_android_nro.py` | explicit callable/spec/match/comment guards, scoped annotations for imports after runtime path injection, direct Path-method replacements | `PEANUTS(upstream-candidate)` |
+
+Existing tests cover the affected NSP/NUP readers, targeted split, metadata, cheat checks, Advanced tables, shader deltas, program packs and NRO collection.
+No new device evidence is implied by these lint repairs.
+
+Inherited Python lint cleanup: checker imports now preserve the tools' existing precedence and add `scripts/` last; Ruff targets the documented Python 3.12 minimum.
+The ordinary tools use explicit optional/link/node types and validated parsed values; test fixtures state their dynamic namespaces and check required values.
+Scoped annotations describe optional fallback imports and platform-only APIs absent from the checker's Darwin stubs. All changed upstream hunks are marked.
+The game-profile generator's headers were compared over all 153 profiles and are byte-identical to the preceding checkpoint.
+The measured ratchet shrink removes 10 obsolete allowances (391 to 381); it adds no finding or increased count. The generated table is allowlisted explicitly.
+
+205 of the 268 inherited excess findings are resolved; 63 remain only in `vk_android_build.py`, `vk_android_spv.py`, `nso.py` and `patch_nso.py`.
+Those four files are unchanged in this lint cleanup: shader-library and rewrite-key fingerprints cover them. They need their documented regeneration and
+actual game-output byte comparisons before edits can be accepted. No equivalence row was added from inspection, and lint is still reported as failing.
+The affected test suite ran 323 tests successfully (two skips); the final review corrections passed 49 tests. No device run is implied.
+
+Protected shader-tool lint cleanup after controlled comparison: 52 findings removed using type metadata and narrowly scoped annotations in
+`vk_android_build.py` and `vk_android_spv.py`. Normalized executable ASTs match; a cold full Monster Sanctuary build with each tool set translated all
+500 shaders and validated all 523 modules. All 500 entry hashes match, and every byte outside the Vulkan version stamp matches; the literal libraries differ.
+No same-version row was added. The generated Vulkan chain is `c13dc8b37b0f`; Apple chain `20aaebbe3106` and ABI `cb5a89b39291` are unchanged.
+Mario Kart World's manifest has no reusable hashes, only its known unbuilt-shader exception: its version row follows the generated chain.
+Existing old-library ABI compatibility remains unchanged, so this offers a shader update rather than invalidating old playable libraries.
+
+The two rewriter-source lint fixes remain outside this primary review tree. Their three-module Monster Sanctuary comparison is byte-identical except
+source provenance, but changing their file bytes also changes installed pack rewrite keys: Home can then use the existing `autoCodeUpdate` path for
+app-owned packs. That policy consequence is not accepted incidentally for lint cleanup. The primary tree preserves the upstream rewriter bytes and
+retains 11 inherited findings. A separate all-clean candidate is prepared for owner review; no global EQUIV claim follows from one game's comparison.
 
 ### System-driver warning and firmware/key setup guidance (2026-11-17)
 

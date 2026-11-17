@@ -77,7 +77,7 @@
 # Pair table: (vertex key, pixel key) of every BNSH variation (every Unity program); dmsh_build uses it to give vertex shaders the outputs their pixel shaders read but they do not write (see dmsh_build.py vs_pad)
 import base64, collections, concurrent.futures as cf, functools, glob, hashlib, json, os, pickle, re, struct, subprocess, sys, time, zlib
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools'))
-from typing import NoReturn
+from typing import NoReturn, cast   # PEANUTS(upstream-candidate): profile_files validates the targeted main build IDs
 from romfs import os, open, is_image
 import nup
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../games')); import game as _game
@@ -2910,7 +2910,7 @@ def unity_compute(x, base, trees):
     Unity 2022.3 lists a kernel's variants in uniqueVariants; Unity 2020.3 keys them by keyword set in variantMap (AI: THE SOMNIUM FILES - nirvanA Initiative's bundles, whose type trees say so).
     Unity 2019.4 has no variant wrapper: each named kernel holds its code directly (Pokemon Brilliant Diamond's GPU skinning)."""
     import unityfs
-    out = []
+    out = []; empty = []   # PEANUTS(upstream-candidate): empty = the kernel variants without code (below)
     try:
         for cid, pid, o in unityfs.serialized_objects(x, COMMON, {unityfs.CLASS_COMPUTE_SHADER}, trees):
             for v in o['variants']:
@@ -2918,7 +2918,11 @@ def unity_compute(x, base, trees):
                     variants = k['uniqueVariants'] if 'uniqueVariants' in k else [p['second'] for p in k['variantMap']] if 'variantMap' in k else [k]
                     for i, u in enumerate(variants):
                         where = f'{base}#{o["m_Name"]}#{k["name"]}.{i}'
+                        # PEANUTS(upstream-candidate): a kernel variant with 0 bytes of code is no program (My Time at Sandrock's `shader` bundle: SkyboxCompute's
+                        # CubemapFilteringSecondPassCS). unity_program raised on it, and the whole file went as unreadable, its 152 Shader objects with it
+                        if not u['code']: empty.append(where); continue
                         out.extend((where, st, ctl, cd) for st, ctl, cd in unity_program(u['code'], where, 'cs'))
+        if empty: print(f'unity compute: {len(empty)} kernel variant(s) without code left out (first: {empty[0]})', flush=True)   # PEANUTS(upstream-candidate): counted, not silent
     except unityfs.NoTree as e:
         if not TREES: raise
         print(f'[RED] {base}: ComputeShader objects that no bundle lends a type tree to and unityfs.py has no layout for, their kernels are left out ({e})', flush=True)
@@ -2954,7 +2958,7 @@ def unity_shaders(d, label, out, trees):
     """Shaders and compute shaders in a UnityFS bundle or serialized file → out and legacy pass pairs; raises NoTree when no type tree is available"""
     import unityfs
     if COMMON is None: red(f'{label}: a Unity asset, but main has no Unity common string table')
-    pairs = set()
+    pairs = set(); empty = []   # PEANUTS(upstream-candidate): empty = the subprograms without code (below)
     sers = unityfs.bundle_files(d) if d[:8] == b'UnityFS\0' else [('', d)]
     for node, x in sers:
         if not unityfs.is_serialized(x): continue
@@ -2964,13 +2968,17 @@ def unity_shaders(d, label, out, trees):
             legacy = {}
             for plat, k, sp in unityfs.shader_programs(o, unity_code_blobs(o)):
                 where = f'{label}{":" + node if node else ""}#{name}#var{plat}.{k}'
-                code = unityfs.subprogram(sp)[4]
+                # PEANUTS(upstream-candidate): a blob entry of 0 bytes, or one whose program code is 0 bytes, is no program: left out and counted, as unity_compute
+                # does for a kernel without code. Reading it raised, and the whole file went as unreadable. None was met in a game's files yet
+                code = unityfs.subprogram(sp)[4] if sp else b''
+                if not code: empty.append(where); continue
                 programs = unity_program(code, where, stages.get(k))
                 out.extend((where, st, ctl, cd) for st, ctl, cd in programs)
                 if len(code) >= 0x14 and code[0x10:0x14] == CTL_MAGIC: legacy[plat, k] = programs[0]
             pairs |= unity_pass_pairs(o, legacy)
         out.extend(unity_compute(x, f'{label}{":" + node if node else ""}', trees))
         out.extend(unity_text_glslc(x, f'{label}{":" + node if node else ""}'))
+    if empty: print(f'unity shaders: {len(empty)} subprogram(s) without code left out (first: {empty[0]})', flush=True)   # PEANUTS(upstream-candidate): counted, not silent
     return pairs
 
 def unity_text_glslc(x, base):
@@ -3375,10 +3383,10 @@ def scan_file_in(args):
     # a file read whole: one of LARGE_FILE bytes or more is read by one worker at a time (LARGE_LOCK). Orbitals Deluxe Edition has a 6.4 GB IoStore container and
     # 0.1 to 0.9 GB videos; with every worker holding one, its full scan ran a 32 GB PC out of memory. Their shader markers occur in them by chance, so they are read
     large = head[:4] != ZSTD_MAGIC and LARGE_LOCK is not None and os.path.getsize(path) >= LARGE_FILE
-    if large: LARGE_LOCK.acquire()
+    if large and LARGE_LOCK is not None: LARGE_LOCK.acquire()   # PEANUTS(upstream-candidate): large already implies the lock exists
     try: return scan_whole(path, rel, head, found, trees)
     finally:
-        if large: LARGE_LOCK.release()
+        if large and LARGE_LOCK is not None: LARGE_LOCK.release()   # PEANUTS(upstream-candidate): large already implies the lock exists
 
 def scan_whole(path, rel, head, found, trees):   # scan_file_in for a file no archive reader took: read whole, decoded by its first bytes, then scanned
     d, kind = plain_blob(path, rel, head)   # PEANUTS: on-device split support — plain_blob factored out below for direct_file's reuse (see file header)
@@ -3495,7 +3503,7 @@ def direct_file(args, targets, keys):
             if any(k == 'IDRK' for _, k, _ in targets): return None
             if head[:4] in (BND2, SPKG, RFRM, b'BERG', MTARC, SCNE, b'BMSG', b'SRYK') or head[:3] == b'PAK' or head[:8] == GFPAK or ue3_package(head) or head[:4] == b'\0\0\1\0' and path.endswith('.gz'): return None
             large = head[:4] != ZSTD_MAGIC and LARGE_LOCK is not None and os.path.getsize(path) >= LARGE_FILE   # PEANUTS (see large above)
-            if large: LARGE_LOCK.acquire()   # PEANUTS
+            if large and LARGE_LOCK is not None: LARGE_LOCK.acquire()   # PEANUTS(upstream-candidate): large already implies the lock exists
             d, kind = plain_blob(path, rel, head)
             if kind or d[:3] == b'XNB' or d[:8] == b'UnityFS\0' or (d[8:11] == b'\0\0\0' and __import__('unityfs').is_serialized(d)): return None
             if not direct_blob(d, '/' + rel, {m: [(k, o) for _, k, o in g] for m, g in __import__('itertools').groupby(targets, key=lambda t: t[0])}, found):
@@ -3509,7 +3517,7 @@ def direct_file(args, targets, keys):
         print(f'direct: /{rel}: {str(e).removeprefix("[RED] ")}; the file is scanned whole', flush=True)
         return None
     finally:
-        if large: LARGE_LOCK.release()   # PEANUTS (see large above): before the whole scan of a file this one gave up takes it again
+        if large and LARGE_LOCK is not None: LARGE_LOCK.release()   # PEANUTS(upstream-candidate): large already implies the lock exists; release before a fallback whole scan
 
 def direct_blob(d, label, targets, found):
     """The recorded containers of a blob into found: targets = {member path: [(kind, offset)]}, '' the blob itself. A Yaz0 blob is decoded; the members are those of a SARC, taken in its
@@ -3819,7 +3827,7 @@ def main():
         # Unreal Engine shader code archives decoded on the Mac (uepak.py): <version dir>/ue_shaders, or DM_UE_SHADERS; needed when the RomFS has Unreal paks
         ued = os.environ.get('DM_UE_SHADERS') or os.path.join(os.path.dirname(os.path.abspath(romfs)), 'ue_shaders')
         names = sorted(f for f in os.listdir(ued) if f.endswith('.ushaderbytecode') and not f.startswith('._')) if os.path.isdir(ued) else []   # AppleDouble metadata, not decoded shader archives
-        def ue_paks():   # PEANUTS: uepak.unreal_paks with the mains reads an encrypted index, off the Mac with the builder's _nxaes module: a Python without it stopped with a traceback
+        def ue_paks(romfs=romfs, mainnso=mainnso):   # PEANUTS: bind this version; uepak.unreal_paks with the mains reads an encrypted index, off the Mac with the builder's _nxaes module: a Python without it stopped with a traceback
             try: return uepak.unreal_paks(romfs, inline=False, mains=[mainnso])
             except ImportError as e: red(f'the RomFS has Unreal paks whose index is encrypted, and this Python has no AES to read it with ({e}): the Peanuts builder makes the module (peanuts-build, peanuts/docs/BUILDER.md); pack_android.py run by hand needs its folder in PYTHONPATH')
         if not names and os.environ.get('DM_UE_DECODE') and ue_paks():   # PEANUTS: the phone decodes them here (ue_ondevice.py; the Mac's NSP script did)
@@ -3850,10 +3858,10 @@ def main():
             big, todo = scan_jobs(files, want, main_v, nros)
             dg = scan_digest(inputs, big + todo + mains)
             if not (rd and os.path.isfile(tf := os.path.join(rd, 'targeted.failed')) and open(tf).read().strip() == dg):   # PEANUTS: not on a rerun that an earlier run's targeted.failed sends to the full scan, as before the modes loop
-                print(f'targeted split: {len(want):,} of {len(files):,} RomFS files hold the shaders of the profile\'s shader_map.tsv (main build {", ".join(build_id(m) for m in main_v)}); only these are scanned', flush=True)
+                print(f'targeted split: {len(want):,} of {len(files):,} RomFS files hold the shaders of the profile\'s shader_map.tsv (main build {", ".join(cast(str, build_id(m)) for m in main_v)}); only these are scanned', flush=True)
             # PEANUTS: on-device split support (see file header) — the direct scan first (DM_SPLIT_DIRECT: the recorded containers of each file, direct_targets), the targeted
             # scan of the whole files when its tables differ; each keeps its own results and its own 'failed' digest (ScanCache's digest with the containers, as the results hold other shaders)
-            modes = [('targeted', None, dg)]
+            modes: list[tuple[str, dict | None, str]] = [('targeted', None, dg)]   # PEANUTS(upstream-candidate): direct mode carries its container table
             if os.environ.get('DM_SPLIT_DIRECT') == '1' and (dt := direct_targets(todo)):
                 modes.insert(0, ('direct', dt, hashlib.sha256((dg + repr(sorted(dt.items()))).encode()).hexdigest()))
             for mode, direct, mdg in modes:
@@ -4032,7 +4040,7 @@ def split_tables(results, big, files, dumps, J, common, zdicts, cache, targeted=
         have = {k for _, uniq, _, _ in results for k in uniq}
         dumps = [d for d in dumps if skey(d[2], d[3]) not in have]
         results.append(('nvn_shdump', last_entries(dumps), var_pairs(dumps), {}))
-    bad = [extra[1] for *_, extra in results if isinstance(extra, tuple) for _ in range(extra[2] if len(extra) > 2 else 1)]
+    bad = [extra[1] for *_, extra in results if isinstance(extra, tuple) for _ in range(extra[2] if len(extra) > 2 else 1)]   # pyright: ignore[reportGeneralTypeIssues]  # PEANUTS: scan_file/ue_packages emit only ('unreadable', reason[, count]) tuples
     scanned = {r for _, r, *_ in big + files}
     holding = list(dict.fromkeys(rel for rel, uniq, pr, _ in results if (uniq or pr) and rel in scanned))   # the files any shader was found in (DM_SPLIT_FILES), in scan order
     per_src = collections.Counter(); pairs = set()

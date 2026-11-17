@@ -133,6 +133,8 @@ class LauncherJvm(unittest.TestCase):
             s = Path(d) / 'saves/040074A01BF12000'; s.mkdir(parents=True); (s / 'slot0.bin').write_text('x')
             (Path(d) / 'src').mkdir(); (Path(d) / 'src/a.bin').write_text('a')
             h = subprocess.Popen(['java', '-cp', str(self.classes), 'dev.nxnative.android.LauncherJvmTest', 'holdtwice', str(s)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            # PEANUTS(upstream-candidate): PIPE creates both streams for this holder process.
+            assert h.stdout is not None and h.stdin is not None
             try:
                 self.assertEqual(h.stdout.readline().strip(), 'held')
                 r = self.java('locked', s)

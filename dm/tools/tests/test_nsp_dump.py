@@ -1,7 +1,7 @@
 """NSP script with a dump folder (scripts/pack_dump.py), its only input: the folder's layout is read and packed into what the script's later steps read.
 The run stops at the prerequisite check; no game files or Xcode needed."""
 import importlib.util
-import io
+# PEANUTS(upstream-candidate): omit the unused io import.
 from pathlib import Path
 import shutil
 import struct
@@ -209,6 +209,7 @@ class Layout(Base):
         (self.dump / 'dlc/040074a01bf13801/131072/romfs').mkdir(parents=True); (self.dump / 'dlc/040074a01bf13801/131072/romfs/patched').write_text('p')
         (self.dump / 'addons/040074a01bf13002/0/romfs').mkdir(parents=True); (self.dump / 'addons/040074a01bf13002/0/romfs/f').write_text('a')
         before = dump_layout.read(self.dump)
+        assert before is not None and before[3] is not None   # PEANUTS(upstream-candidate): the synthetic dump has an update.
         self.assertEqual(before[3][0], VER)   # program 1 found in switch2/
         self.assertEqual(self.run_layout('--apply'), 0)
         for p in (f'updates/{VER}/program/1/exefs/main', 'dlc/040074a01bf13001/0/updates/131072/program/0/romfs/patched',

@@ -14,9 +14,9 @@ from unittest import mock
 REPO = Path(__file__).resolve().parents[3]
 sys.path[:0] = [str(REPO / 'dm/tools'), str(REPO / 'scripts')]
 import nsp
-import nsp_extract
+import nsp_extract   # pyright: ignore[reportMissingImports]  # PEANUTS(upstream-candidate): scripts/ is added to sys.path above.
 import nup
-import pack_dump
+import pack_dump   # pyright: ignore[reportMissingImports]  # PEANUTS(upstream-candidate): scripts/ is added to sys.path above.
 import romfs as romfs_tool
 
 TID = 0x0400AAAA00002000

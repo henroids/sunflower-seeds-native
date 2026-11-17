@@ -130,7 +130,8 @@ class LauncherDigest(unittest.TestCase):
         lines += ['title_key = 0123456789abcdef0123456789abcdef', '[dm] [RED] ' + 'long line ' * 40, '[dm] [RED] naïve ünïcode ' + 'é' * 300]
         py, _ = self.same(lines, RUN, 1, 0)
         self.assertIn('  +7 more groups', py['-- [RED] / error lines'])
-        self.assertNotIn('0123456789abcdef', ''.join(sum(py.values(), [])))
+        # PEANUTS(upstream-candidate): flatten groups without repeated list copies.
+        self.assertNotIn('0123456789abcdef', ''.join(line for group in py.values() for line in group))
 
     def test_long_log_tail(self):
         """a log longer than the part read: the launcher reads its end and numbers its lines from the file's start"""

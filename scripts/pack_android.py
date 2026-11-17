@@ -30,7 +30,7 @@
 # unfinished: the launcher refuses it, the next run rewrites it). Libraries of other versions in the pack's shaders/ are kept.
 # --code-only rewrites the modules and stops (pack.tsv, game.tsv and the shaders untouched); --keep-code packs without rewriting (the phone's two steps).
 # Usage: pack_android.py <game folder | .nup file> [--version N] [--out DIR] [-j N] [--shader-cache DIR] [--shader-pkg DIR] [--shader-python PY] [-J N] [--no-shaders] [--code-only | --keep-code] [--in-process]   (exit 1 on error)
-import argparse, hashlib, os, runpy, shutil, signal, struct, subprocess, sys, time   # PEANUTS: struct (cross_module)
+import argparse, hashlib, os, runpy, shutil, signal, struct, subprocess, sys, tempfile, time   # PEANUTS: struct (cross_module), tempfile (shader selection)
 from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / 'scripts')); sys.path.insert(0, str(REPO / 'dm/games'))
@@ -111,7 +111,7 @@ def windows_job():
         _fields_ = [('Basic', Basic), ('Io', ctypes.c_uint64 * 6), ('ProcessMemoryLimit', ctypes.c_size_t), ('JobMemoryLimit', ctypes.c_size_t),
                     ('PeakProcessMemoryUsed', ctypes.c_size_t), ('PeakJobMemoryUsed', ctypes.c_size_t)]
     try:
-        k = ctypes.WinDLL('kernel32', use_last_error=True)
+        k = ctypes.WinDLL('kernel32', use_last_error=True)   # pyright: ignore[reportAttributeAccessIssue]  # PEANUTS: Windows-only API absent from Darwin stubs.
         k.CreateJobObjectW.restype, k.CreateJobObjectW.argtypes = wintypes.HANDLE, [ctypes.c_void_p, wintypes.LPCWSTR]
         k.SetInformationJobObject.restype, k.SetInformationJobObject.argtypes = wintypes.BOOL, [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
         k.AssignProcessToJobObject.restype, k.AssignProcessToJobObject.argtypes = wintypes.BOOL, [wintypes.HANDLE, wintypes.HANDLE]
@@ -119,7 +119,7 @@ def windows_job():
         job = k.CreateJobObjectW(None, None)   # not inheritable: this process holds the only handle, which closes when it ends
         info = Extended(); info.Basic.LimitFlags = 0x2000   # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         if not job or not k.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)) or not k.AssignProcessToJobObject(job, k.GetCurrentProcess()):   # 9: JobObjectExtendedLimitInformation
-            print(f'the tools this packer starts are not in a job (Windows error {ctypes.get_last_error()}): a stop by TerminateProcess leaves them running', flush=True)
+            print(f'the tools this packer starts are not in a job (Windows error {ctypes.get_last_error()}): a stop by TerminateProcess leaves them running', flush=True)   # pyright: ignore[reportAttributeAccessIssue]  # PEANUTS: Windows-only API absent from Darwin stubs.
             return None
         return job   # kept open for this process's life
     except (OSError, AttributeError) as e:
@@ -862,6 +862,7 @@ def split_shaders(a, g, vdir, pkg, parts=None, aoc=(), nros=None):   # parts: th
     if not map_keys(tmp / 'shader_map.tsv') and not no_nvn_shaders(g): raise Error(empty_split(g, rd, tmp))   # PEANUTS: no shader read is a failure, not an empty library
     ver = getattr(a, 'pack_ver', None)   # PEANUTS: the dump's version (main), for the shaders only another listed version has (may_lack)
     if ooz: ooz_split_checked(ooz, g, tmp, ver)   # PEANUTS: the ooz decoder's output is taken only when the split's keys are the profile's
+    want: set[str] = set(); have: set[str] = set()   # PEANUTS(upstream-candidate): no profile table means no absent keys.
     if (g.dir / 'shader_map.tsv').is_file():
         want, have = map_keys(g.dir / 'shader_map.tsv'), map_keys(tmp / 'shader_map.tsv')
         missing = sorted(want - have)
@@ -883,6 +884,13 @@ def split_shaders(a, g, vdir, pkg, parts=None, aoc=(), nros=None):   # parts: th
     tmp.rmdir()
 
 
+def shader_work(a, work):
+    """PEANUTS(upstream-candidate): the folder of the library build's temporary files. Beside the library cache when --shader-cache names one, as <work>/android-shaders/work
+    is beside the default cache: with --out and --shader-cache elsewhere (a .nup on a drive the pack is not made on) nothing is made beside the game any more.
+    Before, a pack with both still made <title ID>-work/android-shaders/work beside the .nup"""
+    return a.shader_cache.resolve().parent / 'work' if a.shader_cache else work / 'android-shaders' / 'work'
+
+
 def pack_shaders(a, g, work, out, vdir, parts=None, aoc=()):
     """shaders/v-<V>/ in the pack: an up-to-date library from the cache (built there first when it is missing or stale, from the shader package, split from the dump
     first when there is none and --shader-pkg names none). → the library path in the pack, or None"""
@@ -897,24 +905,26 @@ def pack_shaders(a, g, work, out, vdir, parts=None, aoc=()):
         if not pkg.is_dir(): split_shaders(a, g, vdir, pkg, parts, aoc, collected_nros(work))   # also into a --shader-pkg folder that is not there yet
         py = shader_python(a.shader_python)
         print(f'shaders: building the Vulkan library {lib} from {pkg} with {py} (J={a.J}; about 10 minutes on DKB)', flush=True)
-        (work / 'android-shaders' / 'work').mkdir(parents=True, exist_ok=True)
-        env = child_env(DM_GAME=g.id, J=str(a.J), WORK=str(work / 'android-shaders' / 'work'))
+        swork = shader_work(a, work); swork.mkdir(parents=True, exist_ok=True)   # PEANUTS(upstream-candidate): beside a --shader-cache folder (shader_work)
+        env = child_env(DM_GAME=g.id, J=str(a.J), WORK=str(swork))
         env.update(peanuts_env('shaders'))   # PEANUTS: as the phone's shaders step (PackService): zstd 6
         keys = selected_keys(g.dir)   # a profile with a selected set (shader_seen.tsv): only its shaders, as the phone builds them (PackService, ShaderLibs.selection)
         if keys is not None:
-            if not keys: raise Error(f'the profile\'s shader_seen.tsv names none of the shaders of its shader_map.tsv')
+            if not keys: raise Error('the profile\'s shader_seen.tsv names none of the shaders of its shader_map.tsv')   # PEANUTS(upstream-candidate): no substitutions.
             print(f'shaders: the profile selects {len(keys):,} shaders (shader_seen.tsv) and the pixel shaders paired with them, as the phone builds', flush=True)
         if absent := absent_optional(g, pkg, getattr(a, 'pack_ver', None)):   # a registered build without some of the map's shaders (shader_optional.tsv; PEANUTS: or another listed version's own, may_lack): the library is built without them
             print(f'shaders: {len(absent)} of the profile\'s shaders are not in this build of the game (shader_optional.tsv); the library leaves them out '
                   '(the [RED] "not in the package" line below counts them)', flush=True)
             env['DMSH_VK_REQUIRE_ALL'] = '0'
             if keys is not None: keys = [k for k in keys if k not in absent]
-        args = []
-        if keys:   # on Windows a file the wrapper reads (vk_android_win.py "@<file>"): thousands of keys pass a command line's 32,767 characters there
-            if WINDOWS:
-                kf = work / 'android-shaders' / 'keys.txt'; write_lf(kf, ''.join(k + '\n' for k in keys)); args = ['@' + str(kf)]
-            else: args = keys
-        r = subprocess.run([py, str(VK_BUILD_WIN if WINDOWS or sys.platform.startswith('linux') else VK_BUILD), '--target', 'vulkan', str(pkg), str(cache), *args], env=env)   # PEANUTS: on Linux too, for the translator's start (the repository's apphost is the Mac's; vk_android_win.py starts the dlls with dotnet)
+        # PEANUTS(upstream-candidate): each child owns its selection file, even with sibling caches and concurrent builds.
+        with tempfile.TemporaryDirectory(prefix='selection-', dir=swork) as selection_dir:
+            args = []
+            if keys:   # on Windows a file the wrapper reads (vk_android_win.py "@<file>"): thousands of keys pass a command line's 32,767 characters there
+                if WINDOWS:
+                    kf = Path(selection_dir) / 'keys.txt'; write_lf(kf, ''.join(k + '\n' for k in keys)); args = ['@' + str(kf)]   # PEANUTS: private to this child; removed after it exits
+                else: args = keys
+            r = subprocess.run([py, str(VK_BUILD_WIN if WINDOWS or sys.platform.startswith('linux') else VK_BUILD), '--target', 'vulkan', str(pkg), str(cache), *args], env=env)   # PEANUTS: on Linux too, for the translator's start (the repository's apphost is the Mac's; vk_android_win.py starts the dlls with dotnet)
         if r.returncode: raise Error(f'vk_android_build.py exit code {r.returncode} (a package that lacks the profile\'s shaders stops it: delete {pkg} and the split runs again)')
         if not library_current(lib, g): raise Error(f'vk_android_build.py finished but {lib} is not a full library of {g.id} with the current inputs')
     else: print(f'shaders: {lib} is current (game {g.id}, inputs {dmsh_chain.inputs(g)})')
@@ -1018,9 +1028,9 @@ def main():
     # PEANUTS end
     a = ap.parse_args()
     if WINDOWS:
-        for s in (sys.stdout, sys.stderr): s.reconfigure(encoding='utf-8', errors='backslashreplace')   # as the tools' output (child_env): one encoding for the reader
+        for s in (sys.stdout, sys.stderr): s.reconfigure(encoding='utf-8', errors='backslashreplace')   # as the tools' output (child_env): one encoding for the reader   # pyright: ignore[reportAttributeAccessIssue]  # PEANUTS: standard streams use TextIOWrapper.reconfigure.
         if not a.in_process: _job = windows_job()   # noqa: F841  (held until the process ends)
-        signal.signal(signal.SIGBREAK, signal.default_int_handler)   # CTRL_BREAK_EVENT (a GUI that shares a console): stop as on Ctrl-C, the tools stopped in the finally blocks
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)   # CTRL_BREAK_EVENT (a GUI that shares a console): stop as on Ctrl-C, the tools stopped in the finally blocks   # pyright: ignore[reportAttributeAccessIssue]  # PEANUTS: Windows-only API absent from Darwin stubs.
     folder = a.game.resolve()
     try:
         try: import capstone, lz4.block   # noqa: F401  (patch_nso.py needs both; checked here so a missing one fails before any work)
@@ -1028,6 +1038,7 @@ def main():
         if capstone.cs_version()[0] != 5: raise Error(f'Capstone {capstone.__version__}: the rewriter needs Capstone 5')
         app, vers, dlc = pack_dump.scan(folder)
         app0, conorig = app, None
+        vdir = folder   # PEANUTS(upstream-candidate): both version branches replace this before use; keep the path's type explicit
         if a.program:   # program n > 0: its package program/<n> stands where a version folder would; program 0's newest RomFS is its "conorig"
             if pack_dump.nup.is_nup(folder): raise Error(f'--program {a.program}: {folder} is a .nup, which holds program 0 only; pack from the dump folder (updates/<version>/program/{a.program}/)')
             found = pack_dump.program_dir(folder, a.program)
