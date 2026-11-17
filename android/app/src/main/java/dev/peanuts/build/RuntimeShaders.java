@@ -64,6 +64,11 @@ final class RuntimeShaders {
         return RuntimeShaderMap.compilesAtRunTime(c.getAssets().open("pack/tools.zip"), titleId);
     }
 
+    static int missingInPack(Context c, String titleId, File pack) throws IOException {
+        File library = new File(pack, "shaders/v-" + dev.nxnative.android.BuildConfig.NX_DMSH_VK_CHAIN + "/dmsh_vk.lib");
+        return RuntimeShaderMap.missing(c.getAssets().open("pack/tools.zip"), titleId, library);
+    }
+
     static File captureDir(File work) { return new File(work, "glslc_capture"); }
 
     static int captured(File dir) {
