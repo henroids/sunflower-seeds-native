@@ -179,7 +179,7 @@ public final class CompanionVersions {
         if (!item.date.isEmpty()) value.append(item.date.length() >= 10 ? item.date.substring(0, 10) : item.date).append(" · ");
         value.append(size(item.size)).append(" · ").append(verifiedTxt);
         if (isLocal && !isActive) value.append(" · on this device");
-        String notes = firstLine(item.notes);
+        String notes = NotesMarkup.plain(item.notes);
         if (!notes.isEmpty()) value.append("\n").append(notes);
         PUi.Setting s = new PUi.Setting(act, "🖥️", item.version + (isActive ? " · installed" : ""), notes.isEmpty() ? null : v -> showNotes(item));
         s.value(value.toString());
@@ -202,18 +202,19 @@ public final class CompanionVersions {
     /** True when version is older than the installed one (Roll back's label), false when newer or equal (Switch to's) */
     private boolean isOlderThanActive(String version) { return activeVersion != null && CompanionPort.compareVersions(version, activeVersion) < 0; }
 
-    private static String firstLine(String notes) {
-        if (notes == null) return "";
-        String s = notes.trim();
-        int nl = s.indexOf('\n');
-        if (nl >= 0) s = s.substring(0, nl).trim();
-        return s.length() > 140 ? s.substring(0, 140) + "…" : s;
-    }
-
     private static String size(long bytes) { return bytes >= 1 << 20 ? String.format(Locale.US, "%.1f MB", bytes / 1048576.0) : String.format(Locale.US, "%.0f KB", bytes / 1024.0); }
 
     private void showNotes(CompanionPort.Item item) {
-        new AlertDialog.Builder(act).setTitle(item.version).setMessage(item.notes.isEmpty() ? "No release notes." : item.notes).setPositiveButton("Close", null).show();
+        // the release's Markdown and HTML as text: paragraphs, lists, bold; a contributor's badge as their name
+        CharSequence text = item.notes.trim().isEmpty() ? "No release notes." : trim(android.text.Html.fromHtml(NotesMarkup.html(item.notes),
+                android.text.Html.FROM_HTML_SEPARATOR_LINE_BREAK_LIST | android.text.Html.FROM_HTML_SEPARATOR_LINE_BREAK_LIST_ITEM));
+        new AlertDialog.Builder(act).setTitle(item.version).setMessage(text).setPositiveButton("Close", null).show();
+    }
+
+    private static CharSequence trim(CharSequence s) {
+        int end = s.length();
+        while (end > 0 && Character.isWhitespace(s.charAt(end - 1))) end--;
+        return s.subSequence(0, end);
     }
 
     private void install(CompanionPort.Item item, boolean isLocal) {
