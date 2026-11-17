@@ -652,3 +652,12 @@ arguments stay page ids), so a module package can be run against a game RomFS.
   Module actions are logged "unsupported on this host" and otherwise no-op.
 - No pan/pinch-zoom or drag-and-drop coverage in rt_test (optional for R2; the code path is
   lifted and should work, matching Eden's UpdateGestures).
+
+## Companion search for code-mod builds (issue #33)
+
+A custom build folder stores the normal pack at `<title>/pack` and a code-mod variant at `<title>/mod-<hash>/pack`, while the installed
+companion remains at `<title>/peanuts`. The host previously searched only beside the running pack and beside the dump's work folder; neither
+is the installed location for that variant. The search now includes the normal pack's companion root for the recognized 12-hex-digit variant
+layout. Title matching, active-before-parked-version selection and refusal of unfinished `.new` installs still apply. App-owned variant packs
+already share their normal companion root. `test_companion_search.py` compiles the production search and exercises all of these layouts.
+The supplied game log establishes the affected layout; a complete live modded-game run of this fix is still pending.

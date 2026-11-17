@@ -641,8 +641,19 @@ static int rt_scan_root(const char *root, uint64_t want, int allow_old, char *di
 }
 static int rt_find_package(char *dir, size_t n, uint64_t *title) {
     uint64_t want = rt_running_title();
-    char roots[2][512]; int nroots = 0;
+    char roots[3][512]; int nroots = 0;
     snprintf(roots[nroots++], sizeof roots[0], "%s/../peanuts", dm_module_dir());
+    // A code-mod build in the chosen build folder lives at <title>/mod-<hash>/pack. Its companion is still installed beside the
+    // normal pack, at <title>/peanuts, not inside the variant. App-owned packs already share <packs>/peanuts through the first root.
+    const char *pack = dm_module_dir(), *end = strrchr(pack, '/');
+    if (end && !strcmp(end + 1, "pack")) {
+        const char *variant = end;
+        while (variant > pack && variant[-1] != '/') variant--;
+        if (end - variant == 16 && !strncmp(variant, "mod-", 4)
+                && strspn(variant + 4, "0123456789abcdef") == 12) {
+            snprintf(roots[nroots++], sizeof roots[0], "%s/../../peanuts", pack);
+        }
+    }
     const char *romfs = getenv("DM_ROMFS");
     if (romfs && want) {
         const char *nup = strstr(romfs, ".nup:"); const char *slash = NULL;
