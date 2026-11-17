@@ -1158,3 +1158,19 @@ version moves. Device state: see the game's note.
 |---|---|---|---|
 | `dm/gfx/tools/shader_split.py` | 3 | `iga_entries`, `iga_member`, `iga_shaders` and their branch in `scan_file_in`: Alchemy's igArchive version 13 (`IGA\x1a`), whose files are LZMA in 0x8000-byte blocks placed by the archive's small / medium / large block tables; every file is decoded and its whole GLSLC outputs taken. The game's split went from 12 shaders (those in `main`) to 1,945. Checked on all 74,311 files of its 401 archives; the large table (a file over 0x7FFF sectors) follows the same rule and was met on no file. nxnative has an open pull request with a reader of its own (#1077), not used here. Test: `test_split_iga.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
 | `dm/host/hle_audren.c`, `dm/host/tests/t_audren_layout.c`, `dm/host/tests/t_audren_work.c`, `docs/reference/audio.md` | 71 | The host drives up to 4 audio renderers, each with its own state (`ar_t`), PCM blocks, render thread and output; it drove one, and a second `OpenAudioRenderer` logged `[RED] audren: a second renderer` and was never rendered. A hand port of nxnative 18b435ac38 and a334797d12 (MIT) onto this tree's clock pacing, catch-up queue and `DM_AUDREN_WAIT`, which stay, now per renderer. One renderer behaves as before; its log lines now name the renderer (`renderer 0 …`). Tests: the two host tests, built natively with ASan and UBSan, with a case of two renderers open at once. Not run on a device. Upstream candidate: yes (Banana Native 0.3.42 does not have it) | `PEANUTS(upstream-candidate)` on each file's first hunk, `PEANUTS` on the others |
+### Round 22, the GPU driver page (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+Settings › GPU driver was three list dialogs (`GpuDriver.dialog`, its Install…, `DriverFetch`'s Download…): a source's releases showed as tags
+and file names, with no date, notes, size per release or hint which GPU a file is for. It is now a Peanuts page, `dev.peanuts.ui.DriverActivity`:
+the drivers on the phone to pick or remove, the download sources, a zip from the app's folder or picked anywhere; a source opens its releases
+with their dates, notes (`GitHubText`), files, sizes and the Adreno each file names, and Install downloads with its progress and picks the driver.
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | the GPU driver row's click, and `onActivityResult`'s `ReadinessActivity.FIX_DRIVER`: `dev.peanuts.ui.DriverActivity.open(this)` instead of `GpuDriver.dialog(this, PICK_DRIVER)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | the `DriverActivity` entry, not exported | trailing `<!-- PEANUTS: ... -->` |
+
+Upstream's classes keep doing the work, read through reflection (`DriverPort`): `GpuDriver.installed`, `selected`, `select`, `install` (so
+`DriverZip`'s checks stay the only way a zip gets in), `DriverZip.deleteTree`, `DriverFetch.REPOS` (the one list of sources), `GpuGl.name` and
+`PadFocus.watch` (Settings' focus frame). The page reads GitHub only once a source is opened, as `DriverFetch` does. `GpuDriver.dialog` and
+`DriverFetch.dialog` stay unchanged; nothing opens them any more. No upstream-candidate general fix: the hunks call Peanuts-owned code.

@@ -395,7 +395,7 @@ public final class MainActivity extends Activity {
 
         Ui.add(content, Ui.section(this, "System"), Ui.SECTION_GAP);
         LinearLayout sys = settingsCard(content);
-        gpuRow = new Ui.Setting(this, "🎮", "GPU driver", v -> GpuDriver.dialog(this, PICK_DRIVER)).chevron(this);   // custom GPU drivers (GpuDriver.java)
+        gpuRow = new Ui.Setting(this, "🎮", "GPU driver", v -> dev.peanuts.ui.DriverActivity.open(this)).chevron(this);   // PEANUTS: the GPU driver page (dev.peanuts.ui.DriverActivity) in place of GpuDriver.dialog
         sys.addView(gpuRow.view);
         timeRow = new Ui.Setting(this, "🕒", "Time of day", v -> TimeOfDay.dialog(this, this::refreshSettings)).chevron(this);   // the clock the next start gives the game (Prefs.timeOverride → DM_TIME)
         sys.addView(timeRow.view);
@@ -1097,7 +1097,7 @@ public final class MainActivity extends Activity {
         super.onActivityResult(request, result, data);
         if (dev.peanuts.ui.LibrarySettings.result(this, request, result, data)) return;   // PEANUTS: the library's pickers (keys, folders, the sheet's files)
         if (Ondevice.activityResult(this, request, result, data)) return;
-        if (request == ReadinessActivity.REQUEST) { if (result == ReadinessActivity.FIX_DRIVER) GpuDriver.dialog(this, PICK_DRIVER); return; }   // its "Pick a GPU driver"
+        if (request == ReadinessActivity.REQUEST) { if (result == ReadinessActivity.FIX_DRIVER) dev.peanuts.ui.DriverActivity.open(this); return; }   // its "Pick a GPU driver"; PEANUTS: the GPU driver page
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         if (request == PICK_DRIVER) { GpuDriver.picked(this, data.getData()); return; }
         if (GameCopy.activityResult(this, request, data)) return;
