@@ -488,6 +488,7 @@ One line per symptom in the [subsystem references](../reference/): what you see 
 - raising a game's engine cap can speed up NPCs, water effects or animation, or leave simulation locked to its original 30 FPS interval. → [Reviewed community FPS timing plans on Android](../reference/frame-rate.md#reviewed-community-fps-timing-plans-on-android)
 - (PEANUTS, Android) raising a frame cap speeds up frame-counted UI, camera movement or gameplay, or a whole-vsync step cannot represent 120 fps. → [Reviewed dynamic timing plans on Android](../reference/frame-rate.md#reviewed-dynamic-timing-plans-on-android)
 - (PEANUTS, Android) walking judders at a steady 30 fps on a nominal 120 Hz panel: presentation alternates three and five refreshes around the intended four, while the log says `acquire pacer 8.333 ms` and `fallback: no whole number of refreshes`. → [Nominal refresh clocks rejected a measured panel mode (Android)](../reference/frame-rate.md#nominal-refresh-clocks-rejected-a-measured-panel-mode-android)
+- (PEANUTS, Android) the log counts a present as on time, but its desired display time has passed before `vkQueuePresentKHR` receives it; three/five-refresh pairs around a four-refresh target can persist with no shader work. → [Desired present times chosen before GPU and queue waits (Android)](../reference/frame-rate.md#desired-present-times-chosen-before-gpu-and-queue-waits-android)
 
 ## NVN objects
 

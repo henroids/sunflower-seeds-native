@@ -196,6 +196,8 @@ Before publishing, the fixes were integrated with main's pipeline archive and GP
 
 ## Found on this game
 
+- PEANUTS, Android: [Desired present times chosen before GPU and queue waits](../../../docs/reference/frame-rate.md#desired-present-times-chosen-before-gpu-and-queue-waits-android): stale deadlines and misleading on-time counts are corrected at submission; physical presentation and walking validation remain pending.
+
 - PEANUTS, Android: [Nominal refresh clocks rejected a measured panel mode](../../../docs/reference/frame-rate.md#nominal-refresh-clocks-rejected-a-measured-panel-mode-android): measured 118.52 Hz in nominal 120 Hz mode exposes inconsistent limiter and presentation clocks at 30 fps; the clock-fitting correction awaits device comparison.
 
 - **Open, a SIGSEGV in `nn::util::RelocationTable::Relocate` at one cutscene ([issue #810](https://github.com/seedds/nxnative/issues/810)):** not a host bug as far as the reporter's files show. Their `Event/Demo154_2.sbeventpack` has our length (1,196,295 bytes) but another SHA-256 (`e74e7826…`, ours `b822e8a2…`), from a copy of the base game that fails its hash check, with the damaged files kept as read; the model's relocation table is inside that file, so heap placement is not the cause. Open until the scene loads from a clean copy of the game.
