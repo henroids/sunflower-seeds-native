@@ -1095,3 +1095,7 @@ clamped elapsed FPS and a 32-bit greater-than movie-state cap. Loader plans
 check all expected words before mutation and use separate RX/RW auxiliary pages.
 The profile stays experimental: title/movie checks do not validate gameplay.
 See [the game note](../dm/games/0100453019AA8000/README.md#experimental-30--60--120-fps).
+
+### Pipeline cache save failure paths (2026-11-17)
+
+`dm/gfx/vk_android/vka_pso.c` has PEANUTS(upstream-candidate) hunks closing cache, stamp and prewarm streams once, replacing files only after a complete successful close, removing failed temporary files and freeing failed-save blobs. `peanuts/tests/test_pipeline_cache_save.py` injects write, close, rename and open failures in the production writer under ASan/UBSan, including the actual prewarm save function and its dirty-state retry. This is an error-path correction, not an attribution of the observed judder; the measured runs show no cache-save I/O errors.
