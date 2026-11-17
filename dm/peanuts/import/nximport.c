@@ -452,7 +452,10 @@ fail:
 }
 
 // ---------------------------------------------------------------- firmware fonts
-typedef struct FontJob { int got_std, got_ext; const char *out_dir; int found_ncas; int got_cjk[4]; } FontJob;   // got_cjk: cjk_sc, cjk_sc_ext, cjk_tc, cjk_kr (optional)
+typedef struct FontJob {
+    int got_std, got_ext; const char *out_dir; int found_ncas; int got_cjk[4];
+    char why[2][256];   // required font's read/decryption failure, not a missing archive (issue #22)
+} FontJob;   // got_cjk: cjk_sc, cjk_sc_ext, cjk_tc, cjk_kr (optional)
 // The firmware's Chinese and Korean shared fonts, written beside the two the app needs: a game set to one of those languages asks the console for them (types 1 to 4 of
 // the shared font service) and drew most characters as "?" with the standard font (Pokemon Shield with a Chinese save). FontKorean 0100000000000812 (one file),
 // FontChineseTraditional 0100000000000813 (one file), FontChineseSimple 0100000000000814 (the base file and an "ext" one). Not required: a firmware without them still gives the two
@@ -499,10 +502,14 @@ static int font_try_nca_fd(FontJob *fj, int fd, uint64_t off, uint64_t size) {
     if (nx_nca_open(&n, &c, &e)) return 0;   // header didn't decrypt to NCA3/NCA2, or too small: not a readable NCA, skip quietly
     int rc = 0;
     if (n.key_ok) font_try_cjk(fj, &n);
-    if (n.key_ok && (n.title_id == 0x0100000000000810ull || n.title_id == 0x0100000000000811ull)) {
+    if (n.title_id == 0x0100000000000810ull || n.title_id == 0x0100000000000811ull) {
         int std = n.title_id == 0x0100000000000811ull;
+        int s = nx_nca_find_section(&n, NX_FS_ROMFS);
+        // The same title also has a metadata NCA: only the archive with RomFS can hold its font.
+        if (s >= 0 && !n.key_ok) snprintf(fj->why[std], sizeof fj->why[std], "%s", n.key_why);
         if (!(std ? fj->got_std : fj->got_ext)) {
-            int s = nx_nca_find_section(&n, NX_FS_ROMFS); NxNode *root = s >= 0 ? nx_romfs_tree(&n, s) : NULL;
+            NxNode *root = s >= 0 && n.key_ok ? nx_romfs_tree(&n, s) : NULL;
+            if (s >= 0 && n.key_ok && !root) snprintf(fj->why[std], sizeof fj->why[std], "%s", nximport_last_error());
             if (root) {
                 NxNode *pick = NULL;
                 for (int i = 0; i < root->nkids; i++) { NxNode *k = root->kids[i]; size_t l = strlen(k->name); if (k->is_dir || l < 6 || strcmp(k->name + l - 6, ".bfttf")) continue;
@@ -590,13 +597,19 @@ static int font_scan_zip(FontJob *fj, const char *zip_path, const char *out_dir)
 
 int nximport_firmware_fonts(const char *firmware_dir, const char *out_dir) {
     if (!nx_keys.loaded) { nx_err("keys not loaded (nximport_keys)"); return -1; }
-    FontJob fj = { 0, 0, out_dir, 0, { 0, 0, 0, 0 } };
+    FontJob fj = { .out_dir = out_dir };
     struct stat st; if (stat(firmware_dir, &st)) { nx_err("cannot open %s: %s", firmware_dir, strerror(errno)); return -1; }
     if (!S_ISDIR(st.st_mode) && !S_ISREG(st.st_mode)) { nx_err("%s is neither a folder nor a file", firmware_dir); return -1; }
     if (nx_mkdir(out_dir, 0755) && errno != EEXIST) { nx_err("cannot create %s: %s", out_dir, strerror(errno)); return -1; }
     int rc = S_ISDIR(st.st_mode) ? font_scan(&fj, firmware_dir, 0) : font_scan_zip(&fj, firmware_dir, out_dir);
     if (rc) return -1;
     if (!fj.got_std || !fj.got_ext) {
+        const char *why = !fj.got_std && fj.why[1][0] ? fj.why[1] : !fj.got_ext && fj.why[0][0] ? fj.why[0] : NULL;
+        if (why) {
+            nx_err("%s: cannot read %s from the firmware: %s. Check that your keys match this firmware.", firmware_dir,
+                   !fj.got_std && fj.why[1][0] ? "FontStandard 0100000000000811" : "FontNintendoExtended 0100000000000810", why);
+            return -1;
+        }
         nx_err("%s: %s not found among %d NCAs (FontStandard 0100000000000811%s, FontNintendoExtended 0100000000000810%s)", firmware_dir,
                fj.found_ncas ? "the shared font archives were" : "no NCA files", fj.found_ncas, fj.got_std ? " ok" : " missing", fj.got_ext ? " ok" : " missing");
         return -1;

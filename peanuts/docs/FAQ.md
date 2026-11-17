@@ -120,6 +120,7 @@ The row shows **Firmware not added:** and a reason. The last one in this table c
 | **keys not loaded** | Keys were not added, or not yet read in this session. | Add **Keys** (pick the file again if needed), then pick the firmware again. |
 | **no NCA files not found among 0 NCAs** | The folder or zip holds no firmware files the app could read. | Pick the folder or zip of a full firmware dump. |
 | **the shared font archives were not found among N NCAs** | It is a firmware dump, but the font archives are missing from it, or your keys cannot open them. | Dump the firmware again, complete, and check your keys. |
+| **cannot read FontStandard / FontNintendoExtended … prod.keys has no key_area_key_…** | The font archive is present, but the selected keys lack its encryption generation. | Select your keys that match the firmware, then pick the firmware again. Repeating the import with the same older keys cannot decrypt it. |
 | **could not copy the zip** | The zip could not be read from where it is. | Copy the zip to the device's storage and pick it there. |
 | **That folder is not on the phone's storage** | You picked a cloud folder. | Pick a folder on the device or its SD card. |
 

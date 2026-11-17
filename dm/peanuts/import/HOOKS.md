@@ -65,3 +65,16 @@ signature is unchanged) overrides both; `n <= 0` = automatic. `Progress.on` is s
 
 `keys()` reads the user's `prod.keys` (header_key, key_area_key_application/ocean/system_NN, titlekek_NN) and, when a `title.keys` sits beside
 it, its title keys; tickets inside an NSP are used first. Nothing is shipped in the APK.
+
+## Firmware font diagnostics (issue #22)
+
+The font scan distinguishes an absent archive from a matching archive that it cannot decrypt. A font title also has a metadata NCA, so only
+its RomFS-bearing NCA can establish the font's decryption failure. The scan preserves `key_why` for either required font and reports the missing
+key name instead of discarding it behind "the shared font archives were not found". It never substitutes a different generation's key.
+
+Checked with the same local keys: firmware 19.0.1, 20.5.0, 21.2.0 and 22.5.0 import all six fonts. Firmware 23.5.0's font data NCAs require
+`key_area_key_application_16`; keys ending at generation `15` reproduce the original 238-NCA failure, now reported with that specific reason.
+This does not establish that every newer-firmware report has the same cause, or verify 23.5.0 with matching keys.
+
+`font_test` uses invented fonts, NCAs and keys: successful extraction, either required font needing an unavailable generation, success after
+adding that made-up generation, and truly absent archives. It passes on Linux and Android arm64 (AYN Thor); no real keys or firmware are fixtures.
