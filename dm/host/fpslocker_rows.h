@@ -71,12 +71,15 @@ static inline int fpw_parse(const char *spec, const char *build,
       if (!strchr("0123456789abcdef", f[0][i]))
         return -1;
     struct fpw_row r = {0};
+    // Integer constants, reciprocal elapsed FPS and 32-bit state caps extend
+    // the same reviewed row format; none evaluates an arbitrary expression.
     const char *kinds[] = {"zero_i32",         "target_f32",
                            "frame_ms_f32",     "frame_ms2_f32",
                            "vsync_u32",        "inverse_f32",
                            "frame_scaled_f32", "target_scaled_f32",
                            "time_ratio_f32",   "flag_cap_u8", "target_i32", "zero_u16",
-                           "time_step_pair_f32"};
+                           "time_step_pair_f32", "constant_i32",
+                           "elapsed_fps_f32", "flag_cap_u32_gt"};
     for (unsigned i = 0; i < sizeof kinds / sizeof *kinds; i++)
       if (!strcmp(f[1], kinds[i]))
         r.kind = i + 1;
@@ -108,8 +111,15 @@ static inline int fpw_parse(const char *spec, const char *build,
     if (!r.copies || (r.kind == 13 && r.copies != 1) ||
         (r.kind == 13 && r.direct && (r.offset & 7)))
       return -1;
-    if ((r.kind >= 6 && r.kind <= 10) || r.kind == 13) {
-      if (!fpw_factors(f[4], &r.a, &r.b) || (r.kind != 10 && r.a == 0))
+    if ((r.kind >= 6 && r.kind <= 10) || r.kind >= 13) {
+      if (!fpw_factors(f[4], &r.a, &r.b) ||
+          (r.kind != 10 && r.kind != 14 && r.kind != 16 && r.a == 0))
+        return -1;
+      if ((r.kind == 14 || r.kind == 16) &&
+          (r.a > 16777215 || truncf(r.a) != r.a))
+        return -1;
+      if ((r.kind == 10 || r.kind == 16) &&
+          (r.b < 15 || r.b > 120 || truncf(r.b) != r.b))
         return -1;
     } else if (strcmp(f[4], "0"))
       return -1;
@@ -202,11 +212,12 @@ static inline int fpw_effective_cap(const struct fpw_rows *rows, uint64_t base,
                                     uint64_t aux, int fps, fpw_read_fn read) {
   for (unsigned i = 0; i < rows->n; i++) {
     const struct fpw_row *r = &rows->row[i];
-    if (r->kind != 10)
+    if (r->kind != 10 && r->kind != 16)
       continue;
     uint64_t a = fpw_address(r, base, aux, read);
-    uint8_t v;
-    if (a && read(a, &v, 1) && v == (unsigned)r->a)
+    uint32_t v = 0;
+    if (a && read(a, &v, r->kind == 16 ? 4 : 1) &&
+        (r->kind == 16 ? v > (unsigned)r->a : v == (unsigned)r->a))
       fps = (int)r->b;
   }
   return fps;
@@ -221,7 +232,7 @@ static inline unsigned fpw_apply_context_storage(const struct fpw_rows *rows,
   unsigned applied = 0;
   for (unsigned i = 0; i < rows->n; i++) {
     const struct fpw_row *r = &rows->row[i];
-    if (r->kind == 10)
+    if (r->kind == 10 || r->kind == 16)
       continue;
     uint64_t ptr = fpw_address(r, base, aux, read);
     if (r->kind == 13) {
@@ -252,7 +263,9 @@ static inline unsigned fpw_apply_context_storage(const struct fpw_rows *rows,
         !read(ptr, cur, r->copies * 4))
       continue;
     uint32_t value = 0;
-    if (r->kind == 11)
+    if (r->kind == 14)
+      value = (uint32_t)r->a;
+    else if (r->kind == 11)
       value = (uint32_t)fps;
     else if (r->kind == 5)
       value = 60 / (unsigned)fps;
@@ -269,6 +282,14 @@ static inline unsigned fpw_apply_context_storage(const struct fpw_rows *rows,
       if (r->kind == 9) {
         double v = elapsed * r->a, lo = r->a / fps;
         f = (float)(v < lo ? lo : v > r->b ? r->b : v);
+      }
+      // Reciprocal of the same clamped elapsed time used by time_ratio_f32:
+      // games can consume seconds, a speed ratio and FPS in separate paths.
+      if (r->kind == 15) {
+        if (!isfinite(elapsed) || elapsed < 0) continue;
+        double lo = r->a / fps;
+        double seconds = elapsed < lo ? lo : elapsed > r->b ? r->b : elapsed;
+        f = (float)(r->a / seconds);
       }
       memcpy(&value, &f, 4);
     }

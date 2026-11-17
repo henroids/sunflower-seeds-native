@@ -1063,3 +1063,35 @@ next run's `shader_split.py` listed `._ShaderArchive-….ushaderbytecode` (4 KB,
 Run: the FINAL FANTASY RESONANCE build onto that drive went through both places after the change (the archives reused from `ue_shaders`, then split). No
 shader-chain file is changed. Upstream candidate: the `shader_split.py` hunks, yes (the Mac's NSP script writes `ue_shaders` beside the dump, often on such a
 drive).
+
+### Xenoblade Chronicles X: Definitive Edition PC bring-up
+
+The Switch 1 profile `0100453019AA8000` starts from nxnative `b32d0bf3b5fa` and registers the locally checked 1.0.2 modules. Its allocator uses the existing atomic function matcher. Android gameplay remains untested; this is not a supported-games claim.
+
+| Files | Change | Marking |
+|---|---|---|
+| `dm/games/0100453019AA8000/` | profile, allocator patches, generated 1.0.2 shader tables and status note | PEANUTS header; generated tables in upstream-unmarked.txt |
+| `dm/gfx/tools/shader_split.py`, `dm/gfx/tests/test_monolith.py` | nxnative ARH2 and mixed Maxwell/NVN2 HCPS reader and regressions from `aa9e0ff71d93` | PEANUTS blocks/header |
+| `dm/games/README.md`, `docs/reference/shaders.md` | experimental profile and shared format evidence | PEANUTS markers |
+
+### Xenoblade X graphics warning fixes
+
+| Files | Change | Marking |
+|---|---|---|
+| `dm/gfx/vk_android/vka_dev.c` | remove the invalid comparison of a freed completion array address with the next allocation; fence invariants remain checked | PEANUTS comment |
+| `dm/gfx/vk_android/vka_draw.c` | allocate unbound-image placeholders by numeric class as well as shape, so integer views match their storage before format learning | PEANUTS block |
+| `dm/tools/tests/test_vk_placeholder.py` | production placeholder regression with strict image-view format stubs; original source fails, fixed source passes | PEANUTS header |
+| `docs/reference/rendering.md`, `docs/agents/symptoms.md` | causes, fixes and the game's evidence links | PEANUTS block; generated symptom index |
+
+These are host changes; the shader compiler and library versions are unchanged.
+
+## Xenoblade X dynamic frame rates (2026-11-17)
+
+The Android launcher/host FPS foundation is reused from local Peanuts commit
+`fb5ce6f7` (the unrelated optional resolution-code feature is excluded).
+The 1.0.2 profile adapts FPSLocker Warehouse's exact-build timing corrections,
+credited in its game note. Host memory rows add integer constants, reciprocal
+clamped elapsed FPS and a 32-bit greater-than movie-state cap. Loader plans
+check all expected words before mutation and use separate RX/RW auxiliary pages.
+The profile stays experimental: title/movie checks do not validate gameplay.
+See [the game note](../dm/games/0100453019AA8000/README.md#experimental-30--60--120-fps).

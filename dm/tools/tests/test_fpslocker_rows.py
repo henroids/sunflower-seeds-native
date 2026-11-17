@@ -63,6 +63,42 @@ int main(void) {
         fpw_apply(&r,base,rate,read_guest,write_guest);
         uint32_t integer;memcpy(&integer,mem+0x700,4);assert(integer==(unsigned)rate);
     }
+    // A dynamic clock must agree across ratio, reciprocal FPS and seconds,
+    // including slow GPU frames, startup, and a movie's 32-bit state flag.
+    const char *dynamic =
+      "9fe60a212cff9b9a3656ab63d4f882e5,constant_i32,@0x740,2,1:1;"
+      "9fe60a212cff9b9a3656ab63d4f882e5,time_ratio_f32,%0x0,1,30:2;"
+      "9fe60a212cff9b9a3656ab63d4f882e5,elapsed_fps_f32,%0x4,1,1:0.0666666667;"
+      "9fe60a212cff9b9a3656ab63d4f882e5,time_ratio_f32,%0x8,1,1:0.0666666667;"
+      "9fe60a212cff9b9a3656ab63d4f882e5,inverse_f32,%0xc,1,1:1;"
+      "9fe60a212cff9b9a3656ab63d4f882e5,flag_cap_u32_gt,@0x750,1,2:30";
+    assert(fpw_parse(dynamic,bid,&r)==6);
+    for (int rate=30;rate<=120;rate*=2) {
+      const double samples[]={0,1./240,1./120,1./60,1./30,.05,.1};
+      for (unsigned i=0;i<sizeof samples/sizeof *samples;i++) {
+        double seconds=fmax(1./rate,fmin(samples[i],1./15));
+        fpw_apply_context(&r,base,base+0x780,rate,samples[i],read_guest,write_guest);
+        assert(fabsf(val(0x780)-(float)(30*seconds))<1e-6);
+        assert(fabsf(val(0x784)-(float)(1/seconds))<1e-5);
+        assert(fabsf(val(0x788)-(float)seconds)<1e-7);
+        assert(fabsf(val(0x78c)-1.f/rate)<1e-7);
+        uint32_t interval[2];memcpy(interval,mem+0x740,8);
+        assert(interval[0]==1 && interval[1]==1);
+      }
+    }
+    for (unsigned state=0;state<5;state++) {
+      memcpy(mem+0x750,&state,4);
+      int effective=fpw_effective_cap(&r,base,base+0x780,120,read_guest);
+      assert(effective==(state>2?30:120));
+      fpw_apply_context(&r,base,base+0x780,effective,.001,read_guest,write_guest);
+      assert(fabsf(val(0x78c)-1.f/effective)<1e-7);
+    }
+    unsigned wide_state=0x100;memcpy(mem+0x750,&wide_state,4);
+    assert(fpw_effective_cap(&r,base,base+0x780,120,read_guest)==30);
+    assert(fpw_parse(dynamic,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",&r)==0);
+    assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,constant_i32,@0x740,1,1.5:1",bid,&r)==-1);
+    assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,constant_i32,@0x740,1,4294967296:1",bid,&r)==-1);
+    assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,flag_cap_u32_gt,@0x750,1,2:240",bid,&r)==-1);
     // Halfword governor writes must preserve both neighboring bytes and
     // work at the final two bytes of a readable allocation.
     assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,zero_u16,0x100/0x2,1,0",bid,&r)==1);

@@ -147,6 +147,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 | [The Legend of Zelda: Ocarina of Time](#the-legend-of-zelda-ocarina-of-time) | 1 | 8 | 4 | 0 | 2 | `build` → `game` ×7 |
 | [The Legend of Zelda: Tears of the Kingdom](#the-legend-of-zelda-tears-of-the-kingdom) | 0 | 0 | 9 | 0 | 0 | `build` → `game` |
 | [Xenoblade Chronicles 3](#xenoblade-chronicles-3) | 6 | 0 | 0 | 0 | 0 | `build` → `game` |
+| [Xenoblade Chronicles X: Definitive Edition](#xenoblade-chronicles-x-definitive-edition) | 0 | 0 | 0 | 1 | 0 | `game` |
 
 ## Games
 
@@ -791,6 +792,14 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
   - cut `+0x12418dc`: first arena subtraction: -(512 MB + 128 KB)
   - cut `+0x12418e8`: first arena stored capacity: 512 MB + 128 KB
 
+### Xenoblade Chronicles X: Definitive Edition
+
+[Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md), `0100453019AA8000`, [patches.py](../../dm/games/0100453019AA8000/patches.py).
+
+- **`game`**, address space, at goal, checked: both complete functions and their callees in base 1.0.0 and update 1.0.1; forged-build rewrite byte-identical; 1.0.1 opening-field gameplay with the iPhone alias size, first arena 95 MB committed: malloc region 60 GB → 4 GB and its first arena. Monolith's allocator calls nn::os directly; its sizes span two functions matched atomically. The 512 MB first arena is sized for this game; an engine rule needs shared-layout proof and dynamic sizing
+
+- **function-matched** (`main` of builds without CUTS): Monolith malloc region and first arena: 2 functions, 6 cuts
+
 ## SDK cuts
 
 Cuts of Nintendo SDK `sdk` builds ([sdk_patches.py](../../dm/tools/sdk_patches.py)), applied to every game that ships the build. They fit the SDK's address-space layout into an iPhone's guest block. The games listed are those whose profile registers the build.
@@ -858,7 +867,7 @@ Profile keys (`game.tsv`) whose value changes what the host does, set away from 
 | `drs_ctl e25c90c1c136638885659fd55bf8a03b 0x38e100 0x38de2c 0x38dcbc 0x38dbc8` | [Donkey Kong Bananza](../../dm/games/040074A01BF12000/README.md) | `build` → `engine`, gap | four places in sead / agl's MaintainGpuPercentage controller, at fixed offsets per main build (each checked for its instruction); a fingerprint of the controller could find them in other games on that engine |
 | `enc_thread on` | [Need For Speed™ Hot Pursuit Remastered](../../dm/games/010029B0118E8000/README.md) | `game` → `host`, gap | what iOS does for every game: a default for every game after `regress.py check` on the games |
 | `event_wait off` | [Mario Kart World](../../dm/games/0400C3F00006E000/README.md) | `game` → `host`, gap | parked waits cost this game a third of its frame rate and lose the device on Turnip V39; waits that cost no extra submissions would let every game keep them |
-| `fps_modes 30,60,120` | [The Legend of Zelda: Link's Awakening](../../dm/games/01006BB00C6F0000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
+| `fps_limit 30` | [Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md) | `game`, at goal | a choice per game: steady frames and less heat where its own rate wanders below 60 |
 | `fps_steps d00e4f399e411d0613aa8d26b1c02fef 0x37c8410 0x8 0x210 0x214` | [Mario Kart World](../../dm/games/0400C3F00006E000/README.md) | `build` → `engine`, gap | the framework at a fixed global per main build; a fingerprint of its frame function (the step pick from the mode, then the update loop over the count and the present interval set to it) could find it in the game's updates |
 | `fps_target 30` | [Fire Emblem Fortune's Weave](../../dm/games/04007EF01F8AE000/README.md) | `game`, at goal | a choice per game |
 | `game_env DOTNET_GCRegionRange=60000000` | [Absolum](../../dm/games/0100A83022A22000/README.md) | `game`, at goal | measured for the game's regions |
@@ -882,6 +891,7 @@ Profile keys (`game.tsv`) whose value changes what the host does, set away from 
 | `window_fn e25c90c1c136638885659fd55bf8a03b 0x5bf770 0x5bf780 2880x1620` | [Donkey Kong Bananza](../../dm/games/040074A01BF12000/README.md) | `build` → `game`, gap | the game's own constant window size, at fixed offsets per main build; a function fingerprint (two leaf functions returning the size, found from their callers) could carry it over the game's updates |
 | `fps_decouple sead` | [Donkey Kong Bananza](../../dm/games/040074A01BF12000/README.md), [Splatoon Raiders](../../dm/games/0400380020056000/README.md) | `game`, at goal | whether the game steps its world by the rate sead's controller hands it is the game's own (Ocarina of Time's framework turns it back into a present interval): the rewriter finds the controller in any main (nso_code.py sead_find) but gates it only for a profile with this key |
 | `fps_hold off` | [Hyrule Warriors: Age of Calamity](../../dm/games/01002B00111A2000/README.md), [Paper Mario: The Thousand-Year Door](../../dm/games/0100ECD018EBE000/README.md) | `game`, at goal | the game's pacing |
+| `fps_modes 30,60,120` | [The Legend of Zelda: Link's Awakening](../../dm/games/01006BB00C6F0000/README.md), [Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `graphics_scale 2560x1440 1 console` | [Mario Kart World](../../dm/games/0400C3F00006E000/README.md), [Splatoon Raiders](../../dm/games/0400380020056000/README.md) | `game`, at goal | the game sizes its 3D scenes by the graphics scale, not by its window; which crop each scale gives was measured on the game |
 | `graphics_scale original 1 console` | [Mario Tennis Fever](../../dm/games/0400D4201C6EA000/README.md), [The Legend of Zelda: Ocarina of Time](../../dm/games/0400486024DEC000/README.md) | `game`, at goal | the game sizes its 3D scenes by the graphics scale, not by its window; which crop each scale gives was measured on the game |
 | `perf_mode boost` | [Big Brain Academy: Brain vs. Brain](../../dm/games/0100620012D6E000/README.md), [Rhythm Heaven Groove](../../dm/games/0100D9F01D474000/README.md) | `game`, at goal | a combination a Switch 1 never reports: a choice per game |
