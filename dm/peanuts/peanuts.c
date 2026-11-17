@@ -328,7 +328,11 @@ static pthread_mutex_t g_frame_mu = PTHREAD_MUTEX_INITIALIZER;
 // cache, so every read of a tracked page was a system call and, being "readable but not cached", made the whole of /proc/self/maps be read again every 500 ms; and a block
 // in more than 512 pieces lost the rest of its pieces the same way. Joined, the block is a handful of ranges whatever its pages' protection is.
 // g_rd is written under g_rd_mu by whoever refreshes and read under it by every reader (the tick thread, the runtime's workers)
-static range_t g_rd[512]; static int g_nrd; static _Atomic int64_t g_rd_at_ms;
+// RD_MAX ranges (2026-11-18, was 512): Breath of the Wild's block was in 4,414 anonymous pieces between 2,103 placed GPU segments after a few minutes (the placed
+// segments are not the guest's name, so they end a run), the cache kept the lowest 512, and every read above them was a system call: 10,400 of 10,560 reads a tick,
+// the companion at 50 % of a core. A block in more pieces than RD_MAX still loses the highest ones, and says so once
+enum { RD_MAX = 16384 };
+static range_t g_rd[RD_MAX]; static int g_nrd; static _Atomic int64_t g_rd_at_ms;
 static pthread_mutex_t g_rd_mu = PTHREAD_MUTEX_INITIALIZER;
 static int64_t mono_ns(void) { struct timespec m; clock_gettime(CLOCK_MONOTONIC, &m); return (int64_t)m.tv_sec * 1000000000 + m.tv_nsec; }
 static int range_cmp(const void *a, const void *b) { uint64_t x = ((const range_t *)a)->a, y = ((const range_t *)b)->a; return x < y ? -1 : x > y; }
@@ -349,14 +353,20 @@ static int rt_scan_readable(range_t *r, int max) {
         n = range_add(r, n, max, a, b);
     }
     if (f) fclose(f);
-    for (int i = 0; i < g_nmod && n < max; i++) if (g_mod[i].loaded && !g_mod[i].nro) { r[n].a = (uint64_t)(uintptr_t)g_mod[i].base; r[n].b = r[n].a + g_mod[i].size; n++; }
     return n;
 }
+// One refresh at a time, into a buffer of its own (too large for a worker's stack); a thread that finds one running leaves it to that one
 static void rt_ranges_refresh(void) {
-    range_t r[512]; int n = rt_scan_readable(r, 512);
+    static pthread_mutex_t one = PTHREAD_MUTEX_INITIALIZER; static range_t r[RD_MAX]; static int said;
+    if (pthread_mutex_trylock(&one)) return;
+    int n = 0;   // the modules first: the block's pieces can fill the table, the modules' code and data are read every tick
+    for (int i = 0; i < g_nmod && n < RD_MAX; i++) if (g_mod[i].loaded && !g_mod[i].nro) { r[n].a = (uint64_t)(uintptr_t)g_mod[i].base; r[n].b = r[n].a + g_mod[i].size; n++; }
+    int nm = n; n = nm + rt_scan_readable(r + nm, RD_MAX - nm);
+    if (n == RD_MAX && !said) { said = 1; __android_log_print(ANDROID_LOG_INFO, "peanuts", "companion: the guest block is in more readable pieces than the read cache holds (%d): reads above them go through the kernel (logged once)", RD_MAX); }
     qsort(r, n, sizeof r[0], range_cmp);
     pthread_mutex_lock(&g_rd_mu); memcpy(g_rd, r, n * sizeof r[0]); g_nrd = n; pthread_mutex_unlock(&g_rd_mu);
     atomic_store(&g_rd_at_ms, mono_ns() / 1000000);
+    pthread_mutex_unlock(&one);
 }
 // The game's code as its file has it. The process runs main rewritten (dm/tools/patch_nso.py: x18 sites, cuts, patches), so the bytes in memory differ from the file's at
 // the runs of main.changed.tsv; a package's module that hashes a function to know the build, or decodes its instructions for an address, then fails on every function
@@ -506,7 +516,7 @@ static int rt_mem_read(void *u, uint64_t addr, void *buf, size_t len) {
 static void rt_read_stats(char *out, size_t n, unsigned ticks) {
     uint64_t c = atomic_exchange(&g_rdn_cached, 0), k = atomic_exchange(&g_rdn_kernel, 0), r = atomic_exchange(&g_rdn_refused, 0), kb = atomic_exchange(&g_rdn_kbytes, 0);
     double t = ticks ? (double)ticks : 1.0;
-    int o = snprintf(out, n, "; reads a tick: %.0f from the cache, %.0f through the kernel (%.0f bytes), %.0f refused", c / t, k / t, kb / t, r / t);
+    int o = snprintf(out, n, "; reads a tick: %.0f from the cache (%d ranges), %.0f through the kernel (%.0f bytes), %.0f refused", c / t, g_nrd, k / t, kb / t, r / t);
     if (!(k + r) || o < 0 || (size_t)o >= n) return;
     uint64_t a[16]; int na = 0;
     for (int i = 0; i < 8; i++) { uint64_t v = atomic_exchange(&g_rd_miss[i], 0); if (v) a[na++] = v; }
