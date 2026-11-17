@@ -778,3 +778,19 @@ the Mac's split of the same game found them.
 Run: `build.sh <work dir> python`, then on the AYN Thor with `dm_pack_cli`, `shader_split.unsized()` on linked and independent-block LZ4 frames: both
 open; with `lz4/frame` moved away, the same `[RED]` line as the failed Prepare. Not run: a whole Prepare of the game on the phone (it needs the full
 stage, `build.sh … tools`, and an APK built with it). No shader-chain file is changed. Upstream candidate: yes (upstream's `build.sh` has the same gap).
+
+### Round 15, macOS's AppleDouble files on an exFAT drive in the Unreal shader step (2026-11-17)
+
+A Mac build of FINAL FANTASY RESONANCE whose work folder was on an exFAT drive stopped twice. macOS writes an AppleDouble `._<name>` beside each file it
+creates there and removes it with the file. `ue_ondevice.py`'s `rmtree` walked the folder, removed `X`, then found `._X` gone (`FileNotFoundError`); and the
+next run's `shader_split.py` listed `._ShaderArchive-….ushaderbytecode` (4 KB, magic `00 05 16 07`) as a shader archive and stopped with
+`not a version 2 shader code archive`.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/shader_split.py` | 2 | the two listings of `<ue_shaders>/*.ushaderbytecode` leave out names starting with `._` | `# PEANUTS(upstream-candidate)` |
+| `dm/gfx/tools/ue_ondevice.py` | 1 | `rmtree` takes a file already gone as removed | Peanuts-owned file |
+
+Run: the FINAL FANTASY RESONANCE build onto that drive went through both places after the change (the archives reused from `ue_shaders`, then split). No
+shader-chain file is changed. Upstream candidate: the `shader_split.py` hunks, yes (the Mac's NSP script writes `ue_shaders` beside the dump, often on such a
+drive).
