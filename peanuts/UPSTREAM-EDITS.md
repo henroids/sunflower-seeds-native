@@ -94,6 +94,7 @@ not edited (see table above).
 | `dm/games/01008CF01BAAC000/game.tsv` + `README.md` | **fixed this pass** | no (per-game data row) |
 | `dm/games/0100BA4026E94000/game.tsv` | marked (pre-existing, Castlevania `mem_map_limit off`) | no |
 | `dm/games/01006B601380E000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Kirby's Return to Dream Land Deluxe |
+| `dm/games/0100F9F00C696000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Crash Team Racing Nitro-Fueled |
 | `dm/games/0100A0F00DA68000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Monster Sanctuary (provisional: packed on a PC, not run on a device) |
 | `dm/games/0100B63016916000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for My Time at Sandrock (provisional: packed on a PC, not run on a device) |
 | `dm/gfx/tools/shader_split.py` | **fixed this pass** (header note + 6 def-site tags covering DM_SPLIT_DIRECT/WORKER, DM_UE_DECODE) | **yes** — the on-device process-pool split and the comment-insensitive table comparison (`table_rows`) are general infra, not game-specific |
@@ -1147,3 +1148,12 @@ No shader-chain files or shader-library versions changed. See the [frame-rate ev
 ### A diagnostic switch read from the environment at every draw (2026-11-18)
 
 `dm/gfx/vk_android/vka_draw.c` `draw_body` has a PEANUTS(upstream-candidate) hunk: `DM_VK_BIND_LOG`'s keys are parsed when a switch changes (`vka_env_gen`, as `skip_fs` does) instead of `getenv` at every draw. In the same Thor profile of Breath of the Wild that `getenv` was 5.6 % of the replay thread's CPU (32 ms a second) with the switch unset. The switch stays live.
+
+### Round 19, Crash Team Racing Nitro-Fueled (2026-11-18)
+
+The game's first profile (`dm/games/0100F9F00C696000/`) and what it needed in the PC tools and the host. The shader reader is not a shader-cache input (`dmsh_chain.py` `FILES`), so no library
+version moves. Device state: see the game's note.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/shader_split.py` | 3 | `iga_entries`, `iga_member`, `iga_shaders` and their branch in `scan_file_in`: Alchemy's igArchive version 13 (`IGA\x1a`), whose files are LZMA in 0x8000-byte blocks placed by the archive's small / medium / large block tables; every file is decoded and its whole GLSLC outputs taken. The game's split went from 12 shaders (those in `main`) to 1,945. Checked on all 74,311 files of its 401 archives; the large table (a file over 0x7FFF sectors) follows the same rule and was met on no file. nxnative has an open pull request with a reader of its own (#1077), not used here. Test: `test_split_iga.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
