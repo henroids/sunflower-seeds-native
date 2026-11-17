@@ -10,12 +10,17 @@ public final class NotesMarkupJvmTest {
     }
 
     public static void main(String[] a) {
-        // a contributor's badge: the name from the image's alt text, no HTML left
+        // a contributor's badge goes (the text says the name), no HTML left
         String badge = "Cult of the Lamb (01002E7016C46000), game versions 1.5.27 and 1.5.28.\n\n"
                 + "<a href=\"https://github.com/AlterDigga\"><img src=\"https://img.shields.io/badge/x\" style=\"vertical-align: middle;\" alt=\"AlterDigga\"></a> Companion by AlterDigga.\n";
-        eq("<p>Cult of the Lamb (01002E7016C46000), game versions 1.5.27 and 1.5.28.</p><p>AlterDigga Companion by AlterDigga.</p>", NotesMarkup.html(badge));
+        eq("<p>Cult of the Lamb (01002E7016C46000), game versions 1.5.27 and 1.5.28.</p><p>Companion by AlterDigga.</p>", NotesMarkup.html(badge));
         eq("Cult of the Lamb (01002E7016C46000), game versions 1.5.27 and 1.5.28.", NotesMarkup.plain(badge));
-        eq("AlterDigga Companion by AlterDigga.", NotesMarkup.plain("<a href=\"x\"><img alt=\"AlterDigga\"></a> Companion by AlterDigga."));
+        eq("Companion by AlterDigga.", NotesMarkup.plain("<a href=\"x\"><img alt=\"AlterDigga\"></a> Companion by AlterDigga."));
+        eq("<p>🥇 Commissioned by MsMeriBerry. Thank you!</p>",
+                NotesMarkup.html("🥇 <a href=\"https://github.com/MsMeriBerry\"><img src=\"https://img.shields.io/badge/y\" alt=\"MsMeriBerry\"></a> Commissioned by MsMeriBerry. Thank you!"));
+        // a Markdown picture goes too; a line of only pictures is a paragraph break
+        eq("<p>Before.</p><p>After.</p>", NotesMarkup.html("Before.\n![the map](https://example.org/map.png)\nAfter."));
+        eq("Text", NotesMarkup.plain("![shot](https://example.org/s.png)\n\nText"));
 
         // a bullet wrapped onto indented lines, bold, a paragraph after the list
         String list = "Game (01008CF01BAAC000), game version 1.1.0.\n\n"

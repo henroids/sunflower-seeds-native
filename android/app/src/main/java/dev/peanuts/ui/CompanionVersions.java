@@ -205,16 +205,23 @@ public final class CompanionVersions {
     private static String size(long bytes) { return bytes >= 1 << 20 ? String.format(Locale.US, "%.1f MB", bytes / 1048576.0) : String.format(Locale.US, "%.0f KB", bytes / 1024.0); }
 
     private void showNotes(CompanionPort.Item item) {
-        // the release's Markdown and HTML as text: paragraphs, lists, bold; a contributor's badge as their name
-        CharSequence text = item.notes.trim().isEmpty() ? "No release notes." : trim(android.text.Html.fromHtml(NotesMarkup.html(item.notes),
+        // the release's Markdown and HTML as text: paragraphs, lists, bold
+        CharSequence text = item.notes.trim().isEmpty() ? "No release notes." : bullets(android.text.Html.fromHtml(NotesMarkup.html(item.notes),
                 android.text.Html.FROM_HTML_SEPARATOR_LINE_BREAK_LIST | android.text.Html.FROM_HTML_SEPARATOR_LINE_BREAK_LIST_ITEM));
         new AlertDialog.Builder(act).setTitle(item.version).setMessage(text).setPositiveButton("Close", null).show();
     }
 
-    private static CharSequence trim(CharSequence s) {
-        int end = s.length();
-        while (end > 0 && Character.isWhitespace(s.charAt(end - 1))) end--;
-        return s.subSequence(0, end);
+    /** Trailing space cut; Html's bullets (2 px from the text) get a real gap, in the accent */
+    private CharSequence bullets(CharSequence html) {
+        int end = html.length();
+        while (end > 0 && Character.isWhitespace(html.charAt(end - 1))) end--;
+        android.text.SpannableStringBuilder s = new android.text.SpannableStringBuilder(html, 0, end);
+        for (android.text.style.BulletSpan b : s.getSpans(0, s.length(), android.text.style.BulletSpan.class)) {
+            int from = s.getSpanStart(b), to = s.getSpanEnd(b), flags = s.getSpanFlags(b);
+            s.removeSpan(b);
+            s.setSpan(new android.text.style.BulletSpan(PUi.dp(act, 10), PUi.col(act, dev.nxnative.android.R.color.bn_accent), PUi.dp(act, 2.5f)), from, to, flags);
+        }
+        return s;
     }
 
     private void install(CompanionPort.Item item, boolean isLocal) {
