@@ -63,6 +63,7 @@ shows which update you have and which one a game supports, and asks before build
 | Chained Echoes | `0100C510166F0000` | 1.41 | Not checked | AYN Thor, Turnip: title and opening scenes at about 60 fps with a 2 GB application pool; battles, saving/loading, sound and extended play untested |
 | Yoru, Tomosu | `0100C2901153C000` | Base game | Log unreadable | Opening at 60 fps on AYN Thor; companion log text is unreadable |
 | Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes | 60 fps on AYN Thor in single races; with the 120 fps limit, 118 to 120 in the menus and 81 to 97 in a race; new, little tested |
+| Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 only | No | Experimental. On AYN Thor, Turnip: the title and the opening at 30 fps; 57 to 60 fps with the 60 fps limit in two sessions of 5 and 10 minutes; little tested beyond that |
 
 ## What you need
 
