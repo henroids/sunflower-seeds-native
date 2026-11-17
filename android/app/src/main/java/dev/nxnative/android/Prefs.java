@@ -111,6 +111,12 @@ final class Prefs {
     /** Games whose speed follows the measured frame rate (their profile has fps_decouple sead: the host's sead_rate) get a frame limit instead of 60 / 30 / 20 locking.
      *  The limit is one of PACE_CAPS: 0 = 60 fps (the game's fastest rate, where the measured rate is clamped), or at most that many frames a second (paceOf) */
     static final int[] PACE_CAPS = {0, 45, 40, 30, 20};   // saved as the rate itself (fps_cap), not an index: 20 was added last, the others keep their meaning
+    static int paceMax(String titleId) { Profile p = Profile.of(titleId); return p == null || p.decoupled || p.fpsLimit <= 0 ? 60 : p.fpsLimitMax; }
+    static int[] paceCaps(String titleId) {
+        Profile p = Profile.of(titleId);
+        if (p != null && !p.fpsModes.isEmpty()) return p.fpsModeCaps();
+        return p != null && (p.steps && !p.fpsLocker.contains(",time_ratio_f32,") && !p.fpsLockerPlan.contains(",clock,-,1") || p.fpsLocker.contains(",vsync_u32,")) ? new int[] {FrameRateCaps.GAME_OWNED, 0, 30, 20} : FrameRateCaps.rates(paceMax(titleId), p == null ? 20 : p.fpsLimitMin);
+    }
     static boolean paced(String titleId) { Profile p = Profile.of(titleId); return p != null && p.decoupled; }
     /** Games the host's frame limiter caps (hle_fpslock.c fps_limit_wait, DM_FPS_LIMIT): the paced ones, and those whose profile sets a default limit (game.tsv fps_limit, a game
      *  with no limiter of its own the host can write). Both get a frame limit (PACE_CAPS) in place of 60 / 30 / 20 locking */
@@ -119,7 +125,7 @@ final class Prefs {
     static boolean decouple(Context c, String titleId) { return of(c).getBoolean(gameKey("decouple", titleId), true); }
     static void decouple(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("decouple", titleId), on).commit(); }
     /** Games whose framework runs whole fixed steps a frame that the host holds (game.tsv fps_steps: hle_fpslock.c steps_tick), as Mario Kart World's */
-    static boolean steps(String titleId) { Profile p = Profile.of(titleId); return p != null && p.steps; }
+    static boolean steps(String titleId) { Profile p = Profile.of(titleId); return p != null && p.steps && !p.fpsLocker.contains(",time_ratio_f32,") && !p.fpsLockerPlan.contains(",clock,-,1"); }
     /** Hold 60 fps (per game, default off), for steps games at the cap of 60: one step a frame always, where the game's own mode runs two (30 fps) after a frame its work
      *  overran. A frame that runs long then plays a little slower instead of dropping to 30 (DM_FPS_HOLD60=1 at start, Native.hold60Set while it runs) */
     static boolean fullVegetation(Context c, String titleId) { return of(c).getBoolean(gameKey("full_vegetation", titleId), Recommend.bool(rec(c, titleId, Recommend.VEGETATION), true)); }
@@ -141,12 +147,15 @@ final class Prefs {
     /** A saved cap as one of PACE_CAPS: the highest at or below it, 20 below that (the main screen's 15 for the other games). Since 20 was added a saved 20 or 15 (only the main
      *  screen's default can be one) is 20 fps here, where it was 30 */
     static int paceOf(int v) { return v <= 0 || v >= 60 ? 0 : v >= 45 ? 45 : v >= 40 ? 40 : v >= 30 ? 30 : 20; }
-    static String paceLabel(int v) { return (v <= 0 ? 60 : v) + " fps"; }   // 0 is 60: the game's own fastest rate, where the decoupling's rate is clamped
+    static String paceLabel(int v) { return v == FrameRateCaps.GAME_OWNED ? "Game owned" : (v <= 0 ? 60 : v) + " fps" + (v > 60 ? " (experimental)" : ""); }   // saved 0 remains 60
     /** A limited game's cap as saved, without capOf (which turns 45 and 40 into 30 for the other games): its own, else its profile's fps_limit, else the main screen's default, as one of PACE_CAPS */
     static int paceCap(Context c, String titleId) {
         int pl = profileLimit(titleId);
         Integer r = recCap(c, titleId);   // the recommended limit comes before the profile's and the main screen's (Recommend.effective)
-        return paceOf(of(c).getInt(gameKey("fps_cap", titleId), r != null ? r : pl > 0 ? pl : of(c).getInt("fps_cap", -1)));
+        int v = FrameRateCaps.normalize(of(c).getInt(gameKey("fps_cap", titleId), r != null ? r : pl > 0 ? pl : of(c).getInt("fps_cap", -1)), paceMax(titleId));
+        Profile p = Profile.of(titleId);
+        if (p != null && !p.fpsModes.isEmpty()) return p.fpsMode(v);
+        return v > 0 && p != null && v < p.fpsLimitMin ? p.fpsLimitMin : v;
     }
     /** The recommended frame rate cap as the launcher stores it (Recommend.cap), null for none */
     static Integer recCap(Context c, String titleId) { return Recommend.cap(rec(c, titleId, Recommend.FPS_CAP), limited(titleId)); }
@@ -399,7 +408,7 @@ final class Prefs {
         for (int k : FPS_CAPS) if (k > 0 && k <= v && k > best) best = k;
         return best;
     }
-    static int fpsCap(Context c) { return capOf(of(c).getInt("fps_cap", -1)); }
+    static int fpsCap(Context c) { return capOf(of(c).getInt("fps_cap", 60)); }
     static void fpsCap(Context c, int v) { of(c).edit().putInt("fps_cap", v).commit(); }
     /** The game's cap: its own (set in its Game settings or its in-game panel), else the recommended one, else the default */
     static int fpsCap(Context c, String titleId) { Integer r = limited(titleId) ? null : recCap(c, titleId); return capOf(of(c).getInt(gameKey("fps_cap", titleId), r != null ? r : fpsCap(c))); }
@@ -410,7 +419,7 @@ final class Prefs {
      * Whether the host found that this game picks its own frame rate (its cap status reports no rate it can hold: Native.fpsCapStatus rates 0), as the last run
      * saw it: its Game settings and its in-game panel then show no cap choices, which would do nothing. Written by GameActivity and the panel while the game runs.
      */
-    static boolean ownRate(Context c, String titleId) { return of(c).getBoolean(gameKey("own_rate", titleId), false); }
+    static boolean ownRate(Context c, String titleId) { return !limited(titleId) && !steps(titleId) && of(c).getBoolean(gameKey("own_rate", titleId), false); }
     static void ownRate(Context c, String titleId, boolean v) { if (ownRate(c, titleId) != v) of(c).edit().putBoolean(gameKey("own_rate", titleId), v).commit(); }
     /** null: back to the default */
     static void fpsCap(Context c, String titleId, Integer v) {

@@ -2798,7 +2798,7 @@ static void treg(int id, const tex_t *t, const view_t *v, int img) {
     if (!g_tver) g_tver = calloc(1 << 20, sizeof *g_tver);
     if (g_tver) atomic_fetch_add_explicit(&g_tver[id], 1, memory_order_release);
     if (!g_tisbuf) g_tisbuf = calloc(1 << 20, 1);
-    if (g_tisbuf) atomic_store_explicit(&g_tisbuf[id], (v && v->set_target ? v->target : t->d.target) == NVN_TEXTURE_TARGET_BUFFER, memory_order_release);
+    if (g_tisbuf) atomic_store_explicit(&g_tisbuf[id], t && (v && v->set_target ? v->target : t->d.target) == NVN_TEXTURE_TARGET_BUFFER, memory_order_release);
     pthread_mutex_unlock(&g_tmu);
 }
 int vka_tex_id_is_buffer(int id) {   // (no lock: the draw path asks it for every texture binding)

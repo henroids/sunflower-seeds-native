@@ -34,6 +34,12 @@ final class Profile {
     boolean steps;   // game.tsv has fps_steps rows (build.gradle stepsOf): a framework of whole fixed steps a frame, which Hold 60 fps keeps at one (Prefs.steps)
     boolean presentOnly;   // game.tsv fps_limit_present 1 (build.gradle presentOnlyOf): the frame limit only paces the presents, the game's own logic is not known to follow it (Prefs.presentOnly)
     int fpsLimit;   // game.tsv fps_limit (build.gradle fpsLimitOf): the host's frame limit by default, frames a second (0 = none); the launcher offers a frame limit for it (Prefs.limited)
+    String fpsLockerPlan = "";
+    String fpsModes = "";   // explicit supported numeric rates; Game owned is always available
+    String fpsPlan120 = "";   // static timing plan, selected at launch only
+    String fpsLocker = "";   // reviewed build-gated FPSLocker memory writes, serialized by build.gradle
+    int fpsLimitMin = 20;   // checked lower bound for timing correction plans
+    int fpsLimitMax = 60;   // launcher-only opt-in to higher caps; does not change the runtime profile ABI
     boolean drs;   // game.tsv has drs_ctl rows (build.gradle drsOf): the host can steer the game's dynamic resolution (Prefs.drsGame)
     String recommend = "";   // game.tsv recommend rows (build.gradle recommendOf): "<match>|<setting>=<value> …", ';' between them; the recommended settings per phone (Recommend, Prefs.recommended)
     String skipLayers = "";   // game.tsv skip_layers (build.gradle skipLayersOf): pixel shader keys whose draws the Speedhack setting drops (Prefs.skipLayersGame), "" = not offered
@@ -43,6 +49,38 @@ final class Profile {
     boolean linkPlay;   // game.tsv link_play 1: offer the opt-in phone-to-PC join settings (LinkPlay); absent means no row.
     String cameraAspects = "";   // game.tsv aspect rows (build.gradle aspectsOf): "21:9,4:3", ',' between them; picture shapes the host's own 3D camera patch follows, with no module variant (Game settings › Aspect ratio)
     String variants = "";   // game.tsv variant rows (build.gradle variantsOf): "<name>=<label>", ',' between them; a native 4:3 mod is "43=4:3" (Game settings › Aspect ratio)
+
+    int[] fpsModeCaps() {
+        if (fpsModes.isEmpty()) return new int[0];
+        String[] values = fpsModes.split(",");
+        int[] caps = new int[values.length + 1]; caps[0] = -2;
+        for (int i = 0; i < values.length; i++) { int rate = Integer.parseInt(values[values.length - 1 - i]); caps[i + 1] = rate == 60 ? 0 : rate; }
+        return caps;
+    }
+    int fpsMode(int selected) {
+        int value = selected == 60 || selected == -1 ? 0 : selected;
+        if (fpsModes.isEmpty()) return value;
+        for (int cap : fpsModeCaps()) if (cap == value) return value;
+        return 0;   // an unsupported saved choice returns to the safe 60 fps default
+    }
+    boolean fpsRestart(int started, int selected) {
+        return (started == -2) != (selected == -2) || !fpsPlan120.isEmpty() && (started == 120) != (selected == 120);
+    }
+    int fpsModeTarget(int selected) { return fpsMode(selected) == 120 ? 0 : fpsMode(selected) == 30 ? 30 : 60; }
+    List<String> fpsModeEnv(int selected) {
+        List<String> env = new ArrayList<>();
+        boolean high = fpsMode(selected) == 120;
+        int rate = high ? 120 : fpsMode(selected) == 30 ? 30 : 60;
+        env.add("DM_FPSLOCKER_PLAN=" + (high ? fpsPlan120 : ""));
+        env.add("DM_FPSLOCKER=" + (high ? fpsLocker : ""));
+        env.add("DM_FPSLOCKER_INTERVAL=" + (high ? 1 : 0));
+        env.add("DM_FPS_TARGET=" + fpsModeTarget(selected));
+        env.add("DM_FPS_LIMIT=" + rate);
+        env.add("DM_PRESENT_INTERVAL=game");
+        env.add("DM_PRESENT_HZ=" + (high ? 120 : 60));
+        env.add("DM_VSYNC_HZ=" + (high ? 120 : 60));
+        return env;
+    }
 
     /** The variant whose label is w:h (a native aspect mod: "43" for "4:3"), or null when the profile has none */
     String aspectVariant(String label) {
@@ -82,14 +120,20 @@ final class Profile {
         public final boolean live;   // false = restart, true = live
         public final String implies; // env var of option implied by this option, or ""
         public final String needs;   // fixup marker required by this option (e.g. "OOT_PATCHES"), or ""
+        public final String patches; // exact-build literal code words, '~' between rows
 
         public Option(String env, String label, String description, boolean live, String implies, String needs) {
+            this(env, label, description, live, implies, needs, "");
+        }
+
+        public Option(String env, String label, String description, boolean live, String implies, String needs, String patches) {
             this.env = env != null ? env : "";
             this.label = label != null ? label : "";
             this.description = description != null ? description : "";
             this.live = live;
             this.implies = implies != null ? implies : "";
             this.needs = needs != null ? needs : "";
+            this.patches = patches != null ? patches : "";
         }
 
         public Option(String env, String label, String description, boolean live) {
@@ -112,20 +156,21 @@ final class Profile {
             Option that = (Option) o;
             return live == that.live && env.equals(that.env) && label.equals(that.label)
                     && description.equals(that.description) && implies.equals(that.implies)
-                    && needs.equals(that.needs);
+                    && needs.equals(that.needs) && patches.equals(that.patches);
         }
 
         @Override public int hashCode() {
-            return java.util.Objects.hash(env, label, description, live, implies, needs);
+            return java.util.Objects.hash(env, label, description, live, implies, needs, patches);
         }
 
         @Override public String toString() {
             return env + "|" + label + "|" + description + "|" + (live ? "live" : "restart")
-                    + (hasImplies() ? "|implies=" + implies : "") + (hasNeeds() ? "|needs=" + needs : "");
+                    + (hasImplies() ? "|implies=" + implies : "") + (hasNeeds() ? "|needs=" + needs : "")
+                    + (patches.isEmpty() ? "" : "|patches=" + patches);
         }
     }
 
-    /** Parse option rows encoded as "<env>|<label>|<description>|<restart|live>[|<implies>[|<needs>]]", ';' between them */
+    /** Parse option rows encoded as "<env>|<label>|<description>|<restart|live>[|<implies>[|<needs>[|<patches>]]]", ';' between them */
     static List<Option> parseOptions(String text) {
         if (text == null || text.trim().isEmpty()) return Collections.emptyList();
         List<Option> out = new ArrayList<>();
@@ -137,7 +182,8 @@ final class Profile {
                 boolean live = f.length > 3 && "live".equalsIgnoreCase(f[3].trim());
                 String implies = f.length > 4 ? f[4].trim() : "";
                 String needs = f.length > 5 ? f[5].trim() : "";
-                out.add(new Option(f[0].trim(), f[1].trim(), f[2].trim(), live, implies, needs));
+                String patches = f.length > 6 ? f[6].trim() : "";
+                out.add(new Option(f[0].trim(), f[1].trim(), f[2].trim(), live, implies, needs, patches));
             }
         }
         return Collections.unmodifiableList(out);
@@ -158,10 +204,15 @@ final class Profile {
     static List<String> buildOptionsEnv(List<Option> options, java.util.function.Predicate<String> isOptionOn) {
         List<String> env = new ArrayList<>();
         if (options == null || options.isEmpty()) return env;
+        List<String> patches = new ArrayList<>();
         for (Option opt : options) {
             boolean on = isOptionOn.test(opt.env) || findImpliedBy(options, opt, isOptionOn) != null;
-            if (on) env.add(opt.envLine());
+            if (on) {
+                env.add(opt.envLine());
+                if (!opt.patches.isEmpty()) patches.add(opt.patches.replace('~', ';'));
+            }
         }
+        if (!patches.isEmpty()) env.add("DM_OPTION_PATCHES=" + String.join(";", patches));
         return env;
     }
 
@@ -511,6 +562,12 @@ final class Profile {
             p.cameraAspects = c.length > 28 ? c[28] : "";
             p.timeOfDay = c.length > 29 && c[29].equals("1");
             p.cheats = c.length > 30 && c[30].equals("1");
+            try { int maximum = c.length > 31 ? Integer.parseInt(c[31]) : 60; p.fpsLimitMax = maximum == 90 || maximum == 120 ? maximum : 60; } catch (NumberFormatException e) { p.fpsLimitMax = 60; }
+            p.fpsLocker = c.length > 32 ? c[32] : "";
+            p.fpsLockerPlan = c.length > 33 ? c[33] : "";
+            p.fpsLimitMin = c.length > 34 && "30".equals(c[34]) ? 30 : 20;
+            p.fpsModes = c.length > 35 ? c[35] : "";
+            p.fpsPlan120 = c.length > 36 ? c[36] : "";
             out.add(p);
         }
         return Collections.unmodifiableList(out);

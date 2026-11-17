@@ -129,6 +129,7 @@ SHADER_BINDING = [
 # Profile switches: (key, the start of its value ('' = any), entry). A key is per-game data, so `game`; its goal is `host` where it is the semantics every game should get
 DEFAULT_SOON = 'a default for every game after `regress.py check` on the games'
 SWITCH_BINDING = [
+    ('option_patch', '', {'what': 'opt-in expected-byte code words', 'now': 'build', 'goal': 'build', 'purpose': 'rendering', 'why': 'literal instructions of a registered main build; an explicit restart option selects them independently of FPS'}),
     ('render_cond', '', {'what': 'NVN conditional rendering', 'now': 'game', 'goal': 'host', 'purpose': 'rendering',
      'why': f'what the GPU does; off by default only because other games drew everything before: {DEFAULT_SOON}'}),
     ('gpu_timestamps', '', {'what': 'timestamp reports per segment', 'now': 'game', 'goal': 'host', 'purpose': 'rendering', 'why': f'what hardware records: {DEFAULT_SOON}'}),
@@ -180,6 +181,7 @@ SWITCH_BINDING = [
     ('present_interval', '', {'what': 'one frame per display tick', 'now': 'game', 'goal': 'game', 'purpose': 'frame rate', 'why': 'right only for games whose logic does not count frames'}),
     ('fps_hold', '', {'what': 'no frame held past the cap', 'now': 'game', 'goal': 'game', 'purpose': 'frame rate', 'why': "the game's pacing"}),
     ('fps_target', '', {'what': 'frame rate target', 'now': 'game', 'goal': 'game', 'purpose': 'frame rate', 'why': 'a choice per game'}),
+    ('fps_modes', '', {'what': 'reviewed supported frame rates', 'now': 'game', 'goal': 'game', 'purpose': 'frame rate', 'why': 'restrict the launcher to rates reviewed for this game'}),
     ('fps_limit', '', {'what': "the host's frame limit by default (Android)", 'now': 'game', 'goal': 'game', 'purpose': 'frame rate', 'why': 'a choice per game: steady frames and less heat where its own rate wanders below 60'}),
     ('ue_fps_cvar', '', {'what': "the game's own Unreal frame-limit variable", 'now': 'game', 'goal': 'game', 'purpose': 'frame rate', 'why': "the game's own variable, which its settings apply to t.MaxFPS; the rewriter finds it by name (ue_cvar.py)"}),
     ('perf_mode', '', {'what': 'Boost whatever the operation mode', 'now': 'game', 'goal': 'game', 'purpose': 'runtime', 'why': 'a combination a Switch 1 never reports: a choice per game'}),

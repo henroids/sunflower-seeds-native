@@ -21,6 +21,13 @@ The replay on Metal (`dm/gfx/nvn/nvn_mtl.m`) and the Vulkan and OpenGL layers. E
 - **Fix:** check the first texture before logging its dimensions (`hle_nvn.c`) and log serial 0 for a null clear texture (`nvn_mtl.m`).
 - **Found on:** clang static analysis ([issue #424](https://github.com/seedds/nxnative/issues/424)); synthetic null-texture tests, with no gameplay failure reported.
 
+### Clearing a Vulkan texture registration
+
+- **Symptom:** Mario Kart 8 Deluxe crashes at the title screen after `texture ID 1031 registered with no texture`, with a read at address `0x4` in `treg`.
+- **Cause:** the NULL registration clears the entry, but the buffer-texture flag update then reads `t->d.target` through the same NULL texture pointer.
+- **Fix:** a NULL registration publishes a false buffer-texture flag, including when a view is supplied. Live registrations still use the view's target override. `test_vka_tex_registration.py` executes the production registration functions under UBSan, checking register/clear, view overrides, dirty tracking and version updates.
+- **Found on:** [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md), Android with Turnip. A 90-second run of the correction reaches the title and menus at about 60 fps, including a NULL registration, with no recorded crash; race stability remains unchecked.
+
 ### Texture objects copied into command records
 
 - **Symptom:** Metal aborts on a texture descriptor with an absurd size (`height (1869367126) greater than … 16384`).

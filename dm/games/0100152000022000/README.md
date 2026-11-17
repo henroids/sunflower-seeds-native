@@ -62,6 +62,8 @@ The game builds Mii heads from the console's MiiModel system data, starting at b
 
 ## Found on this game
 
+- **Android title-screen NULL texture registration:** `treg` cleared the entry and then dereferenced the NULL texture while updating its buffer flag (SIGSEGV read at `0x4`). The flag now clears without reading the texture; the production registration regression passes under UBSan. A 90-second Turnip run reaches the title and menus at about 60 fps, including a NULL registration, with no recorded crash; a race remains unchecked. See [Clearing a Vulkan texture registration](../../../docs/reference/rendering.md#clearing-a-vulkan-texture-registration).
+
 - **Display sleep during controller play on the Mac (resolved, player-confirmed):** [Mac display sleep during controller play](../../../docs/reference/services.md#mac-display-sleep-during-controller-play).
 - **Resolved in the sanitizer audit:** [Unaligned command headers during layout probing](../../../docs/reference/audio.md#unaligned-command-headers-during-layout-probing), reproduced with the SDK 4 command-list fixture.
 

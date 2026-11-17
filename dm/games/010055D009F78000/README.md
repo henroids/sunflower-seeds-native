@@ -88,3 +88,9 @@ General host changes first needed here; each applies to every game:
 - Deferred binds are not remapped to the pool base (red line).
 - `game.tsv` still describes the game as "In bring-up" and the memory layout as Link's Awakening's, not measured; the development notes call SDK 6.5.0 "the oldest so far", though DARK SOULS: REMASTERED (SDK 4.5.0) and Mario Kart 8 Deluxe (SDK 4.4.0) are older.
 - The capture boot's time: the development notes give "about 10 s in all" for the NSP script's stage and "about a second after launch" for the 9 files.
+
+### Android FPSLocker method
+
+Three Houses uses reviewed auxiliary DRS budget values and checked address-load replacements. Game owned restores the original interval tables. Supported targets are 20, 30, 40, 45 and 60; higher targets stay unavailable until simulation timing is independently established.
+
+The launcher defaults to 60 and offers Game owned as a separate choice. Switching to or from Game owned requires restarting. Code plans require the exact main build and expected instruction words, validate every replacement before writing, and leave pack files unchanged. Other platform patch preparation retains its existing method. See the Thor continuation report for bounded Turnip validation.

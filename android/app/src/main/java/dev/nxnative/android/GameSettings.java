@@ -196,14 +196,8 @@ final class GameSettings {
             picture.add(new Ui.Setting(a, "🔳", "Aspect ratio", v -> aspect(a, g, again)).value(aspectLabel(a, id)).chevron(a));
 
         // ---- Speed ----
-        if (!Prefs.limited(id) && Prefs.ownRate(a, id)) {   // the host found no limiter it can hold for this game: choices would do nothing (the host's frame limiter holds a limited game)
-            Ui.Setting fixed = speed.add(new Ui.Setting(a, "⏱️", "Frame rate cap", null).value("This game picks its own frame rate"));
-            fixed.view.setClickable(false);
-            fixed.view.setAlpha(0.6f);
-        } else {
-            Ui.Setting cap = speed.add(track(recRows, Recommend.FPS_CAP, new Ui.Setting(a, "⏱️", "Frame rate cap", v -> cap(a, g, again)).value(capLabel(a, id)).chevron(a)));
-            if (Prefs.limited(id) && Prefs.presentOnly(id)) { cap.badge("Experimental"); speed.info += " " + Prefs.PRESENT_ONLY_NOTE; }   // fps_limit_present: the limit paces the presents only
-        }
+        Ui.Setting cap = speed.add(track(recRows, Recommend.FPS_CAP, new Ui.Setting(a, "⏱️", "Frame rate cap", v -> cap(a, g, again)).value(capLabel(a, id)).chevron(a)));
+        if (Prefs.limited(id) && Prefs.presentOnly(id)) { cap.badge("Experimental"); speed.info += " " + Prefs.PRESENT_ONLY_NOTE; }
         if (Prefs.steps(id)) {   // a framework of whole steps a frame (fps_steps): Hold 60 fps keeps one step at the cap of 60. The in-game panel changes it live
             Ui.Setting hold = new Ui.Setting(a, "🎯", "Hold 60 fps", null).toggle(a, Prefs.hold60(a, id), (b, on) -> { Prefs.hold60(a, id, on); refresh[0].run(); });
             hold.says("Never drops to 30; less even under 60", "Drops to 30 when 60 does not hold");
@@ -511,6 +505,7 @@ final class GameSettings {
     }
 
     static String capLabel(MainActivity a, String id) {
+        if (!Prefs.limited(id) && Prefs.ownRate(a, id)) return "Game owned";
         String l = Prefs.limited(id) ? Prefs.paceLabel(Prefs.paceCap(a, id)) : MainActivity.capLabel(Prefs.fpsCap(a, id));
         return l;
     }
@@ -741,21 +736,36 @@ final class GameSettings {
         }).setNegativeButton("Cancel", null).show();
     }
 
+    private static android.widget.ListAdapter capItems(MainActivity a, String[] labels, boolean[] enabled) {
+        return new android.widget.ArrayAdapter<String>(a, android.R.layout.simple_list_item_single_choice, labels) {
+            @Override public boolean areAllItemsEnabled() { return false; }
+            @Override public boolean isEnabled(int position) { return enabled[position]; }
+            @Override public View getView(int position, View convert, ViewGroup parent) {
+                View v = super.getView(position, convert, parent); v.setEnabled(enabled[position]); v.setAlpha(enabled[position] ? 1f : 0.4f); return v;
+            }
+        };
+    }
+
     private static void cap(MainActivity a, Game g, Runnable done) {
         if (Prefs.limited(g.titleId)) {   // a frame limit, no locking (Prefs.PACE_CAPS)
-            String[] labels = new String[Prefs.PACE_CAPS.length + 1];
+            int[] choices = FrameRateCaps.menu(), allowed = Prefs.paceCaps(g.titleId);
+            boolean[] enabled = new boolean[choices.length + 1]; enabled[0] = true;
+            String[] labels = new String[choices.length + 1];
             int pl = Prefs.profileLimit(g.titleId);   // the profile's own default (fps_limit), else the main screen's
             Integer rc = Prefs.recCap(a, g.titleId);
             labels[0] = rc != null ? "Recommended (" + Prefs.paceLabel(rc) + ")" : pl > 0 ? "Default (this game's: " + Prefs.paceLabel(Prefs.paceOf(pl)) + ")" : "Default (Settings: " + Prefs.paceLabel(Prefs.paceOf(Prefs.fpsCap(a))) + ")";
             int checked = 0, cur = Prefs.paceCap(a, g.titleId);
-            for (int k = 0; k < Prefs.PACE_CAPS.length; k++) { labels[k + 1] = Prefs.paceLabel(Prefs.PACE_CAPS[k]); if (Prefs.ownFpsCap(a, g.titleId) && Prefs.PACE_CAPS[k] == cur) checked = k + 1; }
-            new PadFocus.Builder(a).setTitle("Frame rate cap · " + g.name).setSingleChoiceItems(labels, checked, (x, w) -> {
-                Prefs.fpsCap(a, g.titleId, w == 0 ? null : Prefs.PACE_CAPS[w - 1]);
+            for (int k = 0; k < choices.length; k++) { enabled[k + 1] = FrameRateCaps.contains(allowed, choices[k]); labels[k + 1] = Prefs.paceLabel(choices[k]) + (enabled[k + 1] ? "" : " · unavailable for this game"); if (Prefs.ownFpsCap(a, g.titleId) && choices[k] == cur) checked = k + 1; }
+            new PadFocus.Builder(a).setTitle("Frame rate cap · " + g.name).setSingleChoiceItems(capItems(a, labels, enabled), checked, (x, w) -> {
+                if (!enabled[w]) return;
+                Prefs.fpsCap(a, g.titleId, w == 0 ? null : choices[w - 1]);
                 x.dismiss(); done.run();
             }).setNegativeButton("Cancel", null).show();
             return;
         }
-        int n = Prefs.FPS_CAPS.length;
+        int[] choices = {0, 120, 90, 60, 45, 40, 30, 20, 15};
+        int n = choices.length;
+        boolean[] enabled = new boolean[n + 2]; enabled[0] = enabled[1] = true;
         String[] labels = new String[n + 2];
         Integer rc = Prefs.recCap(a, g.titleId);
         labels[0] = firstLabel(rc != null ? MainActivity.capLabel(rc) : null, MainActivity.capLabel(Prefs.fpsCap(a)));
@@ -765,11 +775,14 @@ final class GameSettings {
         int cur = Prefs.fpsCap(a, g.titleId);
         if (own && cur < 0) checked = 1;
         for (int k = 0; k < n; k++) {
-            labels[k + 2] = MainActivity.capLabel(Prefs.FPS_CAPS[k]);
-            if (own && Prefs.FPS_CAPS[k] == cur) checked = k + 2;
+            labels[k + 2] = (choices[k] == 0 ? "Game owned" : MainActivity.capLabel(choices[k]));
+            enabled[k + 2] = choices[k] == 0 || !Prefs.ownRate(a, g.titleId) && FrameRateCaps.contains(Prefs.FPS_CAPS, choices[k]);
+            if (!enabled[k + 2]) labels[k + 2] += " · unavailable for this game";
+            if (own && choices[k] == cur) checked = k + 2;
         }
-        new PadFocus.Builder(a).setTitle("Frame rate cap · " + g.name).setSingleChoiceItems(labels, checked, (x, w) -> {
-            Prefs.fpsCap(a, g.titleId, w == 0 ? null : w == 1 ? -1 : Prefs.FPS_CAPS[w - 2]);
+        new PadFocus.Builder(a).setTitle("Frame rate cap · " + g.name).setSingleChoiceItems(capItems(a, labels, enabled), checked, (x, w) -> {
+            if (!enabled[w]) return;
+            Prefs.fpsCap(a, g.titleId, w == 0 ? null : w == 1 ? -1 : choices[w - 2]);
             x.dismiss();
             done.run();
         }).setNegativeButton("Cancel", null).show();

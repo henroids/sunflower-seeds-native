@@ -434,9 +434,30 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         return hz >= 30 && hz <= 240 ? hz : 60;
     }
 
+    private int capDisplayHz(int maximum) {
+        android.view.Display d = getDisplay();
+        int hz = displayHz();
+        if (d != null) {
+            android.view.Display.Mode current = d.getMode();
+            for (android.view.Display.Mode m : d.getSupportedModes()) {
+                if (m.getPhysicalWidth() == current.getPhysicalWidth() && m.getPhysicalHeight() == current.getPhysicalHeight())
+                    hz = Math.max(hz, Math.round(m.getRefreshRate()));
+            }
+        }
+        return Math.max(60, Math.min(maximum, hz));
+    }
+
     private Profile.Render startRender;   // the render setting this run started with (settingsEnv), null for a game without a render_cfg row
     Profile.Render startRender() { return startRender; }
 
+    // The native run survives Activity recreation (attach); keep its launch timing mode too.
+    private static boolean gameOwnedAtStart;
+    boolean gameOwnedAtStart() { return gameOwnedAtStart; }
+    private static int fpsModeAtStart;
+    boolean fpsRestartRequired(int selected) {
+        Profile p = Profile.of(titleId());
+        return p != null ? p.fpsRestart(fpsModeAtStart, selected) : (selected == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart;
+    }
     private String settingsEnv(String id, List<String> env) {
         // Game resolution: the game's own setting, else the main screen's: the window size the host gives the game (window_fn), or the graphics scale and operation
         // mode that give that size (graphics_scale rows), as its profile says (Profile.resolutionEnv); nothing for a game with neither
@@ -456,13 +477,28 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         Lsfg.env(this, env);   // frame generation: the user's Lossless.dll and the settings
         GameUpscaler.env(this, id, env);   // the Upscaler (Game settings, the in-game panel): the game's own upscaler and the present's scaling
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
+        fpsModeAtStart = Prefs.paceCap(this, id);
+        gameOwnedAtStart = Prefs.limited(id) && Prefs.paceCap(this, id) == FrameRateCaps.GAME_OWNED;
+        if (prof != null && prof.fpsPlan120.isEmpty() && (!prof.fpsLocker.isEmpty() || !prof.fpsLockerPlan.isEmpty()) && !gameOwnedAtStart) env.add("DM_FPSLOCKER_INTERVAL=1");
+        if (prof != null && !prof.fpsLockerPlan.isEmpty()) env.add("DM_FPSLOCKER_PLAN=" + prof.fpsLockerPlan);
+        if (prof != null && prof.fpsPlan120.isEmpty() && !prof.fpsLocker.isEmpty() && !gameOwnedAtStart) env.add("DM_FPSLOCKER=" + prof.fpsLocker);
         int cap = Prefs.fpsCap(this, id);   // the game's own frame rate cap (its in-game panel, its Game settings), else the main screen's (unset: the profile's fps_target)
-        if (Prefs.paced(id)) {   // speed follows the measured rate: presents on the host's own tick at the display's refresh rate, no interval locking, and a frame limit (Prefs.PACE_CAPS)
+        if (gameOwnedAtStart) {
+            env.add("DM_FPSLOCKER="); env.add("DM_FPSLOCKER_OWNED=1"); env.add("DM_FPSLOCKER_INTERVAL=0"); env.add("DM_FPS_TARGET=0"); env.add("DM_FPS_LIMIT=0");
+            env.add("DM_PRESENT_INTERVAL=game"); env.add("DM_PRESENT_HZ=60"); env.add("DM_VSYNC_HZ=60"); env.add("DM_FPS_DECOUPLE=0");
+        } else if (prof != null && !prof.fpsPlan120.isEmpty()) {
+            env.addAll(prof.fpsModeEnv(fpsModeAtStart));
+        } else if (Prefs.paced(id)) {   // speed follows the measured rate: presents on the host's own tick at the display's refresh rate, no interval locking, and a frame limit (Prefs.PACE_CAPS)
             int pace = Prefs.paceCap(this, id);
             env.add("DM_PRESENT_INTERVAL=display"); env.add("DM_PRESENT_HZ=" + displayHz()); env.add("DM_FPS_TARGET=0"); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60));
             if (!Prefs.decouple(this, id)) env.add("DM_FPS_DECOUPLE=0");   // Full game speed at low frame rates off (the in-game panel changes it live)
         } else if (Prefs.limited(id)) {   // a profile's default frame limit (fps_limit), which the host applies itself: only the player's own choice is passed (60 fps = none: the game's own interval)
-            if (Prefs.chosenFpsCap(this, id)) { int pace = Prefs.paceCap(this, id); env.add("DM_FPS_LIMIT=" + Math.max(pace, 0)); }   // the player's or the recommended cap
+            int maximum = Prefs.paceMax(id);
+            if (maximum > 60) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes
+                int hz = capDisplayHz(maximum);
+                env.add("DM_PRESENT_HZ=" + hz); env.add("DM_VSYNC_HZ=" + hz); env.add("DM_FPS_TARGET=0");
+            }
+            if (Prefs.chosenFpsCap(this, id)) { int pace = Prefs.paceCap(this, id); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60)); }
         } else if (cap >= 0) env.add("DM_FPS_TARGET=" + cap);
         if (Prefs.steps(id) && Prefs.hold60(this, id)) env.add("DM_FPS_HOLD60=1");   // Hold 60 fps: one step a frame at the cap of 60 (the in-game panel changes it live)
         String gpuNote = GpuDriver.env(this, id, env);   // the game's GPU driver, else the main screen's (DM_VK_DRIVER)

@@ -256,3 +256,9 @@ General host changes first needed here; each applies to every game:
 - `game.tsv` still says "In bring-up", and its memory comment "until measured".
 - 05's `DM_PROBE_POLL` paragraph cites `PlacementMgr` in `main+0x5aaac0` as the one thread in guest code "for that flag" without naming the game; `PlacementMgr` is this game's.
 - Motion on iOS (a controller's gyro, and the phone's own while no controller supplies fresh samples) has not been tested on a device. Source arbitration, concurrent startup and upright orientation were corrected during review and are covered by unit tests; see [Live controller motion](../../../docs/reference/services.md#live-controller-motion). Motion shrines from issue #389 still need a device gameplay check.
+
+### Android FPSLocker method
+
+Breath of the Wild uses the reviewed Warehouse fractional frame ratio, DRS factor, scrolling correction and cutscene flag. The host computes the bounded ratio from monotonic frame elapsed time; cutscenes force 30. Checked legacy floor/GPU-path cuts are restored in memory and the older whole-vsync frame-step backend is disabled. High targets remain experimental pending broad physics coverage.
+
+The launcher defaults to 60 and offers Game owned as a separate choice. Switching to or from Game owned requires restarting. Code plans require the exact main build and expected instruction words, validate every replacement before writing, and leave pack files unchanged. Other platform patch preparation retains its existing method. See the Thor continuation report for bounded Turnip validation.

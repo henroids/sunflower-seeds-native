@@ -86,3 +86,9 @@ General host changes first needed here; each applies to every game:
 - The early stalls are "probably fixed", not confirmed.
 - 03's entry on `StandardAllocator::Initialize` still gives Engage's layout as "5.5 / 8 GB on the Mac"; the profile has 4.375 / 5 GB.
 - `game.tsv`'s header still says the game "reaches the title screen on the Mac" and that the memory partition is "set for Mac bring-up".
+
+### Android FPSLocker method
+
+Engage uses the reviewed Warehouse pointer/direct vsync fields and hub timing field. A checked pre-seal instruction restores the legacy force-60 cut in mapped memory. Its 60 Hz integer controller supports 20, 30 and 60; 40, 90 and 120 stay unavailable.
+
+The launcher defaults to 60 and offers Game owned as a separate choice. Switching to or from Game owned requires restarting. Code plans require the exact main build and expected instruction words, validate every replacement before writing, and leave pack files unchanged. Other platform patch preparation retains its existing method. See the Thor continuation report for bounded Turnip validation.

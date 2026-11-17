@@ -194,6 +194,9 @@ final class Up {
     }
 
     static int[] caps(boolean paced) throws ReflectiveOperationException { return ((int[]) get(k("Prefs"), null, paced ? "PACE_CAPS" : "FPS_CAPS")).clone(); }
+    static int[] caps(boolean paced, String titleId) throws ReflectiveOperationException {
+        return paced ? (int[]) call(k("Prefs"), null, "paceCaps", new Class<?>[] {String.class}, titleId) : caps(false);
+    }
 
     /** The game's own environment lines (its Game settings) */
     static String gameEnv(Context c, String titleId) throws ReflectiveOperationException {
@@ -213,7 +216,7 @@ final class Up {
                 if (prefsBool("dlssGame", titleId)) return "this game's Upscaler row is the DLSS stand-in's";
                 return prefsBool(c, "simpleRes", titleId) ? "this game's Resolution presets set the upscaler (Tester settings shows the row)" : null;
             case "fps_cap":
-                return prefsBool(c, "ownRate", titleId) ? "this game picks its own frame rate" : null;
+                return null;   // Game owned remains selectable; the allowed-cap list rejects unavailable rates
             default: return null;
         }
     }

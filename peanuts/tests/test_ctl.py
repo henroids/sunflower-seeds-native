@@ -37,7 +37,7 @@ public final class CtlTest {
             case "set": {   // set <key> <value> <per game 0|1> <paced 0|1>  ->  "ok <key> <per game> <value> <effective>" | "bad <code>"
                 boolean own = a[3].equals("1"), paced = a[4].equals("1");
                 try {
-                    Settings.Change c = Settings.parse(a[1], a[2], own, paced ? new int[] {0, 45, 40, 30, 20} : new int[] {0, 60, 30, 20, 15}, paced);
+                    Settings.Change c = Settings.parse(a[1], a[2], own, paced ? new int[] {-2, 0, 45, 40, 30, 20} : new int[] {0, 60, 30, 20, 15}, paced);
                     System.out.println("ok " + c.key + " " + c.perGame + " " + c.value + " " + c.effective);
                 } catch (Request.Bad e) { System.out.println("bad " + e.code); }
                 break;
@@ -231,7 +231,7 @@ class CtlTest(unittest.TestCase):
         # a game with the frame limit list: 60 is stored as 0, 45 and 40 exist, "the game's own" does not
         self.assertEqual(self.set('fps_cap', '60', own=True, paced=True), 'ok fps_cap true 0 next_start')
         self.assertEqual(self.set('fps_cap', '45', own=True, paced=True), 'ok fps_cap true 45 next_start')
-        self.assertEqual(self.set('fps_cap', 'own', own=True, paced=True), 'bad bad_value')
+        self.assertEqual(self.set('fps_cap', 'own', own=True, paced=True), 'ok fps_cap true -2 next_start')
         self.assertEqual(self.set('fps_cap', '0', own=True, paced=True), 'bad bad_value')
         self.assertEqual(self.set('fps_cap', '15', own=True, paced=True), 'bad bad_value')
 

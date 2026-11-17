@@ -142,7 +142,7 @@ with `reimport`, or with `job` `do=try_anyway` to build without those shaders.
 | `console_mode` | `docked`, `handheld`, `default` | yes; not for a game whose mode is fixed |
 | `res_scale` | `0.5`, `0.75`, `1`, `1.25`, `1.5`, `2`, `default` | yes; not for a game with its own Resolution rows |
 | `upscaler` | `nearest`, `bilinear`, `fsr1`, `native`, `sgsr1` (one game: also `default`) | yes; not for a game on the DLSS stand-in or with Resolution presets |
-| `fps_cap` | `default`, `own`, `60`, `30`, `20`, `15`; a game with the frame limit list: `60`, `45`, `40`, `30`, `20`, `default` | yes; not for a game that picks its own rate |
+| `fps_cap` | `default`, `own`, supported numeric target. Limited profiles offer supported targets from 20/30/40/45/60/90/120. A profile with fps_limit_min 30 rejects 20; unsupported rates are rejected. Game owned uses the game's own pacing and requires restart when entering/leaving it. `default` uses 60 for adjustable profiles. | yes; native-only games accept `own`/`default` |
 | `overlay` | `on`, `off` | no |
 | `keep_screen_on` | `on`, `off` (Settings › System › Keep the screen on while preparing) | no |
 

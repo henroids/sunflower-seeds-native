@@ -138,6 +138,16 @@ def header(g):
     if ft not in ('0', '30', '60'): sys.exit(f'{g.id}: fps_target must be 0, 30 or 60: {ft}')
     fl = g.get('fps_limit', '0')   # Android: the host's frame limiter's default (hle_fpslock.c fps_limit_wait, a wait before each present): 0 = none, else at most that many frames a second; DM_FPS_LIMIT and the launcher's choice override it
     if not fl.isdigit() or int(fl) and not 10 <= int(fl) <= 60: sys.exit(f'{g.id}: fps_limit must be 0 (none) or 10 to 60 frames a second: {fl}')
+    modes = g.get('fps_modes', '')
+    if modes:
+        rates = modes.split(',')
+        if len(g.values('fps_modes')) != 1 or '60' not in rates or any(v not in ('20','30','40','45','60','90','120') for v in rates) or len(set(rates)) != len(rates) or rates != sorted(rates, key=int):
+            sys.exit(f'{g.id}: fps_modes must be unique ascending supported rates including 60')
+    for row in g.values('fps_plan_120'):
+        if len(row) != 4 or not re.fullmatch(r'[0-9a-f]{32}', row[0]):
+            sys.exit(f'{g.id}: invalid reviewed fps_plan_120')
+    if g.values('fps_plan_120') and '120' not in modes.split(','):
+        sys.exit(f'{g.id}: fps_plan_120 requires fps_modes including 120')
     fh = g.get('fps_hold', 'on')   # whether the frame step may hold a frame longer than the cap's vsyncs when frames come late (hle_nvn.c fstep_tick): on / off
     if fh not in ('on', 'off'): sys.exit(f'{g.id}: fps_hold must be on or off: {fh}')
     try: g.cheats()   # the cheat files' names (their build gate): the host does not compile them in, but a wrong name would never load
@@ -365,6 +375,20 @@ def header(g):
                         sys.exit(f'{g.id}: option needs takes a fixup marker: {tok}')
                 else:
                     sys.exit(f'{g.id}: option unknown attribute (expected restart|live, implies=<ENV>, needs=<marker>): {tok}')
+    option_names = {r[0]: r for r in g.values('option')}
+    option_sites = set()
+    mains = {b.get('main') for b in g.builds().values()}
+    for r in g.values('option_patch'):
+        if len(r) != 5 or r[0] not in option_names or r[1] not in mains or not re.fullmatch(r'0x[0-9a-f]+', r[2]) or int(r[2], 16) % 4 or not all(re.fullmatch(r'[0-9a-f]{8}', x) for x in r[3:]):
+            sys.exit(f'{g.id}: option_patch takes <option ENV> <registered main build> <aligned 0xoffset> <expected LE word> <replacement LE word>: {r}')
+        if 'live' in ' '.join(option_names[r[0]][3:]).split():
+            sys.exit(f'{g.id}: option_patch requires a restart option: {r[0]}')
+        site = (r[1], int(r[2], 16))
+        if site in option_sites:
+            sys.exit(f'{g.id}: option_patch repeats a main code word: {r}')
+        option_sites.add(site)
+    if len(option_sites) > 128:
+        sys.exit(f'{g.id}: option_patch: at most 128 code words')
     # Shaders whose subgroup operations run as subgroups of one invocation on Qualcomm's own driver even where the device has them (vka_shader.c single_lane, one_lane_forced;
     # a workaround, Android): one key per row
     sol = []

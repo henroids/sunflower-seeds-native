@@ -125,8 +125,51 @@ def drsOf = { String game -> tsvRows(game, 'drs_ctl').isEmpty() ? '' : '1' }
 // The profile's default frame limit (game.tsv fps_limit: frames a second, the host's limiter, hle_fpslock.c), or empty without one (0 = none). The launcher then offers a frame limit
 // as for a paced game, the profile's limit its default (Prefs.limited)
 def fpsLimitOf = { String game -> tsvRows(game, 'fps_limit').with { rs -> rs.isEmpty() || rs[0].size() < 2 || rs[0][1].trim() == '0' ? '' : rs[0][1].trim() } }
+def fpsLimitMaxOf = { String game ->
+    def rs = tsvRows(game, 'fps_limit_max')
+    if (rs.isEmpty()) return ''
+    def value = rs[0].size() > 1 ? rs[0][1].trim() : ''
+    if (!(value in ['60', '90', '120'])) throw new GradleException("$game: fps_limit_max must be 60, 90 or 120")
+    value
+}
 // Whether the game's DLSS runs on the host's stand-in upscaler (game.tsv dlss_standin rows): "1", or empty. The launcher's Upscaler row then offers the stand-in's modes, with
 // Motion clarity and Temporal sharpness (Prefs.dlssGame, GameUpscaler, DlssTune: DM_VK_DLSS, DM_VK_GSR2_CLARITY, DM_VK_DLSS_SHARP)
+// Reviewed FPSLocker memory-write rows; executable-code configs are not accepted here.
+def fpsLockerOf = { String game ->
+    (tsvRows(game, 'fpslocker') + tsvRows(game, 'fps_memory')).collect { c ->
+        if (c.size() != 6 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['zero_i32','target_f32','frame_ms_f32','frame_ms2_f32','vsync_u32','inverse_f32','frame_scaled_f32','target_scaled_f32','time_ratio_f32','flag_cap_u8','target_i32','zero_u16','time_step_pair_f32']) || !(c[3] ==~ /[@%]?0x[0-9a-f]+(\/0x[0-9a-f]+){0,3}/) || !(c[4] in ['1','2']))
+            throw new GradleException("$game: invalid reviewed fpslocker row")
+        c[1..5].join(',')
+    }.join(';')
+}
+def fpsLimitMinOf = { String game ->
+    def rs = tsvRows(game, 'fps_limit_min')
+    if (rs.isEmpty()) return ''
+    def value = rs[0].size() > 1 ? rs[0][1].trim() : ''
+    if (!(value in ['20', '30'])) throw new GradleException("$game: fps_limit_min must be 20 or 30")
+    value
+}
+def fpsModesOf = { String game ->
+    def rows = tsvRows(game, 'fps_modes')
+    if (rows.isEmpty()) return ''
+    def value = rows[0].size() == 2 ? rows[0][1].trim() : ''
+    def modes = value.split(',') as List
+    if (rows.size() != 1 || !modes.contains('60') || modes.unique(false).size() != modes.size() || !modes.every { it in ['20','30','40','45','60','90','120'] } || modes != modes.sort(false) { it as int })
+        throw new GradleException("$game: fps_modes must be unique ascending supported rates including 60")
+    value
+}
+def fpsPlan120Of = { String game ->
+    tsvRows(game, 'fps_plan_120').collect { c ->
+        if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/)) throw new GradleException("$game: invalid reviewed fps_plan_120")
+        c[1..4].join(',')
+    }.join(';')
+}
+def fpsLockerPlanOf = { String game ->
+    (tsvRows(game,'fpslocker_plan') + tsvRows(game,'fps_plan')).collect { c ->
+        if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/)) throw new GradleException("$game: invalid reviewed fpslocker_plan")
+        c[1..4].join(',')
+    }.join(';')
+}
 def dlssOf = { String game -> tsvRows(game, 'dlss_standin').isEmpty() ? '' : '1' }
 // Whether the profile's frame limit only paces the presents (game.tsv fps_limit_present 1): the launcher says so beside the cap (Prefs.presentOnly)
 def presentOnlyOf = { String game -> tsvRows(game, 'fps_limit_present').isEmpty() ? '' : '1' }
@@ -144,6 +187,10 @@ def optionsOf = { String game ->
         def mode = 'restart'
         def implies = ''
         def needs = ''
+        def patches = tsvRows(game, 'option_patch').findAll { it.size() > 1 && it[1] == env }.collect { patch ->
+            if (patch.size() != 6 || !(patch[2] ==~ /[0-9a-f]{32}/) || !(patch[3] ==~ /0x[0-9a-f]+/) || !(patch[4] ==~ /[0-9a-f]{8}/) || !(patch[5] ==~ /[0-9a-f]{8}/)) throw new GradleException("$game: invalid option_patch")
+            [patch[2], 'm' + patch[3], patch[4], patch[5]].join(',')
+        }.join('~')
         if (c.size() > 4) {
             c.drop(4).collectMany { it.trim().split(/\s+/) as List }.each { tok ->
                 if (tok == 'restart' || tok == 'live') mode = tok
@@ -151,7 +198,7 @@ def optionsOf = { String game ->
                 else if (tok.startsWith('needs=')) needs = tok.substring('needs='.length()).trim()
             }
         }
-        [env, label, desc, mode, implies, needs].collect { it.replaceAll(/[\t\n\\"]/, ' ').replaceAll(/[;|]/, ',').trim() }.join('|')
+        [env, label, desc, mode, implies, needs, patches].collect { it.replaceAll(/[\t\n\\"]/, ' ').replaceAll(/[;|]/, ',').trim() }.join('|')
     }.join(';')
 }
 // The 3D scene choices for Advanced (or 3D scene): the overlays (game.tsv scene_scale rows, only with a scene_scale_palette row: dm/tools/scene_res.py), "<name>|<label>|<scale>|<mode>",
@@ -233,7 +280,7 @@ def handheldGames = nxGames.findAll { g -> tsvRows(g, 'op_mode').any { it.size()
 // Whether the game has cheat files (game.tsv cheats rows: pack_android.py place_cheats copies them into the pack): "1", or empty. The launcher then offers Game settings › Cheats (Cheats.java)
 def cheatsOf = { String game -> tsvRows(game, 'cheats').isEmpty() ? '' : '1' }
 def timeOfDayOf = { String game -> tsvRows(game, 'time_of_day').any { it.size() > 1 && it[1].trim() == '1' } ? '1' : '' }   // the Game tab's Time of day row only for profiles whose day/night cycle follows the user clock
-def nxProfiles = nxGames.collect { g -> [g, nameOf(g).replaceAll(/[\t\n\\"]/, ' '), shaderTotalOf(g), shaderInputsOf(g), buildsOf(g), reqsOf(g), statusOf(g), deltaOf(g), stampOf(g), resolutionOf(g), romfsChecksOf(g), gpuTsOf(g), windowOf(g), decoupleOf(g), drsOf(g), fpsLimitOf(g), dlssOf(g), presentOnlyOf(g), stepsOf(g), tsvRows(g, 'mesh_vegetation_cut').isEmpty() ? '' : '1', optionsOf(g), sceneOf(g), presetsOf(g), skipLayersOf(g), recommendOf(g), variantsOf(g), presetFromOf(g), linkPlayOf(g), aspectsOf(g), timeOfDayOf(g), cheatsOf(g)].join('\\t') }.join('\\n')
+def nxProfiles = nxGames.collect { g -> [g, nameOf(g).replaceAll(/[\t\n\\"]/, ' '), shaderTotalOf(g), shaderInputsOf(g), buildsOf(g), reqsOf(g), statusOf(g), deltaOf(g), stampOf(g), resolutionOf(g), romfsChecksOf(g), gpuTsOf(g), windowOf(g), decoupleOf(g), drsOf(g), fpsLimitOf(g), dlssOf(g), presentOnlyOf(g), stepsOf(g), tsvRows(g, 'mesh_vegetation_cut').isEmpty() ? '' : '1', optionsOf(g), sceneOf(g), presetsOf(g), skipLayersOf(g), recommendOf(g), variantsOf(g), presetFromOf(g), linkPlayOf(g), aspectsOf(g), timeOfDayOf(g), cheatsOf(g), fpsLimitMaxOf(g), fpsLockerOf(g), fpsLockerPlanOf(g), fpsLimitMinOf(g), fpsModesOf(g), fpsPlan120Of(g)].join('\\t') }.join('\\n')
 def lockOf = { String key -> def f = new File(repo, 'dm/gfx/tools/dmsh_chain.lock'); f.isFile() ? (f.readLines().find { it.startsWith(key + '\t') }?.split('\t')?.getAt(1) ?: 'unknown') : 'unknown' }
 
 android {

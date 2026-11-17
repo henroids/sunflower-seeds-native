@@ -13,6 +13,14 @@ Update 1.1.0 (v131072) over the base game, SDK 8.2.0. Grezzo's engine on Nintend
 
 `dm/tools/sdk_patches.py`'s SDK-wide rules cut its `sdk` build (`3ae34e68…`): the node area and 2 MB alignment of large regions. No `pad_layout`: the virtual gamepad starts in the 2D layout.
 
+## Android frame rate choices (experimental)
+
+The default remains 60 fps with the existing Grezzo controller lock. The checked choices are Game owned, 30, 60 and experimental 120 fps. Original timing is used for 30/60; Game owned leaves the native controller and timing alone. Entering or leaving 120 requires restarting the game.
+
+The 120 mode applies the exact 96 unique main-module words from [Fl4sh9174’s 120 FPS WIP](https://github.com/Fl4sh9174/Switch-Emulator-Ultrawide-FPS-Mods), reviewed at commit `5eed21701e8091389e2e746f073f694ea2ad4ec6`. The archive labels the patch 1.0.1, but its main build ID matches this profile’s 1.1.0. Each original word is checked before applying the plan. The host overrides presentation interval instead of modifying the shared SDK, and a typed 16-bit memory row keeps the controller’s least/most extra-vsync bytes at zero. These changes affect only a selected 120 launch; they do not modify game files.
+
+This is a static timing patch, not a general dynamic FPS conversion. Most timestep values halve, but two clamp values change from 1/15 to 1/60; packed float constants also preserve distinct mantissas. Consequently 20/40/90 are unavailable. The separate Stabilize FPS patch is not included because it removes three calls whose purpose has not been established. Static verification confirms the 96 main patch sites. A bounded Turnip run reached about 119 fps on the title and 70–90 in the saved mountain scene at the 120 target; that does not establish full-speed gameplay with the static patch. sustained 120 performance and complete movement, physics, cutscene and audio timing remain unverified on Android. Test with cloned saves and compare game speed against 60 fps, not only the overlay counter.
+
 ## Rendering
 
 Game-specific findings; the general host changes they led to are listed under [Found on this game](#found-on-this-game).
