@@ -778,3 +778,11 @@ the Mac's split of the same game found them.
 Run: `build.sh <work dir> python`, then on the AYN Thor with `dm_pack_cli`, `shader_split.unsized()` on linked and independent-block LZ4 frames: both
 open; with `lz4/frame` moved away, the same `[RED]` line as the failed Prepare. Not run: a whole Prepare of the game on the phone (it needs the full
 stage, `build.sh … tools`, and an APK built with it). No shader-chain file is changed. Upstream candidate: yes (upstream's `build.sh` has the same gap).
+
+### Round 14, -PnxAppId (2026-11-16)
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/build.gradle` | 2 | `-PnxAppId=<suffix>` (default `nxApp`) names the application ID `dev.nxnative.android.<suffix>`, so a development build installs beside the app | `// PEANUTS` on each line |
+
+Upstream candidate: no (it serves `-PnxApp=peanuts`).
