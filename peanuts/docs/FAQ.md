@@ -562,7 +562,7 @@ The game the controller is on, and what you can do with it:
 - a game to build: what the app found for it, with **Build…** (it opens the game's sheet);
 - a game that is building: the build's step and progress, with **Stop build** and **Screens off**;
 - after **Play**, for a game with a companion: its cover until the companion is up. This also shows when the game starts from a home screen shortcut or a frontend;
-- anything else (the first start, Settings, a game's page): the Peanuts Native logo.
+- anything else (the first start, Settings and its pages, the Readiness check, a game's page): the Peanuts Native logo.
 
 With a controller connected, each button shows the controller button that does the same: **A** is the main action, **Y** the second one, **X** opens Settings. Without one, they show the app's own icons (the gear for Settings). You can always tap them. The controller always stays on the main screen. While a question or a game's sheet is open on the main screen, the second screen dims and waits until it closes. The drifting peanuts behind both screens are one background: they carry on from one screen to the other.
 

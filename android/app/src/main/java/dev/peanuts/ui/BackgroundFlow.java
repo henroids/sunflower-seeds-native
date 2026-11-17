@@ -8,11 +8,11 @@ import android.view.animation.AnimationUtils;
 
 /**
  * One background across both screens while a Peanuts page is on the second one (BottomScreen, GameScreen).
- * Both displays sit in one field (the second centred below, a hinge between). The phase is the clock's, the same in
+ * Both displays sit in one field, the second centred right below the first. The phase is the clock's, the same in
  * every process, so the launcher's page and the game's line up. The drift itself is BananaBackgroundView's, unchanged.
  */
 public final class BackgroundFlow {
-    private static final float GAP_DP = 48;   // the hinge
+    private static final float GAP_DP = 0;   // none: a peanut leaving the top screen comes in below where it left
 
     private static Display top, bottom;
     private static double phase;              // seconds

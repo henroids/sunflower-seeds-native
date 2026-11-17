@@ -16,6 +16,7 @@ import android.util.Log;
 import android.view.Display;
 import android.view.View;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -80,6 +81,8 @@ public final class BottomScreen {
     private static Runnable pendingCard;
     private static Activity keysOn;
     private static boolean ownerFocused = true;
+    private static boolean setup;                               // first run: no way around it to Settings
+    private static final Set<String> pages = new HashSet<>();  // the app's other pages in front (AppScreens)
 
     private BottomScreen() {}
 
@@ -92,6 +95,7 @@ public final class BottomScreen {
         openSettings = settings;
         keys(a);
         applyHeader();
+        UI.post(BottomScreen::show);   // back from Settings or a game's page: the Settings hint again
     }
 
     /** X opens Settings; losing window focus to a dialog dims the panel */
@@ -100,7 +104,7 @@ public final class BottomScreen {
         keysOn = a;
         View decor = a.getWindow().getDecorView();
         decor.addOnUnhandledKeyEventListener((v, ev) -> {
-            if (ev.getKeyCode() != android.view.KeyEvent.KEYCODE_BUTTON_X || header == null || !showing() || launch != null) return false;
+            if (ev.getKeyCode() != android.view.KeyEvent.KEYCODE_BUTTON_X || header == null || !showing() || launch != null || setup) return false;
             if (ev.getAction() == android.view.KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0) { Haptics.play(v, Haptics.Word.TICK); settings(); }
             return true;
         });
@@ -113,7 +117,7 @@ public final class BottomScreen {
                 else if (l.lostFocus && started) launchCancelled();   // a dialog came and went: no game
                 return;
             }
-            if (panel != null) panel.dim(!f);
+            if (panel != null) panel.dim(!f && resumed);   // a dialog; another page of the app pauses this one first
         });
     }
 
@@ -128,7 +132,7 @@ public final class BottomScreen {
     static boolean showing() { return panel != null && panel.isShowing(); }
 
     static boolean settings() {
-        if (!showing() || openSettings == null || launch != null) return false;
+        if (!showing() || openSettings == null || launch != null || setup) return false;
         openSettings.run();
         return true;
     }
@@ -140,7 +144,7 @@ public final class BottomScreen {
         long now = SystemClock.uptimeMillis();
         boolean rested = now - lastCardAt > 250;
         lastCardAt = now;
-        pendingCard = () -> { pendingCard = null; card = c; building = c.kind == Card.K_BUILDING ? b : null; show(); };
+        pendingCard = () -> { pendingCard = null; setup = false; card = c; building = c.kind == Card.K_BUILDING ? b : null; show(); };
         if (rested) pendingCard.run(); else UI.postDelayed(pendingCard, 90);
     }
 
@@ -156,8 +160,9 @@ public final class BottomScreen {
         }
     }
 
-    /** Nothing focused: the logo */
-    static void idle() {
+    /** Nothing focused: the logo; first run without the Settings hint */
+    static void idle(boolean firstRun) {
+        setup = firstRun;
         if (pendingCard != null) { UI.removeCallbacks(pendingCard); pendingCard = null; }
         card = null; building = null;
         show();
@@ -166,7 +171,7 @@ public final class BottomScreen {
     /** The grid changed (a filter, Find): a game no longer in it leaves the bottom screen too */
     static void only(Set<String> ids) {
         Card c = card;
-        if (c != null && !ids.contains(c.titleId)) idle();
+        if (c != null && !ids.contains(c.titleId)) idle(setup);
     }
 
     /** A cover's art landed */
@@ -227,8 +232,25 @@ public final class BottomScreen {
     private static void leave() {
         if (!showing()) return;
         BottomPanel p = panel;
-        p.fadeOut(() -> { if (panel != p) return; if (!started) hide(); else p.appear(); });   // back already: fade in again
+        p.fadeOut(() -> { if (panel != p) return; if (!inApp()) hide(); else p.appear(); });   // back already: fade in again
     }
+
+    /** Home or another page of the app in front */
+    static boolean inApp() { return started || !pages.isEmpty(); }
+
+    /** Left the app, unless one of its pages in another process says it is in front within a moment */
+    private static final Runnable leaveLater = () -> { if (!inApp() && launch == null) leave(); };
+    private static void leaveSoon() { UI.removeCallbacks(leaveLater); UI.postDelayed(leaveLater, 300); }
+
+    /** From the app's pages in other processes (AppScreens) */
+    private static final BroadcastReceiver pageState = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            String k = i.getStringExtra("page");
+            if (k == null) return;
+            if (i.getBooleanExtra("front", false)) { pages.add(k); show(); }
+            else { pages.remove(k); if (!inApp()) leaveSoon(); }
+        }
+    };
 
     /** From the game's process (Companion.tell) */
     private static final BroadcastReceiver companionState = new BroadcastReceiver() {
@@ -244,7 +266,8 @@ public final class BottomScreen {
 
     private static void show() {
         Activity a = owner;
-        if (a == null || !started || a.isFinishing() || a.isDestroyed() || !PeanutsPrefs.bottomScreen(a)) { if (launch == null) hide(); return; }
+        if (a == null || !inApp() || a.isFinishing() || a.isDestroyed() || !PeanutsPrefs.bottomScreen(a)) { if (launch == null) hide(); return; }
+        UI.removeCallbacks(leaveLater);
         Display d = panel != null && panel.getDisplay() != null && panel.getDisplay().isValid() ? panel.getDisplay() : secondDisplay(a);
         if (d == null) { hide(); return; }
         if (panel != null && (panel.getDisplay() == null || panel.getDisplay().getDisplayId() != d.getDisplayId())) { dismiss(); }
@@ -270,9 +293,9 @@ public final class BottomScreen {
         BackgroundFlow.field(a.getDisplay(), d);
         Launch l = launch;
         if (l != null && l.companion) panel.showLaunch(l.titleId, l.name, l.icon, "Starting the game");
-        else if (building != null && card != null && card.kind == Card.K_BUILDING) panel.showBuild(building);
-        else if (card != null && header != null) panel.showCard(card);
-        else panel.showLogo(header != null);
+        else if (started && building != null && card != null && card.kind == Card.K_BUILDING) panel.showBuild(building);
+        else if (started && card != null && header != null) panel.showCard(card);
+        else panel.showLogo(started && header != null && !setup);
         if (!was) panel.appear();
         applyHeader();
     }
@@ -325,22 +348,26 @@ public final class BottomScreen {
         if (watching) return;
         watching = true;
         a.getApplicationContext().registerReceiver(companionState, new IntentFilter(Companion.STATE), Context.RECEIVER_NOT_EXPORTED);
+        a.getApplicationContext().registerReceiver(pageState, new IntentFilter(AppScreens.STATE), Context.RECEIVER_NOT_EXPORTED);
         Context app = a.getApplicationContext();
         Pads.watch(app, () -> { if (panel != null) panel.setPad(Pads.connected(app)); });
         a.getApplication().registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             @Override public void onActivityStarted(Activity x) {
+                if (AppScreens.isPage(x)) { pages.add(AppScreens.key(x)); UI.post(BottomScreen::show); return; }
                 if (!isMain(x)) return;
                 owner = x; started = true;
+                pages.clear();   // whatever was in front has gone; no stale page keeps the display
                 launch = null; UI.removeCallbacks(launchEnd); UI.removeCallbacks(launchStuck); UI.removeCallbacks(launchDialog);   // back from the game
                 listen(x);
                 UI.post(BottomScreen::show);
             }
             @Override public void onActivityResumed(Activity x) { if (isMain(x) && x == owner) { resumed = true; if (!showing()) UI.post(BottomScreen::show); } }
             @Override public void onActivityStopped(Activity x) {
+                if (AppScreens.isPage(x)) { pages.remove(AppScreens.key(x)); if (!inApp()) leaveSoon(); return; }
                 if (x != owner) return;
                 started = false;
                 Launch l = launch;
-                if (l == null || !showing()) { launch = null; leave(); return; }
+                if (l == null || !showing()) { launch = null; if (inApp()) show(); else leaveSoon(); return; }
                 UI.removeCallbacks(launchStuck);
                 UI.removeCallbacks(launchDialog);
                 if (l.said != null) handOff(); else UI.postDelayed(launchEnd, HANDOFF_MAX_MS);

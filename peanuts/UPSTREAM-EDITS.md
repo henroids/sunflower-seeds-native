@@ -1167,6 +1167,7 @@ While the launcher is in front, the second display shows the cover the D-pad is 
 |---|---|---|---|
 | `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `buildHome()`: `BottomScreen.home(this, <the header just added>, () -> page(true))` | trailing `// PEANUTS: ...` |
 | `android/app/src/main/java/dev/nxnative/android/BananaBackgroundView.java` | 2 | `onDraw()` and `popAt()`, after `wx, wy`: `BackgroundFlow.drift(this, BananaGrid.GRID_DEG, BananaGrid.SPEED_X_DP, BananaGrid.SPEED_Y_DP)` replaces them when not null | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/NxApp.java` | 1 | `onCreate()`: `AppScreens.install(this)`, so the Readiness check and the Graphics self-test (their own processes) keep the second display's page | trailing `// PEANUTS: ...` |
 
 The second hook makes the two screens' backgrounds one field: `BackgroundFlow` returns the grid's drift (BananaGrid's `wx, wy`) that puts this view's
 grid where the field's is (the two displays placed as on the device, one phase for both), or null without the bottom screen, and the view draws as before.
@@ -1174,4 +1175,4 @@ The same drift goes into `popAt`, so a tap pops the banana where it is drawn. Si
 the drift is passed unwrapped, as upstream does.
 
 Everything else (the lifecycle through `ActivityLifecycleCallbacks`, the focus, the builds, X on Home through an unhandled-key listener on the
-window) lives in `dev.peanuts.ui`. No upstream-candidate general fix: all three lines call Peanuts-owned code.
+window) lives in `dev.peanuts.ui`. No upstream-candidate general fix: all four lines call Peanuts-owned code.

@@ -725,7 +725,7 @@ public final class Library {
         boolean setup = PeanutsPrefs.gameDir(a) == null || !PeanutsPrefs.setupDone(a);
         List<Row> rows = rows();
         boolean bare = setup && rows.isEmpty() && pc == null;   // the first-run card alone
-        if (setup || rows.isEmpty()) BottomScreen.idle();   // bottom screen: logo
+        if (setup || rows.isEmpty()) BottomScreen.idle(setup);   // bottom screen: logo
 
         Build b = build;
         if (b != null && b.failed && b.step.equals("prepare")) pc = null;   // a build that stopped in Prepare: one card, this build's (its Retry builds again), not upstream's failed card beside it

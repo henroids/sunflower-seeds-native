@@ -55,6 +55,9 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `android/app/src/main/java/dev/nxnative/android/BananaBackgroundView.java` — (2026-11-17, the same) one line each in `onDraw` and `popAt`
      after the drift `wx, wy`: `dev.peanuts.ui.BackgroundFlow.drift(...)` replaces it while the second display shows the launcher, so both screens
      draw one field and a tap pops the banana where it is drawn. The drawing stays upstream's. `peanuts/UPSTREAM-EDITS.md` Round 20.
+   - `android/app/src/main/java/dev/nxnative/android/NxApp.java` — (2026-11-17, the same) one line in `onCreate`: `dev.peanuts.ui.AppScreens.install(this)`
+     lets the app's pages in other processes (Readiness check, Graphics self-test) tell the launcher they are in front, so the second display keeps
+     its page. `peanuts/UPSTREAM-EDITS.md` Round 20.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).
@@ -114,7 +117,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   stop it). Settings › Library › **Bottom screen** turns it off (`PeanutsPrefs.bottomScreen`), and Home is then as before. Its buttons show the face buttons while a controller is connected (`Pads`, the
   game's own rule), the app's icons without one. The cover mark
   "Building · N %" and the build card's step words show a thin, faint bar between the parts instead of the dot (`PUi.joined`). Home's drifting peanuts and the second screen's are one field while it shows (`BackgroundFlow`): the
-  displays sit in it as on the device, the second centred under the first with a 48 dp hinge, one phase for both; the drift is upstream's. Play
+  displays sit in it as on the device, the second centred right below the first, one phase for both; the drift is upstream's. Play
   of a game with a companion turns the card into a start page, and the game's process shows the same page (`GameScreen`) until the companion is
   up, also from a shortcut or a frontend; without one the second display is Android's, or the game's cover with Settings › Library ›
   **Games without a companion** (`PeanutsPrefs.bottomScreenInGames`). Seen on the emulator (Android 13, a 1240x1080 and a 1920x1080 second display, hot-plugged both ways):
