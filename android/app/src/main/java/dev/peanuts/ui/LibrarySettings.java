@@ -35,7 +35,7 @@ public final class LibrarySettings {
     public static final int REQ_MOD_FOLDER = 69, REQ_MOD_ZIP = 70;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Reading the firmware…" and what came of it, while the rows show
-    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow;
+    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow, bottomRow;
     private static Activity rowsOf;
 
     private LibrarySettings() {}
@@ -43,6 +43,7 @@ public final class LibrarySettings {
     /** The section and its card, added to the Settings column before upstream's own sections */
     public static void add(Activity a, LinearLayout content) {
         rowsOf = a;
+        BottomScreen.page(a);   // bottom screen: logo
         PUi.add(content, PUi.section(a, "Library"), 16);
         LinearLayout card = PUi.add(content, PUi.listCard(a), 8);
         // a row that opens a picker or another screen ticks; Rescan, which acts at once, clicks (Haptics)
@@ -82,6 +83,14 @@ public final class LibrarySettings {
             refreshRows();
         });
         card.addView(motionRow.view);
+        // Bottom screen (BottomScreen)
+        bottomRow = new PUi.Setting(a, "📱", "Bottom screen", v -> {
+            PeanutsPrefs.bottomScreen(a, !PeanutsPrefs.bottomScreen(a));
+            BottomScreen.settingChanged();
+            Haptics.play(v, Haptics.Word.CLICK);
+            refreshRows();
+        });
+        card.addView(bottomRow.view);
         companionsRow = new PUi.Setting(a, "🖥️", "Companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
                 .chevron(a);
         card.addView(companionsRow.view);
@@ -120,6 +129,8 @@ public final class LibrarySettings {
                 : "System: follows Android's touch feedback setting. Tap to turn the app's own haptics off.");
         if (motionRow != null) motionRow.value(PeanutsPrefs.motionReduced(a) ? "Reduced: fades and progress only. Tap to follow the system's animation setting again."
                 : "System: follows Android's animation setting. Tap for reduced motion (fades and progress only).");
+        if (bottomRow != null) bottomRow.value(PeanutsPrefs.bottomScreen(a) ? "On: a second screen shows the game you are on, with Play and its page. Tap to leave that screen to Android."
+                : "Off: a second screen shows Android's own launcher while you are here. Tap to turn it on.");
     }
 
     static String keysValue(Activity a) {

@@ -49,6 +49,12 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `SidePanel.java` `look()` — (2026-11-17) one line after the `look(box, ...)` call: `dev.peanuts.ui.PanelPolish.apply(box);   // PEANUTS: ...` (segmented short radio groups, one look for headings, notes and buttons; styling only).
    - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` — (2026-11-17) one line after `GpuDriver.env(...)`: `dev.peanuts.overlay.Hud.driver(...)` with the selected driver's label, else `Readiness.driverWord` of the system facts (null reads "System"), for the table's DRV row.
    - `android/app/src/main/cpp/nxlaunch.c` — (2026-11-17, overlay graph in realtime) in `Java_dev_nxnative_android_Native_overlaySet`, one line before `nxhost_overlay_set`: `if (peanuts_ovl_block) peanuts_ovl_block(...)` (JNI entry points forwarded to `dm/peanuts`), with `#pragma weak peanuts_ovl_block` and its prototype beside the other weak host symbols. `android/host/CMakeLists.txt`: one line compiling `dm/peanuts/peanuts_graph.c`; `android/host/libnxhost.map`: one line exporting `peanuts_ovl_block` (the host exports only `nxhost_*` and `Java_*`). `dm/peanuts/peanuts.c`: `pn_graph_frame();` in `peanuts_tick`.
+   - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` — (2026-11-17, the launcher on a second display) one line in `buildHome`
+     after the header: `dev.peanuts.ui.BottomScreen.home(...)` gets Home's header (it steps aside while the second display shows the launcher's
+     page) and how Settings opens (X). `peanuts/UPSTREAM-EDITS.md` Round 20.
+   - `android/app/src/main/java/dev/nxnative/android/BananaBackgroundView.java` — (2026-11-17, the same) one line each in `onDraw` and `popAt`
+     after the drift `wx, wy`: `dev.peanuts.ui.BackgroundFlow.drift(...)` replaces it while the second display shows the launcher, so both screens
+     draw one field and a tap pops the banana where it is drawn. The drawing stays upstream's. `peanuts/UPSTREAM-EDITS.md` Round 20.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).
@@ -98,6 +104,17 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   Resolution scale (`ResScale`, `DM_RES_SCALE`, a first version) in Settings › Performance and picture (Game defaults before the update to Banana Native v0.3.26) and each game's Picture settings; Console mode also live in
   the in-game panel. The app says Firmware, not Firmware fonts. Pokémon Sword and Shield at 60 fps by their profiles; no controller style before the game
   sets its supported styles (`DM_HID_STYLE_EARLY=1` is the behaviour before). The PC builder runs end to end on Linux (`peanuts/docs/BUILDER.md`).
+- 2026-11-17 (the launcher on the second display, `dev.peanuts.ui.BottomScreen` / `BottomPanel`): while Home, Settings or a game's page is in front, the
+  second display (the Thor's Screen-2, or any presentation display) shows a page of the launcher instead of Android's own: the cover the D-pad is on
+  (Ready: Play and Game page; to build: what the scan found and Build…; building: the step, the bar, Stop build and Screens off), else the logo.
+  A `Presentation` with `Theme.Banana`, not focusable (the controller stays on Home), shown while MainActivity is started and hidden (not
+  dismissed) when it stops, so a game's companion takes the display as before; a `DisplayListener` follows the display coming and going. Built
+  from the launcher's own pieces (`PUi`, `BananaBackgroundView`, the covers' marks); a column on a small or squarish panel, the cover beside the
+  words on a landscape screen 600 dp or wider. Home leaves out its header while it shows (X opens Settings; Y on a running build's cover asks to
+  stop it). Settings › Library › **Bottom screen** turns it off (`PeanutsPrefs.bottomScreen`), and Home is then as before. The cover mark
+  "Building · N %" and the build card's step words show a thin, faint bar between the parts instead of the dot (`PUi.joined`). Home's drifting peanuts and the second screen's are one field while it shows (`BackgroundFlow`): the
+  displays sit in it as on the device, the second centred under the first with a 48 dp hinge, one phase for both; the drift is upstream's. Seen on the emulator (Android 13, a 1240x1080 and a 1920x1080 second display, hot-plugged both ways):
+  the logo page, Settings by X and back, the cards of a game to build and of one not in this app version, the setting off. Not yet run on the Thor.
 - Next: haptics → vibrator; guest calls; a play app id of its own; upstream the `vka_tex.c`, `vka_draw.c` and `hle_audren.c` changes; verify launcher
   support on the Thor and in an actual ES-DE/Daijisho install.
 - Parked: P3 — Pokopia's first real values (memory-diff hunt on the Thor), then the page as DSMod-style widgets; P4 — taps → `nxhost_input_*`.

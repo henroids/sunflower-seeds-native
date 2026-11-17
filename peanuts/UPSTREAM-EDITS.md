@@ -1158,3 +1158,20 @@ version moves. Device state: see the game's note.
 |---|---|---|---|
 | `dm/gfx/tools/shader_split.py` | 3 | `iga_entries`, `iga_member`, `iga_shaders` and their branch in `scan_file_in`: Alchemy's igArchive version 13 (`IGA\x1a`), whose files are LZMA in 0x8000-byte blocks placed by the archive's small / medium / large block tables; every file is decoded and its whole GLSLC outputs taken. The game's split went from 12 shaders (those in `main`) to 1,945. Checked on all 74,311 files of its 401 archives; the large table (a file over 0x7FFF sectors) follows the same rule and was met on no file. nxnative has an open pull request with a reader of its own (#1077), not used here. Test: `test_split_iga.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
 | `dm/host/hle_audren.c`, `dm/host/tests/t_audren_layout.c`, `dm/host/tests/t_audren_work.c`, `docs/reference/audio.md` | 71 | The host drives up to 4 audio renderers, each with its own state (`ar_t`), PCM blocks, render thread and output; it drove one, and a second `OpenAudioRenderer` logged `[RED] audren: a second renderer` and was never rendered. A hand port of nxnative 18b435ac38 and a334797d12 (MIT) onto this tree's clock pacing, catch-up queue and `DM_AUDREN_WAIT`, which stay, now per renderer. One renderer behaves as before; its log lines now name the renderer (`renderer 0 …`). Tests: the two host tests, built natively with ASan and UBSan, with a case of two renderers open at once. Not run on a device. Upstream candidate: yes (Banana Native 0.3.42 does not have it) | `PEANUTS(upstream-candidate)` on each file's first hunk, `PEANUTS` on the others |
+### Round 20, the launcher on the second display (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+While the launcher is in front, the second display shows the cover the D-pad is on and what can be done with it (`dev.peanuts.ui.BottomScreen`,
+`BottomPanel`, all Peanuts-owned). Home's header steps aside while it shows, so the hook hands that header over, with the way Settings opens (X).
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `buildHome()`: `BottomScreen.home(this, <the header just added>, () -> page(true))` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/BananaBackgroundView.java` | 2 | `onDraw()` and `popAt()`, after `wx, wy`: `BackgroundFlow.drift(this, BananaGrid.GRID_DEG, BananaGrid.SPEED_X_DP, BananaGrid.SPEED_Y_DP)` replaces them when not null | trailing `// PEANUTS: ...` |
+
+The second hook makes the two screens' backgrounds one field: `BackgroundFlow` returns the grid's drift (BananaGrid's `wx, wy`) that puts this view's
+grid where the field's is (the two displays placed as on the device, one phase for both), or null without the bottom screen, and the view draws as before.
+The same drift goes into `popAt`, so a tap pops the banana where it is drawn. Since 0.1.4 the grid names each banana by its row and column (BananaGrid):
+the drift is passed unwrapped, as upstream does.
+
+Everything else (the lifecycle through `ActivityLifecycleCallbacks`, the focus, the builds, X on Home through an unhandled-key listener on the
+window) lives in `dev.peanuts.ui`. No upstream-candidate general fix: all three lines call Peanuts-owned code.

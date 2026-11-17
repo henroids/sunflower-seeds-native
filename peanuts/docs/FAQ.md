@@ -162,7 +162,7 @@ If the home screen says **No games found in …**, put your files in that folder
 |---|---|
 | A green check | Ready. Built. Tap the cover to play. |
 | **Build** | Found in your folder, not built yet. Tap to open its sheet. |
-| **Building · N %** or **Building · preparing** | A build is running. Tap to see its card. |
+| **Building** with a percentage, or **Building** and **preparing** | A build is running. Tap to see its card. |
 | **Build stopped** | The build failed or was stopped. Its card says why. |
 | **Wrong version** | Your update is not one this app version supports. |
 | **File gone** | A file of this game is no longer where the app found it. |
@@ -553,6 +553,19 @@ It needs:
 - the companion installed for that game.
 
 On a single-screen device the game runs without it. A game without a companion leaves the second screen free for Android.
+
+### What does the second screen show while I am in the app, not in a game?
+
+The game the controller is on, and what you can do with it:
+
+- a built game: its name, **Ready**, its companion and when you last played it, with **Play** and **Game page**;
+- a game to build: what the app found for it, with **Build…** (it opens the game's sheet);
+- a game that is building: the build's step and progress, with **Stop build** and **Screens off**;
+- anything else (the first start, Settings, a game's page): the Peanuts Native logo.
+
+Each button shows the controller button that does the same: **A** is the main action, **Y** the second one, **X** opens Settings. You can also tap them. The controller always stays on the main screen. While a question or a game's sheet is open on the main screen, the second screen dims and waits until it closes. The drifting peanuts behind both screens are one background: they carry on from one screen to the other.
+
+While the second screen shows this, Home leaves out its title row and the Settings gear: **X** (or **Settings** on the second screen) opens Settings. To give the second screen back to Android while you are in the app, turn off Settings › Library › **Bottom screen**. Home then looks as it always did. Games and their companions are not affected by this setting.
 
 ### Which games have a companion?
 

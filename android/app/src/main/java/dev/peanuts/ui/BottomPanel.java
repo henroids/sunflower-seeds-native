@@ -1,0 +1,499 @@
+package dev.peanuts.ui;
+
+import android.app.Activity;
+import android.app.Presentation;
+import android.content.Context;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.os.Bundle;
+import android.text.TextUtils;
+import android.view.Display;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import java.util.Calendar;
+import java.util.Locale;
+
+import dev.nxnative.android.BananaBackgroundView;
+import dev.nxnative.android.BuildConfig;
+import dev.nxnative.android.R;
+
+/**
+ * The bottom screen's window: logo, game card and build pages, built once and updated in place.
+ * Compact column on small panels, cover beside the text from 600 dp landscape.
+ */
+final class BottomPanel extends Presentation {
+    static final int LOGO = 0, CARD = 1, BUILD = 2;
+    private static final float DIM = 0.5f;
+
+    private FrameLayout stage;
+    private BananaBackgroundView bg;
+    private View scrim;
+    private boolean dimmed;
+    private int page = -1;
+    private View[] pages;
+    private boolean wide, tall;
+    private int coverDp;
+    private final int madeW, madeH, madeDpi;
+
+    // card page
+    private TextView cardTile, cardName, cardState, cardLine1, cardLine2;
+    private LinearLayout cardMark, cardLine1Row;
+    private View cardBadge;
+    private PUi.Action cardPrimary, cardSecond;
+    private BottomScreen.Card shownCard;
+
+    // build page
+    private TextView buildTile, buildName, buildStatus, buildBody, buildPct;
+    private ProgressBar buildBar;
+    private PUi.Action buildStop, buildOff, buildOpen;
+    private BottomScreen.BuildInfo shownBuild;
+
+    // logo page
+    private Button logoSettings;
+
+    @SuppressWarnings("deprecation")   // getRealMetrics
+    BottomPanel(Activity owner, Display display) {
+        super(owner, display, R.style.Theme_Banana);
+        android.util.DisplayMetrics m = new android.util.DisplayMetrics();
+        display.getRealMetrics(m);
+        madeW = m.widthPixels; madeH = m.heightPixels; madeDpi = m.densityDpi;
+    }
+
+    int page() { return page; }
+
+    @Override protected void onCreate(Bundle saved) {
+        super.onCreate(saved);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);   // the controller stays on top
+        getWindow().setDecorFitsSystemWindows(false);                            // no black band for system bars
+        getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(PUi.col(getContext(), R.color.bn_bg)));
+        FrameLayout root = new FrameLayout(getContext());
+        root.setBackgroundColor(PUi.col(getContext(), R.color.bn_bg));
+        bg = new BananaBackgroundView(getContext());
+        root.addView(bg, fill());
+        stage = new FrameLayout(getContext());
+        root.addView(stage, fill());
+        scrim = new View(getContext());
+        scrim.setBackgroundColor(0xFF000000);
+        scrim.setClickable(true);   // swallows taps while dimmed
+        scrim.setAlpha(dimmed ? DIM : 0f);
+        scrim.setVisibility(dimmed ? View.VISIBLE : View.GONE);
+        root.addView(scrim, fill());
+        setContentView(root);
+        build();
+    }
+
+    @Override protected void onStart() { super.onStart(); if (bg != null) bg.setRunning(true); }
+    @Override protected void onStop() { if (bg != null) bg.setRunning(false); super.onStop(); }
+
+    /** Dim while a dialog or sheet on top has the controller */
+    void dim(boolean on) {
+        if (on == dimmed) return;
+        dimmed = on;
+        if (scrim == null) return;
+        scrim.animate().cancel();
+        if (on) scrim.setVisibility(View.VISIBLE);
+        float to = on ? DIM : 0f;
+        if (!Motion.on() || !scrim.isShown()) { scrim.setAlpha(to); if (!on) scrim.setVisibility(View.GONE); return; }
+        scrim.animate().alpha(to).setDuration(on ? Motion.FOCUS : Motion.SNAP).setInterpolator(Motion.OUT)
+                .withEndAction(() -> { if (!dimmed) scrim.setVisibility(View.GONE); });
+    }
+
+    /** False after a size or density change: Android cancels a Presentation then, so BottomScreen makes a new one */
+    @SuppressWarnings("deprecation")   // getRealMetrics
+    boolean fits() {
+        Display d = getDisplay();
+        if (d == null || !d.isValid()) return false;
+        android.util.DisplayMetrics m = new android.util.DisplayMetrics();
+        d.getRealMetrics(m);
+        return m.widthPixels == madeW && m.heightPixels == madeH && m.densityDpi == madeDpi;
+    }
+
+    // ---- Layout ----
+
+    private void build() {
+        Context c = getContext();
+        Configuration cf = c.getResources().getConfiguration();
+        int w = cf.screenWidthDp, h = cf.screenHeightDp;
+        wide = w >= 600 && w >= h * 1.25f;
+        tall = h >= 340;
+        coverDp = wide ? clamp(Math.round(h * 0.42f), 120, 280) : clamp(Math.round(h * 0.25f), 72, 120);
+        stage.removeAllViews();
+        pages = new View[] {page(logoPage()), page(cardPage()), page(buildPage())};
+        for (View v : pages) { v.setVisibility(View.GONE); stage.addView(v); }
+    }
+
+    /** Centred column, capped width, scrolls on short screens */
+    private View page(View column) {
+        Context c = getContext();
+        ScrollView s = new ScrollView(c);
+        s.setFillViewport(true);
+        s.setVerticalScrollBarEnabled(false);
+        s.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        FrameLayout f = new FrameLayout(c);
+        int pad = PUi.dp(c, wide ? 24 : 16);
+        f.setPadding(pad, pad, pad, pad);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        f.addView(new MaxWidth(c, PUi.dp(c, wide ? 880 : 560), column), lp);
+        s.addView(f, fill());
+        return s;
+    }
+
+    private View logoPage() {
+        Context c = getContext();
+        LinearLayout col = column(c);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.addView(PUi.badge(c, wide ? 128 : 96));
+        TextView t = PUi.title(c, "Peanuts Native");
+        t.setGravity(Gravity.CENTER);
+        PUi.add(col, t, 16, PUi.wrap());
+        String id = BuildConfig.NX_PEANUTS_ID;
+        if (id != null && !id.isEmpty()) {
+            TextView v = PUi.text(c, id, 13, R.color.bn_text_2, 600);
+            v.setGravity(Gravity.CENTER);
+            PUi.add(col, v, 4, PUi.wrap());
+        }
+        logoSettings = settingsButton(c);   // Home only
+        PUi.add(col, logoSettings, 20, PUi.wrap());
+        return col;
+    }
+
+    private View cardPage() {
+        Context c = getContext();
+        LinearLayout col = column(c);
+        LinearLayout card = PUi.card(c);
+        LinearLayout top = PUi.row(c);
+        top.setGravity(wide ? Gravity.CENTER_VERTICAL : Gravity.TOP);
+        cardTile = PUi.tile(c, "?", coverDp);
+        top.addView(cardTile);
+        LinearLayout info = column(c);
+        info.setPadding(PUi.dp(c, 16), 0, 0, 0);
+        cardName = PUi.text(c, "", wide ? 26 : 22, R.color.bn_text, 800);
+        cardName.setMaxLines(wide ? 3 : 2);
+        cardName.setEllipsize(TextUtils.TruncateAt.END);
+        info.addView(cardName);
+        cardMark = PUi.row(c);
+        PUi.add(info, cardMark, 8);
+        cardState = PUi.text(c, "", 14, R.color.bn_text, 600);
+        cardLine1Row = PUi.row(c);
+        cardBadge = companionBadge(c);
+        cardLine1Row.addView(cardBadge);
+        cardLine1 = PUi.small(c, "");
+        LinearLayout.LayoutParams l1 = PUi.wrap();
+        l1.leftMargin = PUi.dp(c, 8);
+        cardLine1Row.addView(cardLine1, l1);
+        PUi.add(info, cardLine1Row, 8);
+        cardLine2 = PUi.small(c, "");
+        PUi.add(info, cardLine2, 4);
+        top.addView(info, PUi.weight());
+        card.addView(top);
+
+        cardPrimary = PUi.action(c, 0, "Play", PUi.Kind.PRIMARY, v -> act(v, shownCard == null ? null : shownCard.primary, true));
+        setKey(cardPrimary, "A");
+        cardSecond = keyButton(c, "Y", "Game page", v -> act(v, shownCard == null ? null : shownCard.second, false));
+        if (wide) {
+            PUi.add(info, PUi.pair(c, cardPrimary, cardSecond), 16);
+            cardSecond.getLayoutParams().height = ViewGroup.LayoutParams.MATCH_PARENT;   // as tall as A
+        } else {
+            PUi.add(card, cardPrimary, 16);
+            PUi.add(card, cardSecond, 10);
+        }
+        col.addView(card);
+        if (tall) PUi.add(col, settingsButton(c), 8, PUi.wrap());
+        return col;
+    }
+
+    private View buildPage() {
+        Context c = getContext();
+        LinearLayout col = column(c);
+        LinearLayout card = PUi.card(c);
+        LinearLayout top = PUi.row(c);
+        buildTile = PUi.tile(c, "?", 52);
+        top.addView(buildTile);
+        LinearLayout info = column(c);
+        info.setPadding(PUi.dp(c, 14), 0, 0, 0);
+        buildName = PUi.text(c, "", 17, R.color.bn_text, 700);
+        buildName.setMaxLines(2);
+        buildName.setEllipsize(TextUtils.TruncateAt.END);
+        info.addView(buildName);
+        buildStatus = PUi.text(c, "", 13, R.color.bn_accent, 600);
+        PUi.add(info, buildStatus, 2);
+        top.addView(info, PUi.weight());
+        card.addView(top);
+        buildBody = PUi.body(c, "");
+        PUi.add(card, buildBody, 12);
+        buildBar = PUi.progress(c);
+        buildBar.setMax(100);
+        PUi.add(card, buildBar, 10);
+        buildPct = PUi.small(c, "");
+        PUi.add(card, buildPct, 6);
+        buildStop = keyButton(c, "Y", "Stop build", v -> act(v, shownBuild == null ? null : shownBuild.stop, false));
+        buildOff = keyButton(c, null, "Screens off", v -> act(v, shownBuild == null ? null : shownBuild.screensOff, false));
+        PUi.add(card, PUi.pair(c, buildStop, buildOff), 14);
+        buildOpen = keyButton(c, "A", "Open the build card", v -> act(v, shownBuild == null ? null : shownBuild.open, false));
+        PUi.add(card, buildOpen, 14);
+        col.addView(card);
+        if (tall) PUi.add(col, settingsButton(c), 8, PUi.wrap());
+        return col;
+    }
+
+    /** TONAL button, face button and label centred; key null: no letter */
+    private static PUi.Action keyButton(Context c, String key, String label, View.OnClickListener l) {
+        PUi.Action b = PUi.action(c, 0, label, PUi.Kind.TONAL, l);
+        b.setMinimumHeight(PUi.dp(c, 48));
+        b.setBackground(PUi.ripple(c, PUi.round(PUi.col(c, R.color.bn_tint), PUi.dp(c, 14), 0, 0)));
+        b.label.setTextSize(15);
+        b.label.setTypeface(PUi.face(600));
+        setKey(b, key);
+        return b;
+    }
+
+    private static void setKey(PUi.Action b, String key) {
+        Context c = b.getContext();
+        boolean primary = b.kind == PUi.Kind.PRIMARY;
+        b.icon.setImageDrawable(key == null ? null : new KeyGlyph(c, key, PUi.col(c, primary ? R.color.bn_on_banana : R.color.bn_text),
+                PUi.col(c, primary ? R.color.bn_banana : R.color.bn_tint)));
+        b.icon.setVisibility(key == null ? View.GONE : View.VISIBLE);
+    }
+
+    /** X: Settings */
+    private Button settingsButton(Context c) {
+        Button b = PUi.button(c, "Settings", PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.TICK); BottomScreen.settings(); });
+        b.setCompoundDrawablesRelativeWithIntrinsicBounds(new KeyGlyph(c, "X", b.getCurrentTextColor(), PUi.col(c, R.color.bn_bg)), null, null, null);
+        b.setCompoundDrawablePadding(PUi.dp(c, 10));
+        return b;
+    }
+
+    // ---- Pages ----
+
+    /** onHome: with the Settings button */
+    void showLogo(boolean onHome) {
+        if (logoSettings != null) logoSettings.setVisibility(onHome ? View.VISIBLE : View.GONE);
+        switchTo(LOGO);
+    }
+
+    void showCard(BottomScreen.Card k) {
+        Context c = getContext();
+        boolean same = shownCard != null && shownCard.titleId.equals(k.titleId);
+        shownCard = k;
+        cardName.setText(k.name);
+        if (!same) setTile(cardTile, k.name, k.icon); else if (k.icon != null && cardTile.getCurrentTextColor() != android.graphics.Color.TRANSPARENT) Motion.cover(cardTile, k.icon);
+        stateMark(c, k);
+        boolean ready = k.kind == BottomScreen.Card.K_READY, toBuild = k.kind == BottomScreen.Card.K_BUILD;
+        boolean hasComp = ready && k.companion != null;
+        cardBadge.setVisibility(hasComp ? View.VISIBLE : View.GONE);
+        ((LinearLayout.LayoutParams) cardLine1.getLayoutParams()).leftMargin = hasComp ? PUi.dp(c, 8) : 0;
+        String l1 = ready ? (hasComp ? "Companion " + k.companion : "") : toBuild ? k.found : "This app version does not include this game.";
+        String l2 = ready ? played(k.played) : toBuild ? k.space : "";
+        setLine(cardLine1, cardLine1Row, l1);
+        setLine(cardLine2, cardLine2, l2);
+        cardPrimary.setVisibility(k.primary != null ? View.VISIBLE : View.GONE);
+        if (k.primary != null) cardPrimary.setText(k.primaryLabel);
+        cardSecond.setVisibility(k.second != null ? View.VISIBLE : View.GONE);
+        if (k.second != null) cardSecond.setText(k.secondLabel);
+        switchTo(CARD);
+    }
+
+    void showBuild(BottomScreen.BuildInfo b) {
+        boolean same = shownBuild != null && shownBuild.titleId.equals(b.titleId);
+        shownBuild = b;
+        buildName.setText(b.name);
+        if (!same) setTile(buildTile, b.name, b.icon);
+        updateBuild(b);
+        switchTo(BUILD);
+    }
+
+    /** Progress in place, no layout */
+    void updateBuild(BottomScreen.BuildInfo b) {
+        Context c = getContext();
+        boolean fresh = shownBuild == null || page != BUILD;
+        shownBuild = b;
+        buildStatus.setText(b.step);
+        buildStatus.setTextColor(PUi.col(c, b.failed ? R.color.bn_danger : R.color.bn_accent));
+        buildBody.setText(b.body);
+        buildBar.setVisibility(b.failed ? View.GONE : View.VISIBLE);
+        buildBar.setIndeterminate(b.indeterminate);
+        if (!b.indeterminate) Motion.progress(buildBar, b.percent, fresh);
+        buildPct.setVisibility(b.failed || b.indeterminate ? View.GONE : View.VISIBLE);
+        buildPct.setText(b.percent + " %");
+        // running: Stop and Screens off; stopped or not ours: Open the build card
+        ((View) buildStop.getParent()).setVisibility(b.failed ? View.GONE : View.VISIBLE);
+        buildStop.setVisibility(b.stop != null ? View.VISIBLE : View.GONE);
+        buildOpen.setVisibility((b.failed || b.stop == null) && b.open != null ? View.VISIBLE : View.GONE);
+    }
+
+    /** Crossfade (cut under reduced motion) */
+    private void switchTo(int next) {
+        if (pages == null || next == page) return;
+        View in = pages[next];
+        View out = page >= 0 ? pages[page] : null;
+        page = next;
+        boolean fade = out != null && Motion.on() && stage.isShown();
+        in.animate().cancel();
+        in.setVisibility(View.VISIBLE);
+        if (out != null) {
+            out.animate().cancel();
+            if (fade) out.animate().alpha(0f).setDuration(Motion.EXIT).withLayer().withEndAction(() -> { if (pages != null && pages[page] != out) out.setVisibility(View.GONE); });
+            else { out.setAlpha(1f); out.setVisibility(View.GONE); }
+        }
+        if (fade) { in.setAlpha(0f); in.animate().alpha(1f).setDuration(Motion.ENTER).setInterpolator(Motion.OUT).withLayer(); }
+        else in.setAlpha(1f);
+    }
+
+    // ---- Pieces ----
+
+    private static void act(View v, Runnable r, boolean weighty) {
+        if (r == null) return;
+        Haptics.play(v, weighty ? Haptics.Word.HEAVY : Haptics.Word.CLICK);
+        r.run();
+    }
+
+    /** The cover's own mark: ✓ in a leaf circle, or its pill */
+    private void stateMark(Context c, BottomScreen.Card k) {
+        cardMark.removeAllViews();
+        if (cardState.getParent() != null) ((ViewGroup) cardState.getParent()).removeView(cardState);
+        if (k.kind == BottomScreen.Card.K_READY) {
+            TextView ok = PUi.text(c, "✓", 12, R.color.bn_on_leaf, 700);
+            ok.setGravity(Gravity.CENTER);
+            ok.setIncludeFontPadding(false);
+            ok.setBackground(PUi.round(PUi.col(c, R.color.bn_leaf), PUi.dp(c, 999), 0, 0));
+            ok.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            cardMark.addView(ok, new LinearLayout.LayoutParams(PUi.dp(c, 22), PUi.dp(c, 22)));
+            cardState.setText(k.state);
+            LinearLayout.LayoutParams lp = PUi.wrap();
+            lp.leftMargin = PUi.dp(c, 8);
+            cardMark.addView(cardState, lp);
+        } else {
+            boolean danger = k.kind == BottomScreen.Card.K_NO_PROFILE || !"Build needed".equals(k.state);
+            TextView pill = PUi.text(c, k.state, 12, danger ? R.color.bn_danger : R.color.bn_on_banana, 700);
+            pill.setSingleLine(true);
+            pill.setBackground(PUi.round(PUi.col(c, danger ? R.color.bn_danger_tint : R.color.bn_banana), PUi.dp(c, 999), 0, 0));
+            pill.setPadding(PUi.dp(c, 10), PUi.dp(c, 5), PUi.dp(c, 10), PUi.dp(c, 5));
+            cardMark.addView(pill, PUi.wrap());
+        }
+        cardMark.setContentDescription(k.state);
+    }
+
+    private static void setLine(TextView t, View row, String s) {
+        boolean has = s != null && !s.isEmpty();
+        t.setText(has ? s : "");
+        row.setVisibility(has ? View.VISIBLE : View.GONE);
+    }
+
+    /** Letter first, then the art */
+    private static void setTile(TextView tile, String name, Bitmap icon) {
+        String n = name == null ? "" : name.trim();
+        tile.setText(n.isEmpty() ? "?" : n.substring(0, n.offsetByCodePoints(0, 1)).toUpperCase(Locale.ROOT));
+        PUi.tileIcon(tile, null);
+        if (icon != null) PUi.tileIcon(tile, icon);
+    }
+
+    /** "Last played yesterday" and the like; empty if never */
+    private static String played(long at) {
+        if (at <= 0) return "";
+        Calendar now = Calendar.getInstance(), then = Calendar.getInstance();
+        then.setTimeInMillis(at);
+        int days = daysBetween(then, now);
+        if (days <= 0) return "Last played today";
+        if (days == 1) return "Last played yesterday";
+        if (days < 7) return "Last played " + days + " days ago";
+        return "Last played on " + java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(new java.util.Date(at));
+    }
+
+    private static int daysBetween(Calendar a, Calendar b) {
+        Calendar x = (Calendar) a.clone(), y = (Calendar) b.clone();
+        for (Calendar k : new Calendar[] {x, y}) { k.set(Calendar.HOUR_OF_DAY, 0); k.set(Calendar.MINUTE, 0); k.set(Calendar.SECOND, 0); k.set(Calendar.MILLISECOND, 0); }
+        return (int) Math.round((y.getTimeInMillis() - x.getTimeInMillis()) / 86_400_000d);
+    }
+
+    /** The covers' two-screen companion badge */
+    private static View companionBadge(Context c) {
+        LinearLayout v = column(c);
+        v.setGravity(Gravity.CENTER);
+        v.setBackground(PUi.round(PUi.col(c, R.color.bn_leaf), PUi.dp(c, 6), 0, 0));
+        v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        for (int i = 0; i < 2; i++) {
+            View s = new View(c);
+            s.setBackground(PUi.round(PUi.col(c, R.color.bn_on_leaf), PUi.dp(c, 1), 0, 0));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(PUi.dp(c, 12), PUi.dp(c, 5));
+            if (i > 0) lp.topMargin = PUi.dp(c, 2);
+            v.addView(s, lp);
+        }
+        v.setLayoutParams(new LinearLayout.LayoutParams(PUi.dp(c, 22), PUi.dp(c, 22)));
+        return v;
+    }
+
+    private static LinearLayout column(Context c) {
+        LinearLayout l = new LinearLayout(c);
+        l.setOrientation(LinearLayout.VERTICAL);
+        return l;
+    }
+
+    private static FrameLayout.LayoutParams fill() {
+        return new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+    }
+
+    private static int clamp(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    /** Face button: letter cut out of a 22 dp disc */
+    static final class KeyGlyph extends Drawable {
+        private final Paint disc = new Paint(Paint.ANTI_ALIAS_FLAG), letter = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final String key;
+        private final int size;
+        private final Rect bounds = new Rect();
+
+        KeyGlyph(Context c, String key, int ink, int cut) {
+            this.key = key;
+            size = PUi.dp(c, 22);
+            disc.setColor(ink);
+            letter.setColor(cut);
+            letter.setTypeface(Typeface.create(Typeface.SANS_SERIF, 800, false));
+            letter.setTextSize(PUi.dp(c, 12));
+            letter.setTextAlign(Paint.Align.CENTER);
+        }
+
+        @Override public void draw(Canvas canvas) {
+            Rect r = getBounds();
+            float cx = r.exactCenterX(), cy = r.exactCenterY(), rad = Math.min(r.width(), r.height()) / 2f;
+            canvas.drawCircle(cx, cy, rad, disc);
+            letter.getTextBounds(key, 0, key.length(), bounds);
+            canvas.drawText(key, cx, cy - bounds.exactCenterY(), letter);
+        }
+
+        @Override public int getIntrinsicWidth() { return size; }
+        @Override public int getIntrinsicHeight() { return size; }
+        @Override public void setAlpha(int alpha) { disc.setAlpha(alpha); letter.setAlpha(alpha); invalidateSelf(); }
+        @Override public void setColorFilter(ColorFilter cf) { disc.setColorFilter(cf); letter.setColorFilter(cf); invalidateSelf(); }
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+    }
+
+    /** Caps its child's width */
+    private static final class MaxWidth extends FrameLayout {
+        private final int max;
+        MaxWidth(Context c, int max, View child) {
+            super(c);
+            this.max = max;
+            addView(child, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        @Override protected void onMeasure(int w, int h) {
+            int size = MeasureSpec.getSize(w);
+            if (size > max) w = MeasureSpec.makeMeasureSpec(max, MeasureSpec.getMode(w) == MeasureSpec.UNSPECIFIED ? MeasureSpec.AT_MOST : MeasureSpec.getMode(w));
+            super.onMeasure(w, h);
+        }
+    }
+}
