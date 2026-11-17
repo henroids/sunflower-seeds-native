@@ -40,8 +40,10 @@ public final class ShaderCapture {
     public static void environment(Activity a, List<String> env) {
         if (!active(a)) return;
         // A preparation boot gets no player's save, scripted input, companion or sound.
+        // PEANUTS: use the host's single default account; a multi-user selector would wait for input during Build.
         env.removeIf(s -> s.startsWith("DM_KEYS=") || s.startsWith("DM_SAVE=") || s.startsWith("DM_GLSLC_CAPTURE=")
-                || s.startsWith("DM_AUDIO=") || s.startsWith("PN_COMPANION="));
+                || s.startsWith("DM_AUDIO=") || s.startsWith("PN_COMPANION=")
+                || s.startsWith("DM_USERS=") || s.startsWith("DM_USER="));
         env.add("DM_SAVE=" + a.getIntent().getStringExtra(SAVE));
         env.add("DM_GLSLC_CAPTURE=" + a.getIntent().getStringExtra(DIR));
         env.add("DM_AUDIO=0");
