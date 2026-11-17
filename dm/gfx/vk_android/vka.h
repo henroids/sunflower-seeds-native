@@ -328,6 +328,7 @@ typedef struct vka_img {
     // one); rb_rt: drawn into or cleared as a colour target, first in frame rb_frame; rb_redrawn: and again in a later frame; rb_srgb: the view it was last drawn
     // through (1 linear, 2 sRGB); rb_holds: how many of its holds are a readback's (they read no field of it unlocked: img_storage_upgrade does not count them)
     uint64_t rb_gen, rb_fence, rb_pgen, rb_pfence, rb_frame; uint8_t rb_rt, rb_redrawn, rb_pok, rb_srgb; uint16_t rb_holds;
+    uint32_t smap_n;   // PEANUTS: its entries in the serial map (vka_smap.h vksm_del_im), under g_tmu
 } vka_img;
 // PEANUTS begin: resolution scale (DM_RES_SCALE, restart only): vka_resscale.h the arithmetic, vka_resscale.inc (in vka_tex.c) the images and what the rest is for
 #include "vka_resscale.h"
