@@ -62,6 +62,7 @@ shows which update you have and which one a game supports, and asks before build
 | DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Packs on Linux; device validation pending |
 | Chained Echoes | `0100C510166F0000` | 1.41 | Not checked | AYN Thor, Turnip: title and opening scenes at about 60 fps with a 2 GB application pool; battles, saving/loading, sound and extended play untested |
 | Yoru, Tomosu | `0100C2901153C000` | Base game | Log unreadable | Opening at 60 fps on AYN Thor; companion log text is unreadable |
+| Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes | 60 fps on AYN Thor in single races; with the 120 fps limit, 118 to 120 in the menus and 81 to 97 in a race; new, little tested |
 
 ## What you need
 
