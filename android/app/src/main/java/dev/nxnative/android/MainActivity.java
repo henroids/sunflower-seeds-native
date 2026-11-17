@@ -1501,7 +1501,7 @@ public final class MainActivity extends Activity {
 
     private void start(Game g) {
         // PEANUTS begin: recommend Turnip before a system-driver launch, with a one-launch bypass.
-        if (GpuDriver.launchesSystem(this, g.titleId)) {
+        if (GpuDriver.launchesSystem(this, g.titleId) && Readiness.customDriversFit(Prefs.facts(this, Recommend.SYSTEM))) {   // only where a custom driver can load: a Mali, Xclipse or PowerVR GPU has its system driver alone
             new PadFocus.Builder(this).setTitle("Turnip recommended")
                     .setMessage("You're about to play with the system GPU driver. We recommend Turnip for better game compatibility and stability."
                             + (GpuDriver.selected(this, g.titleId) != null ? "\n\nAn extra driver setting is forcing the system driver. Change that setting to use your selected driver." : ""))
