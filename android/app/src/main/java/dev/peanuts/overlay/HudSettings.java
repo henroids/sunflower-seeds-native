@@ -37,6 +37,8 @@ public final class HudSettings {
     };
     private static final String MASTER = "Show the overlay over the game";
 
+    /** The preset the row names before the player picked one: every item is on until then (Prefs.overlayItem and Hud.item default to true), which is Full */
+    static final String DEFAULT_PRESET = "full";
     static final String[] MINIMAL = {"fps", "graph"};
     static final String[] NORMAL = {"fps", "graph", "throttle", "soc", "battery", "driver", "tag"};
 
@@ -56,7 +58,7 @@ public final class HudSettings {
     public static void rows(Context c, LinearLayout box) {
         SharedPreferences p = prefs(c);
         final Runnable[] sync = new Runnable[1];
-        choice(c, box, "Preset", new String[] {"Minimal", "Normal", "Full", "Custom"}, new String[] {"minimal", "normal", "full", "custom"}, () -> p.getString(Hud.PRESET, "normal"),
+        choice(c, box, "Preset", new String[] {"Minimal", "Normal", "Full", "Custom"}, new String[] {"minimal", "normal", "full", "custom"}, () -> p.getString(Hud.PRESET, DEFAULT_PRESET),
                 v -> { p.edit().putString(Hud.PRESET, v).apply(); apply(box, v); sync[0].run(); });
         choice(c, box, "Style", new String[] {"Table", "Classic"}, new String[] {"table", "classic"}, () -> p.getString(Hud.STYLE, "table"),
                 v -> p.edit().putString(Hud.STYLE, v).apply());
@@ -66,7 +68,7 @@ public final class HudSettings {
                 v -> p.edit().putInt(Hud.SCALE, Integer.parseInt(v)).apply());
         // the item switches stay in the box (their listeners write the preferences) but are shown only for Custom
         sync[0] = () -> {
-            boolean custom = "custom".equals(p.getString(Hud.PRESET, "normal"));
+            boolean custom = "custom".equals(p.getString(Hud.PRESET, DEFAULT_PRESET));
             for (int i = 0; i < box.getChildCount(); i++) {
                 View v = box.getChildAt(i);
                 if (v instanceof CheckBox && !String.valueOf(((CheckBox) v).getText()).startsWith(MASTER)) v.setVisibility(custom ? View.VISIBLE : View.GONE);

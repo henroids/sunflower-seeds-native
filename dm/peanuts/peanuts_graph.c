@@ -12,6 +12,7 @@
 
 // A host without the overlay (Mac, tests) links without it
 __attribute__((weak)) int nxhost_overlay_set(int slot, const void *px, int w, int h, int stride);
+__attribute__((weak)) int nxhost_overlay_state(void);   // below 0: the present does not draw the overlay (DM_VK_OVERLAY=0, or its pipeline failed) and the launcher's views do
 
 static pthread_mutex_t gr_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint8_t *gr_copy;       // the slot-1 block, w * h * 4 bytes
@@ -135,6 +136,7 @@ void pn_graph_rect(int x, int y, int w, int h) {
 
 void pn_graph_frame(void) {
     if (!nxhost_overlay_set) return;
+    if (nxhost_overlay_state && nxhost_overlay_state() < 0) return;   // nobody shows this copy: the launcher's views draw the block, with the bars peanuts_ovl_block painted
     pthread_mutex_lock(&gr_mu);
     if (gr_copy && rect_ok()) {
         draw_current(gr_copy, gr_w * 4);

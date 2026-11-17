@@ -22,7 +22,13 @@ def jar():
     j = os.environ.get('ANDROID_JAR')
     if j and Path(j).exists():
         return Path(j)
-    return ANDROID_JAR if ANDROID_JAR.exists() else None
+    if ANDROID_JAR.exists():
+        return ANDROID_JAR
+    for sdk in (os.environ.get('ANDROID_HOME'), os.environ.get('ANDROID_SDK_ROOT')):   # a machine whose SDK is elsewhere: its newest platform
+        jars = sorted(Path(sdk).glob('platforms/android-*/android.jar')) if sdk else []
+        if jars:
+            return jars[-1]
+    return None
 
 
 class Wiring(unittest.TestCase):
