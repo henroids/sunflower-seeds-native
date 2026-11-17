@@ -438,8 +438,8 @@ static void *motion_thread(void *arg) {
     }
     nxin_shake sh = {0}; const char *e = getenv("DM_SHAKE_G"); sh.thr = e && atof(e) > 0 ? (float)atof(e) : 1.5f;
     float a[3] = {0, 0, 9.80665f}; int have_a = 0;
-    // PEANUTS: the gyroscope's delivery, logged every 10 s: how many samples, their spacing by the sensor's clock, and how long after its measurement a sample got here
-    struct { uint64_t t0, last, n, late_max, gap_max, late_sum; } ms = {0};
+    // PEANUTS: the gyroscope's delivery, logged every 10 s: how many samples, their spacing by the sensor's clock, and how long after its measurement a sample got here (10 s after the start, then every minute)
+    struct { uint64_t t0, last, n, late_max, gap_max, late_sum, every; } ms = {.every = 10000000000ull};   // the first line after 10 s, then one a minute
     while (atomic_load(&g_mo_run)) {
         ALooper_pollOnce(200, NULL, NULL, NULL);
         ASensorEvent ev[32]; ssize_t n;
@@ -465,10 +465,10 @@ static void *motion_thread(void *arg) {
                 if (ms.last && t > ms.last && t - ms.last > ms.gap_max) ms.gap_max = t - ms.last;
                 if (now - t > ms.late_max) ms.late_max = now - t;
                 ms.last = t; ms.n++; ms.late_sum += now - t;
-                if (now - ms.t0 >= 10000000000ull) {
+                if (now - ms.t0 >= ms.every) {
                     LOG("input: phone gyroscope: %.0f samples a second, the longest gap %.1f ms; a sample arrives %.1f ms after it was measured on average, %.1f ms at most",
                         (double)ms.n * 1e9 / (double)(now - ms.t0), (double)ms.gap_max / 1e6, (double)ms.late_sum / (double)ms.n / 1e6, (double)ms.late_max / 1e6);
-                    ms.t0 = now; ms.n = ms.late_max = ms.gap_max = ms.late_sum = 0;
+                    ms.t0 = now; ms.n = ms.late_max = ms.gap_max = ms.late_sum = 0; ms.every = 60000000000ull;
                 }
             }
           }
