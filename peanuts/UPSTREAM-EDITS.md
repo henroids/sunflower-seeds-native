@@ -1158,3 +1158,16 @@ version moves. Device state: see the game's note.
 |---|---|---|---|
 | `dm/gfx/tools/shader_split.py` | 3 | `iga_entries`, `iga_member`, `iga_shaders` and their branch in `scan_file_in`: Alchemy's igArchive version 13 (`IGA\x1a`), whose files are LZMA in 0x8000-byte blocks placed by the archive's small / medium / large block tables; every file is decoded and its whole GLSLC outputs taken. The game's split went from 12 shaders (those in `main`) to 1,945. Checked on all 74,311 files of its 401 archives; the large table (a file over 0x7FFF sectors) follows the same rule and was met on no file. nxnative has an open pull request with a reader of its own (#1077), not used here. Test: `test_split_iga.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
 | `dm/host/hle_audren.c`, `dm/host/tests/t_audren_layout.c`, `dm/host/tests/t_audren_work.c`, `docs/reference/audio.md` | 71 | The host drives up to 4 audio renderers, each with its own state (`ar_t`), PCM blocks, render thread and output; it drove one, and a second `OpenAudioRenderer` logged `[RED] audren: a second renderer` and was never rendered. A hand port of nxnative 18b435ac38 and a334797d12 (MIT) onto this tree's clock pacing, catch-up queue and `DM_AUDREN_WAIT`, which stay, now per renderer. One renderer behaves as before; its log lines now name the renderer (`renderer 0 …`). Tests: the two host tests, built natively with ASan and UBSan, with a case of two renderers open at once. Not run on a device. Upstream candidate: yes (Banana Native 0.3.42 does not have it) | `PEANUTS(upstream-candidate)` on each file's first hunk, `PEANUTS` on the others |
+### Round 21, a Peanuts build known by its build, not its application ID (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+`-PnxAppId` (Round 14) gives a development build its own application ID, `peanutstest` in `peanuts/docs/NEW-GAME.md`. Three Peanuts hunks asked
+whether the ID ends in `.peanuts`, so such a build took Banana Native's button mapping and credits, and looked for updates among Banana Native's
+releases. They now ask `BuildConfig.NX_PEANUTS_ID`, which every `-PnxApp=peanuts` build sets, whatever its ID.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | Settings › About: the fork's credits | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `padMap()`: the Peanuts default button mapping | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/Updater.java` | 1 | the update source: the Peanuts app's own releases | trailing `// PEANUTS: ...` |
+
+Upstream candidate: no (the three lines are Peanuts' own).

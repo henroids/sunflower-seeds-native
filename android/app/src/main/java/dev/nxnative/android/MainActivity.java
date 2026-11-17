@@ -444,7 +444,7 @@ public final class MainActivity extends Activity {
         Ui.add(about, poppedText, 10);
         StringBuilder ids = new StringBuilder();   // the games this build includes, so a player can tell whether it has theirs (Profile.missing points here)
         for (Profile p : Profile.all()) ids.append("\n· ").append(p.name).append(" (").append(p.titleId).append(")");
-        String basedOn = BuildConfig.APPLICATION_ID.endsWith(".peanuts")   // PEANUTS: the fork credits Banana Native and its maker first
+        String basedOn = !BuildConfig.NX_PEANUTS_ID.isEmpty()   // PEANUTS: the fork credits Banana Native and its maker first (a Peanuts build, whatever its -PnxAppId)
                 ? "Peanuts Native is a fork of Banana Native by moceure (GPL-3.0), which is based on nxnative by seedds. Companions run on the Eden Duo runtime. LSFG from Eden (GPL-3.0)."
                 : "Based on nxnative by seedds. LSFG from Eden (GPL-3.0).";
         TextView t = Ui.small(this, "Games in this app:" + ids + "\n\n" + basedOn + (BuildConfig.NX_LSFG ? "" : " Built without LSFG."));   // PEANUTS: basedOn above
