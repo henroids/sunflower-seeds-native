@@ -52,6 +52,8 @@ Not measured yet. In the first stage on the Thor the app used 3.9 GiB (the overl
 
 - **Resolved: startup crash without firmware fonts (Android).** With no firmware in the app, the host serves Android's fallback font for every shared font type, which lacks U+25A1; right after nnMain the game dereferences a null glyph and crashes (`CRASH sig=11 addr=0x38 pc=main+0x4a78c8`, `x1=0x25a1`), as [Echoes of Wisdom](../01008CF01BAAC000/README.md) does. The game's own fault, not the host's: the fix is the firmware's shared fonts, and the launcher's font gate (`dev.peanuts.ui.FontGate`, `NEED_FONTS`) now holds this title back without them.
 
+<!-- PEANUTS: on-device shader preparation and retained validation. -->
+
 ## Missing effects in on-device builds (issue #78)
 
 The supplied 0.1.3 log has 37,406 shaders, exactly 9,693 fewer than the profile's 47,099. Every one of its 27 distinct missing-shader keys
@@ -75,7 +77,7 @@ below remain a separate open rendering question.
 
 ## Open
 
-- A repaired-pack system-driver run on the Thor (Qualcomm driver ID 8) rendered the ship and character as black silhouettes while its world map and stage-selection screen rendered correctly. Turnip V39 rendered the ship correctly with the same library. The system run had no missing-shader errors or pipeline-creation failures and no native crash during its 195-second window; the rendering cause is not established.
+- PEANUTS: A repaired-pack system-driver run on the Thor (Qualcomm driver ID 8) rendered the ship and character as black silhouettes while its world map and stage-selection screen rendered correctly. Turnip V39 rendered the ship correctly with the same library. The system run had no missing-shader errors or pipeline-creation failures and no native crash during its 195-second window; the rendering cause is not established.
 - `[RED] vk: … texture ID … has no view of shape …: it reads as unbound` on both drivers: a 16x16 cube texture (6 layers) sampled through a view of another target, from two shaders; what it draws, and whether anything looks wrong, is not checked.
 - Frame pacing (above), memory layout and pool sizes (the sibling's, not checked against this game).
 - Only the title, the file select and the first stage were played: later worlds, movies, the Magolor Epilogue, Merry Magoland and saves over several sessions are untested.

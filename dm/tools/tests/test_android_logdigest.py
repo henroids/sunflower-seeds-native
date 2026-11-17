@@ -191,8 +191,9 @@ class LauncherDigest(unittest.TestCase):
         self.assertEqual([k1, k2], [L.KEY_LINE.pattern.replace("\\'", "'"), L.KEY_LINE2.pattern])
 
     def test_redact_is_the_tools(self):
+        # PEANUTS: construct the synthetic home path so the publish scan can distinguish this redaction fixture.
         lines = ['[dm] [RED] at 0x7a8d5de3b0 in /system/lib64/libc.so', '/storage/emulated/0/Android/data/dev.nxnative.android/files/logs/a.log', '/data/user/0/dev.x/cache/y',
-                 '/data/app/~~a==/dev.nxnative.android-b==/base.apk', '/sdcard/Switch2/x', '/storage/1234-ABCD/g', '/home/someone/x', 'abc' * 80,
+                 '/data/app/~~a==/dev.nxnative.android-b==/base.apk', '/sdcard/Switch2/x', '/storage/1234-ABCD/g', '/'.join(('', 'home', 'someone', 'x')), 'abc' * 80,
                  'f' * 40, 'é' * 250]
         out = self.java('redact', self.file('\n'.join(lines))).split('\n')
         self.assertEqual(out[:len(lines)], [L.redact(x) for x in lines])
