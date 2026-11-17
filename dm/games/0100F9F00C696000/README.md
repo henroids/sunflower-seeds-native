@@ -4,7 +4,7 @@
 
 Update 1.0.15 (v983040) on the base game. SDK 8.2.0. Vicarious Visions' Alchemy engine (build name Octane) with NVN graphics, Havok, FMOD and Bink 2. Modules `main`, `subsdk0` (the game's own GLSLC) and `sdk`.
 
-**Status (current): packs on the PC, not run on a device yet.** The split finds 1,945 shaders and all of them translate to Vulkan. The profile is a provisional one: its memory layout is the survey's guess, and the game has not booted in this host. The shaders it compiles at run time are still missing, below.
+**Status (current): plays on Android.** On an AYN Thor (Adreno 740, Turnip 27.0.0 R2) it boots, passes the licence screens, the title and the menus, and runs single races (Crash Cove, N. Gin Labs) at the game's own 30 fps with 5 to 11 ms of GPU time and 1.9 GiB of app memory. Not run on the system driver or on a Mac. The memory layout is still the survey's guess; it held for these runs.
 
 ## Builds
 
@@ -29,16 +29,16 @@ No rewriter cut and no host rule of its own.
 ## Files and shaders
 
 - RomFS: 608 files, 9.66 GB: 401 `.pak` archives under `archives/` (igArchive version 13, 74,311 files in all), 163 ghost files, 17 Bink 2 movies.
-- `shader_split.py` found 1,945 shaders: 1,603 pixel, 340 vertex, 2 geometry. 1,933 are whole GLSLC outputs in the 86 shader `.igz` files of `archives/shaders_nx.pak` (2,582 outputs, one stage each; the other 400 archives hold none), read by the igArchive reader ([shaders.md](../../../docs/reference/shaders.md#glslc-outputs-in-alchemys-igarchive-files)); 12 are in `main`. Each output is one stage, so the 340 vertex shaders are paired with the pixel input cover.
-- The Vulkan library: 1,945 of 1,945 translate, 2,061 modules, every one valid for `spirv-val`; 7.8 MB.
+- `shader_split.py` found 1,947 shaders: 1,604 pixel, 341 vertex, 2 geometry. 1,933 are whole GLSLC outputs in the 86 shader `.igz` files of `archives/shaders_nx.pak` (2,582 outputs, one stage each; the other 400 archives hold none), read by the igArchive reader ([shaders.md](../../../docs/reference/shaders.md#glslc-outputs-in-alchemys-igarchive-files)); 12 are in `main` and 2 are the run-time captures below. Each output is one stage, so the 341 vertex shaders are paired with the pixel input cover.
+- The Vulkan library: 1,947 of 1,947 translate, 2,063 modules, every one valid for `spirv-val`; 7.8 MB.
 
-## Shaders compiled at run time (open)
+## Shaders compiled at run time
 
-`main` holds 5 GLSL sources and imports `glslcCompile`, so some shaders exist in no game file. They are not in the tables: the split prints `[RED] main holds GLSL sources and imports glslcCompile, but there are no captured GLSLC outputs`. A profile of this game in a fork of nxnative reports 2 of them compiled, a vertex and a pixel shader, and only after the first button press on the title screen (nothing in 200 s without input). To add them: run the game with `DM_GLSLC_CAPTURE=<folder>` and press A on the title screen, then split again with that folder (`/glslc_capture/=runtime` goes into `shader_groups`).
+`main` holds 5 GLSL sources and imports `glslcCompile`. Two of them are compiled, a vertex and a pixel shader (keys `4e4208ca043b8c27` and `a48c0d8a47c19850`), within the first seconds of a boot on the Thor; without them the screen stays black through the first screens (`[RED] vk: shader … is not in the shader library`). They were captured on the Thor with `DM_GLSLC_CAPTURE` (`05716fdaa771c310.glslc`, `df823c2fe0d0e4f1.glslc`, the same names a Mac capture of this game in a fork of nxnative has) and are the `/glslc_capture/=runtime` rows of the map. A build needs that capture folder beside the RomFS, as for Fire Emblem: Three Houses; Build in the app runs the capture itself.
 
-## Audio (not yet run)
+## Audio
 
-The game opens two audio renderers, one at 32 kHz at boot and one at 48 kHz as its intro starts. A host that drives one stops presenting a few seconds later (`[RED] audren: a second renderer`). The host now drives up to 4 ([audio.md](../../../docs/reference/audio.md#a-game-with-more-than-one-renderer)); not yet heard on this game.
+The game opens two audio renderers, one at 32 kHz at boot and one at 48 kHz as its intro starts. A host that drives one stops presenting a few seconds later (`[RED] audren: a second renderer`). The host drives up to 4 ([audio.md](../../../docs/reference/audio.md#a-game-with-more-than-one-renderer)): on the Thor both render (`renderer 1 rendered 200 frames, 167 of them not silent`) and the game runs on. Judged by the log, not by ear.
 
 ## Frame rate
 
@@ -52,9 +52,13 @@ From the survey, before any rewrite:
 - `sdk`: 1,376,579 instructions, 273 undecodable, 11,228 `x18` uses, 61 `svc`, 56 `mrs tpidrro_el0`, 32 `mrs cntpct_el0`.
 - `subsdk0`: 1,427,545 instructions, 7 undecodable, 2,882 `x18` uses.
 
+## Companion
+
+The companion of eden-duo-companions 1.0.0 loads its native module for this build and shows its race page on the Thor's second screen: the ranked racers, the minimap with their icons, the timer, the lap and the position.
+
 ## Open
 
-- A first boot on a device, on the system driver and on Turnip.
-- The run-time shaders, above, and the two audio renderers heard on a device.
+- The system driver, and more than two tracks.
+- One screenshot of a race's opening flyby showed blocks of another camera's picture; not seen in the races. Not looked into.
 - The memory keys are not measured.
-- The companion on the second screen.
+- 60 fps (above).

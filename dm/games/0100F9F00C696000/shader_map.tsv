@@ -1946,3 +1946,5 @@ ps_main.bin	3	pixel	efaa4bc0fbd3a9d1	main#GLSLC@0x40ddc48
 ps_main.bin	4	pixel	cf444a1dcc8410a0	main#GLSLC@0x40df4c4
 vs_main.bin	5	vertex	b5e6c55a98bd0927	main#GLSLC@0x40e59a4
 ps_main.bin	5	pixel	76c71ac0f2448246	main#GLSLC@0x40e7a50
+vs_runtime.bin	0	vertex	4e4208ca043b8c27	/glslc_capture/05716fdaa771c310.glslc#GLSLC@0x0
+ps_runtime.bin	0	pixel	a48c0d8a47c19850	/glslc_capture/df823c2fe0d0e4f1.glslc#GLSLC@0x0

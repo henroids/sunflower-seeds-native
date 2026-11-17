@@ -3,8 +3,8 @@
 # PEANUTS: a Peanuts Native profile (Banana Native has none for this title); whole file Peanuts' own
 # Vicarious Visions' Alchemy engine (build name Octane), SDK 8.2.0, NVN, Havok, FMOD, Bink 2; subsdk0 is the game's own GLSLC.
 # The shaders are whole GLSLC outputs in the shader .igz files of archives/shaders_nx.pak, an igArchive version 13 with LZMA blocks (shader_split.py iga_shaders),
-# and 12 more in main. The game compiles 2 more at run time, after the first button press on the title screen: not in the tables yet (README.md).
-# Status: provisional profile (dm/games/profile_guess.py from the survey); not run on a device yet
+# and 12 more in main. The game compiles 2 more at run time with its own GLSLC: captured on a device with DM_GLSLC_CAPTURE, the /glslc_capture/ rows (README.md).
+# Status: plays on an AYN Thor; the memory values are the survey's guess (dm/games/profile_guess.py), not measured
 
 # ---- Identity ----
 title_id	0100F9F00C696000
@@ -38,5 +38,5 @@ sys_resource	0x0
 mem_used	0x7000000
 
 # ---- Shader split ----
-shader_groups	/archives/=archives /ghosts/=ghosts /dlog/=dlog
+shader_groups	/archives/=archives /ghosts/=ghosts /dlog/=dlog /glslc_capture/=runtime
 shader_note	Crash Team Racing Nitro-Fueled shaders
