@@ -613,13 +613,19 @@ int nximport_firmware_fonts(const char *firmware_dir, const char *out_dir) {
     }
     // Both required archives are readable. Only now may their output replace the installed files.
     static const char *names[6] = {"standard.ttf", "nintendo_ext.ttf", "cjk_sc.ttf", "cjk_sc_ext.ttf", "cjk_tc.ttf", "cjk_kr.ttf"};
-    for (int i = 0; i < 6; i++) if (fj.data[i]) {
-        char path[1200]; snprintf(path, sizeof path, "%s/%s", out_dir, names[i]);
+    // Each font is written beside its name first and takes the name only once all are written: a full disk or a stop half-way leaves the installed fonts as they were
+    for (int i = 0; i < 6 && !rc; i++) if (fj.data[i]) {
+        char path[1208]; snprintf(path, sizeof path, "%s/%s.tmp", out_dir, names[i]);
         FILE *o = fopen(path, "wb");
-        if (!o) { nx_err("cannot write %s: %s", path, strerror(errno)); rc = -1; goto done; }
+        if (!o) { nx_err("cannot write %s: %s", path, strerror(errno)); rc = -1; break; }
         int written = fwrite(fj.data[i], 1, fj.size[i], o) == fj.size[i];
         int closed = fclose(o);
-        if (!written || closed) { nx_err("write failed: %s", path); rc = -1; goto done; }
+        if (!written || closed) { nx_err("write failed: %s", path); rc = -1; }
+    }
+    for (int i = 0; i < 6; i++) if (fj.data[i]) {
+        char tmp[1208], path[1200]; snprintf(tmp, sizeof tmp, "%s/%s.tmp", out_dir, names[i]); snprintf(path, sizeof path, "%s/%s", out_dir, names[i]);
+        if (rc) { remove(tmp); continue; }
+        if (rename(tmp, path)) { nx_err("cannot replace %s: %s", path, strerror(errno)); remove(tmp); rc = -1; }
     }
 done:
     for (int i = 0; i < 6; i++) free(fj.data[i]);
