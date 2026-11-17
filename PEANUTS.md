@@ -113,7 +113,10 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   words on a landscape screen 600 dp or wider. Home leaves out its header while it shows (X opens Settings; Y on a running build's cover asks to
   stop it). Settings › Library › **Bottom screen** turns it off (`PeanutsPrefs.bottomScreen`), and Home is then as before. The cover mark
   "Building · N %" and the build card's step words show a thin, faint bar between the parts instead of the dot (`PUi.joined`). Home's drifting peanuts and the second screen's are one field while it shows (`BackgroundFlow`): the
-  displays sit in it as on the device, the second centred under the first with a 48 dp hinge, one phase for both; the drift is upstream's. Seen on the emulator (Android 13, a 1240x1080 and a 1920x1080 second display, hot-plugged both ways):
+  displays sit in it as on the device, the second centred under the first with a 48 dp hinge, one phase for both; the drift is upstream's. Play
+  of a game with a companion turns the card into a start page, and the game's process shows the same page (`GameScreen`) until the companion is
+  up, also from a shortcut or a frontend; without one the second display is Android's, or the game's cover with Settings › Library ›
+  **Games without a companion** (`PeanutsPrefs.bottomScreenInGames`). Seen on the emulator (Android 13, a 1240x1080 and a 1920x1080 second display, hot-plugged both ways):
   the logo page, Settings by X and back, the cards of a game to build and of one not in this app version, the setting off. Not yet run on the Thor.
 - Next: haptics → vibrator; guest calls; a play app id of its own; upstream the `vka_tex.c`, `vka_draw.c` and `hle_audren.c` changes; verify launcher
   support on the Thor and in an actual ES-DE/Daijisho install.

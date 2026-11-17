@@ -561,9 +561,12 @@ The game the controller is on, and what you can do with it:
 - a built game: its name, **Ready**, its companion and when you last played it, with **Play** and **Game page**;
 - a game to build: what the app found for it, with **Build…** (it opens the game's sheet);
 - a game that is building: the build's step and progress, with **Stop build** and **Screens off**;
+- after **Play**, for a game with a companion: its cover until the companion is up. This also shows when the game starts from a home screen shortcut or a frontend;
 - anything else (the first start, Settings, a game's page): the Peanuts Native logo.
 
 Each button shows the controller button that does the same: **A** is the main action, **Y** the second one, **X** opens Settings. You can also tap them. The controller always stays on the main screen. While a question or a game's sheet is open on the main screen, the second screen dims and waits until it closes. The drifting peanuts behind both screens are one background: they carry on from one screen to the other.
+
+During a game without a companion the second screen is Android's, as before. Settings › Library › **Games without a companion** keeps the game's cover there instead.
 
 While the second screen shows this, Home leaves out its title row and the Settings gear: **X** (or **Settings** on the second screen) opens Settings. To give the second screen back to Android while you are in the app, turn off Settings › Library › **Bottom screen**. Home then looks as it always did. Games and their companions are not affected by this setting.
 

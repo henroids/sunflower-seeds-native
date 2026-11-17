@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
@@ -18,6 +19,7 @@ import android.view.Display;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -34,17 +36,17 @@ import dev.nxnative.android.BuildConfig;
 import dev.nxnative.android.R;
 
 /**
- * The bottom screen's window: logo, game card and build pages, built once and updated in place.
+ * The bottom screen's window: logo, game card, build and start pages, built once and updated in place.
  * Compact column on small panels, cover beside the text from 600 dp landscape.
  */
 final class BottomPanel extends Presentation {
-    static final int LOGO = 0, CARD = 1, BUILD = 2;
+    static final int LOGO = 0, CARD = 1, BUILD = 2, LAUNCH = 3;
     private static final float DIM = 0.5f;
 
-    private FrameLayout stage;
+    private FrameLayout root, stage;
     private BananaBackgroundView bg;
-    private View scrim;
-    private boolean dimmed;
+    private View scrim, hint;
+    private boolean dimmed, active = true;
     private int page = -1;
     private View[] pages;
     private boolean wide, tall;
@@ -52,11 +54,12 @@ final class BottomPanel extends Presentation {
     private final int madeW, madeH, madeDpi;
 
     // card page
+    private LinearLayout cardBox;
     private TextView cardTile, cardName, cardState, cardLine1, cardLine2;
     private LinearLayout cardMark, cardLine1Row;
     private View cardBadge;
     private PUi.Action cardPrimary, cardSecond;
-    private BottomScreen.Card shownCard;
+    private BottomScreen.Card shownCard, slidingTo;
 
     // build page
     private TextView buildTile, buildName, buildStatus, buildBody, buildPct;
@@ -64,8 +67,9 @@ final class BottomPanel extends Presentation {
     private PUi.Action buildStop, buildOff, buildOpen;
     private BottomScreen.BuildInfo shownBuild;
 
-    // logo page
-    private Button logoSettings;
+    // start page
+    private StartView start;
+    private String launchId;
 
     @SuppressWarnings("deprecation")   // getRealMetrics
     BottomPanel(Activity owner, Display display) {
@@ -82,13 +86,14 @@ final class BottomPanel extends Presentation {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);   // the controller stays on top
         getWindow().setDecorFitsSystemWindows(false);                            // no black band for system bars
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(PUi.col(getContext(), R.color.bn_bg)));
-        FrameLayout root = new FrameLayout(getContext());
-        root.setBackgroundColor(PUi.col(getContext(), R.color.bn_bg));
-        bg = new BananaBackgroundView(getContext());
+        Context c = getContext();
+        root = new FrameLayout(c);
+        root.setBackgroundColor(PUi.col(c, R.color.bn_bg));
+        bg = new BananaBackgroundView(c);
         root.addView(bg, fill());
-        stage = new FrameLayout(getContext());
+        stage = new FrameLayout(c);
         root.addView(stage, fill());
-        scrim = new View(getContext());
+        scrim = new View(c);
         scrim.setBackgroundColor(0xFF000000);
         scrim.setClickable(true);   // swallows taps while dimmed
         scrim.setAlpha(dimmed ? DIM : 0f);
@@ -98,8 +103,15 @@ final class BottomPanel extends Presentation {
         build();
     }
 
-    @Override protected void onStart() { super.onStart(); if (bg != null) bg.setRunning(true); }
-    @Override protected void onStop() { if (bg != null) bg.setRunning(false); super.onStop(); }
+    @Override protected void onStart() { super.onStart(); setActive(active); }
+    @Override protected void onStop() { if (bg != null) bg.setRunning(false); if (start != null) start.setAnimating(false); super.onStop(); }
+
+    /** Off while hidden or the display is off: hide() keeps the window, and its animations would keep running */
+    void setActive(boolean on) {
+        active = on;
+        if (bg != null) bg.setRunning(on);
+        if (start != null) start.setAnimating(on && page == LAUNCH);
+    }
 
     /** Dim while a dialog or sheet on top has the controller */
     void dim(boolean on) {
@@ -124,6 +136,25 @@ final class BottomPanel extends Presentation {
         return m.widthPixels == madeW && m.heightPixels == madeH && m.densityDpi == madeDpi;
     }
 
+    /** Back after a game: the content fades in */
+    void appear() {
+        if (stage == null) return;
+        for (View v : new View[] {stage, hint}) {
+            v.animate().cancel();
+            if (Motion.on()) { v.setAlpha(0f); v.animate().alpha(1f).setDuration(Motion.ENTER).setInterpolator(Motion.OUT); }
+            else v.setAlpha(1f);
+        }
+    }
+
+    /** The game took over: the content fades out, then {@code after} */
+    void fadeOut(Runnable after) {
+        if (stage == null || !Motion.on() || !stage.isShown()) { after.run(); return; }
+        hint.animate().cancel();
+        hint.animate().alpha(0f).setDuration(Motion.EXIT);
+        stage.animate().cancel();
+        stage.animate().alpha(0f).setDuration(Motion.EXIT * 2).setInterpolator(Motion.IN).withEndAction(after);
+    }
+
     // ---- Layout ----
 
     private void build() {
@@ -134,11 +165,16 @@ final class BottomPanel extends Presentation {
         tall = h >= 340;
         coverDp = wide ? clamp(Math.round(h * 0.42f), 120, 280) : clamp(Math.round(h * 0.25f), 72, 120);
         stage.removeAllViews();
-        pages = new View[] {page(logoPage()), page(cardPage()), page(buildPage())};
+        start = new StartView(c);
+        pages = new View[] {page(logoPage()), page(cardPage()), page(buildPage()), start};
         for (View v : pages) { v.setVisibility(View.GONE); stage.addView(v); }
+        if (hint != null) root.removeView(hint);
+        hint = settingsBar(c);
+        hint.setVisibility(View.GONE);
+        root.addView(hint, root.indexOfChild(stage) + 1, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
     }
 
-    /** Centred column, capped width, scrolls on short screens */
+    /** Centred column, capped width, scrolls on short screens; room for the Settings hint */
     private View page(View column) {
         Context c = getContext();
         ScrollView s = new ScrollView(c);
@@ -147,11 +183,29 @@ final class BottomPanel extends Presentation {
         s.setOverScrollMode(View.OVER_SCROLL_NEVER);
         FrameLayout f = new FrameLayout(c);
         int pad = PUi.dp(c, wide ? 24 : 16);
-        f.setPadding(pad, pad, pad, pad);
+        f.setPadding(pad, pad, pad, pad + (tall ? PUi.dp(c, 56) : 0));
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
         f.addView(new MaxWidth(c, PUi.dp(c, wide ? 880 : 560), column), lp);
         s.addView(f, fill());
+        // a sliding card or the growing cover may pass the column's edge
+        for (ViewGroup g : new ViewGroup[] {s, f, (ViewGroup) column.getParent(), (ViewGroup) column}) { g.setClipChildren(false); g.setClipToPadding(false); }
         return s;
+    }
+
+    /** X Settings, fixed at the bottom, in line with the column */
+    private View settingsBar(Context c) {
+        FrameLayout bar = new FrameLayout(c);
+        int pad = PUi.dp(c, wide ? 24 : 16);
+        bar.setPadding(pad, 0, pad, PUi.dp(c, 12));
+        Button b = PUi.button(c, "Settings", PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.TICK); BottomScreen.settings(); });
+        b.setCompoundDrawablesRelativeWithIntrinsicBounds(new KeyGlyph(c, "X", b.getCurrentTextColor(), PUi.col(c, R.color.bn_bg)), null, null, null);
+        b.setCompoundDrawablePadding(PUi.dp(c, 10));
+        LinearLayout row = PUi.row(c);
+        row.addView(b, PUi.wrap());
+        // the same width as the pages' column, centred
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL);
+        bar.addView(new MaxWidth(c, PUi.dp(c, wide ? 880 : 560), row), lp);
+        return bar;
     }
 
     private View logoPage() {
@@ -168,15 +222,13 @@ final class BottomPanel extends Presentation {
             v.setGravity(Gravity.CENTER);
             PUi.add(col, v, 4, PUi.wrap());
         }
-        logoSettings = settingsButton(c);   // Home only
-        PUi.add(col, logoSettings, 20, PUi.wrap());
         return col;
     }
 
     private View cardPage() {
         Context c = getContext();
         LinearLayout col = column(c);
-        LinearLayout card = PUi.card(c);
+        cardBox = PUi.card(c);
         LinearLayout top = PUi.row(c);
         top.setGravity(wide ? Gravity.CENTER_VERTICAL : Gravity.TOP);
         cardTile = PUi.tile(c, "?", coverDp);
@@ -201,20 +253,19 @@ final class BottomPanel extends Presentation {
         cardLine2 = PUi.small(c, "");
         PUi.add(info, cardLine2, 4);
         top.addView(info, PUi.weight());
-        card.addView(top);
+        cardBox.addView(top);
 
-        cardPrimary = PUi.action(c, 0, "Play", PUi.Kind.PRIMARY, v -> act(v, shownCard == null ? null : shownCard.primary, true));
+        cardPrimary = PUi.action(c, 0, "Play", PUi.Kind.PRIMARY, v -> act(v, shownCard == null || slidingTo != null ? null : shownCard.primary, true));   // not mid-slide: that card is leaving
         setKey(cardPrimary, "A");
-        cardSecond = keyButton(c, "Y", "Game page", v -> act(v, shownCard == null ? null : shownCard.second, false));
+        cardSecond = keyButton(c, "Y", "Game page", v -> act(v, shownCard == null || slidingTo != null ? null : shownCard.second, false));
         if (wide) {
             PUi.add(info, PUi.pair(c, cardPrimary, cardSecond), 16);
             cardSecond.getLayoutParams().height = ViewGroup.LayoutParams.MATCH_PARENT;   // as tall as A
         } else {
-            PUi.add(card, cardPrimary, 16);
-            PUi.add(card, cardSecond, 10);
+            PUi.add(cardBox, cardPrimary, 16);
+            PUi.add(cardBox, cardSecond, 10);
         }
-        col.addView(card);
-        if (tall) PUi.add(col, settingsButton(c), 8, PUi.wrap());
+        col.addView(cardBox);
         return col;
     }
 
@@ -248,7 +299,6 @@ final class BottomPanel extends Presentation {
         buildOpen = keyButton(c, "A", "Open the build card", v -> act(v, shownBuild == null ? null : shownBuild.open, false));
         PUi.add(card, buildOpen, 14);
         col.addView(card);
-        if (tall) PUi.add(col, settingsButton(c), 8, PUi.wrap());
         return col;
     }
 
@@ -271,28 +321,54 @@ final class BottomPanel extends Presentation {
         b.icon.setVisibility(key == null ? View.GONE : View.VISIBLE);
     }
 
-    /** X: Settings */
-    private Button settingsButton(Context c) {
-        Button b = PUi.button(c, "Settings", PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.TICK); BottomScreen.settings(); });
-        b.setCompoundDrawablesRelativeWithIntrinsicBounds(new KeyGlyph(c, "X", b.getCurrentTextColor(), PUi.col(c, R.color.bn_bg)), null, null, null);
-        b.setCompoundDrawablePadding(PUi.dp(c, 10));
-        return b;
-    }
-
     // ---- Pages ----
 
-    /** onHome: with the Settings button */
+    /** onHome: with the Settings hint */
     void showLogo(boolean onHome) {
-        if (logoSettings != null) logoSettings.setVisibility(onHome ? View.VISIBLE : View.GONE);
+        setHint(onHome);
         switchTo(LOGO);
     }
 
+    /** Another game slides in from where the D-pad went; the same one updates in place */
     void showCard(BottomScreen.Card k) {
+        setHint(true);
+        boolean other = shownCard != null && !shownCard.titleId.equals(k.titleId);
+        if (page == CARD && (other || slidingTo != null) && Motion.on() && stage.isShown()) { slide(k); return; }
+        bindCard(k);
+        switchTo(CARD);
+    }
+
+    private void slide(BottomScreen.Card k) {
+        boolean underWay = slidingTo != null;
+        slidingTo = k;
+        if (underWay) return;   // the slide out binds the newest
+        BottomScreen.Card from = shownCard;
+        int dx = 0, dy = 1;   // unknown: a small rise
+        if (from != null && from.pos >= 0 && k.pos >= 0 && from.pos != k.pos) {
+            int cols = Math.max(1, k.cols);
+            if (from.pos / cols != k.pos / cols) dy = k.pos > from.pos ? 1 : -1;
+            else { dy = 0; dx = k.pos > from.pos ? 1 : -1; }
+        }
+        float d = PUi.dp(getContext(), 18);
+        float ox = dx * d, oy = dy * d;
+        cardBox.animate().cancel();
+        cardBox.animate().alpha(0f).translationX(-ox).translationY(-oy).setDuration(Motion.SNAP).setInterpolator(Motion.IN).withLayer().withEndAction(() -> {
+            BottomScreen.Card n = slidingTo;
+            slidingTo = null;
+            if (n == null) return;
+            bindCard(n);
+            cardBox.setTranslationX(ox);
+            cardBox.setTranslationY(oy);
+            cardBox.animate().alpha(1f).translationX(0f).translationY(0f).setDuration(Motion.ENTER).setInterpolator(Motion.OUT).withLayer();
+        });
+    }
+
+    private void bindCard(BottomScreen.Card k) {
         Context c = getContext();
         boolean same = shownCard != null && shownCard.titleId.equals(k.titleId);
         shownCard = k;
         cardName.setText(k.name);
-        if (!same) setTile(cardTile, k.name, k.icon); else if (k.icon != null && cardTile.getCurrentTextColor() != android.graphics.Color.TRANSPARENT) Motion.cover(cardTile, k.icon);
+        if (!same) setTile(cardTile, k.name, k.icon); else if (k.icon != null && cardTile.getCurrentTextColor() != Color.TRANSPARENT) Motion.cover(cardTile, k.icon);
         stateMark(c, k);
         boolean ready = k.kind == BottomScreen.Card.K_READY, toBuild = k.kind == BottomScreen.Card.K_BUILD;
         boolean hasComp = ready && k.companion != null;
@@ -306,10 +382,20 @@ final class BottomPanel extends Presentation {
         if (k.primary != null) cardPrimary.setText(k.primaryLabel);
         cardSecond.setVisibility(k.second != null ? View.VISIBLE : View.GONE);
         if (k.second != null) cardSecond.setText(k.secondLabel);
-        switchTo(CARD);
+        cardBox.setAlpha(1f);
+        cardBox.setTranslationX(0f);
+        cardBox.setTranslationY(0f);
+    }
+
+    /** A cover's art landed after its card showed */
+    void icon(String titleId, Bitmap b) {
+        if (shownCard != null && shownCard.titleId.equals(titleId)) { shownCard.icon = b; Motion.cover(cardTile, b); }
+        if (shownBuild != null && shownBuild.titleId.equals(titleId)) { shownBuild.icon = b; Motion.cover(buildTile, b); }
+        if (titleId.equals(launchId)) start.icon(b);
     }
 
     void showBuild(BottomScreen.BuildInfo b) {
+        setHint(true);
         boolean same = shownBuild != null && shownBuild.titleId.equals(b.titleId);
         shownBuild = b;
         buildName.setText(b.name);
@@ -323,7 +409,7 @@ final class BottomPanel extends Presentation {
         Context c = getContext();
         boolean fresh = shownBuild == null || page != BUILD;
         shownBuild = b;
-        buildStatus.setText(b.step);
+        swap(buildStatus, b.step);
         buildStatus.setTextColor(PUi.col(c, b.failed ? R.color.bn_danger : R.color.bn_accent));
         buildBody.setText(b.body);
         buildBar.setVisibility(b.failed ? View.GONE : View.VISIBLE);
@@ -337,25 +423,99 @@ final class BottomPanel extends Presentation {
         buildOpen.setVisibility((b.failed || b.stop == null) && b.open != null ? View.VISIBLE : View.GONE);
     }
 
-    /** Crossfade (cut under reduced motion) */
+    /** Play: the card's cover grows into the start page */
+    void showLaunch(String titleId, String name, Bitmap icon, CharSequence step) {
+        if (page == LAUNCH && titleId.equals(launchId)) return;   // already on its way
+        launchId = titleId;
+        start.bind(name, icon);
+        start.status(step);
+        start.quiet(false);
+        setHint(false);
+        TextView tile = start.tile();
+        View info = start.info();
+        boolean grow = page == CARD && shownCard != null && shownCard.titleId.equals(titleId) && Motion.on() && stage.isShown() && cardTile.isShown();
+        if (!grow) {
+            tile.setScaleX(1f); tile.setScaleY(1f); tile.setTranslationX(0f); tile.setTranslationY(0f); tile.setAlpha(1f);
+            info.setAlpha(1f); info.setTranslationY(0f);
+            switchTo(LAUNCH);
+            start.setAnimating(active);
+            return;
+        }
+        int[] from = new int[2];
+        cardTile.getLocationInWindow(from);
+        float fromW = cardTile.getWidth();
+        View out = pages[page];
+        page = LAUNCH;
+        out.animate().cancel();
+        out.animate().alpha(0f).setDuration(Motion.EXIT).withLayer().withEndAction(() -> { if (page != CARD) { out.setVisibility(View.GONE); out.setAlpha(1f); } });
+        start.animate().cancel();
+        start.setAlpha(1f);
+        start.setTranslationY(0f);
+        start.setVisibility(View.VISIBLE);
+        info.setAlpha(0f);
+        tile.setAlpha(0f);   // until it sits over the card's
+        tile.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                tile.getViewTreeObserver().removeOnPreDrawListener(this);
+                int[] to = new int[2];
+                tile.getLocationInWindow(to);
+                float sc = tile.getWidth() > 0 ? fromW / tile.getWidth() : 1f;
+                tile.setPivotX(0f); tile.setPivotY(0f);
+                tile.setScaleX(sc); tile.setScaleY(sc);
+                tile.setTranslationX(from[0] - to[0]); tile.setTranslationY(from[1] - to[1]);
+                tile.setAlpha(1f);
+                tile.animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f).setDuration(Motion.EMPHASIS).setInterpolator(Motion.OUT).withLayer();
+                info.setTranslationY(PUi.dp(getContext(), 10));
+                info.animate().alpha(1f).translationY(0f).setStartDelay(Motion.EXIT).setDuration(Motion.ENTER).setInterpolator(Motion.OUT);
+                start.setAnimating(active);
+                return true;
+            }
+        });
+    }
+
+    /** Crossfade (cut under reduced motion); the incoming page rises a little */
     private void switchTo(int next) {
         if (pages == null || next == page) return;
         View in = pages[next];
         View out = page >= 0 ? pages[page] : null;
+        if (page == LAUNCH && next != LAUNCH) start.setAnimating(false);
         page = next;
-        boolean fade = out != null && Motion.on() && stage.isShown();
+        boolean fade = Motion.on() && stage.isShown();
         in.animate().cancel();
         in.setVisibility(View.VISIBLE);
         if (out != null) {
             out.animate().cancel();
-            if (fade) out.animate().alpha(0f).setDuration(Motion.EXIT).withLayer().withEndAction(() -> { if (pages != null && pages[page] != out) out.setVisibility(View.GONE); });
+            if (fade) out.animate().alpha(0f).setDuration(Motion.EXIT).withLayer().withEndAction(() -> { if (pages != null && pages[page] != out) { out.setVisibility(View.GONE); out.setAlpha(1f); } });
             else { out.setAlpha(1f); out.setVisibility(View.GONE); }
         }
-        if (fade) { in.setAlpha(0f); in.animate().alpha(1f).setDuration(Motion.ENTER).setInterpolator(Motion.OUT).withLayer(); }
-        else in.setAlpha(1f);
+        if (fade) {
+            in.setAlpha(0f);
+            in.setTranslationY(PUi.dp(getContext(), 10));
+            in.animate().alpha(1f).translationY(0f).setDuration(Motion.ENTER).setInterpolator(Motion.OUT).withLayer();
+        } else { in.setAlpha(1f); in.setTranslationY(0f); }
+    }
+
+    private void setHint(boolean on) {
+        boolean show = on && tall;
+        if (hint == null || (hint.getVisibility() == View.VISIBLE) == show) return;
+        hint.animate().cancel();
+        if (show) {
+            hint.setVisibility(View.VISIBLE);
+            if (Motion.on() && stage.isShown()) { hint.setAlpha(0f); hint.animate().alpha(1f).setDuration(Motion.ENTER); } else hint.setAlpha(1f);
+        } else if (Motion.on() && stage.isShown()) {
+            hint.animate().alpha(0f).setDuration(Motion.EXIT).withEndAction(() -> hint.setVisibility(View.GONE));
+        } else hint.setVisibility(View.GONE);
     }
 
     // ---- Pieces ----
+
+    /** New text fades in; the same text is left alone */
+    private static void swap(TextView t, CharSequence s) {
+        if (TextUtils.equals(t.getText().toString(), s.toString())) return;
+        t.animate().cancel();
+        if (!Motion.on() || !t.isShown() || t.getText().length() == 0) { t.setText(s); t.setAlpha(1f); return; }
+        t.animate().alpha(0f).setDuration(Motion.SNAP).withEndAction(() -> { t.setText(s); t.animate().alpha(1f).setDuration(Motion.FOCUS); });
+    }
 
     private static void act(View v, Runnable r, boolean weighty) {
         if (r == null) return;

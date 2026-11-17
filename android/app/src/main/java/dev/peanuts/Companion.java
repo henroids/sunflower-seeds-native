@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import dev.peanuts.settings.CompanionSection;
+import dev.peanuts.ui.GameScreen;
 
 /**
  * Peanuts Native: the companion screen of a running game, shown on a second display (the AYN Thor's "Screen-2") as a Presentation owned by the
@@ -39,12 +40,60 @@ public final class Companion {
      * then, which goes back to whatever Android shows there. A Presentation is not closed by its activity stopping, so without this the companion stayed
      * on the bottom screen over the home screen or the other app (seen on the AYN Thor, 2026-11-15). */
     private static boolean away;
+    /** Peanuts' page on the second display meanwhile (GameScreen.LOADING / PLAYING), -1 none */
+    private static int wanted = -1;
+    private static final long LOADING_MAX_MS = 60000;
 
     private Companion() {}
+
+    /** To the launcher's bottom screen (BottomScreen, the main process): the second display is the companion's, or will not be */
+    public static final String STATE = "dev.peanuts.COMPANION_STATE";
+
+    private static void tell(android.content.Context c, String state) {
+        if (c == null) return;
+        try { c.sendBroadcast(new android.content.Intent(STATE).setPackage(c.getPackageName()).putExtra("state", state)); } catch (RuntimeException ignored) {}
+    }
+
+    /** Until decide(): the start page if a companion is installed, the game's cover if Settings keep one, else nothing */
+    private static int firstPage(Activity game) {
+        if (!PeanutsPrefs.bottomScreen(game)) return -1;
+        String id = titleId(game);
+        boolean off = CompanionSection.secondScreen(game, id).equals(CompanionSection.OFF);
+        if (!off && companionInstalled(game, id)) return GameScreen.LOADING;
+        return PeanutsPrefs.bottomScreenInGames(game) ? GameScreen.PLAYING : -1;
+    }
+
+    /** As the runtime finds it: a package beside the pack whose manifest names this title */
+    private static boolean companionInstalled(Activity game, String id) {
+        String pack = game.getIntent().getStringExtra("pack");
+        java.io.File parent = pack == null ? null : new java.io.File(pack).getAbsoluteFile().getParentFile();
+        return parent != null && CompanionSection.packageFor(new java.io.File(parent, "peanuts"), id) != null;
+    }
+
+    /** No companion after all: the game's cover if Settings keep one, else the display goes back to Android */
+    private static void settle(Activity game) {
+        wanted = PeanutsPrefs.bottomScreen(game) && PeanutsPrefs.bottomScreenInGames(game) ? GameScreen.PLAYING : -1;
+        if (wanted < 0) GameScreen.close(); else if (!away) openPage(game);
+        tellPage(game, "none");
+    }
+
+    private static void openPage(Activity game) {
+        if (wanted < 0 || listenerDm == null) return;
+        GameScreen.open(game, secondDisplay(game, listenerDm), titleId(game), decidingGameName, wanted);
+    }
+
+    /** What is really on the second display now; nothing: {@code otherwise} */
+    private static void tellPage(Activity game, String otherwise) {
+        int m = GameScreen.mode();
+        tell(game, m == GameScreen.LOADING ? "loading" : m == GameScreen.PLAYING ? "playing" : otherwise);
+    }
+
+    private static String titleId(Activity game) { return String.valueOf(game.getIntent().getStringExtra("title_id")); }
 
     /** The game left the foreground (GameActivity.onStop): the companion's window is taken off the second display until {@link #back}. */
     public static void away() {
         away = true;
+        GameScreen.away();
         if (shown != null) {
             // Hidden, not dismissed: a window made again came back black until the companion drew something new (its page is only sent when it changes)
             try { shown.hide(); } catch (RuntimeException ignored) {}
@@ -58,6 +107,7 @@ public final class Companion {
         if (!away) return;
         away = false;
         if (stopped) return;
+        if (wanted >= 0) { if (GameScreen.mode() < 0) openPage(game); else GameScreen.back(); }
         if (shown != null) {
             try { shown.show(); try { Bridge.present(true); } catch (UnsatisfiedLinkError ignored) {} return; } catch (RuntimeException e) { Log.w(TAG, "companion not shown again: " + e); shown = null; }   // its display went away meanwhile
         }
@@ -74,20 +124,27 @@ public final class Companion {
         away = false;
         DisplayManager dm = (DisplayManager) game.getSystemService(Activity.DISPLAY_SERVICE);
         listener = new DisplayManager.DisplayListener() {
-            @Override public void onDisplayAdded(int id) { if (allowed) show(game, gameName, dm); }
-            @Override public void onDisplayRemoved(int id) { if (allowed && shown != null && shown.getDisplay().getDisplayId() == id) { shown = null; show(game, gameName, dm); } }
+            @Override public void onDisplayAdded(int id) { if (allowed) show(game, gameName, dm); else if (!away) openPage(game); }
+            @Override public void onDisplayRemoved(int id) { if (allowed && shown != null && shown.getDisplay().getDisplayId() == id) { shown = null; show(game, gameName, dm); } if (!allowed) { GameScreen.close(); if (!away) openPage(game); } }
             @Override public void onDisplayChanged(int id) {}
         };
         dm.registerDisplayListener(listener, null);
         listenerDm = dm;
         decidingGame = game; decidingGameName = gameName;
+        wanted = firstPage(game);
+        openPage(game);
+        tellPage(game, "free");
+        if (wanted == GameScreen.LOADING) ui.postDelayed(() -> { if (!allowed && !stopped && decidingGame != null) settle(decidingGame); }, LOADING_MAX_MS);
         decide(dm);
         GameHold.start(game, gameName);
         held = game.getApplicationContext();
     }
 
     public static void stop() {
+        tell(held, "stopped");
         stopped = true;
+        wanted = -1;
+        GameScreen.close();
         decidingGame = null;
         ui.removeCallbacksAndMessages(null);
         if (held != null) { GameHold.stop(held); held = null; }
@@ -109,10 +166,12 @@ public final class Companion {
         }
         if (CompanionSection.secondScreen(game, String.valueOf(game.getIntent().getStringExtra("title_id"))).equals(CompanionSection.OFF)) {
             Log.i(TAG, "second screen is Off in this title's settings: companion not shown");
+            settle(game);
             return;
         }
         if (state != Bridge.RT_LOADED && !developerReadout) {
             Log.i(TAG, "no companion loaded for this title (state=" + state + "): the second display is left to Android, not taken over");
+            settle(game);
             return;
         }
         if (state == Bridge.RT_FAILED) Log.w(TAG, "a companion package was found but the runtime refused it (see earlier \"peanuts\" logs); " +
@@ -124,14 +183,18 @@ public final class Companion {
     private static void show(Activity game, String gameName, DisplayManager dm) {
         if (shown != null || away || game.isFinishing() || game.isDestroyed()) return;   // away: shown again by back()
         Display d = secondDisplay(game, dm);
-        if (d == null) { Log.i(TAG, "no second display: companion not shown"); return; }
+        if (d == null) { Log.i(TAG, "no second display: companion not shown"); tell(game, "none"); return; }
         try {
             shown = new CompanionPresentation(game, d, gameName);
             shown.show();
             Log.i(TAG, "companion on display " + d.getDisplayId() + " \"" + d.getName() + "\"");
+            wanted = -1;
+            GameScreen.closeSoon();
+            tell(game, "shown");
         } catch (RuntimeException e) {   // the display refuses app windows, or went away between the query and show()
             Log.w(TAG, "companion not shown on display " + d.getDisplayId() + ": " + e);
             shown = null;
+            settle(game);
         }
     }
 

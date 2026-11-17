@@ -86,6 +86,9 @@ public final class PeanutsPrefs {
     /** Settings > Library > Bottom screen, on by default */
     public static boolean bottomScreen(Context c) { return of(c).getBoolean("bottom_screen", true); }
     public static void bottomScreen(Context c, boolean on) { of(c).edit().putBoolean("bottom_screen", on).apply(); }
+    /** Settings > Library > Games without a companion: their cover stays on the second display, off by default */
+    public static boolean bottomScreenInGames(Context c) { return of(c).getBoolean("bottom_screen_games", false); }
+    public static void bottomScreenInGames(Context c, boolean on) { of(c).edit().putBoolean("bottom_screen_games", on).apply(); }
 
     /** Settings > Library > Haptics: false (default) = the launcher's haptics follow the system's touch feedback setting, true = none at all */
     public static boolean hapticsOff(Context c) { return of(c).getBoolean("haptics_off", false); }

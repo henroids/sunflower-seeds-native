@@ -35,7 +35,7 @@ public final class LibrarySettings {
     public static final int REQ_MOD_FOLDER = 69, REQ_MOD_ZIP = 70;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Reading the firmware…" and what came of it, while the rows show
-    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow, bottomRow;
+    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow, bottomRow, gamesRow;
     private static Activity rowsOf;
 
     private LibrarySettings() {}
@@ -91,6 +91,13 @@ public final class LibrarySettings {
             refreshRows();
         });
         card.addView(bottomRow.view);
+        gamesRow = new PUi.Setting(a, "🎮", "Games without a companion", v -> {
+            if (!PeanutsPrefs.bottomScreen(a)) { Haptics.play(v, Haptics.Word.REJECT); return; }
+            PeanutsPrefs.bottomScreenInGames(a, !PeanutsPrefs.bottomScreenInGames(a));
+            Haptics.play(v, Haptics.Word.CLICK);
+            refreshRows();
+        });
+        card.addView(gamesRow.view);
         companionsRow = new PUi.Setting(a, "🖥️", "Companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
                 .chevron(a);
         card.addView(companionsRow.view);
@@ -131,6 +138,13 @@ public final class LibrarySettings {
                 : "System: follows Android's animation setting. Tap for reduced motion (fades and progress only).");
         if (bottomRow != null) bottomRow.value(PeanutsPrefs.bottomScreen(a) ? "On: a second screen shows the game you are on, with Play and its page. Tap to leave that screen to Android."
                 : "Off: a second screen shows Android's own launcher while you are here. Tap to turn it on.");
+        if (gamesRow != null) {
+            boolean on = PeanutsPrefs.bottomScreen(a);
+            gamesRow.view.setAlpha(on ? 1f : 0.5f);
+            gamesRow.value(!on ? "Needs Bottom screen on."
+                    : PeanutsPrefs.bottomScreenInGames(a) ? "The game's cover stays on the second screen while you play. Tap to leave it to Android."
+                    : "Android's own screen while you play. Tap to keep the game's cover there.");
+        }
     }
 
     static String keysValue(Activity a) {

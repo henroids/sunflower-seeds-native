@@ -343,6 +343,7 @@ public final class Library {
                 UI.post(() -> {
                     if (icons.containsKey(id)) return;
                     icons.put(id, b);
+                    BottomScreen.icon(id, b);
                     Library l = current; TextView tile = l == null ? null : l.tiles.get(id);
                     if (tile != null) Motion.cover(tile, b);   // a tile on screen crossfades to its art; a tile built from now on has it at once
                 });
@@ -380,7 +381,7 @@ public final class Library {
                 File f = LibraryScanner.icon(a, x);
                 Bitmap b = f == null ? null : BitmapFactory.decodeFile(f.getPath());
                 if (b == null) continue;
-                UI.post(() -> { icons.put(x.titleId, b); TextView tile = tiles.get(x.titleId); if (tile != null) Motion.cover(tile, b); });
+                UI.post(() -> { icons.put(x.titleId, b); BottomScreen.icon(x.titleId, b); TextView tile = tiles.get(x.titleId); if (tile != null) Motion.cover(tile, b); });
             }
             if (!catalogFetched) {
                 List<CompanionPort.Item> c = CompanionPort.fetch();
@@ -758,6 +759,10 @@ public final class Library {
         }
         int hidden = hiddenGameCount();
         int cols = coverColumns();
+        gridPos.clear();
+        for (int i = 0; i < show.size(); i++) gridPos.put(show.get(i).id(), i);
+        gridCols = Math.max(1, cols);
+        if (!setup && !rows.isEmpty() && filter != BUILDING) BottomScreen.only(gridPos.keySet());
 
         // nothing visible changed: the views stay, with their focus, their scroll position and whatever is animating
         String sig = setup ? null : signature(show, pc, b, buildCard, building, all, ready, toBuild, noProfile, hidden, cols);   // the first-run card reads too much to list: always built
@@ -1143,8 +1148,9 @@ public final class Library {
         if (dump != null) dev.peanuts.build.GameEnv.ensureBuildId(a, r.id(), dump);
         FontGate.check(a, r.id(), r.name(), () -> {
             played = r.id(); playedAt = android.os.SystemClock.uptimeMillis();   // Home's next resume puts the focus on this cover (watch)
+            BottomScreen.launching(r.id(), r.name(), icons.get(r.id()), startsCompanion(r));
             if (Upstream.launch(a, r.game)) Motion.launched(a);
-            else { Haptics.play(anchor(), Haptics.Word.REJECT); manage.accept(r.game); }
+            else { BottomScreen.launchCancelled(); Haptics.play(anchor(), Haptics.Word.REJECT); manage.accept(r.game); }
         });
     }
 
@@ -1205,6 +1211,14 @@ public final class Library {
         return v;
     }
 
+    /** As the game's process decides (Companion.firstPage): a package beside the pack names this title, its second screen is not Off */
+    private boolean startsCompanion(Row r) {
+        if (dev.peanuts.settings.CompanionSection.secondScreen(a, r.id()).equals(dev.peanuts.settings.CompanionSection.OFF)) return false;
+        File pack = r.title == null && !r.entry.packDir.isEmpty() ? new File(r.entry.packDir) : null;
+        File root = r.title != null ? r.title.companionRoot() : pack == null || pack.getParentFile() == null ? null : new File(pack.getParentFile(), "peanuts");
+        return root != null && dev.peanuts.settings.CompanionSection.packageFor(root, r.id()) != null;
+    }
+
     /** Whether a companion is installed for this title (Installer.installedVersion under the title's companion root), cached until the next scan or build */
     private boolean companionInstalled(Row r) {
         Boolean c = companions.get(r.id());
@@ -1230,6 +1244,8 @@ public final class Library {
     private void bottom(Row r, Runnable tap, Runnable hold) {
         BottomScreen.Card k = new BottomScreen.Card();
         k.titleId = r.id(); k.name = r.name(); k.icon = icons.get(r.id());
+        Integer at = gridPos.get(r.id());
+        k.pos = at == null ? -1 : at; k.cols = gridCols;
         int st = r.status();
         if (isBuilding(r)) {
             k.kind = BottomScreen.Card.K_BUILDING;
@@ -1311,6 +1327,8 @@ public final class Library {
     }
 
     private final Map<String, String> companionVersions = new HashMap<>();
+    private final Map<String, Integer> gridPos = new HashMap<>();   // cover order: the bottom screen slides the way the D-pad went
+    private int gridCols = 1;
 
     /** Installed companion version, null if none; cached like companionInstalled */
     private String companionVersion(Row r) {
