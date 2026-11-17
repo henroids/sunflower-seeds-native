@@ -2680,8 +2680,12 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     PT(2);
     walk_all(d, sh);
     {   // DM_VK_BIND_LOG: a draw whose vertex or pixel shader is one of those keys logs its stages' bindings too, as a dispatch does (the first 12 draws in all)
-        const char *bl = getenv("DM_VK_BIND_LOG"); static _Atomic int nb; int hit = 0;
-        for (const char *q = bl; q && *q && !hit;) { char *e; unsigned long long k = strtoull(q, &e, 16); if (e == q) break; hit = (sh[0] && k == sh[0]->key) || (sh[1] && k == sh[1]->key); q = *e == ',' ? e + 1 : e; }
+        // PEANUTS(upstream-candidate): the keys are parsed when a switch changes (vka_env_gen, as skip_fs), not read with getenv at every draw: that walk of the environment
+        // was 5.6 % of the replay thread's CPU in Breath of the Wild (Thor, 2026-11-18, ~4,000 draws a frame) with the switch unset. At most 64 keys
+        static uint32_t blgen = ~0u; static uint64_t blk[64]; static int nblk; static _Atomic int nb; int hit = 0;
+        { uint32_t g = atomic_load_explicit(&vka_env_gen, memory_order_relaxed);
+          if (g != blgen) { blgen = g; nblk = 0; for (const char *q = getenv("DM_VK_BIND_LOG"); q && *q && nblk < 64;) { char *e; unsigned long long k = strtoull(q, &e, 16); if (e == q) break; blk[nblk++] = k; q = *e == ',' ? e + 1 : e; } } }
+        for (int i = 0; i < nblk && !hit; i++) hit = (sh[0] && blk[i] == sh[0]->key) || (sh[1] && blk[i] == sh[1]->key);
         if (hit && atomic_fetch_add(&nb, 1) < 12)
             for (int st = 0; st < VKA_NSTAGE; st++) if (sh[st]) for (int i = 0; i < g_wk.n[st]; i++) { const vka_res *x = &g_wk.r[st][i]; char why[320] = "";
                 if ((x->what == VKA_R_TEX || x->what == VKA_R_IMG) && x->tid) vka_tex_id_desc(x->tid, why, sizeof why);

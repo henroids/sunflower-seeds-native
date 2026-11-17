@@ -1143,3 +1143,7 @@ No shader-chain files or shader-library versions changed. See the [frame-rate ev
 ### Texture release scanned the whole serial map under the texture lock (2026-11-18)
 
 `dm/gfx/vk_android/vka_smap.h` has PEANUTS(upstream-candidate) hunks: each image counts its entries in the serial map (`smap_n`, a PEANUTS field of `vka_img` in `vka.h`), kept by `vksm_put` and `vksm_del_ent`, so `vksm_del_im` returns at once for an image without entries and stops at its last one. Before, every image let go (`unref_locked`, from `nvnTextureFinalize`) walked the whole table while holding `g_tmu`. Measured on the Thor in Breath of the Wild (T30 driver, 30 s simpleperf profile with off-CPU time, frame cap 60, streaming terrain): 3.2 s of CPU in that walk on the game's threads, the replay thread 5.5 s waiting for the lock, 28 waits of 15-76 ms, frames of 50-140 ms with no pipeline or texture work on them. `dm/host/tests/t_android_smap.c` checks the counts against a reference and the empty case. Evidence: `pn-build/botw-userplay-20261117` (local).
+
+### A diagnostic switch read from the environment at every draw (2026-11-18)
+
+`dm/gfx/vk_android/vka_draw.c` `draw_body` has a PEANUTS(upstream-candidate) hunk: `DM_VK_BIND_LOG`'s keys are parsed when a switch changes (`vka_env_gen`, as `skip_fs` does) instead of `getenv` at every draw. In the same Thor profile of Breath of the Wild that `getenv` was 5.6 % of the replay thread's CPU (32 ms a second) with the switch unset. The switch stays live.
