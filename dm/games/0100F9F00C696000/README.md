@@ -42,7 +42,17 @@ The game opens two audio renderers, one at 32 kHz at boot and one at 48 kHz as i
 
 ## Frame rate
 
-The game asks for present interval 2 (30 fps), as on the Switch. It is reported to step its races by the time that passed, so a present interval of 1 would give 60 fps at the right speed. Not tried here.
+The game asks for present interval 2 (30 fps), as on the Switch, and steps its races by the time that passed. So the profile follows the display ticks (`present_interval display`) and leaves the rate to the host's frame limit: 60 by default (`fps_limit 60`), the launcher's choices from 20 to 120 (`fps_limit_max 120`). No code patch.
+
+Measured on the Thor in single races, the race clock read off the companion's page against the wall clock:
+
+| Limit | Frames a second | Race clock |
+|---|---|---|
+| 60 | 59 to 60 | 20.43 s in 20.43 s |
+| 120 | 118 to 120 in the menus, 81 to 97 in a race | 15.34 s in 15.36 s |
+| 20 | 19.8 to 19.9 | not read |
+
+At 120 the display runs its 120 Hz mode; the race does not hold 120 on this device. 90, 45, 40 and 30 were not run.
 
 ## Rewrite census
 
@@ -61,4 +71,4 @@ The companion of eden-duo-companions 1.0.0 loads its native module for this buil
 - The system driver, and more than two tracks.
 - One screenshot of a race's opening flyby showed blocks of another camera's picture; not seen in the races. Not looked into.
 - The memory keys are not measured.
-- 60 fps (above).
+- The frame limits not run (above), and physics or timers that may count frames at rates other than 30: none seen in two races.

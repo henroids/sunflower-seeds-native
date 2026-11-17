@@ -37,6 +37,13 @@ sys_resource	0x0
 # the modules take 107 MB (main 84.4, sdk 13.0, subsdk0 9.2), more than the default 64 MB: SetHeapSize(pool − used) needs at least their size here
 mem_used	0x7000000
 
+# ---- Frame rate ----
+# The game asks for present interval 2 (30 fps) and steps its races by the time that passed: at 60 fps the race clock ran 20.43 s in 20.43 s (AYN Thor).
+# Follow the display ticks so the host's frame limit picks the rate; 60 by default, the launcher's choices down to 20 and up to 120. No code patch.
+present_interval	display
+fps_limit	60
+fps_limit_max	120
+
 # ---- Shader split ----
 shader_groups	/archives/=archives /ghosts/=ghosts /dlog/=dlog /glslc_capture/=runtime
 shader_note	Crash Team Racing Nitro-Fueled shaders
