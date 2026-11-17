@@ -179,11 +179,14 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         pausedView.setOnClickListener(v -> unpause());
         root.addView(pausedView, root.indexOfChild(handle), new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         panelHint(root);
+        dev.peanuts.build.ShaderCapture.cover(this, root);   // PEANUTS: internal shader preparation stays behind a progress screen
         root.setOnApplyWindowInsetsListener((v, in) -> { insetOverlay(in); return in; });   // again whenever the insets change (a turn, a fold)
         setContentView(root);
         immersive();
-        dev.peanuts.Companion.start(this, getIntent().getStringExtra("name"));   // PEANUTS: the companion on the second display
-        dev.peanuts.launch.RecentGames.touch(this, getIntent().getStringExtra("peanuts_list_id") != null ? getIntent().getStringExtra("peanuts_list_id") : id, getIntent().getStringExtra("name"));   // PEANUTS: last-3-played dynamic shortcuts (LAUNCHERS.md), by the title ID the list holds (an edition's start: MainActivity.start)
+        if (!dev.peanuts.build.ShaderCapture.active(this)) {   // PEANUTS: preparation is not a play session
+            dev.peanuts.Companion.start(this, getIntent().getStringExtra("name"));   // PEANUTS: the companion on the second display
+            dev.peanuts.launch.RecentGames.touch(this, getIntent().getStringExtra("peanuts_list_id") != null ? getIntent().getStringExtra("peanuts_list_id") : id, getIntent().getStringExtra("name"));   // PEANUTS: last-3-played dynamic shortcuts (LAUNCHERS.md), by the title ID the list holds (an edition's start: MainActivity.start)
+        }   // PEANUTS
         TextInput.screen(this);
         CtrlScreen.screen(this);   // the controller applet's join screen shows on this screen (again, when the game was waiting on it as the screen was recreated)
         UserPicker.screen(this);   // the user selector shows on this screen, as the input box   // the keyboard applet's input box shows on this screen (again, when the game was waiting on it as the screen was recreated)
@@ -601,6 +604,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         String gpu = "GPU: " + Readiness.gpu(f) + "\nMemory: " + f.get("ram_gib") + " GiB as Android reports it.";
         // The notice is short (what is missing, by name); Details has each item's sentence, the GPU and Copy report
         if (!fails.isEmpty()) {
+            if (dev.peanuts.build.ShaderCapture.active(this)) { fail(readinessLine); return; }   // PEANUTS: report preparation failure to Build, no Play prompt
             StringBuilder m = new StringBuilder("Missing: ");
             for (Readiness.Check c : fails) m.append(c.title).append(", ");
             m.setLength(m.length() - 2);
@@ -745,7 +749,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             // the save is the application's: a program pack (a Switch 2 Edition's program 1, its pack.tsv's application row) keeps the game's save, as on the console;
             // its temp, logs and host are its own. So every start of it (the card's edition switch, a frontend, a shortcut) plays the same save
             String saveId = pack.application.isEmpty() ? id : pack.application;
-            File save = saveDir(files, game, saveId), temp = mkdirs(new File(files, "temp/" + id)), root = mkdirs(new File(files, "root"));
+            File save = dev.peanuts.build.ShaderCapture.save(this);   // PEANUTS: a preparation boot never opens the player's save
+            if (save == null) save = saveDir(files, game, saveId);   // PEANUTS
+            File temp = mkdirs(new File(files, "temp/" + id)), root = mkdirs(new File(files, "root"));   // PEANUTS: save is chosen above
             // The DLC links live in internal app storage: the external files folder is shared storage (FUSE), which refuses symbolic links (errno not yet confirmed on a phone; a refused link is now a [RED] line), so
             // every link failed there and no game saw its DLC (docs/reference/packing.md "DLC links in shared storage"). Their targets stay where they are
             File aoc = aocLinks(mkdirs(new File(getFilesDir(), "aoc/" + id)), game, pack, nupFd);
@@ -814,6 +820,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             // DM_TEST_CRASH (a test crash, ExitWatch): the test app only
             if (!testApp() && user.removeIf(kv -> kv.startsWith("DM_TEST_CRASH="))) unknownNotes.add("[nxlaunch] DM_TEST_CRASH not taken: the test app only");
             env.addAll(user);
+            dev.peanuts.build.ShaderCapture.environment(this, env);   // PEANUTS: isolated silent capture, after user overrides
             for (String k : Readiness.unknownSwitches(user, KNOWN_SWITCHES)) unknownNotes.add(Readiness.unknownLine(k, switchFrom(k, files, id), KNOWN_SWITCHES));
             boolean stretch = false;
             String testCrash = null;
@@ -983,6 +990,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
      * this game's host (the next Play of another game would land in it, Native.load) and the save's lock
      */
     private void fail(String why) {
+        if (dev.peanuts.build.ShaderCapture.active(this)) { dev.peanuts.build.ShaderCapture.failure(this, why); end(); return; }   // PEANUTS: Build owns preparation errors
         new AlertDialog.Builder(this).setTitle("Cannot start " + getIntent().getStringExtra("name")).setMessage(why)
                 .setPositiveButton("OK", (d, w) -> end()).setCancelable(false).show();
     }
@@ -1395,6 +1403,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     @Override public void onInputDeviceChanged(int id) { deviceAxes.remove(id); }
 
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
+        if (dev.peanuts.build.ShaderCapture.active(this) && gamepad(e.getSource())) return true;   // PEANUTS: no gameplay input during preparation
         if (panel == null) return super.dispatchKeyEvent(e);   // no host for this game (onCreate): only the message is shown
         // A controller opens and closes the in-game panel (PadPanel.Combo: Home, or − and + held; Settings › Controller: in-game panel); while it is open the pad moves
         // through it and the game gets no pad keys. A key the panel took a press of stays the panel's until it comes up
@@ -1451,6 +1460,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     }
 
     @Override public boolean onGenericMotionEvent(MotionEvent e) {
+        if (dev.peanuts.build.ShaderCapture.active(this)) return true;   // PEANUTS: no gameplay input during preparation
         if (panel != null && panel.isOpen() && (e.getSource() & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) return panel.padMotion(e);   // the panel's, never the game's
         if (!input || panel.isOpen() || paused || (e.getSource() & InputDevice.SOURCE_JOYSTICK) != InputDevice.SOURCE_JOYSTICK || e.getAction() != MotionEvent.ACTION_MOVE || e.getDevice() == null)
             return super.onGenericMotionEvent(e);
@@ -1465,7 +1475,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     /** Back (the phone's button or its edge swipe) opens and closes the in-game panel, which has Stop; while the controller applet's join screen shows, it cancels that */
     @SuppressWarnings("deprecation")
-    @Override public void onBackPressed() { if (panel != null && !panel.isOpen() && CtrlScreen.back()) return; if (panel != null) panel.toggle(); else end(); }
+    @Override public void onBackPressed() { if (dev.peanuts.build.ShaderCapture.active(this)) { dev.peanuts.build.ShaderCapture.cancel(this); return; } /* PEANUTS: Back cancels preparation */ if (panel != null && !panel.isOpen() && CtrlScreen.back()) return; if (panel != null) panel.toggle(); else end(); }
 
     // For CtrlScreen: the view tree it goes into (under the in-game panel), and whether a gamepad is connected (then the on-screen controls are hidden and cannot join)
     FrameLayout rootView() { return rootView; }

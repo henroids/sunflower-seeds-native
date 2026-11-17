@@ -322,11 +322,11 @@ public final class BuildService extends Service {
         if (cancelled) throw new IOException("Build cancelled.");
         if (!enough) {
             int have = RuntimeShaders.captured(RuntimeShaders.captureDir(work));
-            if (have == 0) throw new IOException(name + " is ready, but " + need + " of its shaders are only made while it runs and none were captured: parts of its picture may stay black. Tap Build again after playing it once.");
+            if (have == 0) throw new IOException(name + " could not finish graphics setup (" + need + " shaders unavailable). Tap Build again to retry.");
             Log.w(TAG, "runtime shaders: only " + have + " of " + need + " captured; re-running the job with those");
         }
         RuntimeShaders.rerun(work, jobFile);
-        progress("prepare", IMPORT_END, "Making the pack again with the captured shaders");
+        progress("prepare", IMPORT_END, "Completing graphics setup");
         File rebuilt = stepPrepare(r, dump);
         int left = RuntimeShaders.missing(jobFile);
         int runtimeLeft = RuntimeShaders.missingInPack(this, r.titleId, rebuilt);

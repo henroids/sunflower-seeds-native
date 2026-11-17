@@ -14,7 +14,7 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` — create/destroy the companion `Presentation`; (2026-11-13) one line in
      `onCreate` that touches the last-3-played list for dynamic shortcuts (`dev.peanuts.launch.RecentGames`, `peanuts/docs/LAUNCHERS.md`); and
      (2026-11-13) in `start()`'s env assembly, two lines adding `DM_ROMFS_OVERLAY`/`DM_CHEATS` for the enabled Mods (`dev.peanuts.mods.ModRuntime`,
-     `design/platform/DESIGN-MODS.md`).
+     `design/platform/DESIGN-MODS.md`); internal shader-preparation mode (`dev.peanuts.build.ShaderCapture`) covers the game surface, isolates its save/environment, suppresses play-session hooks and input, and reports errors to Build.
    - `android/app/src/main/cpp/nxlaunch.c` — JNI entry points forwarded to `dm/peanuts`.
    - `android/host/CMakeLists.txt`, `android/app/src/main/cpp/CMakeLists.txt` — add the `dm/peanuts` sources.
    - `dm/gfx/vk_android/vka_present.c` — one call per presented frame (`peanuts_tick()`), beside `ovl_draw`.
@@ -30,6 +30,7 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      additive only; a normal job never sets either. `design/platform/DESIGN-MODS.md`.
    - `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` — (2026-11-13, code mods) the "rewrite" step appends `Job.modArgs()`
      (split on `"\n"`) to `pack_android.py`'s argv when it is not empty — block-marked, a no-op for a normal job.
+     (2026-11-17) shader-map validation and selection call `RuntimeShaderMap.missingRuntime`: a deficit containing only boot-generated shaders is prepared for Build’s internal capture, while missing file-based keys still stop.
    - `android/app/src/ondevice/AndroidManifest.xml` — (2026-11-13, code mods) one new `<service>` line, `dev.peanuts.build.ModBuildService`
      (the modded-variant build, the Mods section's "Build with mods"), beside the existing `BuildService` line.
    - `scripts/pack_android.py` — (2026-11-13, code mods) `--modules`/`--mod-exefs`/`--mod-patches`, block-marked (too much logic for a one-line

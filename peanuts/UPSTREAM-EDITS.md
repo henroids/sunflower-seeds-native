@@ -955,7 +955,16 @@ The APK built; 50 focused tests passed. Device UI checks remain pending. No shad
 | Upstream file | Change | Marker |
 |---|---|---|
 | `android/app/build.gradle` | refuse a native pack stage without `lz4.frame`'s Python wrapper and Android extension before making an APK; issue #78 lost all 9,693 particle shaders with the older stage | `// PEANUTS:` above the required files |
-| `dm/games/010055D009F78000/README.md` | issue #81's adopted-library capture gap and the regression checks | existing `<!-- PEANUTS: on-device runtime shader capture regression -->` |
+| `dm/games/010055D009F78000/README.md` | issue #81's adopted-library capture gap, regression checks and automatic device capture/repack evidence | existing `<!-- PEANUTS: on-device runtime shader capture regression -->` |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | shader-map validation accepts a deficit consisting only of runtime-generated keys and selection translates all static keys before Build captures the rest; other missing or extra keys still fail | each hook marked `PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | internal shader preparation: opaque progress screen, separate save, silent capture environment, no play-session companion/recent entry or gameplay input, Build-owned failure/cancellation | each hook marked `PEANUTS` and listed in `PEANUTS.md` |
 
 The implementation of the firmware diagnostics (#22), code-mod companion search (#33) and adopted-pack runtime-shader check (#81) lives entirely
-in Peanuts-owned files. No shader-chain file or profile input changes. Device gameplay confirmation is pending; the firmware fixture test ran on Android arm64.
+in Peanuts-owned files, with the marked activity hooks above for the preparation UI and packer hooks for a runtime-only initial deficit. No shader-chain file or profile input changes.
+The companion lookup passed on system and Turnip during gameplay; Three Houses captured and repacked all nine runtime shaders automatically.
+The packaged Kirby splitter recovered every particle key on Android. Full Prepare and migration of an incomplete current-version library
+passed; the reported first-stage inhale scene also rendered its particles on Turnip V39 (evidence and remaining driver gap in the game note).
+The firmware fixture test, including preservation after a missing-generation rejection, ran on Android arm64. Firmware 23.5.0 imports all six
+fonts with matching generation `16` keys on Linux and Android. `Prepare` now also detects missing required static shader entries before treating
+an adopted pack as current, covering the older partial Kirby libraries; its map checks exclude runtime capture keys, optional keys, selected
+profiles and known omitted add-on content, and run only for matching package-build module IDs. These changes are in Peanuts-owned files.

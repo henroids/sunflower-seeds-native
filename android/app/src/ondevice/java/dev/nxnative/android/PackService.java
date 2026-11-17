@@ -540,10 +540,12 @@ public final class PackService extends Service {
                 // a split without some of the profile's optional shaders (shader_optional.tsv, splitMatchesProfile): the key list is the map's (or the selection's) other
                 // keys, so vk_android_build.py with DMSH_VK_REQUIRE_ALL=1 neither stops on them nor passes a shader that did not build
                 List<String> absent = j.tryAnyway() || engine.simulated() ? null : ShaderLibs.absentOptional(new File(PackNative.repo(), "dm/games/" + j.titleId()), new File(split, "shader_map.tsv"), j.version());   // PEANUTS: j.version(): also the shaders only another listed version of the game has (ShaderLibs.otherVersionKeys)
+                if (absent == null && !j.tryAnyway() && !engine.simulated()) absent = dev.peanuts.build.RuntimeShaderMap.missingRuntime(   // PEANUTS: translate all file-based shaders before internal runtime capture
+                        new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv"), new File(split, "shader_map.tsv"));   // PEANUTS
                 if (absent != null) {
                     if (selected == null) selected = new java.util.ArrayList<>(new java.util.TreeSet<>(ShaderLibs.mapKeys(new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv"))));
                     selected.removeAll(absent);
-                    keysFrom = "shader_map.tsv without " + absent.size() + " of " + ShaderLibs.OPTIONAL;
+                    keysFrom = "shader_map.tsv without " + absent.size() + " absent shaders";   // PEANUTS: optional or boot-generated outputs
                     // PEANUTS begin: a dump of one of the versions the tables are the union of (game.tsv shader_versions): one plain line, in logcat and in the step's log
                     File prof = new File(PackNative.repo(), "dm/games/" + j.titleId());
                     java.util.Set<String> theirs = ShaderLibs.otherVersionKeys(prof, j.version());
@@ -767,6 +769,7 @@ public final class PackService extends Service {
             File want = new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv");
             if (tableRows(Files.readAllBytes(want.toPath())).equals(tableRows(Files.readAllBytes(have.toPath())))) return null;   // PEANUTS: without the comment lines (shader_split.py tables_data, upstream's since Banana Native v0.3.22; table_rows before: the header prose changed with the tool's wording on 2026-10-28, and 86 profiles carry the older prose)
             if (ShaderLibs.absentOptional(want.getParentFile(), have, j.version()) != null) return null;   // a registered build that lacks only the profile's optional shaders (the shaders step leaves them out); PEANUTS: j.version(): or only what another listed version of the game has, checked before any message below
+            if (dev.peanuts.build.RuntimeShaderMap.missingRuntime(want, have) != null) return null;   // PEANUTS: boot-generated shaders are completed by Build, not missing DLC
         } catch (IOException | RuntimeException | UnsatisfiedLinkError e) {
             // the app's own list is missing (work() refuses a game this APK does not include, so this is an app built without the profile's tables) or the split's
             String why = "cannot compare the dump's shaders with the app's list: " + e.getMessage();
