@@ -64,6 +64,8 @@ shows which update you have and which one a game supports, and asks before build
 | Yoru, Tomosu | `0100C2901153C000` | Base game | Log unreadable | Opening at 60 fps on AYN Thor; companion log text is unreadable |
 | Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes | 60 fps on AYN Thor in single races; with the 120 fps limit, 118 to 120 in the menus and 81 to 97 in a race; new, little tested |
 | Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 only | No | Experimental. On AYN Thor, Turnip: the title and the opening at 30 fps; 57 to 60 fps with the 60 fps limit in two sessions of 5 and 10 minutes; little tested beyond that |
+| My Time at Sandrock | `0100B63016916000` | 1.4.2.0 | Yes | 30 fps on AYN Thor: a 15-minute session through the opening, the town and the menus; new, little tested |
+| Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Not checked | Runs on AYN Thor; new, little tested |
 
 ## What you need
 

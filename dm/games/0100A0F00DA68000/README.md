@@ -4,7 +4,7 @@
 
 Update 2.1.0 (v524288) over the base game (1.0.0, v0), SDK 9.4.1. **Unity 2018.4.23f1** (IL2CPP) with FMOD, rendering with **NVN**. Modules `main`, `subsdk0` (NintendoSDK_movie) and `sdk`. The closest profiles are [FINAL FANTASY CRYSTAL CHRONICLES Remastered Edition](../0100CE4010AAC000/README.md) (Unity 2018.4.2f1, SDK 8.2.1) and [Raging Loop](../010020400E1C2000/README.md) (Unity 2018.3.10f1).
 
-**Status: provisional. Packed on a PC, not run on a device.** The profile is the survey's (`scripts/build_ipa_from_nsp.py` with `dm/games/profile_guess.py`); nothing in it is measured, and the game has not been booted anywhere, on a phone or on the Mac. It is not in any list of supported games.
+**Status: provisional. Packed on a PC; it runs on an AYN Thor (the owner's play, 2026-11-18, with no measurements kept).** The profile is the survey's (`scripts/build_ipa_from_nsp.py` with `dm/games/profile_guess.py`); nothing in it is measured, and the game has not been booted anywhere, on a phone or on the Mac. It is not in any list of supported games.
 
 The companion of eden-duo-companions (package `MonsterSanctuary`) is made for this build: its load plan is under `guest/8EA928B6AA10C84F9E69129C45BCAAAF…`, the `main` of v524288. Whether it loads was not checked.
 
