@@ -852,9 +852,8 @@ static void *completion_main(void *arg) {
         for (uint64_t f = done + 1; f <= v; f++) {
             post_rec *p = &g_post[f % POST_RING];
             if (p->fence == f) {
-                static void *last_ops; static _Atomic int k;   // (diagnostic) the same op array run twice: freed by its first run
-                if (p->ops && p->ops == last_ops && atomic_fetch_add(&k, 1) < 8) VRED("fence %llu: its completion effects' ops %p are those of the record run just before", (unsigned long long)f, p->ops);
-                last_ops = p->ops;
+                // PEANUTS: post_run frees ops. The next submission may legitimately allocate the same address;
+                // comparing it with the previous, freed address cannot diagnose a repeated completion.
                 if (p->run) p->run(p->ops, p->n); else free(p->ops);
             }
         }
