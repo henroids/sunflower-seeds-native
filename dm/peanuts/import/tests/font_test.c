@@ -43,17 +43,25 @@ int main(void) {
     uint8_t got[8]; FILE *f = fopen(result, "rb"); CHECK(f); CHECK(fread(got, 1, sizeof got, f) == sizeof got); fclose(f);
     CHECK(!memcmp(got, "testfont", sizeof got));
 
+    // A rejected firmware must keep both installed fonts, even if one new archive decoded successfully.
+    char ext_result[512]; snprintf(ext_result, sizeof ext_result, "%s/fonts/nintendo_ext.ttf", tmp);
+    fx_write(result, "old-font", 8); fx_write(ext_result, "old-font", 8);
     font_nca(&keys, 0x0100000000000811ull, 0x16, standard);
     CHECK(nximport_firmware_fonts(source, output) == -1);
     CHECK(strstr(nximport_last_error(), "FontStandard"));
     CHECK(strstr(nximport_last_error(), "key_area_key_application_16"));
     CHECK(!strstr(nximport_last_error(), "not found among"));
+    f = fopen(result, "rb"); CHECK(f); CHECK(fread(got, 1, 8, f) == 8); fclose(f); CHECK(!memcmp(got, "old-font", 8));
+    f = fopen(ext_result, "rb"); CHECK(f); CHECK(fread(got, 1, 8, f) == 8); fclose(f); CHECK(!memcmp(got, "old-font", 8));
 
     font_nca(&keys, 0x0100000000000811ull, 0, standard);
     font_nca(&keys, 0x0100000000000810ull, 0x16, extended);
     CHECK(nximport_firmware_fonts(source, output) == -1);
     CHECK(strstr(nximport_last_error(), "FontNintendoExtended"));
     CHECK(strstr(nximport_last_error(), "key_area_key_application_16"));
+
+    f = fopen(result, "rb"); CHECK(f); CHECK(fread(got, 1, 8, f) == 8); fclose(f); CHECK(!memcmp(got, "old-font", 8));
+    f = fopen(ext_result, "rb"); CHECK(f); CHECK(fread(got, 1, 8, f) == 8); fclose(f); CHECK(!memcmp(got, "old-font", 8));
 
     // Supplying the matching made-up generation makes exactly the same NCA import successfully.
     char hex[33]; fx_hex(hex, keys.kaek, sizeof keys.kaek);

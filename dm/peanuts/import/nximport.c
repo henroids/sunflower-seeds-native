@@ -453,41 +453,38 @@ fail:
 
 // ---------------------------------------------------------------- firmware fonts
 typedef struct FontJob {
-    int got_std, got_ext; const char *out_dir; int found_ncas; int got_cjk[4];
+    int got_std, got_ext; int found_ncas; int got_cjk[4];
+    uint8_t *data[6]; size_t size[6];   // decode first; an invalid import must not replace any installed font
     char why[2][256];   // required font's read/decryption failure, not a missing archive (issue #22)
 } FontJob;   // got_cjk: cjk_sc, cjk_sc_ext, cjk_tc, cjk_kr (optional)
 // The firmware's Chinese and Korean shared fonts, written beside the two the app needs: a game set to one of those languages asks the console for them (types 1 to 4 of
 // the shared font service) and drew most characters as "?" with the standard font (Pokemon Shield with a Chinese save). FontKorean 0100000000000812 (one file),
 // FontChineseTraditional 0100000000000813 (one file), FontChineseSimple 0100000000000814 (the base file and an "ext" one). Not required: a firmware without them still gives the two
-static int write_bfttf(const NxNode *f, const char *out_path);
+static int read_bfttf(const NxNode *f, uint8_t **data, size_t *size);
 static int font_all(const FontJob *fj) { return fj->got_std && fj->got_ext && fj->got_cjk[0] && fj->got_cjk[1] && fj->got_cjk[2] && fj->got_cjk[3]; }   // nothing left to look for
 static void font_try_cjk(FontJob *fj, NxNca *n) {
     int base = n->title_id == 0x0100000000000814ull ? 0 : n->title_id == 0x0100000000000813ull ? 2 : n->title_id == 0x0100000000000812ull ? 3 : -1;
     if (base < 0) return;
     int s = nx_nca_find_section(n, NX_FS_ROMFS); NxNode *root = s >= 0 ? nx_romfs_tree(n, s) : NULL;
     if (!root) return;
-    static const char *names[4] = {"cjk_sc.ttf", "cjk_sc_ext.ttf", "cjk_tc.ttf", "cjk_kr.ttf"};
     for (int i = 0; i < root->nkids; i++) {
         NxNode *k = root->kids[i]; size_t l = strlen(k->name);
         if (k->is_dir || l < 6 || strcmp(k->name + l - 6, ".bfttf")) continue;
         int slot = base == 0 && strstr(k->name, "ext_") != NULL ? 1 : base;   // the simplified Chinese title holds two: ..._org_zh-cn_... and ..._ext_zh-cn_...
         if (fj->got_cjk[slot]) continue;
-        char out[1200]; snprintf(out, sizeof out, "%s/%s", fj->out_dir, names[slot]);
-        if (!write_bfttf(k, out)) fj->got_cjk[slot] = 1;
+        if (!read_bfttf(k, &fj->data[slot + 2], &fj->size[slot + 2])) fj->got_cjk[slot] = 1;
     }
     nx_node_free(root);
 }
 
-static int write_bfttf(const NxNode *f, const char *out_path) {
+static int read_bfttf(const NxNode *f, uint8_t **data, size_t *size) {
     uint8_t *b = NULL; int rc = -1;
     if (f->size < 8 || nx_node_read_whole(f, &b, 64u << 20)) goto out;
     size_t n = (size_t)f->size & ~3u;
     for (size_t i = 0; i < n; i += 4) { uint32_t w = u32(b + i) ^ 0x06186249u; put32(b + i, w); }
     if (u32(b) != 0x18029a7fu) { nx_err("%s: not a bfttf (magic %08x)", f->name, u32(b)); goto out; }
     size_t len = u32(b + 4); if (len > f->size - 8) len = (size_t)f->size - 8;
-    FILE *o = fopen(out_path, "wb"); if (!o) { nx_err("cannot write %s: %s", out_path, strerror(errno)); goto out; }
-    if (fwrite(b + 8, 1, len, o) != len) { fclose(o); nx_err("write failed: %s", out_path); goto out; }
-    if (fclose(o)) { nx_err("write failed: %s", out_path); goto out; }
+    memmove(b, b + 8, len); *data = b; *size = len; b = NULL;
     rc = 0;
 out:
     free(b); return rc;
@@ -515,7 +512,7 @@ static int font_try_nca_fd(FontJob *fj, int fd, uint64_t off, uint64_t size) {
                 for (int i = 0; i < root->nkids; i++) { NxNode *k = root->kids[i]; size_t l = strlen(k->name); if (k->is_dir || l < 6 || strcmp(k->name + l - 6, ".bfttf")) continue;
                     if (!pick) pick = k;
                     if (std ? strstr(k->name, "std") != NULL : (strstr(k->name, "ext_") != NULL && !strstr(k->name, "ext2"))) { pick = k; break; } }
-                if (pick) { char out[1200]; snprintf(out, sizeof out, "%s/%s", fj->out_dir, std ? "standard.ttf" : "nintendo_ext.ttf"); if (write_bfttf(pick, out)) rc = -1; else *(std ? &fj->got_std : &fj->got_ext) = 1; }
+                if (pick) { int slot = std ? 0 : 1; if (read_bfttf(pick, &fj->data[slot], &fj->size[slot])) rc = -1; else *(std ? &fj->got_std : &fj->got_ext) = 1; }
                 nx_node_free(root);
             }
         }
@@ -597,24 +594,36 @@ static int font_scan_zip(FontJob *fj, const char *zip_path, const char *out_dir)
 
 int nximport_firmware_fonts(const char *firmware_dir, const char *out_dir) {
     if (!nx_keys.loaded) { nx_err("keys not loaded (nximport_keys)"); return -1; }
-    FontJob fj = { .out_dir = out_dir };
+    FontJob fj = {0};
     struct stat st; if (stat(firmware_dir, &st)) { nx_err("cannot open %s: %s", firmware_dir, strerror(errno)); return -1; }
     if (!S_ISDIR(st.st_mode) && !S_ISREG(st.st_mode)) { nx_err("%s is neither a folder nor a file", firmware_dir); return -1; }
     if (nx_mkdir(out_dir, 0755) && errno != EEXIST) { nx_err("cannot create %s: %s", out_dir, strerror(errno)); return -1; }
     int rc = S_ISDIR(st.st_mode) ? font_scan(&fj, firmware_dir, 0) : font_scan_zip(&fj, firmware_dir, out_dir);
-    if (rc) return -1;
+    if (rc) goto done;
     if (!fj.got_std || !fj.got_ext) {
         const char *why = !fj.got_std && fj.why[1][0] ? fj.why[1] : !fj.got_ext && fj.why[0][0] ? fj.why[0] : NULL;
         if (why) {
             nx_err("%s: cannot read %s from the firmware: %s. Check that your keys match this firmware.", firmware_dir,
                    !fj.got_std && fj.why[1][0] ? "FontStandard 0100000000000811" : "FontNintendoExtended 0100000000000810", why);
-            return -1;
+            rc = -1; goto done;
         }
         nx_err("%s: %s not found among %d NCAs (FontStandard 0100000000000811%s, FontNintendoExtended 0100000000000810%s)", firmware_dir,
                fj.found_ncas ? "the shared font archives were" : "no NCA files", fj.found_ncas, fj.got_std ? " ok" : " missing", fj.got_ext ? " ok" : " missing");
-        return -1;
+        rc = -1; goto done;
     }
-    return 0;
+    // Both required archives are readable. Only now may their output replace the installed files.
+    static const char *names[6] = {"standard.ttf", "nintendo_ext.ttf", "cjk_sc.ttf", "cjk_sc_ext.ttf", "cjk_tc.ttf", "cjk_kr.ttf"};
+    for (int i = 0; i < 6; i++) if (fj.data[i]) {
+        char path[1200]; snprintf(path, sizeof path, "%s/%s", out_dir, names[i]);
+        FILE *o = fopen(path, "wb");
+        if (!o) { nx_err("cannot write %s: %s", path, strerror(errno)); rc = -1; goto done; }
+        int written = fwrite(fj.data[i], 1, fj.size[i], o) == fj.size[i];
+        int closed = fclose(o);
+        if (!written || closed) { nx_err("write failed: %s", path); rc = -1; goto done; }
+    }
+done:
+    for (int i = 0; i < 6; i++) free(fj.data[i]);
+    return rc;
 }
 
 // ---------------------------------------------------------------- .nup verify / extract
