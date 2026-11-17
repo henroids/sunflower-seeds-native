@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="status" src="https://img.shields.io/badge/release-0.1.3-brightgreen">
+  <img alt="status" src="https://img.shields.io/badge/release-0.1.4-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
 </p>

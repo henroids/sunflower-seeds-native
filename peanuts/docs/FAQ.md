@@ -1,6 +1,6 @@
 # Peanuts Native FAQ
 
-For version 0.1.3. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
+For version 0.1.4. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
 
 ## Quick answers
 
@@ -719,7 +719,7 @@ No. An update keeps the app's storage, and saves are in it. Uninstalling can del
 
 ### How do I tell which version I have?
 
-The build name is under the app's title on the home screen and in Settings › **About**. A release build reads `peanuts-native-0.1.3`. Every log starts with it too.
+The build name is under the app's title on the home screen and in Settings › **About**. A release build reads `peanuts-native-0.1.4`. Every log starts with it too.
 
 ## Credits
 
