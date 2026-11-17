@@ -968,3 +968,18 @@ The firmware fixture test, including preservation after a missing-generation rej
 fonts with matching generation `16` keys on Linux and Android. `Prepare` now also detects missing required static shader entries before treating
 an adopted pack as current, covering the older partial Kirby libraries; its map checks exclude runtime capture keys, optional keys, selected
 profiles and known omitted add-on content, and run only for matching package-build module IDs. These changes are in Peanuts-owned files.
+
+### Issue #47 guest-memory probe (2026-11-17)
+
+| Upstream file | Change | Marker |
+|---|---|---|
+| `dm/gfx/vk_android/vka_dev.c` | probe advertised guest-buffer remaps and try the tested exported alias if remapping fails | marked include and block |
+| `dm/gfx/vk_android/vka_readiness.c` | temporary device enables advertised placed maps, uses the same remap probe and reports usability/failure; probes the exported alias on failure | every changed hunk marked |
+| `android/app/src/main/java/dev/nxnative/android/Readiness.java` | reject an advertised placed-memory feature whose functional probe failed, unless a tested alias satisfies it | marked block |
+| `android/app/src/jvmtest/java/dev/nxnative/android/ReadinessJvmTest.java` | failed advertised maps and alias fallback regression checks | marked block |
+| `docs/reference/memory.md` | PanVK evidence, probe behavior and explicit verification limits | marked block |
+
+`docs/agents/symptoms.md` is regenerated from the marked symptom bullet; its new row retains that marker.
+The shared probe and native regression harness live in Peanuts-owned paths. No shader-chain files changed.
+The general remap probe is an upstream candidate. It passed on AYN Thor/Turnip V39; Mali/PanVK rendering
+and the exported fallback on that device remain unverified, as described in the memory reference.
