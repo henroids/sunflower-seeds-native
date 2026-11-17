@@ -62,7 +62,16 @@ if (!(nxPackEngine in ['fake', 'native'])) throw new GradleException("nxPackEngi
 def repo = file('../..')
 nxGames.each { g -> if (!new File(repo, "dm/games/$g/game.tsv").isFile()) throw new GradleException("nxGames: $g has no profile (dm/games/$g/game.tsv)") }
 def tsvRows = { String game, String key -> def t = new File(repo, "dm/games/$game/game.tsv"); t.isFile() ? t.readLines().findAll { it.startsWith(key + '\t') }.collect { it.split('\t') } : [] }
-def buildsOf = { String game -> tsvRows(game, 'build').collect { c -> def m = (c[1] =~ /\d+/); (m.find() ? m.group() : c[1]) + (c.size() > 2 && c[2] ==~ /\d+(\.\d+)+/ ? ' @' + c[2] : '') + ' ' + c.drop(3).join(' ') }.join(';') }   // "<version> [@<display version>] <module>=<build ID> ..."
+// PEANUTS begin: game.tsv android_builds <version> ...: the builds of the profile this app builds and plays, when not all of them (Super Mario Bros. Wonder: 1.2.1 only).
+// The launcher then reads the others as any build the profile does not name ("Not one of this build's versions", Build anyway asks first). Without the key: every build row
+def androidBuildsOf = { String game ->
+    def only = tsvRows(game, 'android_builds').collectMany { r -> r.drop(1).collectMany { (it.trim().split(/\s+/) as List) } }.findAll { it }
+    def known = tsvRows(game, 'build').collect { it[1].trim() }
+    only.each { v -> if (!known.contains(v)) throw new GradleException("dm/games/$game/game.tsv: android_builds names $v, which no build row has (${known.join(' ')})") }
+    only
+}
+// PEANUTS end
+def buildsOf = { String game -> def only = androidBuildsOf(game); tsvRows(game, 'build').findAll { c -> only.isEmpty() || only.contains(c[1].trim()) /* PEANUTS: android_builds */ }.collect { c -> def m = (c[1] =~ /\d+/); (m.find() ? m.group() : c[1]) + (c.size() > 2 && c[2] ==~ /\d+(\.\d+)+/ ? ' @' + c[2] : '') + ' ' + c.drop(3).join(' ') }.join(';') }   // "<version> [@<display version>] <module>=<build ID> ..."
 def nameOf = { String game -> tsvRows(game, 'name').collect { it[1] }.find() ?: game }
 def defineOf = { String path, String name -> def f = new File(repo, path); def m = f.isFile() ? (f.text =~ /#define\s+${name}\s+"([^"]*)"/) : null; (m != null && m.find()) ? m.group(1) : 'unknown' }
 // The shaders Prepare builds: every key of the profile's shader_map.tsv, or for a profile with a selected set (shader_seen.tsv; ShaderLibs.selection, android/SHADERS.md
