@@ -950,3 +950,12 @@ Not run on a device. Checked on a PC: see the commit messages of this round.
 
 Peanuts-owned Library setup and import screens say: "Firmware and keys should be the same version." This is guidance, not an automatic version check.
 The APK built; 50 focused tests passed. Device UI checks remain pending. No shader-chain change.
+### Issue-log fixes (2026-11-17)
+
+| Upstream file | Change | Marker |
+|---|---|---|
+| `android/app/build.gradle` | refuse a native pack stage without `lz4.frame`'s Python wrapper and Android extension before making an APK; issue #78 lost all 9,693 particle shaders with the older stage | `// PEANUTS:` above the required files |
+| `dm/games/010055D009F78000/README.md` | issue #81's adopted-library capture gap and the regression checks | existing `<!-- PEANUTS: on-device runtime shader capture regression -->` |
+
+The implementation of the firmware diagnostics (#22), code-mod companion search (#33) and adopted-pack runtime-shader check (#81) lives entirely
+in Peanuts-owned files. No shader-chain file or profile input changes. Device gameplay confirmation is pending; the firmware fixture test ran on Android arm64.

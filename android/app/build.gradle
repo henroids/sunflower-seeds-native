@@ -456,6 +456,8 @@ if (nxPackEngine == 'native') {
     def stage = file(stageProp)
     def nxPack = layout.buildDirectory.dir('nxpack')
     def need = ['lib/libpython3.14.so', 'lib/libnxpack.so', 'lib/libzbicdec.so', 'lib/libcra.so', 'lib/libdmsh_xlate.so', 'lib/libSPIRV-Tools-shared.so', 'python/lib/python3.14/os.py']
+    // PEANUTS: HAL's .cmp containers need lz4.frame; an older stage silently lost Kirby's 9,693 particle shaders (issue #78).
+    need += ['python/lib/python3.14/site-packages/lz4/frame/__init__.py', 'python/lib/python3.14/site-packages/lz4/frame/_frame.cpython-314-aarch64-linux-android.so']
     need.each { if (!new File(stage, it).isFile()) throw new GradleException("$stage has no $it: run android/ondevice/build.sh <work dir> (it makes <work dir>/stage)") }
     // The stage's translator must be built from this tree: vk_android_build.py check_translator refuses any other on the phone, so an APK with a stale one fails
     // every Prepare at the shaders step (2026-11-10: a stage made before a translator change). xlate_tree.py --check-lib reads the digests the library embeds

@@ -52,6 +52,14 @@ Not measured yet. In the first stage on the Thor the app used 3.9 GiB (the overl
 
 - **Resolved: startup crash without firmware fonts (Android).** With no firmware in the app, the host serves Android's fallback font for every shared font type, which lacks U+25A1; right after nnMain the game dereferences a null glyph and crashes (`CRASH sig=11 addr=0x38 pc=main+0x4a78c8`, `x1=0x25a1`), as [Echoes of Wisdom](../01008CF01BAAC000/README.md) does. The game's own fault, not the host's: the fix is the firmware's shared fonts, and the launcher's font gate (`dev.peanuts.ui.FontGate`, `NEED_FONTS`) now holds this title back without them.
 
+## Missing effects in on-device builds (issue #78)
+
+The supplied 0.1.3 log has 37,406 shaders, exactly 9,693 fewer than the profile's 47,099. Every one of its 27 distinct missing-shader keys
+maps to a `/ptcl/` source. The older on-device Python stage omitted `lz4.frame`, which the splitter needs for those `.cmp` containers. The stage
+build already includes that module; APK configuration now also refuses an old stage without its wrapper and native extension. The test APK's
+`python.zip` contains both. A full Prepare and the same scene's effects still need a device check. The cube-texture view warnings below are a
+separate open rendering question and are not claimed fixed by adding the missing shaders.
+
 ## Open
 
 - `[RED] vk: … texture ID … has no view of shape …: it reads as unbound` on both drivers: a 16x16 cube texture (6 layers) sampled through a view of another target, from two shaders; what it draws, and whether anything looks wrong, is not checked.
