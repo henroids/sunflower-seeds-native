@@ -316,7 +316,12 @@ final class Prepare {
             @SuppressWarnings("unchecked") java.util.List<String> builds = (java.util.List<String>) Upstream.get(p, "builds");
             if (!RuntimeShaderMap.matchesBuild(c.getAssets().open("pack/tools.zip"), titleId, builds)) return false;
         } catch (ReflectiveOperationException | RuntimeException e) { return false; }   // cannot establish that this map describes the pack
-        int missing = RuntimeShaderMap.missingStatic(c.getAssets().open("pack/tools.zip"), titleId, library);
+        int missing;
+        try { missing = RuntimeShaderMap.missingStatic(c.getAssets().open("pack/tools.zip"), titleId, library); }
+        catch (IOException e) {   // a library that cannot be read, is another game's or has a cut entry table is what this repair is for: its shaders are made again
+            Log.i(TAG, "prepare: the shader library of " + titleId + " cannot be checked (" + e.getMessage() + "): rebuilding shaders");
+            return true;
+        }
         if (missing > 0) Log.i(TAG, "prepare: " + missing + " required static shaders are absent from " + titleId + ": rebuilding shaders");
         return missing > 0;
     }
