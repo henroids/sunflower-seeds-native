@@ -802,6 +802,7 @@ public final class Library {
             Button hideB = PUi.button(a, hidden + " hidden · " + (showHidden ? "Hide" : "Show"),
                     PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.CLICK); showHidden = !showHidden; render(); });
             hideB.setOnKeyListener(shoulders);
+            focusRing(hideB, Color.TRANSPARENT);
             track(hideB, "hidden", null);
             LinearLayout.LayoutParams hlp = PUi.wrap();
             hlp.leftMargin = PUi.dp(a, 8);
@@ -813,6 +814,7 @@ public final class Library {
         findB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_search, R.color.bn_accent), null, null, null);
         findB.setCompoundDrawablePadding(PUi.dp(a, 6));
         findB.setOnKeyListener(shoulders);
+        focusRing(findB, Color.TRANSPARENT);
         track(findB, "find", null);
         LinearLayout.LayoutParams flp = PUi.wrap(); flp.leftMargin = PUi.dp(a, 8);
         top.addView(findB, flp);
@@ -935,10 +937,23 @@ public final class Library {
         Button c = PUi.button(a, label, on ? PUi.Kind.PRIMARY : PUi.Kind.TONAL, v -> { Haptics.play(v, Haptics.Word.CLICK); filter = which; animateNext = true; render(); });
         c.setSelected(on);
         c.setOnKeyListener(shoulders);
+        focusRing(c, PUi.col(a, on ? R.color.bn_banana : R.color.bn_tint));
         track(c, "chip:" + which, null);
         LinearLayout.LayoutParams lp = PUi.wrap();
         if (row.getChildCount() > 0) lp.leftMargin = PUi.dp(a, 8);
         row.addView(c, lp);
+    }
+
+    /** The covers' focus ring on a filter-row button, at its edge; a filled button's fill steps inside it */
+    private void focusRing(View v, int fill) {
+        int r = PUi.dp(a, 14), w = PUi.dp(a, 3), gap = PUi.dp(a, 2);
+        LayerDrawable focused = new LayerDrawable(new Drawable[] {PUi.round(Color.TRANSPARENT, r, PUi.col(a, R.color.bn_banana), w),
+                PUi.round(fill, r - w - gap, 0, 0)});
+        focused.setLayerInset(1, w + gap, w + gap, w + gap, w + gap);   // layer insets, not an InsetDrawable: those would become the button's padding
+        StateListDrawable s = new StateListDrawable();
+        s.addState(new int[] {android.R.attr.state_focused}, focused);
+        s.addState(new int[0], v.getBackground());
+        v.setBackground(s);
     }
 
     /** A key on any of the library's own focusable views (covers, chips, Find): the D-pad's focus haptic first (it never takes the key), then L/R
