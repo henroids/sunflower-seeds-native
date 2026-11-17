@@ -13,6 +13,7 @@ static void gate(int slot, uint64_t *buttons, int32_t axes[4]) {
     axes[0] = axes[1] = axes[2] = axes[3] = 0;
 }
 
+extern int front_calls;   // t_peanuts_hid_stubs.c: the front end's join screen, counting its openings
 int main(void) {
     g_mode = 1; h_hid_SetStyles(7); ids((uint32_t[]){0}, 1); dm_pad_players(1);
     dm_input_set(0, 0, 0, 0, 0); dm_pad_set(0, 0, 0, 0, 0); buttons_of(0, STYLE_FULLKEY);
@@ -49,6 +50,21 @@ int main(void) {
     atomic_store(&gate_on, 0);
     CHECK(buttons_of(0, STYLE_FULLKEY) == (DM_BTN_A | DM_BTN_B), "gate off again: the pad is back");
     dm_pad_set(0, 0, 0, 0, 0);
+
+    // the controller applet right after an operation mode change is answered with the connected players, without the front end's join screen; once, and only for 5 s
+    { static uint8_t arg[CTRL_ARG_SIZE]; arg[0] = 1; arg[1] = 1; arg[5] = 1; int32_t info[2] = {-1, -1};
+      motion_now += 10000000000ull;   // the mode changes above are long ago
+      CHECK(ctrl_support(info, (const int8_t *)arg) == RES_OK && front_calls == 0 && info[0] == 1 && info[1] == NPAD_NO1, "one player wanted, one controller: OK with player 1 at once, no join screen");
+      dm_pad_players(3);   // a second controller holds player 2 (which this game does not read): the join screen has something to choose
+      CHECK(ctrl_support(info, (const int8_t *)arg) == RES_OK && front_calls == 1, "the applet with no mode change goes to the front end's join screen");
+      g_mode = 0; dm_hid_opmode_changed(); motion_now += 1000000000ull; info[0] = info[1] = -1;
+      CHECK(ctrl_support(info, (const int8_t *)arg) == RES_OK && front_calls == 1 && info[0] == 1 && info[1] == NPAD_HANDHELD, "1 s after a mode change: OK with player 1 on the Handheld npad, no join screen");
+      CHECK(ctrl_support(info, (const int8_t *)arg) == RES_OK && front_calls == 2, "the next applet is the join screen again");
+      g_mode = 1; dm_hid_opmode_changed(); motion_now += 6000000000ull;
+      CHECK(ctrl_support(info, (const int8_t *)arg) == RES_OK && front_calls == 3, "6 s after a mode change: the join screen");
+      g_mode = 0; dm_hid_opmode_changed(); arg[0] = 2; arg[1] = 2; arg[5] = 0;
+      CHECK(ctrl_support(info, (const int8_t *)arg) == RES_OK && front_calls == 4, "two players wanted and one connected: the join screen, mode change or not");
+      g_mode = 1; dm_hid_opmode_changed(); dm_pad_players(1); }
     if (fails) printf("FAILED: %d of %d\n", fails, checks); else printf("all passed: %d\n", checks);
     return fails != 0;
 }
