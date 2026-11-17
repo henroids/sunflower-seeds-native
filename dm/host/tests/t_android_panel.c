@@ -80,7 +80,29 @@ int main(void) {
     CHECK(vkpanel_fit(22222222, THOR) == 22222222 && vkpanel_fit(25000000, THOR) == 25000000, "45 and 40 on 59.83 Hz stay");
     CHECK(vkpanel_fit(SIXTY, 11111111) == SIXTY && vkpanel_fit(8333333, THOR) == 8333333, "60 on 90 Hz, 120 on 60 Hz stay");
     CHECK(vkpanel_fit(SIXTY, 0) == SIXTY && vkpanel_fit(0, THOR) == 0, "nothing measured, no pacing");
-    CHECK(vkpanel_fit(SIXTY, 16400000) == SIXTY, "over 1 %% off (60.98 Hz) stays");
+    // PEANUTS: nominal display modes can differ from the measured panel by more than 1 %.
+    // Thor's 120 Hz mode measures 8.4375 ms (118.52 Hz). Producer clocks and the four-refresh
+    // present grid must share that period; 33.333 ms against 33.75 ms accumulates phase error.
+    { const uint64_t r = 8437500, nominal = 8333333;
+      vkpanel measured = {0}; vkpanel_seed(&measured, nominal);
+      uint64_t stamp = 1000000000ull;
+      for (int i = 0; i < 300; i++) { stamp += 4 * r; vkpanel_sample(&measured, stamp); }
+      CHECK(measured.period == r, "nominal 120 Hz measures 118.52 Hz: %llu", (unsigned long long)measured.period);
+      CHECK(vkpanel_fit(nominal, r) == r && vkpanel_fit(SIXTY, r) == 2 * r &&
+            vkpanel_fit(25000000, r) == 3 * r && vkpanel_fit(33333333, r) == 4 * r,
+            "120 / 60 / 40 / 30 Hz producer clocks follow measured 118.52 Hz refreshes");
+      vkgrid g = {0}; uint64_t now = stamp + 1000000, prev = 0; int late, bad = 0, nlate = 0;
+      const uint64_t producer = vkpanel_fit(33333333, measured.period);
+      for (int i = 0; i < 2000; i++) {
+          uint64_t tg = vkgrid_next(&g, stamp, r, 33333333, now, &late);
+          if (prev && tg - prev != 4 * r) bad++;
+          nlate += late; prev = tg; now += producer;
+      }
+      CHECK(!bad && !nlate, "30 Hz producer and grid keep one phase over 2000 frames: %d wrong holds, %d late", bad, nlate);
+    }
+    CHECK(vkpanel_fit(10000000, 10200000) == 10200000 && vkpanel_fit(10000000, 9800000) == 9800000, "2 %% fit boundary in both directions");
+    CHECK(vkpanel_fit(10000000, 10200001) == 10000000 && vkpanel_fit(10000000, 9799999) == 10000000, "outside 2 %% retains the requested clock");
+    CHECK(vkpanel_fit(SIXTY, 16000000) == SIXTY, "60 on a 62.5 Hz panel stays");
 
     // ---- the grid ----
     CHECK(vkpanel_near(1000, 100, 1049) == 1000 && vkpanel_near(1000, 100, 1050) == 1100 && vkpanel_near(1000, 100, 940) == 900 && vkpanel_near(1000, 100, 951) == 1000, "nearest");
