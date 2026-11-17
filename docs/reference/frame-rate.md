@@ -531,7 +531,7 @@ Frame pacing: the host's frame step, engine frame limiters, present intervals an
 
 ### Reviewed dynamic timing plans on Android
 
-- **Symptom:** raising a frame cap speeds up frame-counted UI, camera movement or gameplay, or a whole-vsync step cannot represent 120 fps.
+- **Symptom:** (PEANUTS, Android) raising a frame cap speeds up frame-counted UI, camera movement or gameplay, or a whole-vsync step cannot represent 120 fps.
 - **Cause:** the game consumes several timing values, while Switch code caves can assume a physical counter frequency that differs on a native Android CPU.
 - **Fix:** the reviewed FPS plan loader checks the main build and every expected instruction before any write, relocates auxiliary code/data pages before sealing executable memory, and leaves Game owned unchanged. Typed memory rows supply the target, measured elapsed ratio/seconds and reciprocal elapsed FPS. `constant_i32` reasserts an integer setting; `flag_cap_u32_gt` holds a cap when a full 32-bit state exceeds its threshold. Profile `fps_modes` restricts the displayed rates. These plans deliberately modify game behavior and require per-build review and gameplay validation; no runtime YAML evaluator is involved.
 - **Found on:** [Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md#experimental-30--60--120-fps), 1.0.2. Title/settings tests exceed the original 30 cap (119 fps in the light settings screen) and retain the movie's 30 fps; high-rate gameplay remains unverified.

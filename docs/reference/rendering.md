@@ -1523,14 +1523,14 @@ Digimon Story Cyber Sleuth: Complete Edition (Media.Vision's MVGL engine, SDK 6.
 <!-- PEANUTS begin: host diagnostics and typed placeholders found during XCX bring-up. -->
 ### Reused completion-array addresses reported as duplicate effects (Android)
 
-- **Symptom:** `[RED] vk: fence N: its completion effects' ops ... are those of the record run just before`, without invalid-op diagnostics or a GPU hang.
+- **Symptom:** (PEANUTS, Android) `[RED] vk: fence N: its completion effects' ops ... are those of the record run just before`, without invalid-op diagnostics or a GPU hang.
 - **Cause:** the completion thread remembered the previous array's address after `post_run` freed it. A later submission can allocate a new array at that same address. Address equality across those separate lifetimes does not establish repeated execution.
 - **Fix:** remove that invalid address comparison. The existing checks for duplicate fence records, late posts and invalid operation kinds remain; completion ordering and ownership are unchanged.
 - **Found on:** [Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md), on both system and Turnip drivers.
 
 ### Integer unbound-image placeholders using normalized views (Android)
 
-- **Symptom:** on the first run, 1x1 `VkFormat 37` placeholders request views in formats 41 and 42, then log `which its format list does not have: viewed in its own format`.
+- **Symptom:** (PEANUTS, Android) on the first run, 1x1 `VkFormat 37` placeholders request views in formats 41 and 42, then log `which its format list does not have: viewed in its own format`.
 - **Cause:** `placeholder` shared one RGBA8 UNORM image across float, signed-integer and unsigned-integer descriptors. Its format list allowed UNORM/sRGB views only. Integer views were learned too late for the existing image and fell back to normalized views, which do not match an integer shader declaration. The affected images are host placeholders for unbound descriptors, not the game's scene targets.
 - **Fix:** create one image per shape and numeric class, using native RGBA8, RGBA8I or RGBA8UI storage from its first use. No learned format pair is needed for typed zero. A regression test runs the production placeholder function with strict format-list stubs, across sampled/storage descriptors and 2D, array, cube and 3D shapes; the original code fails on the first integer view.
 - **Found on:** [Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md), on the system Qualcomm driver (which needs placeholders).

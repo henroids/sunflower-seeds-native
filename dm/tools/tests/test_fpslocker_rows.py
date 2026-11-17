@@ -63,7 +63,7 @@ int main(void) {
         fpw_apply(&r,base,rate,read_guest,write_guest);
         uint32_t integer;memcpy(&integer,mem+0x700,4);assert(integer==(unsigned)rate);
     }
-    // A dynamic clock must agree across ratio, reciprocal FPS and seconds,
+    // PEANUTS: a dynamic clock must agree across ratio, reciprocal FPS and seconds,
     // including slow GPU frames, startup, and a movie's 32-bit state flag.
     const char *dynamic =
       "9fe60a212cff9b9a3656ab63d4f882e5,constant_i32,@0x740,2,1:1;"

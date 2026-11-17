@@ -1,7 +1,7 @@
 """The Android launcher's save backup / restore (SaveStore.java: verified copies of the save and its device save, the automatic backup before a restore, the lock, the
 roll-forward journal it shares with the host's plat_rename_swap) and its game table (Profile.java), on the JVM: javac compiles them with a stub BuildConfig and
 android/app/src/jvmtest's LauncherJvmTest. Also: the lock held by another process, and the journal's recovery rules checked against the host's own plat_swap_recover
-(its swap code cut out of dm/host/plat/plat_android.c and compiled for the local POSIX host), case by case, so the two sides keep one format and one set of rules.
+(PEANUTS: its swap code cut out of dm/host/plat/plat_android.c and compiled for the local POSIX host), case by case, so the two sides keep one format and one set of rules.
 Skipped without a JDK (the C half: without cc)."""
 import re
 import shutil

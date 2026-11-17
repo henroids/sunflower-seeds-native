@@ -1,3 +1,4 @@
+// PEANUTS begin: restricted reviewed memory-row evaluator and dynamic timing extensions.
 // PEANUTS: reviewed FPSLocker Warehouse operations; no runtime YAML or
 // arbitrary expression evaluation.
 #ifndef DM_FPSLOCKER_ROWS_H
@@ -320,3 +321,5 @@ static inline unsigned fpw_apply(const struct fpw_rows *rows, uint64_t base,
   return fpw_apply_context(rows, base, 0, fps, 0, read, write);
 }
 #endif
+
+// PEANUTS end
