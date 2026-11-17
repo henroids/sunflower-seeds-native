@@ -599,7 +599,9 @@ Turn it off without removing it:
 2. In the **Companion** section tap **Second screen**.
 3. Pick **Off**. **Physical display** turns it back on.
 
-What you should see: the row reads **Off: the companion does not show**. It applies at the game's next start, and the second screen is left to Android.
+What you should see: the row reads **Off: the companion does not load**. It applies at the game's next start, and the second screen is left to Android.
+
+On a device without a second display the row starts at **Off: no second display found, the companion does not load**, and a new build does not install the companion unless you tick it. Pick **Physical display** to load it anyway, for a display you connect later.
 
 ### What can I do on a companion's pages?
 
