@@ -42,12 +42,14 @@ static uint64_t g_refresh_ns = 8437500, g_last_desired;
 static vkpanel g_panel;
 static vkgrid g_grid;
 static _Atomic uint32_t g_grid_timed, g_grid_late, g_grid_presents;
+static _Atomic uint64_t g_presentation_deadline; // PEANUTS: current display metadata
 static uint64_t test_now, queue_delay, wait_delay, deadline;
 static int submit_error, hung, submitted, presented, unlocked;
 int nxhost_fps_limit_get(void);
 static uint64_t now_ns(void) { return test_now; }
 static int vka_hung(void) { return hung; }
 #define VKA_ENV(k, fallback) (fallback)
+#define VLOG(...) ((void)0) /* PEANUTS: diagnostic sink absent from this clock fixture. */
 static void pthread_mutex_unlock(int *mu) { assert(mu == &V.qmu); unlocked++; }
 void vka_qhold_add(int k, uint64_t ns) { (void)k; (void)ns; }
 static VkResult submit(int q, int n, const void *si, int fence) {
@@ -92,6 +94,10 @@ int main(void) {
     }
     reset(); exercise();
     assert(g_grid_late == 0 && deadline == 1000000000 + 4 * g_refresh_ns - g_refresh_ns / 2);
+    // PEANUTS: the API timestamp is still future, but Android's 11.333 ms queue deadline has elapsed for the old target.
+    reset(); g_presentation_deadline = 11333333; test_now = 1000000000 + 27000000; exercise();
+    assert(g_grid_late == 1 && g_grid.last >= test_now + g_presentation_deadline);
+    g_presentation_deadline = 0;
     reset(); submit_error = -1; exercise();
     assert(submitted == 1 && !presented && unlocked == 1 && !g_grid_presents);
     reset(); hung = 1; exercise();

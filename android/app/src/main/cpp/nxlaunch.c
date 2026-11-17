@@ -55,8 +55,10 @@ void nxhost_motion_sens(float factor);
 #pragma weak nxhost_fps
 #pragma weak nxhost_overlay_set
 #pragma weak nxhost_overlay_state
+#pragma weak nxhost_presentation_deadline_set   // PEANUTS: active display's compositor queue lead
 #pragma weak nxhost_framegen_set
 #pragma weak nxhost_framegen_status
+#pragma weak nxhost_framegen_enabled   // PEANUTS: requested state for the running display policy
 #pragma weak nxhost_picture_place
 #pragma weak nxhost_fps_cap_set
 #pragma weak nxhost_fps_cap_status
@@ -448,6 +450,17 @@ JNIEXPORT jstring JNICALL Java_dev_nxnative_android_Native_frameGenStatus(JNIEnv
     int st = nxhost_framegen_status(buf, sizeof buf);
     snprintf(out, sizeof out, "%d %s", st, buf);
     return (*env)->NewStringUTF(env, out);
+}
+
+// PEANUTS: an unavailable requested-FG interface leaves display selection unrestricted.
+JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_frameGenEnabled(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls; return nxhost_framegen_enabled ? nxhost_framegen_enabled() : -1;
+}
+
+// PEANUTS: negative/unavailable Java deadlines fall back to zero; older hosts safely ignore the hint.
+JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_presentationDeadlineSet(JNIEnv *env, jclass cls, jlong ns) {
+    (void)env; (void)cls;
+    if (nxhost_presentation_deadline_set) nxhost_presentation_deadline_set(ns > 0 ? (uint64_t)ns : 0);
 }
 
 // The frame rate cap (nxhost_fps_cap_set / _status): "<cap> <rates> <game fps> <limit held>" (input_android.h), "-1 0 0" when this host has no cap

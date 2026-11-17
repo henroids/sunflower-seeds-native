@@ -60,6 +60,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private TextView overlay;
     private TextView tag, fps;   // the build tag (top left) and the frame rate with the other items (top right, Overlay) as views over the game, shown only while the host's present does not draw them (fpsTick)
     private Overlay stats;
+    private final dev.peanuts.display.RunningDisplayMode runningDisplayMode = new dev.peanuts.display.RunningDisplayMode();   // PEANUTS: running-cap platform mitigation
     private Overlay.Block tagBlock, fpsBlock;   // the build tag and the items as pixels for the host's present (fpsTick)
     private String fpsShown;   // the text the top-right view has (Overlay.key): set again only when it changes
     private static Boolean overlayEnv;   // DM_OVERLAY in env.txt: overrides the setting for this run (static: a screen created again keeps it)
@@ -307,13 +308,24 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         h.postDelayed(gone, 20000);
     }
 
+    // PEANUTS begin: the active display reports the compositor's required buffer-queue lead, independent of nominal refresh.
+    private void presentationDeadlineUpdate() {
+        android.view.Display display = getDisplay();
+        Native.presentationDeadlineSet(display == null ? 0 : display.getPresentationDeadlineNanos());
+    }
+    // PEANUTS end
+
     /**
      * The overlay, twice a second: top right the frame rate and the other items that are on (Overlay), top left the build tag; nothing is read while it is off. Both go to
      * the host's present, which draws them into the game's images (Overlay.Block, redrawn only when the text changed), so the window over the SurfaceView stays still; the
      * views show them only while the present does not (not yet drawn, DM_VK_OVERLAY=0, a failure), the top-right one set again only when its text changed
      */
     private void fpsTick() {
+        // PEANUTS: Stable 30 uses a window-local 60 Hz mode; requested FG and the running cap are authoritative.
+        if (started && resumedNow && !stopped && !paused) runningDisplayMode.update(this, Native.fpsCapStatus(), Native.frameGenEnabled());
+        else runningDisplayMode.clear(this);
         if (stopped || paused) { ui.postDelayed(this::fpsTick, 2000); return; }   // nothing to show: no readings (thermal, battery, the host's counters) while suspended
+        if (started && resumedNow) presentationDeadlineUpdate();   // PEANUTS: reuse the active 500 ms tick, after the mode request
         boolean on = overlayOn();
         CharSequence t = on ? stats.tick() : null, g = on && Prefs.overlayItem(this, "tag") ? tag.getText() : null;
         boolean host = tagBlock.host(g) & fpsBlock.host(t);   // both every time: a block that is off empties its corner
@@ -1012,6 +1024,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
      * The game itself is left as it is: onStop has suspended it
      */
     @Override protected void onDestroy() {
+        runningDisplayMode.clear(this);   // PEANUTS: release this game window's display request
         dev.peanuts.Companion.stop();   // PEANUTS
         TextInput.gone(this);
         UserPicker.gone(this);
@@ -1149,6 +1162,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     // ---- The host's side of the Activity: input devices, audio focus and route, motion, lifecycle ----
     private void hostSetup() {
+        presentationDeadlineUpdate();   // PEANUTS: publish the initial display deadline once the host is ready
         inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
         inputManager.registerInputDeviceListener(this, ui);
         padMotion = new PadMotion();
@@ -1326,6 +1340,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     }
     private boolean resumedNow;
     @Override protected void onPause() {
+        runningDisplayMode.clear(this);   // PEANUTS: a background activity keeps no display request
         resumedNow = false;
         if (started) { Native.motionStop(); if (padMotion != null) padMotion.pause(); Native.lifecycle(0); }
         super.onPause();

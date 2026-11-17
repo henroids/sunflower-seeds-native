@@ -89,19 +89,42 @@ uint64_t vka_fp_host(const char *who) {
 }
 // The calls of vk.* that compile go through these, so they compile with the host's FPCR on whatever thread calls them (the replay, presents, the NaN scan, NDSR,
 // a replay run inline on the game's thread), and the caller's FPCR is put back afterwards
+// PEANUTS begin: optional driver-call tracing also covers helper pipelines and shader variants outside vka_pso.c.
+static int g_compile_trace;
+static void compile_trace(const char *kind, uint64_t begin, uint64_t end, VkResult result, uint32_t count, size_t bytes) {
+    VLOG("compile trace kind=%s start=%llu end=%llu duration=%llu tid=%ld result=%d count=%u bytes=%zu", kind,
+         (unsigned long long)begin, (unsigned long long)end, (unsigned long long)(end - begin), (long)gettid(), (int)result, count, bytes);
+}
 static PFN_vkCreateShaderModule g_csm; static PFN_vkCreateGraphicsPipelines g_cgp; static PFN_vkCreateComputePipelines g_ccp;
 static VkResult VKAPI_CALL fp_csm(VkDevice d, const VkShaderModuleCreateInfo *ci, const VkAllocationCallbacks *a, VkShaderModule *m) {
-    uint64_t f = vka_fp_host(NULL); VkResult r = g_csm(d, ci, a, m); vka_fp_back(f); return r; }
+    uint64_t f = vka_fp_host(NULL), begin = g_compile_trace ? now_ns() : 0;
+    VkResult r = g_csm(d, ci, a, m); uint64_t end = g_compile_trace ? now_ns() : 0;
+    vka_fp_back(f);
+    if (g_compile_trace) compile_trace("shader-module", begin, end, r, 1, ci ? ci->codeSize : 0);
+    return r;
+}
 static VkResult VKAPI_CALL fp_cgp(VkDevice d, VkPipelineCache c, uint32_t n, const VkGraphicsPipelineCreateInfo *ci, const VkAllocationCallbacks *a, VkPipeline *p) {
-    uint64_t f = vka_fp_host(NULL); VkResult r = g_cgp(d, c, n, ci, a, p); vka_fp_back(f); return r; }
+    uint64_t f = vka_fp_host(NULL), begin = g_compile_trace ? now_ns() : 0;
+    VkResult r = g_cgp(d, c, n, ci, a, p); uint64_t end = g_compile_trace ? now_ns() : 0;
+    vka_fp_back(f);
+    if (g_compile_trace) compile_trace("graphics-pipeline", begin, end, r, n, 0);
+    return r;
+}
 static VkResult VKAPI_CALL fp_ccp(VkDevice d, VkPipelineCache c, uint32_t n, const VkComputePipelineCreateInfo *ci, const VkAllocationCallbacks *a, VkPipeline *p) {
-    uint64_t f = vka_fp_host(NULL); VkResult r = g_ccp(d, c, n, ci, a, p); vka_fp_back(f); return r; }
+    uint64_t f = vka_fp_host(NULL), begin = g_compile_trace ? now_ns() : 0;
+    VkResult r = g_ccp(d, c, n, ci, a, p); uint64_t end = g_compile_trace ? now_ns() : 0;
+    vka_fp_back(f);
+    if (g_compile_trace) compile_trace("compute-pipeline", begin, end, r, n, 0);
+    return r;
+}
 static void fp_wrap_compiles(void) {
-    if (vka_fp_guest()) return;
+    const char *trace = getenv("DM_VK_COMPILE_TRACE"); g_compile_trace = trace && !strcmp(trace, "1");
+    if (vka_fp_guest() && !g_compile_trace) return;
     if ((g_csm = vk.vkCreateShaderModule)) vk.vkCreateShaderModule = fp_csm;
     if ((g_cgp = vk.vkCreateGraphicsPipelines)) vk.vkCreateGraphicsPipelines = fp_cgp;
     if ((g_ccp = vk.vkCreateComputePipelines)) vk.vkCreateComputePipelines = fp_ccp;
 }
+// PEANUTS end
 static int init_once(void) {
     void *lib = vka_driver_open();   // DM_VK_DRIVER: a custom driver through libadrenotools (vka_driver.c); NULL = the system's
     if (!lib) lib = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);

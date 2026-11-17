@@ -23,6 +23,57 @@ static uint64_t run(vkpanel *p, uint64_t t, uint64_t r, int frames, int *lost) {
     return t;
 }
 
+// PEANUTS: exercise the compositor's actual queue deadline, including a producer stall and metadata-free fallback.
+static void deadline_grid_cases(uint64_t r, uint64_t deadline, const char *mode) {
+    const uint64_t anchor = 11000000000ull, period = vkpanel_fit(33333333, r);
+    const uint64_t hold = vkpanel_hold(33333333, r);
+    uint64_t now = anchor + 1000000;
+    vkgrid old = {0}, aware = {0}; int late;
+    uint64_t target = vkgrid_next(&old, anchor, r, 33333333, now, &late);
+    CHECK(target > now && target < now + deadline, "%s: the old future target misses the compositor deadline", mode);
+    target = vkgrid_next_deadline(&aware, anchor, r, 33333333, now, deadline, &late);
+    CHECK(target >= now + deadline && !late && (target - anchor) % r == 0,
+          "%s: the first reachable target is on the measured grid", mode);
+
+    aware.last = 0;
+    uint64_t prev = 0; int wrong_hold = 0, early = 0, nlate = 0;
+    for (int i = 0; i < 2000; i++) {
+        target = vkgrid_next_deadline(&aware, anchor, r, 33333333, now, deadline, &late);
+        wrong_hold += prev && target - prev != hold * r;
+        early += target < now + deadline;
+        nlate += late; prev = target; now += period;
+    }
+    CHECK(!wrong_hold && !early && !nlate, "%s: 2000 steady frames: %d wrong holds, %d too early, %d late",
+          mode, wrong_hold, early, nlate);
+
+    aware.last = 0; prev = 0; now = anchor + 1000000;
+    wrong_hold = early = nlate = 0;
+    for (int i = 0; i < 2000; i++) {
+        // One delayed producer reaches QueuePresent just after the next target's deadline.
+        // The producer then recovers its old cadence; presentation must retain the new phase.
+        uint64_t ready = i == 1000 ? prev + hold * r - deadline + 1 : now;
+        target = vkgrid_next_deadline(&aware, anchor, r, 33333333, ready, deadline, &late);
+        if (i == 1000) CHECK(late && target - prev == (hold + 1) * r,
+                             "%s: missed deadline moves one refresh once", mode);
+        else wrong_hold += prev && target - prev != hold * r;
+        early += target < ready + deadline;
+        nlate += late; prev = target; now += period;
+    }
+    CHECK(nlate == 1 && !wrong_hold && !early, "%s: producer delay: %d late, %d short/long catch-up holds, %d too early",
+          mode, nlate, wrong_hold, early);
+
+    old.last = aware.last = 0; now = anchor + 1000000;
+    for (int i = 0; i < 2000; i++) {
+        if (i == 1000) now += 7 * r;
+        int old_late, new_late;
+        uint64_t fallback = vkgrid_next(&old, anchor, r, 33333333, now, &old_late);
+        target = vkgrid_next_deadline(&aware, anchor, r, 33333333, now, 0, &new_late);
+        CHECK(target == fallback && aware.last == old.last && new_late == old_late,
+              "%s: zero deadline preserves fallback at frame %d", mode, i);
+        now += period;
+    }
+}
+
 int main(void) {
     // ---- the estimate ----
     vkpanel p = {0}; int lost = 0;
@@ -155,6 +206,10 @@ int main(void) {
       // the clock far behind the chain (a stale chain after a long stop is over eight holds ahead of what a frame can have): starts again
       uint64_t tg = vkgrid_next(&g, a, THOR, SIXTY, a + 1000, &late); g.last = tg + 100 * THOR;
       CHECK(vkgrid_next(&g, a, THOR, SIXTY, a + THOR, &late) == vkpanel_up(a, THOR, a + THOR + THOR / 2) && late, "a chain too far ahead starts again"); }
+
+    // PEANUTS: the measured Thor grids and Android-reported queue deadlines at nominal 120/60 Hz.
+    deadline_grid_cases(8437500, 11333333, "Thor 118.52 Hz");
+    deadline_grid_cases(16710000, 16666666, "Thor 59.84 Hz");
 
     printf(fails ? "t_android_panel: %d FAILED\n" : "t_android_panel: all passed\n", fails);
     return fails != 0;

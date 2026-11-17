@@ -76,6 +76,10 @@ DM_FIXED_TIME	developer	Game			text			both
 DM_FONT_DIR	developer	Diagnostics			text			both						
 DM_FORCE_STRICT	developer	Diagnostics			text			both						
 DM_FPS	developer	Performance			text			both						
+DM_FPSLOCKER	developer	Performance			text			both						
+DM_FPSLOCKER_INTERVAL	developer	Performance			text			both						
+DM_FPSLOCKER_OWNED	developer	Performance			text			both						
+DM_FPSLOCKER_PLAN	developer	Performance			text			both						
 DM_FPS_DECOUPLE	developer	Performance			text			both						
 DM_FPS_HOLD	developer	Performance			text			both						
 DM_FPS_HOLD60	developer	Performance			text			both						
@@ -285,6 +289,7 @@ DM_OOT_MAX_RESOLUTION	developer	Game			text			both
 DM_OOT_TEXTURE_POOL_X2	developer	Memory			text			both						
 DM_OOT_WIDE_KEEP	developer	Diagnostics			text			both						
 DM_OPMODE	developer	Game			text			both						
+DM_OPTION_PATCHES	developer	Game			text			both						
 DM_OVERLAY	developer	Game			text			both						
 DM_PACKER_COMMIT	developer	Diagnostics			text			both						
 DM_PAD_DEADZONE	developer	Input			text			both						
@@ -462,6 +467,7 @@ DM_VK_CHUNK	developer	Graphics			text			both
 DM_VK_CHUNK_PASS	developer	Graphics			text			both						
 DM_VK_CLASSIC_RP	advanced	Performance	Classic render passes		toggle			game		Game settings > Classic render passes				
 DM_VK_COALESCE_PCT	developer	Graphics			text			both						
+DM_VK_COMPILE_TRACE	developer	Diagnostics			text			both						
 DM_VK_CS_ASYNC	developer	Graphics			text			both						
 DM_VK_CS_SHARED_OVER	developer	Diagnostics			text			both						
 DM_VK_DEVICE_FAULT	developer	Graphics			text			both						
@@ -633,11 +639,13 @@ DM_VK_POOL_FB	developer	Memory			text			both
 DM_VK_POOL_FB_EARLY	developer	Diagnostics			text			both						
 DM_VK_POOL_SLOT_BIND	developer	Diagnostics			text			both						
 DM_VK_PREFAULT	developer	Diagnostics			text			both						
+DM_VK_PRESENT_DEADLINE	developer	Performance			text			both						
 DM_VK_PRESENT_GATE_WAIT	developer	Performance			text		30 ms with Turnip, 0 (off) with other drivers	both						
 DM_VK_PRESENT_GRID	developer	Performance			text			both						
 DM_VK_PRESENT_NEAREST	developer	Performance			text			both						
 DM_VK_PRESENT_OWNFMT	developer	Diagnostics			text			both						
 DM_VK_PRESENT_PREWAIT	developer	Diagnostics			text			both						
+DM_VK_PRESENT_TRACE	developer	Diagnostics			text			both						
 DM_VK_PRETRANSFORM	developer	Graphics			text			both						
 DM_VK_PREWARM	developer	Graphics			text		4 threads; 0 (off) with Qualcomm's driver before 512.800	both						
 DM_VK_PREWARM_FILE	developer	Diagnostics			text			both						

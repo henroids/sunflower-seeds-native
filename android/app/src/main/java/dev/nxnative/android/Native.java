@@ -102,11 +102,16 @@ final class Native {
     /** 1 = the present has drawn the overlay (the launcher's views hide), 0 = not yet, -1 = the present does not draw it (DM_VK_OVERLAY=0, a failure, or not in this host) */
     static native int overlayState();
 
+    /** PEANUTS: active display's required buffer-queue lead in nanoseconds; zero means unavailable. */
+    static native void presentationDeadlineSet(long deadlineNanos);
+
     /** Frame generation's settings for the next frames (nxhost_framegen_set): on, images per game frame 2..4, target rate (0 = fixed), flow scale % (0 = auto). */
     static native void frameGenSet(boolean on, int multiplier, int targetRate, int flowPct);
 
     /** "<state> <reason>": state 0 off, 1 generating, 2 on and not generating, -1 unavailable, -2 not in this host. */
     static native String frameGenStatus();
+    /** PEANUTS: requested running FG state, including warm-up: 0 off, 1 enabled, -1 unavailable interface. */
+    static native int frameGenEnabled();
 
     /** Where the letterboxed picture sits in the window's free space (nxhost_picture_place), never scaled: 0 = left / top, 0.5 = centred, 1 = right / bottom. */
     static native void picturePlace(float x, float y);

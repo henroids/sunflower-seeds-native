@@ -196,7 +196,11 @@ Before publishing, the fixes were integrated with main's pipeline archive and GP
 
 ## Found on this game
 
-- PEANUTS, Android: [Desired present times chosen before GPU and queue waits](../../../docs/reference/frame-rate.md#desired-present-times-chosen-before-gpu-and-queue-waits-android): stale deadlines and misleading on-time counts are corrected at submission; physical presentation and walking validation remain pending.
+- PEANUTS, Android: [Desired present times chosen before GPU and queue waits](../../../docs/reference/frame-rate.md#desired-present-times-chosen-before-gpu-and-queue-waits-android): stale deadlines and misleading on-time counts are corrected at submission; subsequent outdoor tests still show short/long presentation pairs.
+
+- PEANUTS, Android: [Future presentation targets missed the compositor queue deadline](../../../docs/reference/frame-rate.md#future-presentation-targets-missed-the-compositor-queue-deadline-android): use the active display's declared queue lead when selecting a target; native regressions cover both panel modes.
+
+- PEANUTS, Android: [Uneven 30 fps presentation in a 120 Hz display mode](../../../docs/reference/frame-rate.md#uneven-30-fps-presentation-in-a-120-hz-display-mode-android) separates the remaining compositor cadence from cold-cache pipeline compilation. The [content-rate hint correction](../../../docs/reference/frame-rate.md#capped-content-advertised-its-presentation-tick-android) alone does not cure the cadence.
 
 - PEANUTS, Android: [Nominal refresh clocks rejected a measured panel mode](../../../docs/reference/frame-rate.md#nominal-refresh-clocks-rejected-a-measured-panel-mode-android): measured 118.52 Hz in nominal 120 Hz mode exposes inconsistent limiter and presentation clocks at 30 fps; the clock-fitting correction awaits device comparison.
 

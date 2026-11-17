@@ -35,6 +35,9 @@ static pthread_mutex_t g_pmu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_pcv = PTHREAD_COND_INITIALIZER;
 static ANativeWindow *g_win_new; static uint64_t g_win_gen, g_win_ack;   // set by nxhost_set_window; the present thread takes it and acknowledges the generation
 static int g_thread_up;
+// PEANUTS(upstream-candidate): Display.getPresentationDeadlineNanos(), updated by the game window on the UI thread.
+static _Atomic uint64_t g_presentation_deadline;
+void nxhost_presentation_deadline_set(uint64_t ns) { atomic_store_explicit(&g_presentation_deadline, ns, memory_order_relaxed); }
 static void *selftest_main(void *arg);
 void nxhost_set_window(ANativeWindow *w) {
     static int first = 1;
@@ -663,6 +666,11 @@ static void timing_poll(void) {
     VkPastPresentationTimingGOOGLE pt[16]; uint32_t n = 16;
     if (vk.vkGetPastPresentationTimingGOOGLE(V.dev, g_swap, &n, pt) < 0) return;
     for (uint32_t i = 0; i < n; i++) pres_note(pt[i].presentID, pt[i].actualPresentTime / 1e9);
+    // PEANUTS: raw driver feedback, correlated by present ID with the request below and SurfaceFlinger frame history. Disabled outside diagnosis.
+    if (VKA_ENV("DM_VK_PRESENT_TRACE", 0)) for (uint32_t i = 0; i < n; i++)
+        VLOG("present trace shown id=%u desired=%llu actual=%llu earliest=%llu margin=%llu poll=%llu",
+             pt[i].presentID, (unsigned long long)pt[i].desiredPresentTime, (unsigned long long)pt[i].actualPresentTime,
+             (unsigned long long)pt[i].earliestPresentTime, (unsigned long long)pt[i].presentMargin, (unsigned long long)now_ns());
     // PEANUTS: every actual present time (generated frames too) also feeds the estimate of the panel's refresh period and phase (vka_panel.h). When the estimate is
     // dropped (readings off the grid: the panel changed its mode on its own) the driver's refresh period is read again, as after a window frame rate change
     vkpanel_seed(&g_panel, g_refresh_ns);
@@ -831,7 +839,15 @@ static int present_one(const pq_item *it) {
     VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO, .pNext = &ti, .waitSemaphoreCount = it->fence ? 2 : 1, .pWaitSemaphores = ws, .pWaitDstStageMask = st,
                        .commandBufferCount = 1, .pCommandBuffers = &cb, .signalSemaphoreCount = 1, .pSignalSemaphores = &g_sdone[idx]};
     if (!it->fence) ti.waitSemaphoreValueCount = 1;
-    frame_rate(it->period); refresh_poll();
+    // PEANUTS begin (upstream-candidate): the content-rate hint follows the effective cap; frame generation keeps its output rate.
+    double vote_period = it->period;
+    if (!g_fg_on) {
+        int nxhost_fps_limit_get(void) __attribute__((weak));
+        int lim = &nxhost_fps_limit_get ? nxhost_fps_limit_get() : 0;
+        if (lim > 0 && vote_period < 1.0 / lim) vote_period = 1.0 / lim;
+    }
+    frame_rate(vote_period); refresh_poll();
+    // PEANUTS end
     // The frame done on the GPU before the queue lock is taken: a submission that waits for a timeline value still pending can block inside vkQueueSubmit until it is
     // signalled (Turnip on KGSL emulates timeline semaphores: 25-35 ms a frame with the lock held, so every replay submission behind it waited; Ocarina of Time's note).
     // The copy cannot start before the frame ends anyway; only a value already handed to the queue is waited for here (a later one is handled under the lock below)
@@ -884,7 +900,9 @@ static int present_one(const pq_item *it) {
             int nxhost_fps_limit_get(void) __attribute__((weak));
             int lim = &nxhost_fps_limit_get ? nxhost_fps_limit_get() : 0, late = 0; uint64_t per = period;
             if (lim > 0 && per < 1000000000ull / (uint64_t)lim) per = 1000000000ull / (uint64_t)lim;
-            grid = vkgrid_next(&g_grid, g_panel.last, g_panel.period, per, now_ns(), &late);
+            // PEANUTS(upstream-candidate): honor the compositor queue deadline, not merely a future desired-present timestamp.
+            uint64_t lead = VKA_ENV("DM_VK_PRESENT_DEADLINE", 1) ? atomic_load_explicit(&g_presentation_deadline, memory_order_relaxed) : 0;
+            grid = vkgrid_next_deadline(&g_grid, g_panel.last, g_panel.period, per, now_ns(), lead, &late);
             if (grid) { want = grid - g_panel.period / 2; g_last_desired = 0; atomic_fetch_add_explicit(&g_grid_timed, 1, memory_order_relaxed); if (late) atomic_fetch_add_explicit(&g_grid_late, 1, memory_order_relaxed); }
         } else g_grid.last = 0;
         if (it->ticket) atomic_fetch_add_explicit(&g_grid_presents, 1, memory_order_relaxed);
@@ -898,7 +916,14 @@ static int present_one(const pq_item *it) {
         VkPresentTimeGOOGLE pt = {(uint32_t)it->ticket, want};
         VkPresentTimesInfoGOOGLE ptv = {VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, .swapchainCount = 1, .pTimes = &pt};
         VkPresentInfoKHR pi = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .pNext = V.display_timing ? &ptv : NULL, .waitSemaphoreCount = 1, .pWaitSemaphores = &g_sdone[idx], .swapchainCount = 1, .pSwapchains = &g_swap, .pImageIndices = &idx};
+        // PEANUTS: trace the original target as well as the API timestamp; a midpoint request and a missed GPU deadline are different failures.
+        int trace = VKA_ENV("DM_VK_PRESENT_TRACE", 0);
+        if (trace) VLOG("present trace queue id=%u at=%llu want=%llu grid=%llu panel=%llu period=%llu submit=%llu lead=%llu",
+                        pt.presentID, (unsigned long long)now_ns(), (unsigned long long)want, (unsigned long long)grid,
+                        (unsigned long long)g_panel.period, (unsigned long long)period, (unsigned long long)(th1 - th0),
+                        (unsigned long long)atomic_load_explicit(&g_presentation_deadline, memory_order_relaxed));
         pr = vk.vkQueuePresentKHR(V.q, &pi);
+        if (trace) VLOG("present trace return id=%u at=%llu result=%d", pt.presentID, (unsigned long long)now_ns(), pr);
     }
     vka_qhold_add(0, th1 - th0); vka_qhold_add(1, now_ns() - th1);
     pthread_mutex_unlock(&V.qmu);

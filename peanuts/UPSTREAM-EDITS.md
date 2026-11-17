@@ -1096,6 +1096,46 @@ check all expected words before mutation and use separate RX/RW auxiliary pages.
 The profile stays experimental: title/movie checks do not validate gameplay.
 See [the game note](../dm/games/0100453019AA8000/README.md#experimental-30--60--120-fps).
 
+## Android presentation deadline forwarding
+
+The active game Activity forwards `Display.getPresentationDeadlineNanos()` once during `hostSetup`, then through the existing 500 ms `fpsTick` while active. A missing display sends zero. The JNI bridge preserves positive nanosecond values as 64-bit unsigned values, normalizes nonpositive values to zero and safely ignores a host without the new weak interface. The renderer uses this platform queue-lead requirement when selecting its target presentation grid; half a refresh alone does not describe the compositor's deadline. See the [Android API contract](https://developer.android.com/reference/android/view/Display#getPresentationDeadlineNanos()).
+
+There is no additional timer or persisted preference; the first tick after resuming a paused loop can take up to two seconds. Deadline-aware physical 120 Hz testing still showed uneven presentation despite sufficient reported queue lead. Forwarding the deadline corrects the source's platform contract but does not establish a cure for that platform behavior.
+
+| Files | Marked hook | Purpose |
+|---|---|---|
+| `GameActivity.java` | `presentationDeadlineUpdate`, `hostSetup`, active `fpsTick` | Forward the current display's required queue lead |
+| `Native.java`, `nxlaunch.c` | `presentationDeadlineSet`, weak forwarder | Preserve nanoseconds and handle missing hosts |
+| `vk_android.h`, `vka_present.c` | `nxhost_presentation_deadline_set` | Expose and consume the platform's compositor deadline |
+
+`peanuts/tests/test_presentation_deadline.py` compiles the production Activity forwarding helper against JVM stubs and the production JNI bridge against the exported C header. It checks deadline changes, missing displays, 64-bit values, signed-input normalization and unavailable weak host symbols.
+
+### Stable 30 display-mode platform mitigation
+
+For the owner's Stable 30 preference, the game Activity requests a same-resolution mode within 0.5 Hz of 60 Hz only when the fourth field of the running native cap status is 30 and requested native FG state is explicitly off. The third status field is the configured game rate, not an observed frame count; zero means unavailable state. Pending restart preferences never drive this request. Every other cap, unavailable state, FG enablement, pause/background transition and destruction releases it. No global setting is changed.
+
+Final combined physical 60 Hz menu/outdoor/movement windows measured 630/630 uniform two-refresh intervals (378 while walking or moving the camera) while nominal 120 Hz retained 12–18 short/long pairs per 126 intervals despite the platform deadline lead. The remaining high-refresh compositor/HWC cause is open. This is an explicit platform mitigation for stable 30 fps, not a demonstrated root-cause cure; mode selection remains an asynchronous platform request.
+
+| Files | Marked hook | Purpose |
+|---|---|---|
+| `GameActivity.java` | helper field, active `fpsTick`, pause and destruction | Apply and release the request before updating the display deadline |
+| `Lsfg.java` | `push` call-out | Release the Activity request immediately before an in-app native FG enable call |
+| `Native.java`, `nxlaunch.c` | `frameGenEnabled`, weak forwarder | An absent interface leaves display selection unrestricted |
+| `vk_android.h`, `vka_framegen.c` | `nxhost_framegen_enabled` | Read initialized requested FG state independently of rendering warm-up |
+
+The helpers live under `dev/peanuts/display`. External native cap/FG changes are observed by the active 500 ms tick, with up to two seconds for the first resumed tick. Physical display switching is asynchronous. `peanuts/tests/test_running_display.py` compiles the real policy/helper and in-app enable path against JVM stubs, and the production native getter/setter against C stubs. It checks effective-cap parsing, mode geometry/rate, cap/FG changes, missing state, idempotent window updates and request release before the native enable call.
+
+### Android content-rate and compilation diagnostics (2026-11-17)
+
+| Files | Change | Marking |
+|---|---|---|
+| `dm/gfx/vk_android/vka_present.c` | Advertise the effective capped content rate without reducing generated output; optional raw presentation tracing | PEANUTS blocks/comments; content hint is an upstream candidate |
+| `dm/gfx/vk_android/vka_dev.c`, `vka_ctl.c` | Restart-only `DM_VK_COMPILE_TRACE` times shader-module and graphics/compute pipeline API calls, including helpers and guest-FPCR mode; off by default | PEANUTS block/inline comment |
+| `dm/tools/tests/test_vk_frame_rate_vote.py`, `test_vk_compile_trace.py`, `test_vk_present_deadline.py` | Production-block forwarding, cap, FG, FPCR and timing regressions | PEANUTS headers/comments |
+| `docs/reference/frame-rate.md`, `docs/env_switches.tsv`, `dm/games/01007EF00011E000/README.md` | Separate cold pipeline compilation from the remaining high-refresh compositor cadence; record diagnostic limits | PEANUTS blocks/rows |
+
+No shader-chain files or shader-library versions changed. See the [frame-rate evidence](../docs/reference/frame-rate.md#uneven-30-fps-presentation-in-a-120-hz-display-mode-android).
+
 ### Pipeline cache save failure paths (2026-11-17)
 
 `dm/gfx/vk_android/vka_pso.c` has PEANUTS(upstream-candidate) hunks closing cache, stamp and prewarm streams once, replacing files only after a complete successful close, removing failed temporary files and freeing failed-save blobs. `peanuts/tests/test_pipeline_cache_save.py` injects write, close, rename and open failures in the production writer under ASan/UBSan, including the actual prewarm save function and its dirty-state retry. This is an error-path correction, not an attribution of the observed judder; the measured runs show no cache-save I/O errors.

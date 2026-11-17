@@ -34,6 +34,9 @@ static void settings_init(void) {
     atomic_compare_exchange_strong(&g_on, &exp, e && atoi(e) ? 1 : 0);
 }
 
+// PEANUTS: let window display policy observe initialized requested FG state independently of rendering warm-up.
+int nxhost_framegen_enabled(void) { settings_init(); return atomic_load(&g_on) > 0; }
+
 void nxhost_framegen_set(int on, int multiplier, int target_rate, int flow_pct) {
     atomic_store(&g_mult, multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier);
     atomic_store(&g_target, target_rate < 0 ? 0 : target_rate);

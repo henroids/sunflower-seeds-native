@@ -88,14 +88,20 @@ static inline uint32_t vkpanel_hold(uint64_t period_ns, uint64_t r) {
 // lateness is paid once, not carried. The time to hand to vkQueuePresentKHR is the target minus half a refresh (the system shows a frame at the first refresh not
 // before its desired time). Returns the target, 0 when the period is not a whole number of refreshes (the chain ends)
 typedef struct { uint64_t last; } vkgrid;
-static inline uint64_t vkgrid_next(vkgrid *g, uint64_t anchor, uint64_t r, uint64_t period_ns, uint64_t now, int *late) {
+// PEANUTS(upstream-candidate): Android reports the queue lead required by its compositor; a future API timestamp alone is not a reachable display target.
+static inline uint64_t vkgrid_next_deadline(vkgrid *g, uint64_t anchor, uint64_t r, uint64_t period_ns, uint64_t now, uint64_t deadline_ns, int *late) {
     uint32_t hold = vkpanel_hold(period_ns, r);
     if (late) *late = 0;
     if (!hold || !anchor) { g->last = 0; return 0; }
-    uint64_t first = now + r / 2, t = g->last ? vkpanel_near(anchor, r, g->last + (uint64_t)hold * r) : 0;
+    uint64_t lead = deadline_ns > r / 2 ? deadline_ns : r / 2;   // PEANUTS: preserve the old fallback when display timing is unavailable
+    uint64_t first = now + lead, t = g->last ? vkpanel_near(anchor, r, g->last + (uint64_t)hold * r) : 0;
     // (a target more than eight holds ahead cannot come from frames in the swapchain's queue: the clock or the grid moved, start again)
     if (t < first || t > first + 8ull * hold * r) { if (late) *late = g->last != 0; t = vkpanel_up(anchor, r, first); }
     g->last = t;
     return t;
+}
+// PEANUTS: callers without Android display metadata retain the previous fallback.
+static inline uint64_t vkgrid_next(vkgrid *g, uint64_t anchor, uint64_t r, uint64_t period_ns, uint64_t now, int *late) {
+    return vkgrid_next_deadline(g, anchor, r, period_ns, now, 0, late);
 }
 #endif
