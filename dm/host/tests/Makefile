@@ -679,8 +679,8 @@ $(B)/t_peanuts_stopworld: t_peanuts_stopworld.c ../hle_thread.c ../dm.h $(GAME_H
 	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -I.. $(GINC) -o $@ t_peanuts_stopworld.c -lpthread -lm
 $(B)/t_peanuts_padgate: t_peanuts_padgate.c t_hid.c t_peanuts_hid_stubs.c ../hle_hid.c ../hle_haptics.c ../dm_input.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -I.. $(GINC) -o $@ t_peanuts_padgate.c t_peanuts_hid_stubs.c ../hle_haptics.c -lpthread -lm
-$(B)/t_peanuts_host: t_peanuts_host.c stub_android/android/log.h ../../peanuts/peanuts.c ../../peanuts/peanuts.h ../../peanuts/peanuts_frametime.c ../../peanuts/peanuts_frametime.h ../../peanuts/rt/peanuts_rt.h ../dm.h $(GAME_H) | $(B)
-	$(CLANG) -O1 -g -Wall -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -Istub_android -I.. $(GINC) -o $@ t_peanuts_host.c ../../peanuts/peanuts_frametime.c -lpthread -lm
+$(B)/t_peanuts_host: t_peanuts_host.c stub_android/android/log.h ../../peanuts/peanuts.c ../../peanuts/peanuts.h ../../peanuts/peanuts_frametime.h ../../peanuts/peanuts_graph.h ../../peanuts/rt/peanuts_rt.h ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -Istub_android -I.. $(GINC) -o $@ t_peanuts_host.c -lpthread -lm
 # t_peanuts_frametime: the ring of presented-frame intervals (peanuts_frametime.c, included as the other peanuts tests include their sources): the first push, the gap rule,
 # the ring's wrap and the reads. Built without __ANDROID__, so the JNI function is left out.
 $(B)/t_peanuts_frametime: t_peanuts_frametime.c ../../peanuts/peanuts_frametime.c ../../peanuts/peanuts_frametime.h | $(B)
