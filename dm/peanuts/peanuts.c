@@ -476,19 +476,55 @@ static int rt_copy(void *dst, uint64_t addr, size_t len) {
     g_rd_guard = &j; memcpy(dst, (const void *)(uintptr_t)addr, len); g_rd_guard = NULL;
     return 1;
 }
+// Read accounting for the 30 s line (2026-11-18: Breath of the Wild's companion took 46-50 % of a core, half of it in process_vm_readv, and nothing said which reads
+// those were): reads answered by the cache, by the kernel, and refused by it, with the last few distinct pages of the last two kinds, named from /proc/self/maps
+// when the line is printed (rt_read_stats). Relaxed counters; the samples are a ring written without a lock (a torn entry is only a wrong sample address)
+static _Atomic uint64_t g_rdn_cached, g_rdn_kernel, g_rdn_refused, g_rdn_kbytes;
+static _Atomic uint64_t g_rd_miss[8], g_rd_bad[8]; static _Atomic unsigned g_rd_miss_n, g_rd_bad_n;
+static void rd_note(_Atomic uint64_t *ring, _Atomic unsigned *n, uint64_t addr) {
+    uint64_t pg = addr & ~0xfffffull;   // (by MiB: neighbours are one sample)
+    for (int i = 0; i < 8; i++) if (atomic_load_explicit(&ring[i], memory_order_relaxed) == pg) return;
+    atomic_store_explicit(&ring[atomic_fetch_add_explicit(n, 1, memory_order_relaxed) & 7], pg, memory_order_relaxed);
+}
 static int rt_mem_read(void *u, uint64_t addr, void *buf, size_t len) {
     (void)u;
     if (rt_range_has(addr, len)) {
-        if (rt_copy(buf, addr, len)) { rt_orig_apply(addr, buf, len); return 1; }
+        if (rt_copy(buf, addr, len)) { rt_orig_apply(addr, buf, len); atomic_fetch_add_explicit(&g_rdn_cached, 1, memory_order_relaxed); return 1; }
         rt_ranges_refresh();   // the cache was wrong: read it again, and let the kernel answer this read
     }
-    if (plat_mem_read(addr, buf, len)) return 0;
+    if (plat_mem_read(addr, buf, len)) { atomic_fetch_add_explicit(&g_rdn_refused, 1, memory_order_relaxed); rd_note(g_rd_bad, &g_rd_bad_n, addr); return 0; }
+    atomic_fetch_add_explicit(&g_rdn_kernel, 1, memory_order_relaxed); atomic_fetch_add_explicit(&g_rdn_kbytes, len, memory_order_relaxed); rd_note(g_rd_miss, &g_rd_miss_n, addr);
     rt_orig_apply(addr, buf, len);
     // Readable but not in the cache: maybe a new mapping, so refresh, but at most every 500 ms. Some pages read memory that stays outside the cached ranges
     // (Animal Crossing's, every tick), and a /proc/self/maps parse per such read held the tick thread at 100 % (~140 ms a tick, the page at ~7 Hz).
     static _Atomic int64_t miss_at; int64_t now = mono_ns() / 1000000;
     if (now - atomic_load(&miss_at) >= 500) { atomic_store(&miss_at, now); rt_ranges_refresh(); }
     return 1;
+}
+// The read accounting as text for the tick thread's 30 s line; the counters start over. Sample addresses are named by their /proc/self/maps line (one pass, only when
+// the kernel answered or refused reads in the period)
+static void rt_read_stats(char *out, size_t n, unsigned ticks) {
+    uint64_t c = atomic_exchange(&g_rdn_cached, 0), k = atomic_exchange(&g_rdn_kernel, 0), r = atomic_exchange(&g_rdn_refused, 0), kb = atomic_exchange(&g_rdn_kbytes, 0);
+    double t = ticks ? (double)ticks : 1.0;
+    int o = snprintf(out, n, "; reads a tick: %.0f from the cache, %.0f through the kernel (%.0f bytes), %.0f refused", c / t, k / t, kb / t, r / t);
+    if (!(k + r) || o < 0 || (size_t)o >= n) return;
+    uint64_t a[16]; int na = 0;
+    for (int i = 0; i < 8; i++) { uint64_t v = atomic_exchange(&g_rd_miss[i], 0); if (v) a[na++] = v; }
+    int nm = na;
+    for (int i = 0; i < 8; i++) { uint64_t v = atomic_exchange(&g_rd_bad[i], 0); if (v) a[na++] = v; }
+    char what[16][72]; for (int i = 0; i < na; i++) snprintf(what[i], sizeof what[i], "no mapping");
+    FILE *f = fopen("/proc/self/maps", "r"); char line[512];
+    while (f && fgets(line, sizeof line, f)) {
+        uint64_t lo, hi; char perm[8]; int name = 0;
+        if (sscanf(line, "%" SCNx64 "-%" SCNx64 " %7s %*s %*s %*s %n", &lo, &hi, perm, &name) < 3) continue;
+        for (int i = 0; i < na; i++) if (a[i] + 0x100000 > lo && a[i] < hi && !strcmp(what[i], "no mapping")) {
+            size_t L = strlen(line); if (L && line[L - 1] == '\n') line[L - 1] = 0;
+            snprintf(what[i], sizeof what[i], "%s %.48s", perm, name && line[name] ? line + name : "(anonymous, no name)");
+        }
+    }
+    if (f) fclose(f);
+    for (int i = 0; i < na && (size_t)o < n; i++)
+        o += snprintf(out + o, n - (size_t)o, "%s0x%" PRIx64 " [%s]", i == 0 ? (nm ? "; kernel-read near " : "; refused near ") : i == nm ? "; refused near " : ", ", a[i], what[i]);
 }
 // A guest write: process_vm_writev (plat_mem_write) first. Reads of the cached ranges are plain memcpys, so a seccomp policy that refuses process_vm_* (ENOSYS / EPERM)
 // was never noticed on the read side, but it fails every write - and a companion's writes (Octopath Traveler 0 hiding its party HUD and raising the command panel on the
@@ -856,9 +892,10 @@ static void *rt_thread(void *arg) {
         busy += d; if (d > longest) longest = d; ticks++; hidden += !shown;
         if (t1 - stat_at >= 30000000000ll) {
             uint64_t stops = 0, failed = 0, stop_us = 0; pn_rt_stop_stats(&stops, &failed, &stop_us);
-            LOG("[peanuts] companion ticks: %u in %.1f s (%u with the page not shown), %.2f ms each on average, longest %.2f ms, %.1f%% of one core; the game's threads stopped for writes %llu times since the start (%llu given up), longest %.2f ms",
+            char rds[1600]; rt_read_stats(rds, sizeof rds, ticks);
+            LOG("[peanuts] companion ticks: %u in %.1f s (%u with the page not shown), %.2f ms each on average, longest %.2f ms, %.1f%% of one core; the game's threads stopped for writes %llu times since the start (%llu given up), longest %.2f ms%s",
                 ticks, (t1 - stat_at) / 1e9, hidden, ticks ? busy / 1e6 / ticks : 0.0, longest / 1e6, 100.0 * busy / (double)(t1 - stat_at),
-                (unsigned long long)stops, (unsigned long long)failed, stop_us / 1e3);
+                (unsigned long long)stops, (unsigned long long)failed, stop_us / 1e3, rds);
             stat_at = t1; busy = longest = 0; ticks = hidden = 0;
         }
     }
