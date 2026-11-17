@@ -65,6 +65,19 @@ int main(void) {
       g_mode = 0; dm_hid_opmode_changed(); arg[0] = 2; arg[1] = 2; arg[5] = 0;
       CHECK(ctrl_support(info, (const int8_t *)arg) == RES_OK && front_calls == 4, "two players wanted and one connected: the join screen, mode change or not");
       g_mode = 1; dm_hid_opmode_changed(); dm_pad_players(1); }
+
+    // the six-axis history: each entry is the sample that was current at its time, not the newest one. Samples 10 ms apart, turning at 1, 2, 3, 4 rad/s about x
+    { uint32_t h = 0; SixAxisState st[8]; float flat[3] = {0, 0, -1};   // the full key style's sensor of No1
+      motion_now += 10000000000ull;   // every earlier sample is stale
+      for (int k = 1; k <= 4; k++) { motion_now += 10000000ull; dm_motion_set_switch(0, flat, (float[]){(float)k, 0, 0}); }
+      float one;
+      CHECK(h_hid_SixStates(st, 8, &h) == 8 && st[0].gyro[0] > st[2].gyro[0] && st[2].gyro[0] > st[4].gyro[0] && st[4].gyro[0] > st[6].gyro[0], "8 states read: the newest sample first, older samples behind it, 10 ms a sample");
+      CHECK(st[1].gyro[0] == st[2].gyro[0] && st[3].gyro[0] == st[4].gyro[0] && st[5].gyro[0] == st[7].gyro[0], "the sample current 5 and 10 ms ago is the one before the newest, and so on; times before the oldest sample give the oldest");
+      CHECK(st[0].sampling == st[1].sampling + 1 && st[1].sampling == st[7].sampling + 6, "the sampling numbers still count down by one");
+      one = st[0].gyro[0]; h_hid_SixStates(st, 1, &h);
+      CHECK(st[0].gyro[0] == one, "one state read: the newest sample");
+      motion_now += 300000001ull;
+      CHECK(h_hid_SixStates(st, 8, &h) == 8 && st[0].gyro[0] == 0 && st[5].gyro[0] == 0, "stale motion: the history is the resting state again"); }
     if (fails) printf("FAILED: %d of %d\n", fails, checks); else printf("all passed: %d\n", checks);
     return fails != 0;
 }
