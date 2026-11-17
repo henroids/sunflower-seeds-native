@@ -246,9 +246,9 @@ For a game that is already built, tapping the cover shows the dialog **Game file
 
 ### Which games are supported?
 
-The project's README lists the tested games with the update each one needs. In 0.1.1 they are Link's Awakening, Echoes of Wisdom, Fire Emblem: Three Houses, Fire Emblem Engage, Metroid Dread, Super Mario Odyssey, Mario Kart 8 Deluxe, Animal Crossing: New Horizons, Persona 5 Royal, Castlevania: Belmont's Curse, Octopath Traveler 0, Pokémon Brilliant Diamond, Pokémon Sword and Breath of the Wild (new, little tested). Super Mario Bros. Wonder and Dragon Quest III HD-2D Remake are in the app too, but were not tested on a device yet. 0.1.2 adds Pokémon Shining Pearl, Pokémon Shield, Final Fantasy Resonance, Skyward Sword HD, Pokémon Legends: Arceus and Resident Evil 4, all new and little tested, and Kirby's Return to Dream Land Deluxe, which was run by its contributor on their own AYN Thor only; the README's table says what was seen of each.
+The project's README lists the tested games with the update each one needs. In 0.1.1 they are Link's Awakening, Echoes of Wisdom, Fire Emblem: Three Houses, Fire Emblem Engage, Metroid Dread, Super Mario Odyssey, Mario Kart 8 Deluxe, Animal Crossing: New Horizons, Persona 5 Royal, Castlevania: Belmont's Curse, Octopath Traveler 0, Pokémon Brilliant Diamond, Pokémon Sword and Breath of the Wild (new, little tested). Super Mario Bros. Wonder and Dragon Quest III HD-2D Remake are in the app too, but were not tested on a device yet. 0.1.2 adds Pokémon Shining Pearl, Pokémon Shield, Final Fantasy Resonance, Skyward Sword HD, Pokémon Legends: Arceus and Resident Evil 4, all new and little tested, and Kirby's Return to Dream Land Deluxe, which was run by its contributor on their own AYN Thor only. 0.1.4 adds Crash Team Racing Nitro-Fueled, Kirby and the Forgotten Land, Super Mario 3D World + Bowser's Fury, Chained Echoes, My Time at Sandrock, Monster Sanctuary and Yoru, Tomosu, all new and little tested, and Xenoblade Chronicles X: Definitive Edition as an experiment. Super Mario Bros. Wonder was checked on a device for 0.1.4, on its 1.2.1 update, the only one the app builds now. The README's table says what was seen of each.
 
-Settings › **About** may list more titles. Those have a profile but are not on the tested list. Two profiles in the source are first drafts that were only packed on a PC and never run: Chained Echoes and Yoru, Tomosu.
+Settings › **About** lists the games of the app you have installed, each with its title ID.
 
 ### Why does building take so long?
 
@@ -556,7 +556,7 @@ On a single-screen device the game runs without it. A game without a companion l
 
 ### Which games have a companion?
 
-Settings › Library › **Companions** shows the catalog: **Your games** first, then **Other companions · add the game first**. Every game on the tested list has a companion. The catalog is read online, so the list can change without an app update.
+Settings › Library › **Companions** shows the catalog: **Your games** first, then **Other companions · add the game first**. Most games on the tested list have a companion: the README's table says which. The catalog is read online, so the list can change without an app update.
 
 ### How do I install a companion for the first time?
 
