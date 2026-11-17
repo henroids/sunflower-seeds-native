@@ -936,3 +936,17 @@ Peanuts-owned: `dev.peanuts.ctl.Up` (the page `advanced`; `Up.page` closes upstr
 `peanuts/docs/CONTROL.md`, `peanuts/tests/test_ctl.py`, `dm/peanuts/import/tests/nsp_test.c` (links to `fd:<n>/dlc6.xci` and `fd:<n>/DLC7.NSP`).
 
 Not run on a device. Checked on a PC: see the commit messages of this round.
+
+### System-driver warning and firmware/key setup guidance (2026-11-17)
+
+| File | Change | Marker |
+|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | warn before system-driver Play; choose the per-game driver, play once anyway, or cancel | `PEANUTS begin/end` and launch helper comment |
+| `android/app/src/main/java/dev/nxnative/android/GpuDriver.java` | resolve launch driver with the same environment override order | `PEANUTS begin/end` |
+| `android/app/src/main/java/dev/nxnative/android/DriverLaunch.java` | pure effective-driver decision, checked on the JVM | `PEANUTS` class comment |
+| `android/app/src/main/java/dev/nxnative/android/FrontendLaunch.java` | route system-driver starts through the warning | `PEANUTS` comment |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | share the per-game driver picker with the warning | `PEANUTS` inline comment |
+| `android/README.md`, `dm/tools/tests/test_android_driver_launch.py` | document and check the launch warning | `PEANUTS` comments |
+
+Peanuts-owned Library setup and import screens say: "Firmware and keys should be the same version." This is guidance, not an automatic version check.
+The APK built; 50 focused tests passed. Device UI checks remain pending. No shader-chain change.

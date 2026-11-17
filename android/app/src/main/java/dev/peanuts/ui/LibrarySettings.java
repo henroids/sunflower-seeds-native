@@ -27,6 +27,7 @@ import java.io.OutputStream;
  * Home's first-run card and the sheet's Add keys….
  */
 public final class LibrarySettings {
+    static final String KEYS_FIRMWARE_GUIDANCE = "Firmware and keys should be the same version.";
     static final int REQ_KEYS = 60, REQ_GAME = 61, REQ_UPDATE_DIR = 62, REQ_DLC_DIR = 63, REQ_FIRMWARE = 64, REQ_SHEET_UPDATE = 65, REQ_SHEET_DLC = 66, REQ_FIRMWARE_ZIP = 67,
             REQ_BUILD_DIR = 68;
     /** dev.peanuts.settings.ModsSection's "Install mod…" (ACTION_OPEN_DOCUMENT_TREE / ACTION_OPEN_DOCUMENT), public: the section lives in another
@@ -60,6 +61,7 @@ public final class LibrarySettings {
         card.addView(keysRow.view);
         fontsRow = new PUi.Setting(a, "🔤", "Firmware", Haptics.on(Haptics.Word.TICK, v -> pickFirmwareSource(a))).chevron(a);
         card.addView(fontsRow.view);
+        PUi.add(card, PUi.body(a, KEYS_FIRMWARE_GUIDANCE), 12);
         card.addView(new PUi.Setting(a, "🔄", "Rescan", Haptics.on(Haptics.Word.CLICK, v -> { Library.rescan(a); Toast.makeText(a, "Looking in the folders again", Toast.LENGTH_SHORT).show(); }))
                 .value("Reads the folders again").chevron(a).view);
         card.addView(new PUi.Setting(a, "🧹", "Free up space", Haptics.on(Haptics.Word.TICK, v -> freeUpSpace(a)))
@@ -167,7 +169,14 @@ public final class LibrarySettings {
     // ---- Pickers ----
 
     /** The keys picker (Settings › Library › Keys, the first-run card, the sheet's Add keys…) */
-    public static void pickKeys(Activity a) { pickFile(a, REQ_KEYS, "Pick your prod.keys"); }
+    public static void pickKeys(Activity a) {
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        PUi.add(box, PUi.body(a, KEYS_FIRMWARE_GUIDANCE), 0);
+        PUi.sheet(a, "Firmware and keys", box)
+                .setPositiveButton("Choose keys", (d, w) -> pickFile(a, REQ_KEYS, "Pick your prod.keys"))
+                .setNegativeButton("Cancel", null).show();
+    }
 
     static void pickFile(Activity a, int request, String title) { pickFile(a, request, title, "*/*"); }
 
@@ -190,6 +199,7 @@ public final class LibrarySettings {
         box.setOrientation(LinearLayout.VERTICAL);
         AlertDialog[] d = new AlertDialog[1];
         PUi.add(box, PUi.body(a, "Pick the folder your firmware is extracted into, or a firmware .zip (its NCA files flat inside, stored or deflated)."), 0);
+        PUi.add(box, PUi.body(a, KEYS_FIRMWARE_GUIDANCE), 12);
         PUi.add(box, new PUi.Setting(a, "📁", "Folder", v -> { d[0].dismiss(); pickFolder(a, REQ_FIRMWARE, "Pick your firmware folder"); }).chevron(a).view, 12);
         PUi.add(box, new PUi.Setting(a, "🗜️", "Zip file", v -> { d[0].dismiss(); pickFile(a, REQ_FIRMWARE_ZIP, "Pick your firmware zip", "application/zip"); }).chevron(a).view, 0);
         d[0] = PUi.sheet(a, "Firmware", box).setPositiveButton("Cancel", null).show();
@@ -271,7 +281,7 @@ public final class LibrarySettings {
                 String err = imp.lastError();
                 UI.post(() -> {
                     if (r != 0) error(a, "The importer does not accept these keys: " + err + "\nThe file is kept; pick another to replace it.");
-                    else { Haptics.play(a.getWindow().getDecorView(), Haptics.Word.CLICK); Toast.makeText(a, "Keys accepted", Toast.LENGTH_SHORT).show(); }
+                    else { Haptics.play(a.getWindow().getDecorView(), Haptics.Word.CLICK); Toast.makeText(a, "Keys loaded", Toast.LENGTH_LONG).show(); }
                     keysLanded(a);
                 });
             }, "peanuts-keys").start();
@@ -314,7 +324,8 @@ public final class LibrarySettings {
             int r = imp.firmwareFonts(source, out.getPath());
             String err = imp.lastError();
             if (deleteAfter != null) deleteAfter.delete();
-            UI.post(() -> { fontsState = r == 0 ? null : "Firmware not added: " + err; fontsLanded(a); });
+            UI.post(() -> { fontsState = r == 0 ? null : "Firmware not added: " + err
+                    + "\n" + KEYS_FIRMWARE_GUIDANCE; fontsLanded(a); });
         }, "peanuts-fonts").start();
     }
 

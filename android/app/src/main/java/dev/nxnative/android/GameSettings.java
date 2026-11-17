@@ -788,7 +788,7 @@ final class GameSettings {
         }).setNegativeButton("Cancel", null).show();
     }
 
-    private static void driver(MainActivity a, Game g, Runnable done) {
+    static void driver(MainActivity a, Game g, Runnable done) {   // PEANUTS: also opened by the system-driver launch warning
         List<GpuDriver.Info> inst = GpuDriver.installed(a);
         GpuDriver.Info def = GpuDriver.selected(a);
         List<String> labels = new ArrayList<>();

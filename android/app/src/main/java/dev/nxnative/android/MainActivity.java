@@ -1500,6 +1500,24 @@ public final class MainActivity extends Activity {
     }
 
     private void start(Game g) {
+        // PEANUTS begin: recommend Turnip before a system-driver launch, with a one-launch bypass.
+        if (GpuDriver.launchesSystem(this, g.titleId)) {
+            new PadFocus.Builder(this).setTitle("Turnip recommended")
+                    .setMessage("You're about to play with the system GPU driver. We recommend Turnip for better game compatibility and stability."
+                            + (GpuDriver.selected(this, g.titleId) != null ? "\n\nAn extra driver setting is forcing the system driver. Change that setting to use your selected driver." : ""))
+                    .setPositiveButton("Choose driver", (d, w) -> {
+                        gameSettings(g);
+                        GameSettings.driver(this, g, () -> gameSettings(g));
+                    })
+                    .setNeutralButton("Play anyway", (d, w) -> startWithDriver(g))
+                    .setNegativeButton("Cancel", null).show();
+            return;
+        }
+        startWithDriver(g);
+        // PEANUTS end
+    }
+
+    private void startWithDriver(Game g) {   // PEANUTS: the existing launch continues after the driver choice
         Game.touch(this, g);   // the entry played last is the one kept if the list ever holds this game twice
         Intent intent = new Intent(this, GameActivity.class).putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", g.packDir);
         if (getIntent().getBooleanExtra("no_pause", false)) intent.putExtra("no_pause", true);

@@ -176,6 +176,8 @@ Each game's own rows are in its profile, `dm/games/<title ID>/readiness.tsv` ([t
 
 ## Custom GPU drivers
 
+Peanuts Native warns before Play when the effective selection is the system GPU driver and recommends Turnip. **Choose driver** opens that game's driver picker; **Play anyway** continues this launch, and **Cancel** stays in the launcher. The warning is shown again on the next system-driver launch. Per-game and extra environment overrides are respected; selecting a custom driver bypasses this warning. Frontend and shortcut starts that need the warning go through the launcher too. <!-- PEANUTS: system-driver launch warning -->
+
 The replay runs on the phone's own Vulkan driver (**System**) unless another is picked. A custom driver is a zip in the layout Eden and other Android emulators use: the driver `.so`, anything it loads, and a `meta.json` whose `libraryName` names the `.so`.
 
 - **Install and pick:** Settings › **GPU driver** → **Install…** → **Pick a zip…** (the system file picker), **Download…** (the public GitHub releases of the repositories in `DriverFetch.REPOS`; only on a tap), or a zip put in the app's own `Android/data/<app>/files/gpu_drivers/` (listed by name). The launcher never opens files in other folders (Download, …) by itself. The zip is unpacked off the UI thread into the app's private files, `files/gpu_drivers/<name>/`, the only place a library may be loaded from, and the picked one goes to the host as `DM_VK_DRIVER=<that folder>` when the game starts. **System** passes nothing. adb: `am start -n dev.nxnative.android/.MainActivity --es gpu_driver_zip <zip path>` installs and picks a zip, `--es gpu_driver system` goes back.

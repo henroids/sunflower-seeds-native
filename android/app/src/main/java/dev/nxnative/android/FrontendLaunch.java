@@ -144,6 +144,8 @@ public final class FrontendLaunch extends Activity {
     }
 
     private void play(Game g) {
+        // PEANUTS: use Home's launch warning and per-game driver picker when a choice is needed.
+        if (GpuDriver.launchesSystem(this, g.titleId)) { home(new File(g.gameDir)); return; }
         // PEANUTS begin: a shortcut or a frontend plays the build with mods too, as Home's Play does (MainActivity.launch): it started the normal pack, so a game
         // with code mods on ran without them (GitHub issue #12: a Luminescent Platinum save read by the unmodded game). The same rule as there: the variant when
         // it is built and fits, else the normal pack and a line that says so
