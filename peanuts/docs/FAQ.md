@@ -564,7 +564,7 @@ The game the controller is on, and what you can do with it:
 - after **Play**, for a game with a companion: its cover until the companion is up. This also shows when the game starts from a home screen shortcut or a frontend;
 - anything else (the first start, Settings, a game's page): the Peanuts Native logo.
 
-Each button shows the controller button that does the same: **A** is the main action, **Y** the second one, **X** opens Settings. You can also tap them. The controller always stays on the main screen. While a question or a game's sheet is open on the main screen, the second screen dims and waits until it closes. The drifting peanuts behind both screens are one background: they carry on from one screen to the other.
+With a controller connected, each button shows the controller button that does the same: **A** is the main action, **Y** the second one, **X** opens Settings. Without one, they show the app's own icons (the gear for Settings). You can always tap them. The controller always stays on the main screen. While a question or a game's sheet is open on the main screen, the second screen dims and waits until it closes. The drifting peanuts behind both screens are one background: they carry on from one screen to the other.
 
 During a game without a companion the second screen is Android's, as before. Settings › Library › **Games without a companion** keeps the game's cover there instead.
 

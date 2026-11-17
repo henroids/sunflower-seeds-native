@@ -1255,14 +1255,14 @@ public final class Library {
         if (st == READY) {
             k.kind = BottomScreen.Card.K_READY; k.state = "Ready";
             k.companion = companionVersion(r); k.played = r.used();
-            k.primary = tap; k.primaryLabel = r.game != null ? "Play" : "Open";
+            k.primary = tap; k.primaryLabel = r.game != null ? "Play" : "Open"; k.primaryIcon = r.game != null ? R.drawable.ic_play : 0;
             if (r.game != null) { k.second = hold; k.secondLabel = "Game page"; }
         } else if (st == BUILD) {
             k.kind = BottomScreen.Card.K_BUILD;
             LibraryScanner.VersionState vs = r.title == null ? LibraryScanner.VersionState.UNKNOWN : r.title.versionState;
             k.state = vs == LibraryScanner.VersionState.FILE_GONE ? "File gone" : vs == LibraryScanner.VersionState.UNSUPPORTED ? "Wrong version" : "Build needed";
             k.found = found(r.title);
-            k.primary = tap; k.primaryLabel = "Build…";   // the sheet, as the tap
+            k.primary = tap; k.primaryLabel = "Build…"; k.primaryIcon = R.drawable.ic_build;   // the sheet, as the tap
         } else {
             k.kind = BottomScreen.Card.K_NO_PROFILE; k.state = "Not in this app version";
             if (r.game != null) { k.second = hold; k.secondLabel = "Game page"; }

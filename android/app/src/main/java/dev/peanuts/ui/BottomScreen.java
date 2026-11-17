@@ -253,6 +253,7 @@ public final class BottomScreen {
             try { panel = new BottomPanel(a, d); }
             catch (RuntimeException e) { Log.w(TAG, "bottom screen: no window on display " + d.getDisplayId() + ": " + e); panel = null; return; }
             panel.dim(!ownerFocused && launch == null);
+            panel.setPad(Pads.connected(a));
             BackgroundFlow.stale();
             BottomPanel made = panel;
             // cancelled by Android (display change): make a new one
@@ -324,6 +325,8 @@ public final class BottomScreen {
         if (watching) return;
         watching = true;
         a.getApplicationContext().registerReceiver(companionState, new IntentFilter(Companion.STATE), Context.RECEIVER_NOT_EXPORTED);
+        Context app = a.getApplicationContext();
+        Pads.watch(app, () -> { if (panel != null) panel.setPad(Pads.connected(app)); });
         a.getApplication().registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             @Override public void onActivityStarted(Activity x) {
                 if (!isMain(x)) return;

@@ -46,7 +46,8 @@ final class BottomPanel extends Presentation {
     private FrameLayout root, stage;
     private BananaBackgroundView bg;
     private View scrim, hint;
-    private boolean dimmed, active = true;
+    private boolean dimmed, active = true, pad = true;
+    private Button settingsBtn;
     private int page = -1;
     private View[] pages;
     private boolean wide, tall;
@@ -172,6 +173,7 @@ final class BottomPanel extends Presentation {
         hint = settingsBar(c);
         hint.setVisibility(View.GONE);
         root.addView(hint, root.indexOfChild(stage) + 1, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        applyKeys();
     }
 
     /** Centred column, capped width, scrolls on short screens; room for the Settings hint */
@@ -198,7 +200,7 @@ final class BottomPanel extends Presentation {
         int pad = PUi.dp(c, wide ? 24 : 16);
         bar.setPadding(pad, 0, pad, PUi.dp(c, 12));
         Button b = PUi.button(c, "Settings", PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.TICK); BottomScreen.settings(); });
-        b.setCompoundDrawablesRelativeWithIntrinsicBounds(new KeyGlyph(c, "X", b.getCurrentTextColor(), PUi.col(c, R.color.bn_bg)), null, null, null);
+        settingsBtn = b;
         b.setCompoundDrawablePadding(PUi.dp(c, 10));
         LinearLayout row = PUi.row(c);
         row.addView(b, PUi.wrap());
@@ -313,12 +315,43 @@ final class BottomPanel extends Presentation {
         return b;
     }
 
-    private static void setKey(PUi.Action b, String key) {
+    private static void setKey(PUi.Action b, String key) { setKey(b, key, 0); }
+
+    /** With a controller its face button; without, the app's icon for the action (none: the label alone) */
+    private static void setKey(PUi.Action b, String key, int iconRes) {
         Context c = b.getContext();
         boolean primary = b.kind == PUi.Kind.PRIMARY;
-        b.icon.setImageDrawable(key == null ? null : new KeyGlyph(c, key, PUi.col(c, primary ? R.color.bn_on_banana : R.color.bn_text),
-                PUi.col(c, primary ? R.color.bn_banana : R.color.bn_tint)));
-        b.icon.setVisibility(key == null ? View.GONE : View.VISIBLE);
+        Drawable d = null;
+        if (key != null) d = new KeyGlyph(c, key, PUi.col(c, primary ? R.color.bn_on_banana : R.color.bn_text), PUi.col(c, primary ? R.color.bn_banana : R.color.bn_tint));
+        else if (iconRes != 0) { d = c.getDrawable(iconRes).mutate(); d.setTint(b.label.getCurrentTextColor()); }
+        b.icon.setImageDrawable(d);
+        b.icon.setVisibility(d == null ? View.GONE : View.VISIBLE);
+    }
+
+    /** A controller came or went: face buttons, or the app's icons for touch */
+    void setPad(boolean on) {
+        if (on == pad) return;
+        pad = on;
+        if (stage == null) return;   // build() applies it
+        View[] v = {cardPrimary.icon, cardSecond.icon, buildStop.icon, buildOpen.icon, settingsBtn};
+        if (!Motion.on() || !stage.isShown()) { applyKeys(); return; }
+        for (View x : v) { x.animate().cancel(); x.animate().alpha(0f).setDuration(Motion.SNAP); }
+        stage.postDelayed(() -> { applyKeys(); for (View x : v) x.animate().alpha(1f).setDuration(Motion.FOCUS); }, Motion.SNAP);
+    }
+
+    private void applyKeys() {
+        if (cardPrimary == null || settingsBtn == null) return;
+        setKey(cardPrimary, pad ? "A" : null, shownCard != null ? shownCard.primaryIcon : 0);
+        setKey(cardSecond, pad ? "Y" : null);
+        setKey(buildStop, pad ? "Y" : null);
+        setKey(buildOpen, pad ? "A" : null);
+        Context c = getContext();
+        int ink = settingsBtn.getCurrentTextColor();
+        Drawable d = pad ? new KeyGlyph(c, "X", ink, PUi.col(c, R.color.bn_bg)) : c.getDrawable(R.drawable.ic_settings).mutate();
+        if (!pad) d.setTint(ink);
+        int s = PUi.dp(c, 22);
+        d.setBounds(0, 0, s, s);
+        settingsBtn.setCompoundDrawablesRelative(d, null, null, null);
     }
 
     // ---- Pages ----
@@ -379,7 +412,7 @@ final class BottomPanel extends Presentation {
         setLine(cardLine1, cardLine1Row, l1);
         setLine(cardLine2, cardLine2, l2);
         cardPrimary.setVisibility(k.primary != null ? View.VISIBLE : View.GONE);
-        if (k.primary != null) cardPrimary.setText(k.primaryLabel);
+        if (k.primary != null) { cardPrimary.setText(k.primaryLabel); setKey(cardPrimary, pad ? "A" : null, k.primaryIcon); }
         cardSecond.setVisibility(k.second != null ? View.VISIBLE : View.GONE);
         if (k.second != null) cardSecond.setText(k.secondLabel);
         cardBox.setAlpha(1f);

@@ -111,7 +111,8 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   dismissed) when it stops, so a game's companion takes the display as before; a `DisplayListener` follows the display coming and going. Built
   from the launcher's own pieces (`PUi`, `BananaBackgroundView`, the covers' marks); a column on a small or squarish panel, the cover beside the
   words on a landscape screen 600 dp or wider. Home leaves out its header while it shows (X opens Settings; Y on a running build's cover asks to
-  stop it). Settings › Library › **Bottom screen** turns it off (`PeanutsPrefs.bottomScreen`), and Home is then as before. The cover mark
+  stop it). Settings › Library › **Bottom screen** turns it off (`PeanutsPrefs.bottomScreen`), and Home is then as before. Its buttons show the face buttons while a controller is connected (`Pads`, the
+  game's own rule), the app's icons without one. The cover mark
   "Building · N %" and the build card's step words show a thin, faint bar between the parts instead of the dot (`PUi.joined`). Home's drifting peanuts and the second screen's are one field while it shows (`BackgroundFlow`): the
   displays sit in it as on the device, the second centred under the first with a 48 dp hinge, one phase for both; the drift is upstream's. Play
   of a game with a companion turns the card into a start page, and the game's process shows the same page (`GameScreen`) until the companion is
