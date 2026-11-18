@@ -1250,3 +1250,22 @@ All logic is in Peanuts' own files; the upstream lines only call it.
 | `android/app/.gitignore` | 1 | `!src/jvmtest/java/dev/peanuts/build/` under the existing marked line: `build/` hid the package's JVM test (`BuildLogJvmTest`) as it hid its sources | `PEANUTS` (the comment above, in the hunk) |
 
 Tests: `dm/tools/tests/test_android_build_log.py`. Upstream candidate: no (it serves Peanuts' build pipeline).
+
+### Round 20, the launcher on the second display (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+While the launcher is in front, the second display shows the cover the D-pad is on and what can be done with it (`dev.peanuts.ui.BottomScreen`,
+`BottomPanel`, all Peanuts-owned). Home's header steps aside while it shows, so the hook hands that header over, with the way Settings opens (X).
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `buildHome()`: `BottomScreen.home(this, <the header just added>, () -> page(true))` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/BananaBackgroundView.java` | 2 | `onDraw()` and `popAt()`, after `wx, wy`: `BackgroundFlow.drift(this, BananaGrid.GRID_DEG, BananaGrid.SPEED_X_DP, BananaGrid.SPEED_Y_DP)` replaces them when not null | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/NxApp.java` | 1 | `onCreate()`: `AppScreens.install(this)`, so the Readiness check and the Graphics self-test (their own processes) keep the second display's page | trailing `// PEANUTS: ...` |
+
+The second hook makes the two screens' backgrounds one field: `BackgroundFlow` returns the grid's drift (BananaGrid's `wx, wy`) that puts this view's
+grid where the field's is (the two displays placed as on the device, one phase for both), or null without the bottom screen, and the view draws as before.
+The same drift goes into `popAt`, so a tap pops the banana where it is drawn. Since 0.1.4 the grid names each banana by its row and column (BananaGrid):
+the drift is passed unwrapped, as upstream does.
+
+Everything else (the lifecycle through `ActivityLifecycleCallbacks`, the focus, the builds, X on Home through an unhandled-key listener on the
+window) lives in `dev.peanuts.ui`. No upstream-candidate general fix: all four lines call Peanuts-owned code.

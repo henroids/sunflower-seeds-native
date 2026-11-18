@@ -167,3 +167,28 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   never keys, game files, saves or packs. `BuildLogProvider` serves it read-only; the sheet offers Share (the chooser on the app's display) and Save to
   a folder (request 71 through `LibrarySettings.result`). Entry points: Home's stopped build card, the Prepare card and its Manage sheet, the game's
   Storage tab, Settings › Share log, and ctl `share_build_log`. Tests: `dm/tools/tests/test_android_build_log.py` (`BuildLogJvmTest`).
+
+   - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` — (2026-11-17, the launcher on a second display) one line in `buildHome`
+     after the header: `dev.peanuts.ui.BottomScreen.home(...)` gets Home's header (it steps aside while the second display shows the launcher's
+     page) and how Settings opens (X). `peanuts/UPSTREAM-EDITS.md` Round 20.
+   - `android/app/src/main/java/dev/nxnative/android/BananaBackgroundView.java` — (2026-11-17, the same) one line each in `onDraw` and `popAt`
+     after the drift `wx, wy`: `dev.peanuts.ui.BackgroundFlow.drift(...)` replaces it while the second display shows the launcher, so both screens
+     draw one field and a tap pops the banana where it is drawn. The drawing stays upstream's. `peanuts/UPSTREAM-EDITS.md` Round 20.
+   - `android/app/src/main/java/dev/nxnative/android/NxApp.java` — (2026-11-17, the same) one line in `onCreate`: `dev.peanuts.ui.AppScreens.install(this)`
+     lets the app's pages in other processes (Readiness check, Graphics self-test) tell the launcher they are in front, so the second display keeps
+     its page. `peanuts/UPSTREAM-EDITS.md` Round 20.
+- 2026-11-17 (the launcher on the second display, `dev.peanuts.ui.BottomScreen` / `BottomPanel`): while Home, Settings or a game's page is in front, the
+  second display (the Thor's Screen-2, or any presentation display) shows a page of the launcher instead of Android's own: the cover the D-pad is on
+  (Ready: Play and Game page; to build: what the scan found and Build…; building: the step, the bar, Stop build and Screens off), else the logo.
+  A `Presentation` with `Theme.Banana`, not focusable (the controller stays on Home), shown while MainActivity is started and hidden (not
+  dismissed) when it stops, so a game's companion takes the display as before; a `DisplayListener` follows the display coming and going. Built
+  from the launcher's own pieces (`PUi`, `BananaBackgroundView`, the covers' marks); a column on a small or squarish panel, the cover beside the
+  words on a landscape screen 600 dp or wider. Home leaves out its header while it shows (X opens Settings; Y on a running build's cover asks to
+  stop it). Settings › Library › **Bottom screen** turns it off (`PeanutsPrefs.bottomScreen`), and Home is then as before. Its buttons show the face buttons while a controller is connected (`Pads`, the
+  game's own rule), the app's icons without one. The cover mark
+  "Building · N %" and the build card's step words show a thin, faint bar between the parts instead of the dot (`PUi.joined`). Home's drifting peanuts and the second screen's are one field while it shows (`BackgroundFlow`): the
+  displays sit in it as on the device, the second centred right below the first, one phase for both; the drift is upstream's. Play
+  of a game with a companion turns the card into a start page, and the game's process shows the same page (`GameScreen`) until the companion is
+  up, also from a shortcut or a frontend; without one the second display is Android's, or the game's cover with Settings › Library ›
+  **Games without a companion** (`PeanutsPrefs.bottomScreenInGames`). Seen on the emulator (Android 13, a 1240x1080 and a 1920x1080 second display, hot-plugged both ways):
+  the logo page, Settings by X and back, the cards of a game to build and of one not in this app version, the setting off. Not yet run on the Thor.

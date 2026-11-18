@@ -35,7 +35,7 @@ public final class LibrarySettings {
     public static final int REQ_MOD_FOLDER = 69, REQ_MOD_ZIP = 70;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Reading the firmware…" and what came of it, while the rows show
-    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow, swapRow;
+    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow, swapRow, bottomRow, gamesRow;
     private static Activity rowsOf;
 
     private LibrarySettings() {}
@@ -43,6 +43,7 @@ public final class LibrarySettings {
     /** The section and its card, added to the Settings column before upstream's own sections */
     public static void add(Activity a, LinearLayout content) {
         rowsOf = a;
+        BottomScreen.page(a);   // bottom screen: logo
         PUi.add(content, PUi.section(a, "Library"), 16);
         LinearLayout card = PUi.add(content, PUi.listCard(a), 8);
         // a row that opens a picker or another screen ticks; Rescan, which acts at once, clicks (Haptics)
@@ -92,6 +93,21 @@ public final class LibrarySettings {
             });
             card.addView(swapRow.view);
         }
+        // Bottom screen (BottomScreen)
+        bottomRow = new PUi.Setting(a, "📱", "Bottom screen", v -> {
+            PeanutsPrefs.bottomScreen(a, !PeanutsPrefs.bottomScreen(a));
+            BottomScreen.settingChanged();
+            Haptics.play(v, Haptics.Word.CLICK);
+            refreshRows();
+        });
+        card.addView(bottomRow.view);
+        gamesRow = new PUi.Setting(a, "🎮", "Games without a companion", v -> {
+            if (!PeanutsPrefs.bottomScreen(a)) { Haptics.play(v, Haptics.Word.REJECT); return; }
+            PeanutsPrefs.bottomScreenInGames(a, !PeanutsPrefs.bottomScreenInGames(a));
+            Haptics.play(v, Haptics.Word.CLICK);
+            refreshRows();
+        });
+        card.addView(gamesRow.view);
         companionsRow = new PUi.Setting(a, "🖥️", "Companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
                 .chevron(a);
         card.addView(companionsRow.view);
@@ -133,6 +149,15 @@ public final class LibrarySettings {
         if (swapRow != null) swapRow.value(PeanutsPrefs.swapScreens(a)
                 ? "On: games start on the other screen, the companion is on this one. Tap to swap back. Takes effect at the next game start."
                 : "Off: games start on this screen, the companion is on the other one. Tap to swap, for a clip-on top screen. Takes effect at the next game start.");
+        if (bottomRow != null) bottomRow.value(PeanutsPrefs.bottomScreen(a) ? "On: a second screen shows the game you are on, with Play and its page. Tap to leave that screen to Android."
+                : "Off: a second screen shows Android's own launcher while you are here. Tap to turn it on.");
+        if (gamesRow != null) {
+            boolean on = PeanutsPrefs.bottomScreen(a);
+            gamesRow.view.setAlpha(on ? 1f : 0.5f);
+            gamesRow.value(!on ? "Needs Bottom screen on."
+                    : PeanutsPrefs.bottomScreenInGames(a) ? "The game's cover stays on the second screen while you play. Tap to leave it to Android."
+                    : "Android's own screen while you play. Tap to keep the game's cover there.");
+        }
     }
 
     static String keysValue(Activity a) {

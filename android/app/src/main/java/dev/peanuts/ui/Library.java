@@ -176,6 +176,7 @@ public final class Library {
             boolean stepChanged = !step.equals(b.step);
             b.step = step; b.percent = percent; b.detail = detail == null ? "" : detail;
             if (stepChanged || (buildStatus == null && coverChip == null) || box == null) render(); else updateBuildCard(b, false);
+            pushBuild();
         }
         @Override public void done(boolean ok, String message, String code) {
             Build b = build;
@@ -203,6 +204,7 @@ public final class Library {
                 // a build the user stopped is not a refusal: the press on Stop was its feedback
                 if (inFront && !BuildListener.CANCELLED.equals(b.code)) { Haptics.play(anchor(), Haptics.Word.REJECT); if (coverChip != null) Motion.shake(coverChip); }
             }
+            pushBuild();
         }
     };
 
@@ -281,7 +283,9 @@ public final class Library {
         if (current == null || current.a != a) current = new Library(a);
         Library l = current;
         l.box = box; l.games = new ArrayList<>(games); l.ondeviceCard = ondeviceCard; gen++;
-        l.shows = (Predicate<Object>) shows; l.card = (Function<Object, View>) card; l.manage = (Consumer<Object>) manage; l.refresh = refresh;
+        Consumer<Object> m = (Consumer<Object>) manage;
+        l.shows = (Predicate<Object>) shows; l.card = (Function<Object, View>) card; l.refresh = refresh;
+        l.manage = g -> { BottomScreen.page(a); m.accept(g); };   // bottom screen: logo
         if (build != null) {
             if (BuildPipeline.running() == build.id) BuildPipeline.attach(build.id, l.listener);   // an activity made anew while the service builds
             else if (!build.failed) build = null;   // the service ended while no listener heard it
@@ -339,6 +343,7 @@ public final class Library {
                 UI.post(() -> {
                     if (icons.containsKey(id)) return;
                     icons.put(id, b);
+                    BottomScreen.icon(id, b);
                     Library l = current; TextView tile = l == null ? null : l.tiles.get(id);
                     if (tile != null) Motion.cover(tile, b);   // a tile on screen crossfades to its art; a tile built from now on has it at once
                 });
@@ -376,7 +381,7 @@ public final class Library {
                 File f = LibraryScanner.icon(a, x);
                 Bitmap b = f == null ? null : BitmapFactory.decodeFile(f.getPath());
                 if (b == null) continue;
-                UI.post(() -> { icons.put(x.titleId, b); TextView tile = tiles.get(x.titleId); if (tile != null) Motion.cover(tile, b); });
+                UI.post(() -> { icons.put(x.titleId, b); BottomScreen.icon(x.titleId, b); TextView tile = tiles.get(x.titleId); if (tile != null) Motion.cover(tile, b); });
             }
             if (!catalogFetched) {
                 List<CompanionPort.Item> c = CompanionPort.fetch();
@@ -720,6 +725,7 @@ public final class Library {
         boolean setup = PeanutsPrefs.gameDir(a) == null || !PeanutsPrefs.setupDone(a);
         List<Row> rows = rows();
         boolean bare = setup && rows.isEmpty() && pc == null;   // the first-run card alone
+        if (setup || rows.isEmpty()) BottomScreen.idle(setup);   // bottom screen: logo
 
         Build b = build;
         if (b != null && b.failed && b.step.equals("prepare")) pc = null;   // a build that stopped in Prepare: one card, this build's (its Retry builds again), not upstream's failed card beside it
@@ -753,6 +759,10 @@ public final class Library {
         }
         int hidden = hiddenGameCount();
         int cols = coverColumns();
+        gridPos.clear();
+        for (int i = 0; i < show.size(); i++) gridPos.put(show.get(i).id(), i);
+        gridCols = Math.max(1, cols);
+        if (!setup && !rows.isEmpty() && filter != BUILDING) BottomScreen.only(gridPos.keySet());
 
         // nothing visible changed: the views stay, with their focus, their scroll position and whatever is animating
         String sig = setup ? null : signature(show, pc, b, buildCard, building, all, ready, toBuild, noProfile, hidden, cols);   // the first-run card reads too much to list: always built
@@ -1035,7 +1045,7 @@ public final class Library {
         LibraryScanner.VersionState vs = r.title == null ? LibraryScanner.VersionState.UNKNOWN : r.title.versionState;
         boolean fileGone = vs == LibraryScanner.VersionState.FILE_GONE, wrongVersion = vs == LibraryScanner.VersionState.UNSUPPORTED;
         String buildWords = fileGone ? "File gone" : wrongVersion ? "Wrong version" : "Build needed";
-        String state = building ? (stopped ? "Build stopped" : ownBuild ? "Building · " + b.percent + " %" : "Building · preparing")
+        CharSequence state = building ? (stopped ? "Build stopped" : PUi.joined("Building", ownBuild ? b.percent + " %" : "preparing"))
                 : st == READY ? "Ready" : st == BUILD ? buildWords : "Not in this app version";
 
         LinearLayout cell = new LinearLayout(a);
@@ -1127,10 +1137,18 @@ public final class Library {
             tap.run();
         });
         cover.setOnLongClickListener(v -> { hold.run(); return true; });   // the system plays its own long-press haptic for a true: nothing added, or it plays twice
+        // Y: second action; Stop on a running build while the bottom screen shows
         cover.setOnKeyListener((v, code, ev) -> {
-            if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0 && code == KeyEvent.KEYCODE_BUTTON_Y) { Haptics.play(v, Haptics.Word.HEAVY); hold.run(); return true; }
+            if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0 && code == KeyEvent.KEYCODE_BUTTON_Y) {
+                Haptics.play(v, Haptics.Word.HEAVY);
+                Runnable stop = ownBuild && !stopped && BottomScreen.showing() ? stopAsk(name) : null;
+                (stop != null ? stop : hold).run();
+                return true;
+            }
             return shoulders.onKey(v, code, ev);
         });
+        View.OnFocusChangeListener focusWas = cover.getOnFocusChangeListener();
+        cover.setOnFocusChangeListener((v, f) -> { focusWas.onFocusChange(v, f); if (f) bottom(r, tap, hold); });
 
         cell.addView(cover, PUi.fill());
         cell.addView(n, nlp);
@@ -1145,13 +1163,14 @@ public final class Library {
         if (dump != null) dev.peanuts.build.GameEnv.ensureBuildId(a, r.id(), dump);
         FontGate.check(a, r.id(), r.name(), () -> {
             played = r.id(); playedAt = android.os.SystemClock.uptimeMillis();   // Home's next resume puts the focus on this cover (watch)
+            BottomScreen.launching(r.id(), r.name(), icons.get(r.id()), startsCompanion(r));
             if (Upstream.launch(a, r.game)) Motion.launched(a);
-            else { Haptics.play(anchor(), Haptics.Word.REJECT); manage.accept(r.game); }
+            else { BottomScreen.launchCancelled(); Haptics.play(anchor(), Haptics.Word.REJECT); manage.accept(r.game); }
         });
     }
 
     /** A pill on the cover, 8 dp in from its corner: 12 sp 700, a 1 dp shadow so it reads on any art */
-    private TextView mark(String s, int fill, int textRes, boolean stroke, int gravity) {
+    private TextView mark(CharSequence s, int fill, int textRes, boolean stroke, int gravity) {
         TextView t = PUi.text(a, s, 12, textRes, 700);
         t.setSingleLine(true);
         t.setBackground(PUi.round(fill, PUi.dp(a, 999), stroke ? PUi.col(a, R.color.bn_card_stroke) : 0, stroke ? Math.max(1, PUi.dp(a, 1)) : 0));
@@ -1207,6 +1226,14 @@ public final class Library {
         return v;
     }
 
+    /** As the game's process decides (Companion.firstPage): a package beside the pack names this title, its second screen is not Off */
+    private boolean startsCompanion(Row r) {
+        if (dev.peanuts.settings.CompanionSection.secondScreen(a, r.id()).equals(dev.peanuts.settings.CompanionSection.OFF)) return false;
+        File pack = r.title == null && !r.entry.packDir.isEmpty() ? new File(r.entry.packDir) : null;
+        File root = r.title != null ? r.title.companionRoot() : pack == null || pack.getParentFile() == null ? null : new File(pack.getParentFile(), "peanuts");
+        return root != null && dev.peanuts.settings.CompanionSection.packageFor(root, r.id()) != null;
+    }
+
     /** Whether a companion is installed for this title (Installer.installedVersion under the title's companion root), cached until the next scan or build */
     private boolean companionInstalled(Row r) {
         Boolean c = companions.get(r.id());
@@ -1220,15 +1247,129 @@ public final class Library {
         return c;
     }
 
+    // ---- Bottom screen ----
+
+    /** Asks first, Cancel focused */
+    private Runnable stopAsk(String name) {
+        return () -> PUi.confirmDanger(a, "Stop the build?", "The build of " + name + " stops. What is written so far stays, and the next Build picks up what it can.",
+                "Stop", () -> { Haptics.play(anchor(), Haptics.Word.CLICK); BuildPipeline.cancel(a); });
+    }
+
+    /** The focused cover's card; A = the cover's tap, Y = its second action */
+    private void bottom(Row r, Runnable tap, Runnable hold) {
+        BottomScreen.Card k = new BottomScreen.Card();
+        k.titleId = r.id(); k.name = r.name(); k.icon = icons.get(r.id());
+        Integer at = gridPos.get(r.id());
+        k.pos = at == null ? -1 : at; k.cols = gridCols;
+        int st = r.status();
+        if (isBuilding(r)) {
+            k.kind = BottomScreen.Card.K_BUILDING;
+            BottomScreen.focus(k, buildInfo(r.id(), r.name()));
+            return;
+        }
+        if (st == READY) {
+            k.kind = BottomScreen.Card.K_READY; k.state = "Ready";
+            k.companion = companionVersion(r); k.played = r.used();
+            k.primary = tap; k.primaryLabel = r.game != null ? "Play" : "Open"; k.primaryIcon = r.game != null ? R.drawable.ic_play : 0;
+            if (r.game != null) { k.second = hold; k.secondLabel = "Game page"; }
+        } else if (st == BUILD) {
+            k.kind = BottomScreen.Card.K_BUILD;
+            LibraryScanner.VersionState vs = r.title == null ? LibraryScanner.VersionState.UNKNOWN : r.title.versionState;
+            k.state = vs == LibraryScanner.VersionState.FILE_GONE ? "File gone" : vs == LibraryScanner.VersionState.UNSUPPORTED ? "Wrong version" : "Build needed";
+            k.found = found(r.title);
+            k.primary = tap; k.primaryLabel = "Build…"; k.primaryIcon = R.drawable.ic_build;   // the sheet, as the tap
+        } else {
+            k.kind = BottomScreen.Card.K_NO_PROFILE; k.state = "Not in this app version";
+            if (r.game != null) { k.second = hold; k.secondLabel = "Game page"; }
+        }
+        BottomScreen.focus(k, null);
+    }
+
+    /** Build page; upstream's Prepare only points to its card */
+    private BottomScreen.BuildInfo buildInfo(String titleId, String name) {
+        BottomScreen.BuildInfo i = new BottomScreen.BuildInfo();
+        i.titleId = titleId; i.name = name; i.icon = icons.get(titleId);
+        i.open = () -> { filter = BUILDING; focusGrid = true; animateNext = true; render(); };
+        i.screensOff = () -> ScreensOff.show(a);
+        Build b = build;
+        if (b == null || !titleId.equalsIgnoreCase(b.titleId)) {
+            i.step = PUi.joined("Building", "preparing"); i.body = "Its progress is on the build card."; i.indeterminate = true;
+            return i;
+        }
+        i.percent = b.percent; i.failed = b.failed; i.step = stepWords(b);
+        if (b.failed) {
+            // details and fixes stay on the build card
+            i.body = BuildListener.CANCELLED.equals(b.code) ? "You stopped the build. Its card can resume it." : "The build stopped. Its card says why and what to do next.";
+        } else {
+            String d = b.detail.trim();
+            i.body = (d.isEmpty() ? "Working" : d.endsWith(".") ? d.substring(0, d.length() - 1) : d) + ". It goes on with the screens off.";
+            i.stop = stopAsk(name);
+        }
+        return i;
+    }
+
+    private void pushBuild() {
+        Build b = build;
+        if (b == null) { BottomScreen.build(null); return; }
+        LibraryScanner.Title t = titleFor(b.titleId);
+        BottomScreen.build(buildInfo(b.titleId, t != null ? t.name : b.name));
+    }
+
+    /** "Found the game and update 1.4.1." */
+    private static String found(LibraryScanner.Title t) {
+        if (t == null || t.base == null) return "";
+        if (t.versionState == LibraryScanner.VersionState.FILE_GONE) return "Its file is no longer where it was found.";
+        long u = 0;
+        for (LibraryScanner.Source s : t.updates) u = Math.max(u, s.version);
+        List<String> items = new ArrayList<>();
+        // a dump folder carries its update inside
+        items.add(u == 0 && t.base.version > 0 ? "the game at " + versionWords(t, t.base.version) : "the game");
+        if (u > 0) items.add("update " + versionWords(t, u));
+        int n = t.dlcs.size();
+        if (n > 0) items.add(n == 1 ? "1 DLC" : n + " DLC");
+        StringBuilder s = new StringBuilder("Found ");
+        for (int i = 0; i < items.size(); i++) s.append(i == 0 ? "" : i == items.size() - 1 ? " and " : ", ").append(items.get(i));
+        s.append('.');
+        if (t.versionState == LibraryScanner.VersionState.UNSUPPORTED && t.recommendedVersion > 0) s.append(" This app supports ").append(versionWords(t, t.recommendedVersion)).append('.');
+        return s.toString();
+    }
+
+    /** "1.4.1" if the profile names it, else "v5" */
+    private static String versionWords(LibraryScanner.Title t, long v) {
+        String d = t.supportedBuilds.get(v);
+        if (d != null && !d.isEmpty()) return d;
+        return (v & 0xFFFF) == 0 ? "v" + (v >> 16) : "v" + v;
+    }
+
+    private final Map<String, String> companionVersions = new HashMap<>();
+    private final Map<String, Integer> gridPos = new HashMap<>();   // cover order: the bottom screen slides the way the D-pad went
+    private int gridCols = 1;
+
+    /** Installed companion version, null if none; cached like companionInstalled */
+    private String companionVersion(Row r) {
+        boolean fresh = !companions.containsKey(r.id());
+        if (!companionInstalled(r)) return null;
+        String v = fresh ? null : companionVersions.get(r.id());
+        if (v == null) {
+            CompanionPort.Item it = CompanionPort.forTitle(catalog, r.id());
+            File pack = r.title == null && !r.entry.packDir.isEmpty() ? new File(r.entry.packDir) : null;
+            File root = r.title != null ? r.title.companionRoot() : pack == null || pack.getParentFile() == null ? null : new File(pack.getParentFile(), "peanuts");
+            v = it == null || root == null ? null : CompanionPort.installedVersion(root, it.packageName);
+            if (v == null) v = "";
+            companionVersions.put(r.id(), v);
+        }
+        return v.isEmpty() ? null : v;
+    }
+
     // ---- The build card (Ondevice's shape) ----
 
-    private static String stepWords(Build b) {
+    private static CharSequence stepWords(Build b) {
         if (b.failed) return "Build stopped";
         switch (b.step) {
-            case "prepare": return "Building · preparing the game";
-            case "companion": return "Building · installing the companion";
+            case "prepare": return PUi.joined("Building", "preparing the game");
+            case "companion": return PUi.joined("Building", "installing the companion");
             case "done": return "Ready";
-            default: return "Building · importing the game";
+            default: return PUi.joined("Building", "importing the game");
         }
     }
 
@@ -1317,7 +1458,7 @@ public final class Library {
                     right = null;
             }
         } else {
-            left = PUi.button(a, "Stop", PUi.Kind.TONAL, v -> PUi.confirmDanger(a, "Stop the build?", "The build of " + name + " stops. What is written so far stays, and the next Build picks up what it can.", "Stop", () -> { Haptics.play(anchor(), Haptics.Word.CLICK); BuildPipeline.cancel(a); }));
+            left = PUi.button(a, "Stop", PUi.Kind.TONAL, v -> stopAsk(name).run());
             PUi.Action play = PUi.action(a, R.drawable.ic_play, "Play", PUi.Kind.PRIMARY, null);
             play.setEnabled(false);
             right = play;
@@ -1332,7 +1473,7 @@ public final class Library {
     /** The build's state into the card and the cover that show it; fresh: the views were just built (a bar shows its value as it is, later values animate their fill) */
     private void updateBuildCard(Build b, boolean fresh) {
         if (coverChip != null) {   // the building cover's chip and strip (the Building filter not chosen)
-            coverChip.setText(b.failed ? "Build stopped" : "Building · " + b.percent + " %");
+            coverChip.setText(b.failed ? "Build stopped" : PUi.joined("Building", b.percent + " %"));
             coverChip.setTextColor(PUi.col(a, b.failed ? R.color.bn_danger : R.color.bn_accent));
             if (coverStrip != null) { coverStrip.setVisibility(b.failed ? View.GONE : View.VISIBLE); if (!coverStrip.isIndeterminate()) Motion.progress(coverStrip, b.percent, fresh); }
         }
