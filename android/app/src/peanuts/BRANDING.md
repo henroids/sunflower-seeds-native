@@ -58,3 +58,12 @@ paths in code. Overriding the `ic_banana` drawable resource (above) is sufficien
 - String resources to override: **0** (none exist)
 - Java literals needing a hook: **6** (listed above, see `HOOKS.md`)
 - Left alone (functional or internal, non-branding): **7**
+
+## Sunflower Seeds rebrand (henroids/sunflower-seeds-native)
+
+This fork renames what the user sees to "Sunflower Seeds Native" and keeps every internal identifier (`-PnxApp=peanuts`, the `dev.peanuts` package,
+`PeanutsPrefs`, resource names, the `/sdcard/Peanut Roms` default) so upstream changes from Peanuts Native still merge.
+
+- Art: the four `ic_banana*` overlays above now draw a striped sunflower seed, tilted 12 degrees (no screens); the legacy `mipmap-*dpi` PNGs are rendered from the same art on the leaf-green circle.
+- Text: the Java literals listed above that read "Peanuts Native" read "Sunflower Seeds Native"; the About text credits Peanuts Native by igawa6, then Banana Native and nxnative.
+- Test app: `.github/workflows/test-apk.yml` builds `dev.nxnative.android.sunflowertest`, labelled "Sunflower Seeds test".

@@ -283,7 +283,7 @@ public final class MainActivity extends Activity {
         trailing.addView(dev.peanuts.ui.Library.screensOffButton(this), sop);
         trailing.addView(headerButtons());
         // PEANUTS end
-        content.addView(Ui.header(this, Ui.badge(this, 44), "Peanuts Native", Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
+        content.addView(Ui.header(this, Ui.badge(this, 44), "Sunflower Seeds Native", Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
         accessCard = accessCard();
         Ui.add(content, accessCard, 16);
         Ondevice.attach(this, content, content.getChildCount());   // a game being prepared and its progress (hidden when there is none)
@@ -429,7 +429,7 @@ public final class MainActivity extends Activity {
                 if (!on) { Prefs.adbControl(this, false); return; }
                 b.setChecked(false);   // stays off until confirmed
                 Ui.confirmDanger(this, "Turn ADB control on?", "While it is on, adb, and any other app on this phone, can add games, start Prepare and install or pick a GPU "
-                        + "driver through Peanuts Native's launcher, without asking you. A GPU driver is code that runs inside the game. Turn it on only while you use adb, then off again.",   // PEANUTS: rebrand
+                        + "driver through Sunflower Seeds Native's launcher, without asking you. A GPU driver is code that runs inside the game. Turn it on only while you use adb, then off again.",   // PEANUTS: rebrand
                         "Turn on", () -> { Prefs.adbControl(this, true); b.setChecked(true); });
             });
             help.addView(adb.view);
@@ -444,8 +444,8 @@ public final class MainActivity extends Activity {
         Ui.add(about, poppedText, 10);
         StringBuilder ids = new StringBuilder();   // the games this build includes, so a player can tell whether it has theirs (Profile.missing points here)
         for (Profile p : Profile.all()) ids.append("\n· ").append(p.name).append(" (").append(p.titleId).append(")");
-        String basedOn = BuildConfig.APPLICATION_ID.endsWith(".peanuts")   // PEANUTS: the fork credits Banana Native and its maker first
-                ? "Peanuts Native is a fork of Banana Native by moceure (GPL-3.0), which is based on nxnative by seedds. Companions run on the Eden Duo runtime. LSFG from Eden (GPL-3.0)."
+        String basedOn = BuildConfig.APPLICATION_ID.contains(".peanuts") || BuildConfig.APPLICATION_ID.contains(".sunflower")   // PEANUTS: the fork credits Banana Native and its maker first
+                ? "Sunflower Seeds Native is a fork of Peanuts Native by igawa6 (GPL-3.0), itself a fork of Banana Native by moceure (GPL-3.0), which is based on nxnative by seedds. Companions run on the Eden Duo runtime. LSFG from Eden (GPL-3.0)."
                 : "Based on nxnative by seedds. LSFG from Eden (GPL-3.0).";
         TextView t = Ui.small(this, "Games in this app:" + ids + "\n\n" + basedOn + (BuildConfig.NX_LSFG ? "" : " Built without LSFG."));   // PEANUTS: basedOn above
         t.setTextIsSelectable(true);
@@ -459,7 +459,7 @@ public final class MainActivity extends Activity {
     /** The settings rows' current values (after a dialog, on resume) */
     private void refreshSettings() {
         if (overlayRow == null) return;
-        updateRow.value("Peanuts Native " + Updater.version(this) + (Updater.available(this) ? "" : " · release app only"));   // PEANUTS: rebrand
+        updateRow.value("Sunflower Seeds Native " + Updater.version(this) + (Updater.available(this) ? "" : " · release app only"));   // PEANUTS: rebrand
         boolean ov = Prefs.overlay(this);
         if (overlayRow.toggle.isChecked() != ov) overlayRow.toggle.setChecked(ov);
         int n = 0;

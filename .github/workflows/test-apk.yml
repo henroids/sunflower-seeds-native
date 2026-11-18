@@ -14,11 +14,11 @@ on:
       app_id:
         description: 'dev.nxnative.android.<app_id> (lower-case letters and digits)'
         required: true
-        default: 'peanutstest'
+        default: 'sunflowertest'
       label:
         description: 'App name on the device'
         required: true
-        default: 'Peanuts test'
+        default: 'Sunflower Seeds test'
   push:
     branches: [mlb-the-show-26]
     paths: ['.github/workflows/test-apk.yml', 'dm/games/0100AA7024094000/**', 'android/**', 'dm/host/**', 'dm/gfx/**']
@@ -56,8 +56,8 @@ jobs:
       - name: Build
         env:
           GAMES: ${{ inputs.games || '0100AA7024094000' }}
-          APP_ID: ${{ inputs.app_id || 'peanutstest' }}
-          LABEL: ${{ inputs.label || 'Peanuts test' }}
+          APP_ID: ${{ inputs.app_id || 'sunflowertest' }}
+          LABEL: ${{ inputs.label || 'Sunflower Seeds test' }}
         run: |
           export JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH"
           python3 --version
