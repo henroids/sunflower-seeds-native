@@ -1173,3 +1173,7 @@ Added the Peanuts profile and game index entry for `01009720213B0000`. The gener
 `dm/tools/ue_malloc.py` accepts a relocated primary vtable header when the exact Itanium type name matches FMallocBinned3. `dm/host/hle_uemalloc.c` carries that header into the replacement allocator. Both changes carry PEANUTS markers and apply to Unreal builds with RTTI. `dm/tools/tests/test_ue_malloc.py` covers the verified and mismatched type names.
 
 `dm/host/hle_offline.c` adds the PEANUTS-marked SDK hook for the application server environment enum. [Offline NSD environment query](../docs/reference/services.md#nsd-application-server-environment-query-aborts-during-startup)
+
+## DAVE THE DIVER 1.0.6.1267
+
+The Peanuts Android profile registers the updated executable, PC-generated shader tables and a Vulkan startup prewarm seed from Thor. The exact build uses the shared `step_ticks_u32` memory operation to scale Unity's fixed timestep to the 20–120 fps caps. The generated tables and binary seed are listed in `upstream-unmarked.txt`. [Game note](../dm/games/010097F018538000/README.md)

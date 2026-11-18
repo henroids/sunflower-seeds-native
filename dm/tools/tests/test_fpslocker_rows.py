@@ -99,6 +99,23 @@ int main(void) {
     assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,constant_i32,@0x740,1,1.5:1",bid,&r)==-1);
     assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,constant_i32,@0x740,1,4294967296:1",bid,&r)==-1);
     assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,flag_cap_u32_gt,@0x750,1,2:240",bid,&r)==-1);
+    // PEANUTS: Unity keeps fixedDeltaTime as integer ticks behind a pointer.
+    const char *ticks = "9fe60a212cff9b9a3656ab63d4f882e5,step_ticks_u32,0x158/0x50,1,141120000:1";
+    assert(fpw_parse(ticks, bid, &r) == 1);
+    assert(!fpw_apply(&r, base, 20, read_guest, write_guest));
+    bind(0x158, 0xa00);
+    memset(mem + 0xa50, 0xa5, 8);
+    const int caps[] = {20, 30, 40, 45, 60, 90, 120};
+    for (unsigned i = 0; i < sizeof caps / sizeof *caps; i++) {
+        assert(fpw_apply(&r, base, caps[i], read_guest, write_guest) == 1);
+        uint32_t count, neighbor;
+        memcpy(&count, mem + 0xa50, 4);
+        memcpy(&neighbor, mem + 0xa54, 4);
+        assert(count == 141120000u / (unsigned)caps[i] && neighbor == 0xa5a5a5a5u);
+    }
+    assert(fpw_parse(ticks, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", &r) == 0);
+    assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,step_ticks_u32,@0x750,1,4294967296:1",bid,&r)==-1);
+    assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,step_ticks_u32,@0x750,1,141120000.5:1",bid,&r)==-1);
     // Halfword governor writes must preserve both neighboring bytes and
     // work at the final two bytes of a readable allocation.
     assert(fpw_parse("9fe60a212cff9b9a3656ab63d4f882e5,zero_u16,0x100/0x2,1,0",bid,&r)==1);
