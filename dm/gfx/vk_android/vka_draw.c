@@ -1434,6 +1434,16 @@ static void tbv_destroy(void *v) { vk.vkDestroyBufferView(V.dev, (VkBufferView)(
 // g_tbuf_gcopy: copies on the GPU were recorded for it, so the barrier between them and the dispatch is owed (tbuf_gcopy_end, after bind_sets). The first use of each (shader, binding) is logged, 32 lines at most
 static int g_tbuf_disp, g_tbuf_gcopy;
 static void tbuf_gcopy_end(void) { if (g_tbuf_gcopy) { g_tbuf_gcopy = 0; vka_barrier(g_cb); } }
+// A storage texel buffer a dispatch writes, at an offset off the device's texel buffer alignment: copied into aligned scratch memory before the dispatch (tbuf_view) and
+// copied back after it (tbuf_writeback, vka_dispatch). MLB The Show 26's skinning and player compute shaders write theirs off alignment; unbound, skinned players drew as
+// long spikes with black or missing faces
+static struct { VkBuffer src, dst; VkDeviceSize so, doff, n; } g_tbuf_wb[8]; static int g_tbuf_nwb;
+static void tbuf_writeback(void) {
+    if (!g_tbuf_nwb) return;
+    vka_barrier(g_cb);
+    for (int i = 0; i < g_tbuf_nwb; i++) { VkBufferCopy c = {g_tbuf_wb[i].so, g_tbuf_wb[i].doff, g_tbuf_wb[i].n}; vk.vkCmdCopyBuffer(g_cb, g_tbuf_wb[i].src, g_tbuf_wb[i].dst, 1, &c); }
+    vka_barrier(g_cb); g_tbuf_nwb = 0;
+}
 static void tbuf_gw_note(const vka_shader *sh, const vka_res *r, uint64_t addr, uint64_t bytes, int path, uint32_t off, uint32_t al) {
     static uint64_t seen[32]; static int n; uint64_t h = sh->key ^ ((uint64_t)r->binding << 8) ^ ((uint64_t)path << 4);
     for (int i = 0; i < n; i++) if (seen[i] == h) return;
@@ -1504,6 +1514,19 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
     // theirs at offsets that are not multiples of the device's texel buffer alignment, and unbound their players drew as long spikes with black faces
     int writes = storage && (r->flags & (DMSH_VK_BF_RW | DMSH_VK_BF_ATOMIC));
     int gw = !writes && bytes && bytes <= VKTB_COPY_MAX && VKA_ENV("DM_VK_TBUF_GW", 1) && vka_tex_gw_tbuf_pending(addr, bytes);
+    if (writes && g_tbuf_disp && run >= bytes && (o % al) && bytes <= VKTB_COPY_MAX && g_tbuf_nwb < 8) {
+        vka_span sp; uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements, n = texel && bytes / texel > mx ? mx * texel : bytes;
+        VkBufferView v = VK_NULL_HANDLE;
+        if (vka_scratch(n, al > 16 ? al : 16, &sp)) {
+            VkBufferViewCreateInfo ci = {VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO, .buffer = sp.buf, .format = f, .offset = sp.off, .range = n};
+            if (!vk.vkCreateBufferView(V.dev, &ci, NULL, &v)) {
+                if (!g_tbuf_gcopy) vka_barrier(g_cb);
+                VkBufferCopy c = {o, sp.off, n}; vk.vkCmdCopyBuffer(g_cb, b, sp.buf, 1, &c); g_tbuf_gcopy = 1;
+                g_tbuf_wb[g_tbuf_nwb++] = (typeof(g_tbuf_wb[0])){sp.buf, b, sp.off, o, n};
+                if (VKA_ENV("DM_VK_TBUF_GW", 1)) vka_tex_gw_tbuf(addr, bytes);
+                vka_after(vka_fence_last() + 1, tbv_destroy, (void *)(uintptr_t)v); return v; }
+        }
+    }
     int path = vka_tbuf_path(writes, bytes, run >= bytes, !(o % al), !storage && VKA_ENV("DM_VK_TBUF_COPY", 1) != 0, gw, !g_tbuf_disp);   // (a storage one in place where it can be, as before)
     if (gw) tbuf_gw_note(sh, r, addr, bytes, path, (uint32_t)(o % al), al);
     if (gw && path == VKTB_PLACE && g_tbuf_disp) vka_disp_settle(g_cb);   // (a dispatch reading what a dispatch before it stored: the barrier the replay leaves pending after a dispatch is needed here, unless the game's own came since)
@@ -3544,7 +3567,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
                                             && tbuf_img_gpu(g_wk.r[5][i].tid, g_wk.r[5][i].dim))   // PEANUTS: only where the choice is upstream's copy (tbuf_img_gpu)
         tbuf_img_make(g_wk.r[5][i].tid, g_wk.r[5][i].dim, 0);   // buffer textures read as images: their copies (vka_tbuf.c; no pass is open)   // PEANUTS: tbuf_img_make (upstream: vka_tbuf_refresh when vka_tbuf_pending)
     { g_tbuf_disp = 1; int ok = bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_COMPUTE, &c0); g_tbuf_disp = 0; tbuf_gcopy_end();   // PEANUTS: + the barrier after the texel buffer copies the GPU makes for this dispatch (tbuf_view), whether it is recorded or not
-      if (!ok) { g_skipped++; return; } }
+      if (!ok) { g_tbuf_nwb = 0; g_skipped++; return; } }
     if (dp->ind && c0.buf) {   // the group counts the GPU wrote, into c0's dispatch words before the dispatch reads them (nvn_mtl.m g_c0_dim_buf); NVN2 reads them at c0 + 4 too
         vka_disp_settle(g_cb);   // (a copy: after the dispatches before it, as before; "Dispatch order")
         VkBufferCopy c[2] = {{io, c0.off + DMSH_C0_DISPATCH, 12}, {io, c0.off + DMSH_C0_DISPATCH_NVN2, 12}};
@@ -3563,7 +3586,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
     for (const char *p = sks; !skip && p && *p;) { char *e; unsigned long long k = strtoull(p, &e, 16); if (e == p) break; skip = k == sh[5]->key; p = *e == ',' ? e + 1 : e; }
     if (lg) VLOG("dispatch %llu: %016llx groups %d,%d,%d%s local %u,%u,%u shared %u flags %#x%s", di, (unsigned long long)sh[5]->key, dp->x, dp->y, dp->z, dp->ind ? " (indirect)" : "",
                  sh[5]->e->local[0], sh[5]->e->local[1], sh[5]->e->local[2], sh[5]->e->shared, sh[5]->e->flags, skip ? " SKIPPED" : "");
-    if (skip) { vka_barrier(g_cb); g_dispatches++; return; }
+    if (skip) { g_tbuf_nwb = 0; vka_barrier(g_cb); g_dispatches++; return; }
     if (vka_gp_active) vka_gp_note('c', sh[5]->key, 0, dp->ind ? 0 : (uint64_t)(dp->x > 0 ? dp->x : 0) * (uint64_t)(dp->y > 0 ? dp->y : 0) * (uint64_t)(dp->z > 0 ? dp->z : 0));
     vka_rw_pre(g_cb);   // DM_VK_RANGE_WATCH
     vk.vkCmdBindPipeline(g_cb, VK_PIPELINE_BIND_POINT_COMPUTE, p);
@@ -3573,6 +3596,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
         else vk.vkCmdDispatch(g_cb, (uint32_t)dp->x, (uint32_t)dp->y, (uint32_t)dp->z);
     }
     disp_count(sh[5]->key, dp->caller, dp->ind ? 0 : (uint64_t)(dp->x > 0 ? dp->x : 0) * (uint64_t)(dp->y > 0 ? dp->y : 0) * (uint64_t)(dp->z > 0 ? dp->z : 0));
+    tbuf_writeback();   // PEANUTS: what it stored into off-alignment storage texel buffers, back where the game reads it
     if (sb || vka_nan_on() || VKA_ENV("DM_VK_DISPATCH_ORDER", 0)) vka_barrier(g_cb);   // (a spill: frees the shared memory spill buffer for the next dispatch)
     else {   // "Dispatch order": recorded before the next GPU work that is not a dispatch, unless a barrier comes first
         VkCommandBuffer was = atomic_exchange(&vka_disp_pend, g_cb);
