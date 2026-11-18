@@ -133,6 +133,19 @@ public final class ProfileOptionsJvmTest {
         List<String> highEnv = la.fpsModeEnv(120);
         check(highEnv.contains("DM_FPSLOCKER_PLAN=" + highRate[36]) && highEnv.contains("DM_FPSLOCKER=" + highRate[32]), "120 applies code and typed governor");
         for (String e : new String[] {"DM_FPS_TARGET=0", "DM_FPS_LIMIT=120", "DM_VSYNC_HZ=120", "DM_PRESENT_HZ=120", "DM_FPSLOCKER_INTERVAL=1"}) check(highEnv.contains(e), "120 launch environment " + e);
+        // PEANUTS: explicit native modes set the engine target even after the static 120 fps plan is removed.
+        check(la.usesFpsModeTarget(), "static 120 mode retains its engine target policy");
+        highRate[36] = "";
+        Profile dynamic = Profile.parse(String.join("\t", highRate)).get(0);
+        check(!dynamic.usesFpsModeTarget(), "dynamic FPSLocker modes drive their own engine timing");
+        highRate[0] = "01006BB00C6F0000"; highRate[31] = "60";
+        highRate[32] = ""; highRate[33] = ""; highRate[35] = "30,60";
+        Profile nativeModes = Profile.parse(String.join("\t", highRate)).get(0);
+        check(nativeModes.usesFpsModeTarget(), "Link's Awakening selects its native engine mode");
+        check(nativeModes.fpsModeTarget(30) == 30 && nativeModes.fpsModeTarget(0) == 60, "30 and 60 select matching engine targets");
+        check(nativeModes.fpsModeTarget(120) == 60, "old 120 preference selects the 60 fps engine mode");
+        check(nativeModes.fpsRestart(-2, 30) && !nativeModes.fpsRestart(30, 0), "Game owned still requires restart; 30 and 60 switch live");
+        check(!pOld.usesFpsModeTarget(), "ordinary profiles keep their existing limiter policy");
         check(pOld.fpsModes.isEmpty() && pOld.fpsPlan120.isEmpty(), "old profile columns retain legacy launch policy");
         check(pOld.options.isEmpty(), "old line has empty options");
 

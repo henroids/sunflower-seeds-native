@@ -77,6 +77,10 @@ final class Profile {
     boolean fpsRestart(int started, int selected) {
         return (started == -2) != (selected == -2) || !fpsPlan120.isEmpty() && (started == 120) != (selected == 120);
     }
+    // PEANUTS: native timing modes need an engine target as well as a presentation limit.
+    boolean usesFpsModeTarget() {
+        return !fpsPlan120.isEmpty() || (!fpsModes.isEmpty() && fpsLocker.isEmpty() && fpsLockerPlan.isEmpty());
+    }
     int fpsModeTarget(int selected) { return fpsMode(selected) == 120 ? 0 : fpsMode(selected) == 30 ? 30 : 60; }
     List<String> fpsModeEnv(int selected) {
         List<String> env = new ArrayList<>();

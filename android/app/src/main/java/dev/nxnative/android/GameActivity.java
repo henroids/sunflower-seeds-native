@@ -555,6 +555,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             env.add("DM_PRESENT_INTERVAL=display"); env.add("DM_PRESENT_HZ=" + displayHz()); env.add("DM_FPS_TARGET=0"); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60));
             if (!Prefs.decouple(this, id)) env.add("DM_FPS_DECOUPLE=0");   // Full game speed at low frame rates off (the in-game panel changes it live)
         } else if (Prefs.limited(id)) {   // a profile's default frame limit (fps_limit), which the host applies itself: only the player's own choice is passed (60 fps = none: the game's own interval)
+            if (prof != null && prof.usesFpsModeTarget()) env.add("DM_FPS_TARGET=" + prof.fpsModeTarget(fpsModeAtStart));   // PEANUTS: select the native engine mode on launch
             int maximum = Prefs.paceMax(id);
             if (maximum > 60) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes
                 int hz = capDisplayHz(maximum);
