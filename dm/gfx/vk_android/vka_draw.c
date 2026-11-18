@@ -830,6 +830,12 @@ static VkFormat vin_format(int f, int want, int *changed, int *retype) {
         if (bits < 32 && want == DMSH_VK_TYPE_FLOAT) return VSCALED[n - 1][bits == 16][sg];
         col = bits == 8 ? 2 + sg : bits == 16 ? 7 + sg : 10 + sg; *changed = want == DMSH_VK_TYPE_FLOAT;
         if (want == DMSH_VK_TYPE_FLOAT) return VROW[n - 1][col];
+    } else if (f == 0x3E) {   // RGB10A2UI: the integers as they are, or as floats (USCALED) for a float input; where the device has no such vertex format the input reads zeros as before.
+        // MLB The Show 26's player meshes have one (vertex attribute format 0x3e is not mapped)
+        VkFormat p = want == DMSH_VK_TYPE_FLOAT ? VK_FORMAT_A2B10G10R10_USCALED_PACK32 : want == DMSH_VK_TYPE_UINT ? VK_FORMAT_A2B10G10R10_UINT_PACK32 : VK_FORMAT_UNDEFINED;
+        static int ok[2] = {-1, -1}; int i = want == DMSH_VK_TYPE_UINT;
+        if (p && ok[i] < 0) { VkFormatProperties fp; vk.vkGetPhysicalDeviceFormatProperties(V.pd, p, &fp); ok[i] = (fp.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) != 0; }
+        return p && ok[i] ? p : VK_FORMAT_UNDEFINED;
     } else {
         VkFormat p = f == 0x3D ? VK_FORMAT_A2B10G10R10_UNORM_PACK32 : f == 0x69 ? VK_FORMAT_A2B10G10R10_SNORM_PACK32 : f == 0x3F ? VK_FORMAT_B10G11R11_UFLOAT_PACK32 : f == 0x9A ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_UNDEFINED;
         if (p && want != DMSH_VK_TYPE_FLOAT) { *changed = 1; return want == DMSH_VK_TYPE_UINT ? VK_FORMAT_R32_UINT : VK_FORMAT_R32_SINT; }
@@ -1494,8 +1500,11 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
     }
     // PEANUTS begin: the choice (vka_tbuf.h): as before, except where a storage texel buffer's stores over the range are not done (gw): then in place, or for a dispatch
     // through a copy the GPU makes here, after everything recorded so far (a full barrier before the first copy of the dispatch, one after the last: tbuf_gcopy_end)
-    int gw = !storage && bytes && bytes <= VKTB_COPY_MAX && VKA_ENV("DM_VK_TBUF_GW", 1) && vka_tex_gw_tbuf_pending(addr, bytes);
-    int path = vka_tbuf_path(storage, bytes, run >= bytes, !(o % al), VKA_ENV("DM_VK_TBUF_COPY", 1) != 0, gw, !g_tbuf_disp);
+    // a storage texel buffer the shader only reads (BF_RW / BF_ATOMIC unset) can be read through a copy too: MLB The Show 26's skinning and player compute shaders read
+    // theirs at offsets that are not multiples of the device's texel buffer alignment, and unbound their players drew as long spikes with black faces
+    int writes = storage && (r->flags & (DMSH_VK_BF_RW | DMSH_VK_BF_ATOMIC));
+    int gw = !writes && bytes && bytes <= VKTB_COPY_MAX && VKA_ENV("DM_VK_TBUF_GW", 1) && vka_tex_gw_tbuf_pending(addr, bytes);
+    int path = vka_tbuf_path(writes, bytes, run >= bytes, !(o % al), !storage && VKA_ENV("DM_VK_TBUF_COPY", 1) != 0, gw, !g_tbuf_disp);   // (a storage one in place where it can be, as before)
     if (gw) tbuf_gw_note(sh, r, addr, bytes, path, (uint32_t)(o % al), al);
     if (gw && path == VKTB_PLACE && g_tbuf_disp) vka_disp_settle(g_cb);   // (a dispatch reading what a dispatch before it stored: the barrier the replay leaves pending after a dispatch is needed here, unless the game's own came since)
     if (path == VKTB_GPU) {
