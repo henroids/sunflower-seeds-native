@@ -1185,3 +1185,17 @@ The Peanuts Android profile registers the updated executable, PC-generated shade
 ## Kirby and the Forgotten Land frame rate
 
 The 1.1.0 profile uses reviewed FPSLocker rows for caps from 20 to 120 fps. `build.gradle` and `fpslocker_rows.h` accept four offsets after the module-relative pointer. `test_fpslocker_rows.py` covers the chain and rejects a fifth offset. [Game note](../dm/games/01004D300C5AE000/README.md#android-frame-limits-from-20-to-120)
+
+### Round 21, a Peanuts build known by its build, not its application ID (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+`-PnxAppId` (Round 14) gives a development build its own application ID, `peanutstest` in `peanuts/docs/NEW-GAME.md`. Three Peanuts hunks asked
+whether the ID ends in `.peanuts`, so such a build took Banana Native's button mapping and credits, and looked for updates among Banana Native's
+releases. They now ask `BuildConfig.NX_PEANUTS_ID`, which every `-PnxApp=peanuts` build sets, whatever its ID.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | Settings › About: the fork's credits | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `padMap()`: the Peanuts default button mapping | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/Updater.java` | 1 | the update source: the Peanuts app's own releases | trailing `// PEANUTS: ...` |
+
+Upstream candidate: no (the three lines are Peanuts' own).
