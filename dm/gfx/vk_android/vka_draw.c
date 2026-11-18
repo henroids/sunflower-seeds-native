@@ -1898,6 +1898,10 @@ static int make_images(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], in
             any = 1; if (dry) return 1;
             vka_tex_id_view(r[i].tid, g_cb, r[i].dim, wbf_view_of_binding(r[i].what == VKA_R_IMG, r[i].flags, DMSH_VK_BF_RW), NULL);
         }
+        for (int i = 0; i < g_wk.n[st]; i++) if (r[i].what == VKA_R_TEX && r[i].tid && r[i].desc != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && vka_tex_id_bc_pending(r[i].tid)) {   // PEANUTS: blocks a GPU encoder wrote over a compressed texture (vka_tex.c bc_src), outside the pass
+            any = 1; if (dry) return 1;
+            vka_tex_id_bc_take(r[i].tid, g_cb);
+        }
         for (int i = 0; i < g_wk.n[st]; i++) if (r[i].what == VKA_R_TEX && r[i].tid && r[i].desc != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && vka_tex_id_is_buffer(r[i].tid) && tbuf_img_gpu(r[i].tid, r[i].dim)   // PEANUTS: only where the choice is upstream's copy (tbuf_img_gpu)
                                                  && tbuf_img_make(r[i].tid, r[i].dim, dry)) {   // a buffer texture read as an image: its copy (vka_tbuf.c), outside the pass   // PEANUTS: tbuf_img_make (upstream: vka_tbuf_pending, then vka_tbuf_refresh)
             any = 1; if (dry) return 1;
