@@ -744,6 +744,16 @@ HLE_FORCE("_ZN2nn5audio20AppendAudioOutBufferEPNS0_8AudioOutEPNS0_14AudioOutBuff
     pthread_mutex_unlock(&a->m);
     return ok;      // bool: false when the queue is full (the real device has a limit too)
 }
+// MLB The Show 26's voice-chat headset thread asks after its buffer right after Start; the SDK's version read the audout session the host never made (a null read at sdk+0x1e7e24)
+HLE_FORCE("_ZN2nn5audio22ContainsAudioOutBufferEPKNS0_8AudioOutEPKNS0_14AudioOutBufferE", "whether a buffer is appended and not yet released", bool, h_au_Contains, const void *g, const gbuf *b) {
+    aout *a = ao_or_closed(g, "ContainsAudioOutBuffer", __builtin_return_address(0));
+    if (!a) return false;
+    bool in = false;
+    pthread_mutex_lock(&a->m);
+    for (uint32_t i = atomic_load_explicit(&a->q_head, memory_order_acquire), t = atomic_load_explicit(&a->q_tail, memory_order_relaxed); i != t && !in; i++) in = a->q[i & (QMAX - 1)] == b;
+    pthread_mutex_unlock(&a->m);
+    return in;
+}
 HLE_FORCE("_ZN2nn5audio25GetReleasedAudioOutBufferEPNS0_8AudioOutE", "get a played buffer; NULL if none", gbuf *, h_au_Released, void *g) {
     aout *a = ao_or_closed(g, "GetReleasedAudioOutBuffer", __builtin_return_address(0)); gbuf *b = NULL;
     if (!a) return NULL;
