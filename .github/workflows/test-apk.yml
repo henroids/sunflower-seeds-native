@@ -1,7 +1,7 @@
-# PEANUTS: builds a test app (peanuts/docs/NEW-GAME.md step 6) on a GitHub-hosted Linux runner, for a contributor without the Android SDK at hand.
-# The app is dev.nxnative.android.<app_id>: an app of its own beside the release, with its own data, carrying the profiles of the games given. The simulated
-# on-device packer (-PnxPackEngine=fake): the pack comes from scripts/pack_android.py on a PC. The debug signing key is kept in the Actions cache, so a
-# later build installs over the earlier one (adb install -r) while the cache lives (7 days unused); after that, uninstall the test app first.
+# PEANUTS: builds the Sunflower Seeds test app on a GitHub-hosted Linux runner and publishes it as a release, which the app's updater offers (Updater.sources:
+# an app ID ending in .sunflowertest asks this repository's releases). The app is dev.nxnative.android.<app_id> with the profiles of the games given; the pack
+# comes from scripts/pack_android.py on a PC (-PnxPackEngine=fake). Every build is signed with the one key in the SIGN_KEYSTORE_B64 secret (a PKCS12 debug
+# keystore, base64: alias androiddebugkey, password android), so each release installs over the last. Version 0.2.<run number>, which only grows.
 name: test-apk
 
 on:
@@ -24,17 +24,23 @@ on:
     paths: ['.github/workflows/test-apk.yml', 'dm/games/0100AA7024094000/**', 'android/**', 'dm/host/**', 'dm/gfx/**']
 
 permissions:
-  contents: read
+  contents: write   # the release
 
 defaults:
   run:
     shell: bash
+
+concurrency:
+  group: test-apk
+  cancel-in-progress: false
 
 jobs:
   apk:
     name: Test APK
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    env:
+      VERSION: 0.2.${{ github.run_number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,11 +54,12 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1" > /dev/null
-      - name: Debug signing key (kept between runs)
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: debug-keystore-v1
+      - name: The signing key
+        env:
+          KEY: ${{ secrets.SIGN_KEYSTORE_B64 }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the SIGN_KEYSTORE_B64 secret is missing: without it each build has a new key and cannot install over the last"; exit 1; }
+          mkdir -p ~/.android && printf '%s' "$KEY" | base64 -d > ~/.android/debug.keystore
       - name: Build
         env:
           GAMES: ${{ inputs.games || '0100AA7024094000' }}
@@ -60,13 +67,21 @@ jobs:
           LABEL: ${{ inputs.label || 'Sunflower Seeds test' }}
         run: |
           export JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH"
-          python3 --version
           echo "sdk.dir=$ANDROID_HOME" > android/app/local.properties
           cd android/app
-          ./gradlew --no-daemon apk -PnxApp=peanuts "-PnxAppId=$APP_ID" "-PnxLabel=$LABEL" "-PnxGames=$GAMES" -PnxPackEngine=fake
-          ls -la out
+          ./gradlew --no-daemon apk -PnxApp=peanuts "-PnxAppId=$APP_ID" "-PnxLabel=$LABEL" "-PnxGames=$GAMES" -PnxPackEngine=fake \
+            "-PnxVersion=$VERSION" "-PnxVersionCode=$((100 + ${{ github.run_number }}))"
+          mv out/nxnative-android-peanuts.apk "out/sunflower-seeds-test-$VERSION.apk"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: peanuts-test-apk
-          path: android/app/out/nxnative-android-peanuts.apk
+          name: sunflower-seeds-test-apk
+          path: android/app/out/sunflower-seeds-test-*.apk
           if-no-files-found: error
+      - name: Release (what the app's updater offers)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          printf '%s\n' "${MSG:-Manual build}" | head -n 1 > notes.md
+          gh release create "v$VERSION" "android/app/out/sunflower-seeds-test-$VERSION.apk" -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "Sunflower Seeds test $VERSION" --notes-file notes.md
