@@ -54,7 +54,22 @@ typedef struct {
 static aout *g_aos[AOMAX];
 static pthread_mutex_t g_aos_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_suspended;
-static aout *ao(const void *g) { aout *a = objmap_get(g); if (!a) die("AudioOut %p was not created by the host", g); return a; }
+// Outputs whose OpenAudioOut is still running. The host's open takes milliseconds (the output stream is made on a helper thread), the service's on the console far less, and a
+// game may touch the AudioOut from a second thread as soon as it sees the open under way (MLB The Show 26: its voice chat's headset thread opens one while another thread already
+// uses it, "AudioOut ... was not created by the host"). A call on an output still opening waits for the open to finish, giving up the guest core meanwhile, as a service call would
+static const void *g_opening[AOMAX]; static pthread_cond_t g_opened = PTHREAD_COND_INITIALIZER;
+static int opening(const void *g) { for (int i = 0; i < AOMAX; i++) if (g_opening[i] == g) return 1; return 0; }
+static aout *ao(const void *g) {
+    aout *a = objmap_get(g);
+    if (!a) {
+        dm_host_work++; pthread_mutex_lock(&g_aos_lock);
+        while (opening(g)) pthread_cond_wait(&g_opened, &g_aos_lock);
+        pthread_mutex_unlock(&g_aos_lock); dm_host_work--;
+        a = objmap_get(g);
+    }
+    if (!a) die("AudioOut %p was not created by the host", g);
+    return a;
+}
 // the call site as "module+offset"; "host" when the host itself calls (in-process audio renderer)
 static const char *site(void *lr, char *buf, size_t n) {
     module_t *m = lr ? module_of(lr) : NULL;
@@ -569,6 +584,9 @@ static Result au_open_at(void *g, void *ev, const char *name, const uint8_t *par
     atomic_init(&a->null_run, 0); atomic_init(&a->notify_run, 1);
     atomic_init(&a->notify_pending, 0); atomic_init(&a->notify_armed, 0);
     atomic_init(&a->st_pending, 0);
+    pthread_mutex_lock(&g_aos_lock);
+    int pend = -1; for (int i = 0; i < AOMAX; i++) if (!g_opening[i]) { g_opening[i] = g; pend = i; break; }
+    pthread_mutex_unlock(&g_aos_lock);
     a->notify_sem = plat_sem_create(0); a->id = atomic_fetch_add(&nopen, 1);
     pthread_create(&a->notify_th, NULL, event_notify, a);
     if (ev) hle_bind_system_event(ev, 1);   // Buffer release event: bind a kernel event on the guest thread (auto-clear), afterwards signaled by the audio thread
@@ -582,6 +600,7 @@ static Result au_open_at(void *g, void *ev, const char *name, const uint8_t *par
     int slot = -1; for (int i = 0; i < AOMAX; i++) if (!g_aos[i]) { slot = i; break; }
     if (slot < 0) die("more than %d AudioOuts open at once", AOMAX);
     g_aos[slot] = a;
+    if (pend >= 0) { g_opening[pend] = NULL; pthread_cond_broadcast(&g_opened); }
     pthread_mutex_unlock(&g_aos_lock);
     if (use_au) { static pthread_once_t wd = PTHREAD_ONCE_INIT; pthread_once(&wd, au_watchdog_start); }
     au_info(g, ch, STATE_STOPPED);
