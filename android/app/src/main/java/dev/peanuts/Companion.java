@@ -152,7 +152,7 @@ public final class Companion {
                 game.startActivity(new android.content.Intent(game, CompanionScreen.class).putExtra("name", gameName)
                                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
                         android.app.ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY).toBundle());
-                Log.i(TAG, "companion on the built-in display (Swap screens)");
+                Log.i(TAG, "companion on the built-in display (the game is on another one)");
             } catch (RuntimeException e) { screenUp = false; Log.w(TAG, "companion not shown on the built-in display: " + e); }
             return;
         }
@@ -167,10 +167,10 @@ public final class Companion {
     }
 
     /** The first display that is not the game's own: the Thor lists its Screen-2 only under DISPLAY_CATEGORY_PRESENTATION, an emulator's overlay only in the plain list, so both are read.
-     *  With Swap screens on and the game started on another display (dev.peanuts.Screens), the companion takes the built-in, default display. */
+     *  A game on another display (Swap screens, dev.peanuts.Screens, or the app started there) leaves the built-in, default display to the companion. */
     static Display secondDisplay(Activity game, DisplayManager dm) {
         int own = game.getDisplay() != null ? game.getDisplay().getDisplayId() : Display.DEFAULT_DISPLAY;
-        if (own != Display.DEFAULT_DISPLAY && PeanutsPrefs.swapScreens(game)) {
+        if (own != Display.DEFAULT_DISPLAY) {
             Display builtIn = dm.getDisplay(Display.DEFAULT_DISPLAY);
             return builtIn != null && builtIn.isValid() ? builtIn : null;
         }

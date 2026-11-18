@@ -18,9 +18,9 @@ class SwapScreens(unittest.TestCase):
         body = src[src.index('public static Bundle gameStart'):]
         self.assertLess(body.index('if (!PeanutsPrefs.swapScreens(c)) return null;'), body.index('setLaunchDisplayId'))
 
-    def test_companion_takes_the_built_in_display_only_when_swapped(self):
+    def test_companion_takes_the_display_the_game_is_not_on(self):
         src = (JAVA / 'dev/peanuts/Companion.java').read_text(encoding='utf-8')
-        self.assertIn('if (own != Display.DEFAULT_DISPLAY && PeanutsPrefs.swapScreens(game)) {', src)
+        self.assertIn('if (own != Display.DEFAULT_DISPLAY) {', src)
         self.assertIn('new android.content.Intent(game, CompanionScreen.class)', src)
         screen = (JAVA / 'dev/peanuts/CompanionScreen.java').read_text(encoding='utf-8')
         self.assertIn('FLAG_NOT_FOCUSABLE', screen)

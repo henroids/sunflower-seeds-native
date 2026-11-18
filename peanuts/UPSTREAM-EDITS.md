@@ -1163,7 +1163,8 @@ version moves. Device state: see the game's note.
 
 Some dual-screen setups attach the top screen over USB-C, so Android lists the built-in bottom screen as the default display and the clip-on top screen as an
 external one (the Retroid Pocket 5 with its Dual Screen Add-On): the game started on the bottom and the companion on the top. Settings › Library › Swap screens
-(`PeanutsPrefs.swapScreens`, only shown with a second display) starts the game on the external display and puts the companion on the built-in one.
+(`PeanutsPrefs.swapScreens`, only shown with a second display) starts the game on the external display. The companion takes the display the game is not on, so
+it also goes to the built-in one when the app itself was started on the external display, with the setting off.
 
 | File | Hunks | Hook | Marker |
 |---|---|---|---|

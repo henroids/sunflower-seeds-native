@@ -5,7 +5,8 @@ import android.os.Bundle;
 import android.view.WindowManager;
 
 /**
- * The companion page (CompanionPage) on the built-in, default display while Swap screens has moved the game to the other one (dev.peanuts.Screens, #131).
+ * The companion page (CompanionPage) on the built-in, default display while the game runs on another one (Swap screens, dev.peanuts.Screens, or the app
+ * started there; #131).
  * Android takes no Presentation on the default display, so the page gets an activity of its own there, in the game's process. Its window never takes the
  * input focus: the controller stays with the game. Companion starts and finishes it.
  */
