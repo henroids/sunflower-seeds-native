@@ -275,11 +275,14 @@ public final class MainActivity extends Activity {
         LinearLayout settings = new LinearLayout(this);
         settings.setOrientation(LinearLayout.VERTICAL);
         settings.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        settings.setMinimumWidth(Ui.dp(this, 60));
         settings.addView(Ui.iconButton(this, R.drawable.ic_settings, "Settings (X)", Ui.Kind.TONAL, v -> page(true)));
         TextView hint = Ui.text(this, "X Settings", 10, R.color.bn_text_2, 700);
+        hint.setSingleLine(true);
+        hint.setGravity(android.view.Gravity.CENTER);
         hint.setPadding(0, Ui.dp(this, 2), 0, 0);
         hint.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        settings.addView(hint);
+        settings.addView(hint, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.leftMargin = Ui.dp(this, 10);
         r.addView(settings, lp);
