@@ -34,6 +34,8 @@ static uint64_t g_probe, g_from_frame; static uint32_t g_big; static int g_split
 static _Atomic int g_lines; static int g_maxl = 200;
 static uint32_t g_ts_gen = UINT32_MAX; static uint64_t g_ts_keys[NKEY], g_ts_last[NKEY]; static int g_ts_n; static _Atomic int g_ts_lines;   // DM_VK_TEX_STATS (replay thread)
 static struct { uint64_t fs; int bind, tid; } g_ts_seen[512]; static int g_ts_nseen;   // DM_VK_TEX_STATS: descriptions logged
+static uint32_t g_ts_seq;   // PEANUTS: DM_VK_RT_LOG's scans: the number the next stats scans carry (vka_texstats_seq), 0 = none
+void vka_texstats_seq(uint32_t seq) { g_ts_seq = seq; }
 
 int vka_nan_on(void) {
     static int v = -1; if (v >= 0) return v;
@@ -213,11 +215,22 @@ void vka_nan_inputs(VkCommandBuffer cb, vka_img *const *ims, const int *binds, c
         if (!im || im->f.kind != 0 || im->samples > 1 || !(im->usage & VK_IMAGE_USAGE_SAMPLED_BIT)) continue;
         uint32_t nl = im->d.target == NVN_TEXTURE_TARGET_3D ? 1 : im->layers;
         uint32_t nlv = stats ? 1 : im->levels;   // DM_VK_TEX_STATS: level 0 only
-        for (uint32_t lv = 0; lv < nlv && lv < 14; lv++) for (uint32_t l = 0; l < nl && l < 6; l++) any |= scan_one(cb, b, im, lv, l, g_pass, binds[i], tids[i], stats);
+        for (uint32_t lv = 0; lv < nlv && lv < 14; lv++) for (uint32_t l = 0; l < nl && l < 6; l++) any |= scan_one(cb, b, im, lv, l, stats ? g_ts_seq : g_pass, binds[i], tids[i], stats);
     }
     if (any) vka_barrier(cb);
     if (stats) return;
     static _Atomic int k; if (atomic_fetch_add(&k, 1) < 2) VLOG("NaN scan: frame %llu: %d inputs of fragment shader %016llx scanned before its first draw (only those with NaN / infinite texels are logged)", (unsigned long long)vka_frame(), n, (unsigned long long)g_probe);
+}
+// PEANUTS: DM_VK_RT_LOG with DM_VK_TEX_STATS: a logged pass's colour targets as they are when the pass ends (or is ended before a draw's inputs are scanned), the level drawn:
+// `tex stats: … scan <seq> target …` lines, to follow a chain of passes (a composite built layer by layer) value by value
+void vka_texstats_targets(VkCommandBuffer cb, vka_img *const *ims, const uint32_t *lvs, const uint32_t *l0s, int n, uint32_t seq) {
+    batch_t *b = &g_b[g_bi % NBATCH];
+    if (!ready()) return;
+    int any = 0;
+    for (int i = 0; i < n; i++) { vka_img *im = ims[i];
+        if (!im || im->f.kind != 0 || im->samples > 1 || im->d.target == NVN_TEXTURE_TARGET_3D || !(im->usage & VK_IMAGE_USAGE_SAMPLED_BIT)) continue;
+        any |= scan_one(cb, b, im, lvs[i], l0s[i], seq, -2, 0, 1); }
+    if (any) vka_barrier(cb);
 }
 // After a pass ends (its writes made visible by the caller's barrier): one dispatch per float colour attachment
 void vka_nan_pass(VkCommandBuffer cb, vka_img *const *ims, const uint32_t *lvs, const uint32_t *l0s, int n) {
@@ -262,8 +275,9 @@ static void report(void *arg) {
             if (!vka_texstats_room()) return;
             uint64_t nt = (uint64_t)c->w * c->h * (c->dz ? c->dz : 1); float mx[4]; memcpy(mx, r->mx, sizeof mx);
             char dims[32]; snprintf(dims, sizeof dims, c->dz ? "%ux%ux%u" : "%ux%u", c->w, c->h, c->dz);
-            VLOG("tex stats: frame %llu fragment %016llx binding %d texture ID %d serial %llu (format %#x %s level 0 layer %u): %llu texels; above 1/1024 x %.1f%% y %.1f%% z %.1f%% w %.1f%%; max x %g y %g z %g w %g; %u NaN + %u infinite",
-                 (unsigned long long)c->frame, (unsigned long long)c->stats, c->bind, c->tid, (unsigned long long)c->serial, c->fmt, dims, c->layer, (unsigned long long)nt,
+            char who[96]; if (c->bind == -2) snprintf(who, sizeof who, "scan %u target", c->pass); else snprintf(who, sizeof who, "scan %u fragment %016llx binding %d texture ID %d", c->pass, (unsigned long long)c->stats, c->bind, c->tid);   // PEANUTS: (scan: DM_VK_RT_LOG's number, else 0)
+            VLOG("tex stats: frame %llu %s serial %llu (format %#x %s level %u layer %u): %llu texels; above 1/1024 x %.1f%% y %.1f%% z %.1f%% w %.1f%%; max x %g y %g z %g w %g; %u NaN + %u infinite",
+                 (unsigned long long)c->frame, who, (unsigned long long)c->serial, c->fmt, dims, c->lv, c->layer, (unsigned long long)nt,
                  100.0 * r->nz[0] / (double)nt, 100.0 * r->nz[1] / (double)nt, 100.0 * r->nz[2] / (double)nt, 100.0 * r->nz[3] / (double)nt, mx[0], mx[1], mx[2], mx[3], r->nan, r->inf);
             continue;
         }

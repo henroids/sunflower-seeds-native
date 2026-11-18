@@ -645,6 +645,7 @@ int vka_nan_probe(uint64_t fs);
 void vka_nan_inputs(VkCommandBuffer cb, vka_img *const *ims, const int *binds, const int *tids, int n, uint64_t stats);   // stats: DM_VK_TEX_STATS's fragment shader (level 0 scanned, every input logged), 0 = NaN scan
 void vka_rtlog_skip(const p_set_rt *rt, int has_rt, const vka_dstate *d, const char *why);   // DM_VK_RT_LOG: a draw not recorded into a logged pass
 int vka_texstats_on(void);   // DM_VK_TEX_STATS (live) is set: the encoder thread stays off
+void vka_texstats_seq(uint32_t seq); void vka_texstats_targets(VkCommandBuffer cb, vka_img *const *ims, const uint32_t *lvs, const uint32_t *l0s, int n, uint32_t seq);   // PEANUTS: DM_VK_RT_LOG's scans (vka_nanscan.c)
 int vka_texstats_probe(uint64_t fs);   // 1 = scan this draw's inputs (DM_VK_TEX_STATS)
 int vka_texstats_room(void);   // 1 = a `tex stats:` value line may be logged (counts it)
 int vka_texstats_desc_new(uint64_t fs, int bind, int tid);   // 1 = log this input's description (first time for this value of DM_VK_TEX_STATS)

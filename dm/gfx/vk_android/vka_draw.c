@@ -408,12 +408,18 @@ static int g_zdir, g_zlog_pass; static uint32_t g_zlog_n, g_zpart_d;
 // draw in it (`rt log draw`: shaders, primitive, counts, indirect, raster / depth / stencil state, colour masks, blend, alpha test, viewport, scissor); draws a render
 // condition skips into targets of that size (`rt log draw … skipped by a render condition`, vka_exec.c) and draws that end early (empty scissor, both faces culled). To
 // see why a small pass (Ocarina of Time's 213x120 light-volume tiles) leaves its target as cleared. DM_VK_RT_LOG_LINES (live, default 400): lines in a run, only logged ones count
-static uint32_t g_rtl_gen = UINT32_MAX, g_rtl_w, g_rtl_h, g_rtl_d; static int g_rtl_pass; static _Atomic int g_rtl_lines;
+static uint32_t g_rtl_gen = UINT32_MAX, g_rtl_w[4], g_rtl_h[4], g_rtl_n, g_rtl_d, g_rtl_seq; static int g_rtl_pass; static _Atomic int g_rtl_lines;   // PEANUTS: up to four sizes (<w>x<h>,<w>x<h>…); g_rtl_seq: its stats scans' numbers
 static int rtl_size(uint32_t w, uint32_t h) {
     uint32_t g = atomic_load_explicit(&vka_env_gen, memory_order_relaxed);
-    if (g != g_rtl_gen) { g_rtl_gen = g; g_rtl_w = g_rtl_h = 0; char b[64]; unsigned a, c; if (vka_env_str("DM_VK_RT_LOG", b, sizeof b) && sscanf(b, "%ux%u", &a, &c) == 2) { g_rtl_w = a; g_rtl_h = c; } }
-    return g_rtl_w && w == g_rtl_w && h == g_rtl_h;
+    if (g != g_rtl_gen) { g_rtl_gen = g; g_rtl_n = 0; char b[96];
+        if (vka_env_str("DM_VK_RT_LOG", b, sizeof b)) for (const char *q = b; *q && g_rtl_n < 4;) { unsigned a, c; if (sscanf(q, "%ux%u", &a, &c) != 2) break; g_rtl_w[g_rtl_n] = a; g_rtl_h[g_rtl_n++] = c; q = strchr(q, ','); if (!q) break; q++; } }
+    for (uint32_t i = 0; i < g_rtl_n; i++) if (w == g_rtl_w[i] && h == g_rtl_h[i]) return 1;
+    return 0;
 }
+// PEANUTS: DM_VK_RT_LOG with DM_VK_TEX_STATS set (any key: the scans record on the replay thread): each logged draw's sampled textures are scanned before it and the pass's
+// colour targets when it ends, as `tex stats: … scan <n> …` lines; the `rt log scan <n>` line says which draw or pass end a number is
+uint64_t vka_frame(void);
+static int rtl_stats(void) { return vka_texstats_on() && !vka_enc_on(); }
 static int rtl_room(void) { int lim = VKA_ENV("DM_VK_RT_LOG_LINES", 400), n = atomic_load(&g_rtl_lines); while (n < lim) if (atomic_compare_exchange_weak(&g_rtl_lines, &n, n + 1)) return 1; return 0; }
 static uint64_t key_of(const prog_t *p, int st) { vka_progsh ps; return p && vka_prog_shaders(p, &ps) && ps.sh[st] ? ps.sh[st]->key : 0; }   // DM_VK_RT_LOG
 // A draw the replay does not record into a DM_VK_RT_LOG pass: why, with the bound programs' keys (vka_exec.c for render conditions)
@@ -450,6 +456,10 @@ void vka_rp_end(void) {
     ub_flush();          // inline uniform updates deferred during the pass: copied into placed guest RAM
     vka_tf_flush(g_cb);  // PEANUTS: what the pass's draws captured by transform feedback: copied into the game's buffers (vka_tf.c)
     R.on = 0; vka_tex_feedback(NULL, NULL, 0);
+    if (g_rtl_pass && rtl_stats()) {   // PEANUTS: DM_VK_RT_LOG: the targets as this pass leaves them
+        uint32_t seq = ++g_rtl_seq; if (rtl_room()) VLOG("rt log scan %u: frame %llu: the pass's %u colour target(s) as it ends (serial %llu)", seq, (unsigned long long)vka_frame(), (unsigned)R.nci, R.nci && R.cim[0] ? (unsigned long long)R.cim[0]->serial : 0ull);
+        vka_texstats_targets(g_cb, R.cim, R.clv, R.cl0, R.nci, seq);
+    }
     if (vka_nan_on()) vka_nan_pass(g_cb, R.cim, R.clv, R.cl0, R.nci);
 }
 static void rt_peek(const char *what, int i, const tex_t *t, const vka_img *im, uint32_t lv, uint32_t l0, uint32_t nl);   // DM_VK_TEX_PEEK
@@ -2750,7 +2760,8 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
         else if (ds) R.dread = 1;
     }
     uint64_t tstats = 0;   // DM_VK_TEX_STATS: this draw's fragment shader, its inputs' level 0 scanned and logged
-    if (sh[1] && !d->rast_discard && ((vka_nan_on() >= 2 && vka_nan_probe(sh[1]->key)) || (vka_texstats_probe(sh[1]->key) && (tstats = sh[1]->key)))) {   // DM_VK_NANSCAN_FS: this draw's sampled textures, scanned before it
+    int rtl_scan = sh[1] && !d->rast_discard && has_rt && rt->n && rt->color[0] && rtl_size(rt->color[0]->d.width, rt->color[0]->d.height) && rtl_stats();   // PEANUTS: DM_VK_RT_LOG: this draw's inputs too
+    if (sh[1] && !d->rast_discard && ((vka_nan_on() >= 2 && vka_nan_probe(sh[1]->key)) || (vka_texstats_probe(sh[1]->key) && (tstats = sh[1]->key)) || (rtl_scan && (tstats = sh[1]->key)))) {   // DM_VK_NANSCAN_FS: this draw's sampled textures, scanned before it
         char why[8]; int n = vka_walk(&d->b, 1, sh[1]->e, sh[1]->b, sh[1]->lib->h->ssbo_align, 0, rd_cb, NULL, g_res, 512, NULL, why, sizeof why), m = 0;
         static vka_img *ims[64]; static int bs[64], ts[64];
         for (int i = 0; i < n && m < 64; i++) if (g_res[i].what == VKA_R_TEX && g_res[i].tid) { ims[m] = vka_tex_id_img(g_res[i].tid, g_cb); bs[m] = g_res[i].binding; ts[m++] = g_res[i].tid;
@@ -2761,6 +2772,9 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
                 if (tstats) { char st[1400]; vka_tex_id_storage(g_res[i].tid, st, sizeof st); VLOG("tex stats: fragment %016llx input binding %u texture ID %d: %s", (unsigned long long)tstats, g_res[i].binding, g_res[i].tid, st); } } }
         if (tstats) m = texstats_table(&d->b, sh[1]->key, g_res, n, ims, bs, ts, m, 64);   // DM_VK_TEX_STATS_TABLE: the record table's bindless textures too
         int on = R.on; vka_rp_end(); (void)on;
+        if (rtl_scan) { uint32_t seq = ++g_rtl_seq; vka_texstats_seq(seq);
+            if (rtl_room()) VLOG("rt log scan %u: frame %llu: the %d sampled texture(s) of the next draw with fragment %016llx into colour serial %llu", seq, (unsigned long long)vka_frame(), m, (unsigned long long)sh[1]->key, (unsigned long long)rt->color[0]->serial); }
+        else vka_texstats_seq(0);
         vka_nan_inputs(g_cb, ims, bs, ts, m, tstats);
     }
     if (!rp_begin(rt, has_rt, sc, has_sc, d)) { g_skipped++; return; }
