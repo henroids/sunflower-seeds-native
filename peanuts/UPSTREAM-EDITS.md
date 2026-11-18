@@ -1216,3 +1216,22 @@ Upstream's classes keep doing the work, read through reflection (`DriverPort`): 
 `DriverZip`'s checks stay the only way a zip gets in), `DriverZip.deleteTree`, `DriverFetch.REPOS` (the one list of sources), `GpuGl.name` and
 `PadFocus.watch` (Settings' focus frame). The page reads GitHub only once a source is opened, as `DriverFetch` does. `GpuDriver.dialog` and
 `DriverFetch.dialog` stay unchanged; nothing opens them any more. No upstream-candidate general fix: the hunks call Peanuts-owned code.
+
+### Round 23, Swap screens (2026-11-18, GitHub issue #131)
+
+Some dual-screen setups attach the top screen over USB-C, so Android lists the built-in bottom screen as the default display and the clip-on top screen as an
+external one (the Retroid Pocket 5 with its Dual Screen Add-On): the game started on the bottom and the companion on the top. Settings › Library › Swap screens
+(`PeanutsPrefs.swapScreens`, only shown with a second display) starts the game on the external display. The companion takes the display the game is not on, so
+it also goes to the built-in one when the app itself was started on the external display, with the setting off.
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `startWithDriver()`: `startActivity(intent, Screens.gameStart(this, intent))` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/FrontendLaunch.java` | 1 | the game's start: the intent as a local `play`, `startActivity(play, Screens.gameStart(this, play))` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | `dev.peanuts.CompanionScreen`, process `:game`, its own task affinity, single instance | trailing `<!-- PEANUTS: ... -->` |
+
+`Screens.gameStart` returns null (the start as before) unless the setting is on and another display exists; then the game starts there in a task of its own
+(`ActivityOptions.setLaunchDisplayId`). Android refuses a `Presentation` on the default display, so the companion page (now `CompanionPage`, shared with
+`CompanionPresentation`) gets an activity there, `CompanionScreen`, whose window never takes the input focus. Its start still makes the built-in display the
+focused one, which leaves the controller with no window, so `Companion.refocusGame` starts the game's activity again on its display (singleTask: brought to
+the front; an intent with no title ID is a no-op in `GameActivity.onNewIntent`). No upstream-candidate general fix: the lines call Peanuts-owned code.

@@ -160,8 +160,9 @@ public final class FrontendLaunch extends Activity {
             else android.widget.Toast.makeText(this, "The build with mods no longer fits this game: it starts without its code mods (hold the cover \u203a Game \u203a Mods \u203a Rebuild with mods)", android.widget.Toast.LENGTH_LONG).show();
         }
         // PEANUTS end
-        startActivity(new Intent(this, GameActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", pack).putExtra("frontend", true));   // PEANUTS: pack, not g.packDir
+        Intent play = new Intent(this, GameActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", pack).putExtra("frontend", true);   // PEANUTS: pack, not g.packDir
+        startActivity(play, dev.peanuts.Screens.gameStart(this, play));   // PEANUTS: Swap screens starts the game on the other display (dev.peanuts.Screens, #131)
         dev.peanuts.GameReturn.remember(this, g.titleId, g.name, g.gameDir, pack);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
         finish();
     }
