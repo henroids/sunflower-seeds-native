@@ -87,8 +87,6 @@ jobs:
       - name: Release (what the app's updater offers)
         env:
           GH_TOKEN: ${{ github.token }}
-          MSG: ${{ github.event.head_commit.message }}
         run: |
-          printf '%s\n' "${MSG:-Manual build}" | head -n 1 > notes.md
           gh release create "v$VERSION" "android/app/out/sunflower-seeds-test-$VERSION.apk" -R "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --title "Sunflower Seeds test $VERSION" --notes-file notes.md
+            --target "$GITHUB_SHA" --title "Sunflower Seeds test $VERSION" --notes ""
