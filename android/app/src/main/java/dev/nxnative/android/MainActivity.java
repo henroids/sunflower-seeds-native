@@ -150,9 +150,15 @@ public final class MainActivity extends Activity {
 
     private View pageRoot() { return bananas.getParent() instanceof View ? (View) bananas.getParent() : bananas; }
 
-    /** A controller: B goes back one level (a game's page or Settings to Home), L1 / R1 switch a game page's tabs; the rest is Android's focus (D-pad, A) */
+    /** Controller shortcuts for Home and settings pages. Android handles focus and activation. */
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
         int k = e.getKeyCode();
+        // PEANUTS begin: handle Home's Settings shortcut before dispatching to the focused view
+        if (k == KeyEvent.KEYCODE_BUTTON_X && !settingsPage && settingsGame == null && !advancedOpen) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) page(true);
+            return true;
+        }
+        // PEANUTS end
         if (PadFocus.isBack(k) && (settingsPage || settingsGame != null || advancedOpen)) {
             if (e.getAction() == KeyEvent.ACTION_UP) onBackPressed();
             return true;
@@ -265,10 +271,19 @@ public final class MainActivity extends Activity {
         label.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         wiki.addView(label, new LinearLayout.LayoutParams(Ui.dp(this, 44), ViewGroup.LayoutParams.WRAP_CONTENT));   // as wide as the book, so the text is centred under it
         r.addView(wiki);
-        View gear = Ui.iconButton(this, R.drawable.ic_settings, "Settings", Ui.Kind.TONAL, v -> page(true));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 44), Ui.dp(this, 44));   // the size iconButton gives it
+        // PEANUTS begin: pair the Settings gear with its Home controller shortcut
+        LinearLayout settings = new LinearLayout(this);
+        settings.setOrientation(LinearLayout.VERTICAL);
+        settings.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        settings.addView(Ui.iconButton(this, R.drawable.ic_settings, "Settings (X)", Ui.Kind.TONAL, v -> page(true)));
+        TextView hint = Ui.text(this, "X Settings", 10, R.color.bn_text_2, 700);
+        hint.setPadding(0, Ui.dp(this, 2), 0, 0);
+        hint.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        settings.addView(hint);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.leftMargin = Ui.dp(this, 10);
-        r.addView(gear, lp);
+        r.addView(settings, lp);
+        // PEANUTS end
         return r;
     }
 
@@ -284,7 +299,7 @@ public final class MainActivity extends Activity {
         trailing.addView(headerButtons());
         // PEANUTS end
         content.addView(Ui.header(this, Ui.badge(this, 44), "Peanuts Native", Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
-        dev.peanuts.ui.BottomScreen.home(this, content.getChildAt(content.getChildCount() - 1), () -> page(true));   // PEANUTS: bottom screen (dev.peanuts.ui.BottomScreen)
+        dev.peanuts.ui.BottomScreen.home(this, () -> page(true));   // PEANUTS: bottom screen (dev.peanuts.ui.BottomScreen)
         accessCard = accessCard();
         Ui.add(content, accessCard, 16);
         Ondevice.attach(this, content, content.getChildCount());   // a game being prepared and its progress (hidden when there is none)

@@ -20,10 +20,16 @@ class SwapScreens(unittest.TestCase):
         self.assertLess(body.index('manager.isActivityStartAllowedOnDisplay'), body.index('setLaunchDisplayId'))
         self.assertLess(body.index('catch (SecurityException | IllegalArgumentException e)'), body.index('launcher.startActivity(intent);'))
 
-    def test_launcher_panel_yields_to_an_external_game_and_keeps_settings_when_display_is_off(self):
+    def test_launcher_panel_yields_to_an_external_game_without_hiding_home_settings(self):
         bottom = (JAVA / 'dev/peanuts/ui/BottomScreen.java').read_text(encoding='utf-8')
         self.assertIn('d.getDisplayId() == activeGameDisplay', bottom)
-        self.assertIn('d != null && on(d) ? View.GONE : View.VISIBLE', bottom)
+        self.assertNotIn('applyHeader', bottom)
+        main = (JAVA / 'dev/nxnative/android/MainActivity.java').read_text(encoding='utf-8')
+        self.assertIn('ic_settings, "Settings (X)"', main)
+        self.assertIn('"X Settings"', main)
+        dispatch = main.split('public boolean dispatchKeyEvent(KeyEvent e)', 1)[1].split('return super.dispatchKeyEvent(e);', 1)[0]
+        self.assertIn('KeyEvent.KEYCODE_BUTTON_X && !settingsPage && settingsGame == null && !advancedOpen', dispatch)
+        self.assertIn('e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) page(true)', dispatch)
 
     def test_companion_takes_the_display_the_game_is_not_on(self):
         src = (JAVA / 'dev/peanuts/Companion.java').read_text(encoding='utf-8')

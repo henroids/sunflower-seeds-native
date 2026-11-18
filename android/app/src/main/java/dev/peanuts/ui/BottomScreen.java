@@ -73,14 +73,13 @@ public final class BottomScreen {
     private static DisplayManager dm;
     private static DisplayManager.DisplayListener displays;
     private static boolean watching, started, resumed;
-    private static View header;             // Home's header; null off Home
-    private static Runnable openSettings;
+    private static Runnable openSettings;   // null off Home
     private static Card card;
     private static BuildInfo building;
     private static Launch launch;
     private static long lastCardAt;
     private static Runnable pendingCard;
-    private static Activity keysOn;
+    private static Activity focusOwner;
     private static boolean ownerFocused = true;
     private static boolean setup;                               // first run: no way around it to Settings
     private static final Set<String> pages = new HashSet<>();  // the app's other pages in front (AppScreens)
@@ -90,25 +89,18 @@ public final class BottomScreen {
     // ---- Hooks ----
 
     /** MainActivity.buildHome (PEANUTS hook) */
-    public static void home(Activity a, View homeHeader, Runnable settings) {
+    public static void home(Activity a, Runnable settings) {
         watch(a);
-        header = homeHeader;
         openSettings = settings;
-        keys(a);
-        applyHeader();
+        watchFocus(a);
         UI.post(BottomScreen::show);   // back from Settings or a game's page: the Settings hint again
     }
 
-    /** X opens Settings; losing window focus to a dialog dims the panel */
-    private static void keys(Activity a) {
-        if (keysOn == a) return;
-        keysOn = a;
+    /** Losing window focus to a dialog dims the panel. */
+    private static void watchFocus(Activity a) {
+        if (focusOwner == a) return;
+        focusOwner = a;
         View decor = a.getWindow().getDecorView();
-        decor.addOnUnhandledKeyEventListener((v, ev) -> {
-            if (ev.getKeyCode() != android.view.KeyEvent.KEYCODE_BUTTON_X || header == null || !showing() || launch != null || setup) return false;
-            if (ev.getAction() == android.view.KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0) { Haptics.play(v, Haptics.Word.TICK); settings(); }
-            return true;
-        });
         decor.getViewTreeObserver().addOnWindowFocusChangeListener(f -> {
             if (a != owner) return;
             ownerFocused = f;
@@ -125,7 +117,7 @@ public final class BottomScreen {
     /** Off Home (Settings, a game's page): the logo */
     static void page(Activity a) {
         if (a != owner) return;
-        header = null;
+        openSettings = null;
         card = null; building = null;
         show();
     }
@@ -287,7 +279,7 @@ public final class BottomScreen {
             BackgroundFlow.stale();
             BottomPanel made = panel;
             // cancelled by Android (display change): make a new one
-            made.setOnDismissListener(x -> { if (panel == made) { panel = null; applyHeader(); UI.post(BottomScreen::show); } });
+            made.setOnDismissListener(x -> { if (panel == made) { panel = null; UI.post(BottomScreen::show); } });
         }
         try {
             if (!panel.isShowing()) panel.show();
@@ -301,35 +293,23 @@ public final class BottomScreen {
         Launch l = launch;
         if (l != null && l.companion) panel.showLaunch(l.titleId, l.name, l.icon, "Starting the game");
         else if (started && building != null && card != null && card.kind == Card.K_BUILDING) panel.showBuild(building);
-        else if (started && card != null && header != null) panel.showCard(card);
-        else panel.showLogo(started && header != null && !setup);
+        else if (started && card != null && openSettings != null) panel.showCard(card);
+        else panel.showLogo(started && openSettings != null && !setup);
         if (!was) panel.appear();
-        applyHeader();
     }
 
     /** Hidden, not dismissed: a new window flashes black */
     private static void hide() {
         if (panel != null && panel.isShowing()) { panel.setActive(false); try { panel.hide(); } catch (RuntimeException ignored) { } }
         BackgroundFlow.clear();
-        applyHeader();
     }
 
     private static void dismiss() {
         if (panel != null) { try { panel.dismiss(); } catch (RuntimeException ignored) { } panel = null; }
         BackgroundFlow.clear();
-        applyHeader();
     }
 
     private static boolean on(Display d) { return d.getState() != Display.STATE_OFF; }
-
-    /** Home's header: gone while the panel shows */
-    private static void applyHeader() {
-        View h = header;
-        if (h == null) return;
-        Display d = panel == null ? null : panel.getDisplay();
-        int want = showing() && d != null && on(d) ? View.GONE : View.VISIBLE;
-        if (h.getVisibility() != want) h.setVisibility(want);
-    }
 
     /** Settings › Library › Bottom screen */
     static void settingChanged() {
@@ -385,8 +365,8 @@ public final class BottomScreen {
                 launch = null; UI.removeCallbacks(launchEnd); UI.removeCallbacks(launchStuck); UI.removeCallbacks(launchDialog);
                 dismiss();
                 if (dm != null && displays != null) { try { dm.unregisterDisplayListener(displays); } catch (RuntimeException ignored) { } }
-                dm = null; displays = null; owner = null; header = null; openSettings = null; card = null; building = null; started = resumed = false;
-                keysOn = null; ownerFocused = true;
+                dm = null; displays = null; owner = null; openSettings = null; card = null; building = null; started = resumed = false;
+                focusOwner = null; ownerFocused = true;
             }
             @Override public void onActivityCreated(Activity x, Bundle b) {}
             @Override public void onActivityPaused(Activity x) { if (x == owner) resumed = false; }
@@ -411,7 +391,6 @@ public final class BottomScreen {
                 if (d == null || d.getDisplayId() != id) return;
                 if (!panel.fits()) { dismiss(); show(); return; }
                 if (showing()) panel.setActive(on(d));   // the screen turned off or on
-                applyHeader();
             }
         };
         dm.registerDisplayListener(displays, UI);

@@ -587,7 +587,7 @@ With a controller connected, each button shows the controller button that does t
 
 During a game without a companion the second screen is Android's, as before. Settings › Library › **Games without a companion** keeps the game's cover there instead.
 
-While the second screen shows this, Home leaves out its title row and the Settings gear: **X** (or **Settings** on the second screen) opens Settings. To give the second screen back to Android while you are in the app, turn off Settings › Library › **Bottom screen**. Home then looks as it always did. Games and their companions are not affected by this setting.
+On Home, open Settings with the top-screen gear or press **X**, as shown under the gear. The second screen also has a Settings button. To give the second screen back to Android while you are in the launcher, turn off Settings › Library › **Bottom screen**. This setting controls the launcher and the optional cover shown while playing without a companion.
 
 ### Which games have a companion?
 
