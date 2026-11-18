@@ -36,6 +36,35 @@ No code of the game is cut, and no run-time key is set. The game asks for presen
 
 - **Current:** 30 fps on the Mac, as on the Switch (`power` lines: 28–30 fps; frame interval p99 33.6 ms in play). The game sets present interval 1 and paces its frames itself. CPU about one core and 5–5.6 W on an Apple M6 in Point of Arrival.
 
+<!-- PEANUTS begin: frame limits from 20 to 120 -->
+
+### Android: frame limits from 20 to 120
+
+Reviewed `fpslocker` rows in [`game.tsv`](game.tsv) apply the memory writes of the [FPSLocker Warehouse config for this build](https://github.com/masagrator/FPSLocker-Warehouse/blob/v4/SaltySD/plugins/FPSLocker/patches/01004D300C5AE000/A6CE40DC3AEDB1BE.yaml) (v4; its interval offsets found by Hazerou), on Android and for main `a6ce40dc…` (1.1.0) only. No code is patched and no shader is rebuilt.
+
+| Row | Address | What it does |
+|---|---|---|
+| `zero_i32` | `[main+0xA76728]+0x50` | the game's frame interval, 2 as shipped; 0 takes off its own 30 fps pacing and, by the config's note, makes the game step by the time that passed |
+| `inverse_f32 30:1.95`, `30:1.7` | `[[[[main+0xA767B0]+0x140]+0x1B0]+0x20]+0x34`, `+0x38` | the dynamic resolution's GPU frame-time budget, most and least: 1.95 and 1.7 at 30 fps, scaled by 30 / the limit |
+
+The host's frame limit then picks the rate: 60 by default (`fps_limit 60`), the launcher's choices from 20 to 120 (`fps_limit_max 120`), and Game owned for the game's own 30 fps (a restart). The budget's chain is four pointers deep, one more than the rows took, so the row format now takes four offsets after the first pointer ([`fpslocker_rows.h`](../../host/fpslocker_rows.h), `test_fpslocker_rows.py`).
+
+Run on an AYN Thor (Adreno 740, Turnip 27.0.0 R2, 1920x1080), 2026-11-18, a pack built on a PC, from Continue: 4 s standing, 3 s of walking forward by the wall clock, then on to the first guide movie, 120 frames captured on the way. The writes land in play (`reviewed FPS memory writes applied at 60 fps`), not at the prompts or the opening movie, which run at the panel's rate either way.
+
+| Limit | Frames a second (120 captured frames) | Worst frame | Where Kirby stands after 3 s of walking |
+|---|---|---|---|
+| Game owned | 30.0 | 38.1 ms | the reference |
+| 30 | 29.9 | 35.4 ms | the same spot |
+| 60 | 59.8 | 20.9 ms | the same spot |
+| 20 | 17.9 (median frame 50.2 ms; about one frame in nine stays a fourth refresh) | 210 ms, at the guide movie's start | the same spot |
+| 120, on the panel at 60 Hz | 54 to 55 (median frame 16.7 ms) | 208 to 218 ms, at the guide movie's start | the same spot |
+
+So the game's speed follows the wall clock at every limit, and 60 holds on the Thor in these areas (GPU 5.5 to 9.4 ms a frame). The guide movie plays at each. About a minute more of walking, jumping and floating at 60: no crash, no red line of the game's.
+
+Open: **120 on a 120 Hz panel.** The window asked for 120 (`window frame rate 120 fps`) and the Thor's panel stayed at 60 Hz, also with Android's peak and minimum refresh rate set to 120 for the run (put back after); what holds the panel there was not found, so no frame was shown above 60. Also open: 40, 45 and 90, 20's late frames, the opening movie under a limit other than 60, other areas and a long session, and frame generation with a limit.
+
+<!-- PEANUTS end -->
+
 ## Audio
 
 - `nn::atk2` through an audio renderer (96 voices, 14 effects, one sink). 131,543 of the first 132,000 rendered frames were not silent.
