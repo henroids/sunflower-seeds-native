@@ -3,7 +3,7 @@
 # PEANUTS: a Peanuts Native profile (Banana Native has none for this title); whole file Peanuts' own
 # San Diego Studio's own engine, SDK 19.3.11, NVN. Modules main and sdk only.
 # The shaders are GLSLC outputs in the .fxbnvn files under NSW/SHADERS (an FXB\0 wrapper, uncompressed), read by shader_split.py's loose-file GLSLC path.
-# Status: provisional profile (dm/games/profile_guess.py from the survey); not packed or run on a device yet; memory values not measured yet
+# Status: provisional profile (dm/games/profile_guess.py from the survey); packed on a PC; first boot on an AYN Thor stopped in nninitStartup (fixed by mem_used); memory values not measured yet
 
 # ---- Identity ----
 title_id	0100AA7024094000
@@ -33,6 +33,8 @@ mem_stack	0x10000000
 app_pool	0xCD500000
 # the NPDM declares 0 MB of system resource: IsVirtualAddressMemoryEnabled is false, as on Horizon (Big Brain Academy: Brain vs. Brain sets a heap only then)
 sys_resource	0x0
+# main sizes its heap as pool − used memory (0xc9400000 = pool − 64 MB); its rewritten modules take 0x5a00000 (90 MB), more than the default 64 MB, so that SetHeapSize failed (ResultLimitReached), nninitStartup aborted with 0x1003 at main+0x5b1b60 (first boot on an AYN Thor, both drivers). 96 MB covers the modules, as Catherine: Full Body's: docs/reference/memory.md#heap-sized-from-the-application-pool-less-used-memory
+mem_used	0x6000000
 
 # ---- Shader split ----
 shader_groups	/NSW/=nsw /CROSS/=cross /AND/=and /PS4/=ps4 /FLUX/=flux /FRONTEND/=frontend /PS5/=ps5 /BOOT/=boot
