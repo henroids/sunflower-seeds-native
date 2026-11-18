@@ -68,6 +68,12 @@ final class RuntimeShaders {
         return RuntimeShaderMap.missing(c.getAssets().open("pack/tools.zip"), titleId, library);
     }
 
+    /** The buttons the title's capture boot presses (RuntimeShaderMap.captureKeys), "" for none or an APK without the profile */
+    static String captureKeys(Context c, String titleId) {
+        try { return RuntimeShaderMap.captureKeys(c.getAssets().open("pack/tools.zip"), titleId); }
+        catch (IOException e) { Log.w(TAG, "capture: no capture keys for " + titleId + " (" + e.getMessage() + ")"); return ""; }
+    }
+
     static File captureDir(File work) { return new File(work, "glslc_capture"); }
 
     static int captured(File dir) {
@@ -89,7 +95,7 @@ final class RuntimeShaders {
         Files.deleteIfExists(ShaderCapture.error(dir).toPath());
         try {
             p.on(0, "Finishing graphics setup");
-            Intent i = ShaderCapture.intent(c, titleId, game, pack, dir, save);
+            Intent i = ShaderCapture.intent(c, titleId, game, pack, dir, save, captureKeys(c, titleId));
             try {
                 c.startActivity(i);
             } catch (RuntimeException e) {
