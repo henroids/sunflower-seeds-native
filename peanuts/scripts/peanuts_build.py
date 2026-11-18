@@ -9,7 +9,7 @@
 # peanuts-build.bat (Windows) run this with the packer's Python.
 #   peanuts_build.py "Game [01006BB00C6F0000].nsp" "Game [01006BB00C6F0000] [Update v1.1.0].nsp" --keys ~/prod.keys   base + update: the .nup beside the first file, then the pack
 #   peanuts_build.py "Game folder with .nsp files" --update 131072 --push                                              pick an update, then copy the pack and the .nup to the phone
-#   peanuts_build.py "Game [01006BB00C6F0000][v131072].nup" --push --dest "/sdcard/Peanut Roms/Game" -- -j 8         a .nup; the words after -- go to pack_android.py
+#   peanuts_build.py "Game [01006BB00C6F0000][v131072].nup" --push --dest "/sdcard/Sunflower Roms/Game" -- -j 8         a .nup; the words after -- go to pack_android.py
 #   peanuts_build.py "Dump folder" --dry-run --push                                                                    print the commands, write nothing
 # Keys: --keys, else NX_KEYS, else ~/.switch/prod.keys: the importer needs your own prod.keys (the import only; packs need none).
 # Importer: --importer, else NX_IMPORTER, else built into peanuts/.build/nximport (needs cmake and a C compiler).
@@ -36,7 +36,7 @@ PYMOD_BUILD = REPO / 'peanuts' / '.build' / 'pymod'
 WINDOWS = sys.platform == 'win32'
 LINUX = sys.platform.startswith('linux')
 GAME_EXTS = ('.nsp', '.xci')
-DEVICE_ROOT = '/sdcard/Peanut Roms'   # the default folder on the phone; push-pack.py's --dest default is the same one (the test compares them)
+DEVICE_ROOT = '/sdcard/Sunflower Roms'   # the default folder on the phone; push-pack.py's --dest default is the same one (the test compares them)
 ENV = dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1')   # the children print UTF-8, unbuffered, on every OS
 
 
@@ -479,7 +479,7 @@ def main():
     ap.add_argument('--force-nup', action='store_true', help='make the .nup again even if it is newer than its inputs')
     ap.add_argument('--any-version', action='store_true', help='pack even when the profile has no build row for the update')
     ap.add_argument('--push', action='store_true', help='copy the pack and the game to the phone with push-pack.py (adb)')
-    ap.add_argument('--dest', help='the folder on the phone for the game (default: /sdcard/Peanut Roms/<game name>, or /sdcard/Peanut Roms for a dump)')
+    ap.add_argument('--dest', help='the folder on the phone for the game (default: /sdcard/Sunflower Roms/<game name>, or /sdcard/Sunflower Roms for a dump)')
     ap.add_argument('--serial', help='the adb serial of the phone (default: the one device adb lists)')
     ap.add_argument('--dry-run', action='store_true', help='print the commands instead of importing, packing or pushing')
     args = ap.parse_args(argv)

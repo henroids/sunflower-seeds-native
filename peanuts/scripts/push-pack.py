@@ -4,8 +4,8 @@
 # (android/TESTING.md section 3): base/exefs, the update's folder and dlc/, into <dest>/<its name>/; base/romfs stays here (it is large). Each folder goes to <name>.tmp first and replaces its name in one shell step, so the app never sees half a copy.
 #   push-pack.py <work>/android-pack
 #   push-pack.py <work>/android-pack --game "<dump>/DonkeyKongBananza" --version 458752 --dest /sdcard/SW2 --dry-run
-#   push-pack.py <work>/android-pack --game "<folder>/Game [<titleID>].nup" --dest "/sdcard/Peanut Roms/Game"
-# --dest defaults to /sdcard/Peanut Roms, the folder peanuts_build.py uses (DEVICE_ROOT there; peanuts/tests/test_peanuts_build.py compares the two).
+#   push-pack.py <work>/android-pack --game "<folder>/Game [<titleID>].nup" --dest "/sdcard/Sunflower Roms/Game"
+# --dest defaults to /sdcard/Sunflower Roms, the folder peanuts_build.py uses (DEVICE_ROOT there; peanuts/tests/test_peanuts_build.py compares the two).
 # What is removed on the device: only <folder>.tmp and <folder> of the folders named above (android-pack in <titleID>-work, base/exefs, updates/<digits>, dlc)
 # and the .nup's own .tmp file. Every device path is checked first (device_path): absolute, no empty, '.' or '..' part, and deep enough that it is never
 # /sdcard or a folder right under the root.
@@ -14,7 +14,7 @@ import argparse, posixpath, re, shlex, subprocess, sys
 from pathlib import Path
 
 
-DEVICE_ROOT = '/sdcard/Peanut Roms'
+DEVICE_ROOT = '/sdcard/Sunflower Roms'
 
 
 def die(msg): sys.exit(f'[RED] {msg}')

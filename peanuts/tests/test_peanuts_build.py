@@ -226,7 +226,7 @@ class Push(unittest.TestCase):
         return [l[2:] for l in out.getvalue().splitlines() if l.startswith('+ ')]
 
     def test_device_path(self):
-        self.assertEqual(pp.device_path('/sdcard/Peanut Roms/x'), '/sdcard/Peanut Roms/x')
+        self.assertEqual(pp.device_path('/sdcard/Sunflower Roms/x'), '/sdcard/Sunflower Roms/x')
         self.assertEqual(pp.device_path('/sdcard/x', depth=2), '/sdcard/x')
         for bad in ('', '/', '/sdcard', '/sdcard/x', 'sdcard/a/b/c', '/sdcard/a/../b', '/sdcard/a/./b', '/sdcard//a/b', '/sdcard/a/b/', '-rf/a/b', '/sdcard/a/b\nc'):
             with self.assertRaises(SystemExit, msg=bad): pp.device_path(bad)
@@ -234,7 +234,7 @@ class Push(unittest.TestCase):
     def test_default_dest(self):
         with tempfile.TemporaryDirectory() as d:
             cmds = self.dry(str(self.pack(d)))
-        work = f'/sdcard/Peanut Roms/{TITLE}-work/android-pack'
+        work = f'/sdcard/Sunflower Roms/{TITLE}-work/android-pack'
         self.assertIn(f"adb -s S shell 'rm -rf '\"'\"'{work}.tmp'\"'\"''", cmds)   # the path is one quoted word for the device's shell
         removed = [c for c in cmds if 'rm -' in c]
         self.assertEqual(len(removed), 2)
@@ -255,9 +255,9 @@ class Push(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             pack = self.pack(d)
             nup = Path(d, f'Game [{TITLE}][v0].nup'); nup.write_text('n'); nup.with_suffix('.png').write_bytes(b'\x89PNG\r\n\x1a\n')
-            cmds = self.dry(str(pack), '--game', str(nup), '--dest', '/sdcard/Peanut Roms/Game')
-        self.assertTrue(any(c.startswith('adb -s S push ') and c.endswith(f"'/sdcard/Peanut Roms/Game/Game [{TITLE}][v0].nup.tmp'") for c in cmds), cmds)
-        self.assertTrue(any(c.startswith('adb -s S push ') and c.endswith(f"'/sdcard/Peanut Roms/Game/Game [{TITLE}][v0].png'") for c in cmds), cmds)
+            cmds = self.dry(str(pack), '--game', str(nup), '--dest', '/sdcard/Sunflower Roms/Game')
+        self.assertTrue(any(c.startswith('adb -s S push ') and c.endswith(f"'/sdcard/Sunflower Roms/Game/Game [{TITLE}][v0].nup.tmp'") for c in cmds), cmds)
+        self.assertTrue(any(c.startswith('adb -s S push ') and c.endswith(f"'/sdcard/Sunflower Roms/Game/Game [{TITLE}][v0].png'") for c in cmds), cmds)
 
 
 class Syntax(unittest.TestCase):
