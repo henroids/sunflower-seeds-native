@@ -70,6 +70,9 @@ def payoff(gap):   # the Gaps order: open gaps, then blocked, kept and unreviewe
 HOST_BINDING = [
     ('', '', '4b159f0f7a360669738390ee8657b4f0', {'what': 'ASTRAL CHAIN elapsed-time step on Android', 'now': 'build', 'goal': 'game', 'purpose': 'frame rate',
      'why': 'the elapsed-time hook and its cinematic flag are verified for this build', 'blocked': 'a new build needs its clock and timer hooks checked'}),
+    ('', '', '277178b7dba1b6d4949a84778d4abc58', {'what': 'Tears of the Kingdom elapsed-time step on Android', 'now': 'build', 'goal': 'game', 'purpose': 'frame rate',
+     'why': 'the FPSLocker frame-step sites and the elapsed tick field are specific to this build', 'blocked': 'a new build needs its timing hooks checked',
+     'checked': 'Thor cave tests at the 20, 30, 60 and 120 FPS caps, 2026-11-18'}),
     ('', '', 'e0f3ccfaf50065ae4ea01eb5aeb13b1a', {'what': 'Ocarina of Time camera and 2D layer aspect callback in main v131072', 'now': 'build', 'goal': 'game', 'purpose': 'rendering',
      'why': "the callback reads sead's PerspectiveProjection fields, the same in every title of this engine, but its eight gates (five cameras, the HUD canvas, the movie viewport and the save picture) are fixed addresses of this build",
      'blocked': 'one build on hand; the projection reads are plain sead code a function fingerprint could find'}),

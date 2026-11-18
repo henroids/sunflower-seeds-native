@@ -321,8 +321,9 @@ void dm_fps_state_apply(void) {
     const char *e = getenv("DM_FPS_TARGET"); int t = e ? atoi(e) : DM_GAME_FPS_TARGET;
     if (t != 0 && t != 30 && t != 60) { LOG("[RED] DM_FPS_TARGET=%s: must be 0, 30 or 60; using the game's own frame step", e); t = 0; }
     float f = (float)t; memcpy(dm_fps_state, &f, sizeof f);
-    // Astral Chain 1.0.1 has a reviewed elapsed-time clock on Android.
-    if (PLAT_ANDROID && t && !strcmp(dm_main_build(), "4b159f0f7a360669738390ee8657b4f0")) {
+    // These exact builds have reviewed elapsed-time clocks on Android.
+    if (PLAT_ANDROID && t && (!strcmp(dm_main_build(), "4b159f0f7a360669738390ee8657b4f0") ||
+                             !strcmp(dm_main_build(), "277178b7dba1b6d4949a84778d4abc58"))) {
         __atomic_store_n((uint32_t *)(dm_fps_state + 0x3c), 1, __ATOMIC_RELAXED);
     }
     // Render scale of the 3D views (the stubs at Tears of the Kingdom's main+0xd5cc0, Breath of the Wild's main+0x1266880): 1.0 keeps the game's own size and dynamic resolution;
