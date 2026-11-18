@@ -2370,6 +2370,47 @@ static vka_img **g_wb; static int g_nwb, g_wbcap;
 static void rb_written_locked(vka_img *im);   // PEANUTS: texture readback (vka_readback.inc, included below)
 // A linear texture whose GPU writes are copied back into its storage (vka_tex_writeback): one level-free, single-sample colour texture of plain texels
 static int img_wb_kind(const vka_img *im) { return (im->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) && im->mem && im->samples == 1 && im->f.kind < 3 && im->f.bw == 1; }
+// PEANUTS begin: blocks a GPU encoder wrote. MLB The Show 26 compresses its generated players' face textures on the GPU: TEXTURECOMPRESSBC7 stores BC7 blocks as RGBA32UI
+// texels into a texture of one texel per 4x4 block over the BC7 texture's storage. The two are images of their own here (a view does not reinterpret one as the other: same_shape),
+// and the BC7 image, filled from the storage the CPU has, stayed black (every generated face black, the scanned ones right). A compressed texture now takes the newest GPU-written
+// uncompressed image of its block size and its shape in blocks over the same storage, by a copy between size-compatible formats (a texel of one is a block of the other), each
+// time that image is written again. Caller holds g_tmu
+static uint64_t g_wgen;
+static vka_img *bc_src(const vka_img *im) {
+    if (!compressed(&im->f) || !im->mem || im->par || !VKA_ENV("DM_VK_BC_TAKE", 1)) return NULL;
+    uint32_t bw = (im->w + im->f.bw - 1) / im->f.bw, bh = (im->h + im->f.bh - 1) / im->f.bh;
+    vka_img *best = NULL; int k;
+    for (vka_img *o = live_first(im->mem, &k); o; o = live_next(o, im->mem, &k))
+        if (o != im && !compressed(&o->f) && o->f.kind < 3 && o->f.bpb == im->f.bpb && o->gpu_owned && o->wgen > im->bc_gen && o->w == bw && o->h == bh && o->layers == im->layers
+            && o->depth == im->depth && o->samples == 1 && !o->par && (!best || o->wgen > best->wgen)) best = o;
+    return best;
+}
+static vka_img *bc_img_of(int id) { smap_ent *e = id > 0 && id < g_ntreg && g_treg[id].t.serial ? map_get(g_treg[id].t.serial) : NULL; return e ? e->im : NULL; }
+int vka_tex_id_bc_pending(int id) {
+    pthread_mutex_lock(&g_tmu);
+    vka_img *im = bc_img_of(id); int r = im && bc_src(im);
+    pthread_mutex_unlock(&g_tmu);
+    return r;
+}
+void vka_tex_id_bc_take(int id, VkCommandBuffer cb) {
+    pthread_mutex_lock(&g_tmu);
+    vka_img *im = bc_img_of(id), *src = im ? bc_src(im) : NULL;
+    if (!src) { pthread_mutex_unlock(&g_tmu); return; }
+    VkImageCopy rc[16]; uint32_t n = 0;
+    for (uint32_t lv = 0; lv < im->levels && lv < src->levels && n < 16; lv++) {   // the levels whose size in blocks is the block image's level size
+        uint32_t w = im->w >> lv ? im->w >> lv : 1, h = im->h >> lv ? im->h >> lv : 1, sw = src->w >> lv ? src->w >> lv : 1, sh = src->h >> lv ? src->h >> lv : 1, dl = lv, sl = lv;
+        if ((w + im->f.bw - 1) / im->f.bw != sw || (h + im->f.bh - 1) / im->f.bh != sh || !vka_img_lv(im, &dl) || !vka_img_lv(src, &sl)) break;
+        VkImageSubresourceLayers s = {VK_IMAGE_ASPECT_COLOR_BIT, sl, 0, src->layers}, d = {VK_IMAGE_ASPECT_COLOR_BIT, dl, 0, im->layers};
+        rc[n++] = (VkImageCopy){s, {0, 0, 0}, d, {0, 0, 0}, {sw, sh, 1}};
+    }
+    im->bc_gen = src->wgen;
+    static _Atomic int nl; if (atomic_fetch_add(&nl, 1) < 8) VLOG("block image: texture serial %llu %ux%u format %#x takes %u levels of the GPU-written blocks of serial %llu %ux%u format %#x over its storage",
+        (unsigned long long)im->serial, im->w, im->h, im->d.format, n, (unsigned long long)src->serial, src->w, src->h, src->d.format);
+    if (n) { vka_barrier(cb); vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, im->img, VK_IMAGE_LAYOUT_GENERAL, n, rc); vka_barrier(cb); }
+    pthread_mutex_unlock(&g_tmu);
+    if (n) vka_img_written(im);   // (its own wgen: a compressed image is never a block source)
+}
+// PEANUTS end
 void vka_img_written_at(vka_img *im, const char *file, int line) {
     if (!im) return;
     if (im->par) vka_img_written_at(im->par, file, line);   // a level child's write is its parent's
@@ -2381,7 +2422,7 @@ void vka_img_written_at(vka_img *im, const char *file, int line) {
     if (!im->gpu_owned && im->m.size >= big_min()) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 64)   // large images: the first GPU write (DM_VK_BIGIMG_MB)
         VLOG("large image serial %llu %ux%u layers %u format %#x (%.1f MiB): first GPU write at frame %llu (%s:%d), sampled by %u draws before, %u other textures over its storage", (unsigned long long)im->serial,
              im->w, im->h, im->layers, im->d.format, im->m.size / 1048576.0, (unsigned long long)vka_frame(), file, line, im->nsamp, im->novl); }
-    im->gpu_owned = 1;
+    im->gpu_owned = 1; im->wgen = ++g_wgen;   // PEANUTS: wgen (bc_src)
     im->last_fence = vka_fence_last();
     if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_written_locked(im);   // PEANUTS: texture readback: the write, its batch and (from the site's vka_rb_color) a colour target's use are noted, once a companion has asked for a texture
     if (img_wb_kind(im)) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 32)   // which GPU writes a copied-back linear texture takes (the copy-back covers the whole image)
