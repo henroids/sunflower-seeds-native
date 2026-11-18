@@ -37,6 +37,7 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      (split on `"\n"`) to `pack_android.py`'s argv when it is not empty — block-marked, a no-op for a normal job.
      (2026-11-17) shader-map validation and selection call `RuntimeShaderMap.missingRuntime`: a deficit containing only boot-generated shaders is prepared for Build’s internal capture, while missing file-based keys still stop.
    - `android/app/src/main/java/dev/nxnative/android/ExitWatch.java` — game exit notices and on-device pack retries use the same Android exit lookup by process name, PID and timestamp. `Job` saves the pack PID when its service marks a job running.
+   - `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` — (2026-11-18) the Prepare card's progress bar is `dev.peanuts.ui.Strip.card` (the app's one bar: 6 dp, rounded, as the building cover's strip), one line.
    - `android/app/src/ondevice/AndroidManifest.xml` — (2026-11-13, code mods) one new `<service>` line, `dev.peanuts.build.ModBuildService`
      (the modded-variant build, the Mods section's "Build with mods"), beside the existing `BuildService` line.
    - `scripts/pack_android.py` — (2026-11-13, code mods) `--modules`/`--mod-exefs`/`--mod-patches`, block-marked (too much logic for a one-line

@@ -1324,3 +1324,14 @@ Breath of the Wild's Sheikah glow (the pedestal in the Shrine of Resurrection) c
 | `docs/reference/rendering.md`, `dm/games/01007EF00011E000/README.md` | 1 each | the entry and the game's line | `PEANUTS(upstream-candidate)` |
 | `docs/agents/symptoms.md` | 1 | regenerated (`docs_symptoms.py`, allow-listed) | `(PEANUTS, Android)` in the symptom |
 | `dm/tools/tests/test_vka_fb_pinned_level.py` (new) | whole file | runs `fb_samp_pin` and `fb_view_levels` from the production file: upsample, DKB's downsample and environment cube, every small view | `PEANUTS(upstream-candidate)` in its docstring |
+
+### Round 27, one progress bar for Peanuts' screens: the cover's strip (2026-11-19)
+
+The Prepare card showed upstream's bar (`Ui.progress`: the platform's thin horizontal bar, scaled 1.6x), the building cover a 6 dp rounded strip of its own.
+`dev/peanuts/ui/Strip.java` is that strip (banana deep on its track, 6 dp, rounded ends); the cover, the build card, the second screen's build card, the build
+log's and the GPU driver page's bars (which took `PUi.progress`) and the Prepare card use it, so the progress bars of Peanuts' screens look the same.
+`PUi` stays a verbatim copy of `Ui`; upstream's own screens (the app update, the game's shader prewarm) keep `Ui.progress`.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 1 | The Prepare card's progress bar is `dev.peanuts.ui.Strip.card`, the building cover's 6 dp rounded strip, in place of `Ui.progress` | `PEANUTS` |

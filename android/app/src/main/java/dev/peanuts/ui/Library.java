@@ -8,7 +8,6 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.graphics.drawable.ClipDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -1206,16 +1205,8 @@ public final class Library {
 
     /** The building cover's 6 dp progress strip along the bottom edge, 8 dp inset: banana deep on 70 % of the screen's colour; indeterminate for upstream's Prepare */
     private ProgressBar strip(boolean indeterminate) {
-        ProgressBar p = new ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
+        ProgressBar p = Strip.of(a, (PUi.col(a, R.color.bn_bg) & 0x00FFFFFF) | 0xB3000000, indeterminate);
         p.setMax(100);
-        p.setIndeterminate(indeterminate);
-        int track = (PUi.col(a, R.color.bn_bg) & 0x00FFFFFF) | 0xB3000000;
-        GradientDrawable fill = PUi.round(PUi.col(a, R.color.bn_banana_deep), PUi.dp(a, 3), 0, 0);
-        LayerDrawable ld = new LayerDrawable(new Drawable[] {PUi.round(track, PUi.dp(a, 3), 0, 0), new ClipDrawable(fill, Gravity.START, ClipDrawable.HORIZONTAL)});
-        ld.setId(0, android.R.id.background);
-        ld.setId(1, android.R.id.progress);
-        p.setProgressDrawable(ld);
-        p.setIndeterminateTintList(ColorStateList.valueOf(PUi.col(a, R.color.bn_banana_deep)));
         p.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, PUi.dp(a, 6), Gravity.BOTTOM);
         int p8 = PUi.dp(a, 8);
@@ -1422,7 +1413,7 @@ public final class Library {
         c.addView(top);
         buildBody = PUi.body(a, "");
         PUi.add(c, buildBody, 12);
-        buildBar = PUi.progress(a);
+        buildBar = Strip.card(a);
         buildBar.setMax(100);
         PUi.add(c, buildBar, 10);
         buildPct = PUi.small(a, "");
