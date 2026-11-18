@@ -1165,3 +1165,11 @@ version moves. Device state: see the game's note.
 |---|---|---|
 | `Profile.java`, `GameActivity.java`, `ProfileOptionsJvmTest.java` | Fall back to game timing when a pack build has no matching FPSLocker plan | PEANUTS |
 | `dm/games/01007EF00011E000/` | Register the 1.6.0 executable, combine its shader tables with 1.9.0, and add its FPSLocker plan | PEANUTS |
+
+## Captain Tsubasa 2: World Fighters 1.0.6
+
+Added the Peanuts profile and game index entry for `01009720213B0000`. The generated shader tables are listed in `upstream-unmarked.txt` so their bytes match the PC split. [Game note](../dm/games/01009720213B0000/README.md)
+
+`dm/tools/ue_malloc.py` accepts a relocated primary vtable header when the exact Itanium type name matches FMallocBinned3. `dm/host/hle_uemalloc.c` carries that header into the replacement allocator. Both changes carry PEANUTS markers and apply to Unreal builds with RTTI. `dm/tools/tests/test_ue_malloc.py` covers the verified and mismatched type names.
+
+`dm/host/hle_offline.c` adds the PEANUTS-marked SDK hook for the application server environment enum. [Offline NSD environment query](../docs/reference/services.md#nsd-application-server-environment-query-aborts-during-startup)
