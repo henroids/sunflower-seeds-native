@@ -418,7 +418,7 @@ public final class MainActivity extends Activity {
         help.addView(new Ui.Setting(this, "📋", "Readiness check", v -> startActivityForResult(new Intent(this, ReadinessActivity.class), ReadinessActivity.REQUEST))
                 .value("Can this phone run your games?").chevron(this).view);   // (ReadinessActivity.java)
         help.addView(new Ui.Setting(this, "🧪", "Graphics self-test", v -> startActivity(new Intent(this, SelftestActivity.class))).value("Needs no game").chevron(this).view);
-        help.addView(new Ui.Setting(this, "📨", "Share log", v -> shareLog()).value("The newest log").chevron(this).view);
+        help.addView(new Ui.Setting(this, "📨", "Share log", v -> dev.peanuts.ui.BuildLogUi.shareLog(this, this::shareLog)).value("The newest log").chevron(this).view);   // PEANUTS: the newest build instead, when a build log changed after the newest run (Share build log)
         help.addView(new Ui.Setting(this, "🧰", "Tester settings", null).toggle(this, Prefs.testerRows(this), (b, on) -> Prefs.testerRows(this, on))
                 .says("Showing the rows made for testing: Advanced resolution, Upscaler and Dynamic resolution", "Hidden: a game with Resolution choices shows just those").view);   // (Prefs.simpleRes)
         if (BuildConfig.NX_PLAY || BuildConfig.NX_RELEASE) {   // a test build always takes adb's commands (Prefs.adbControl); PEANUTS: the Peanuts release has the switch too
@@ -932,6 +932,7 @@ public final class MainActivity extends Activity {
         if (noProfile == null && Shortcuts.supported(this))
             more.addView(new Ui.Setting(this, "🏠", "Add to home screen", v -> Shortcuts.pin(this, g)).value("A shortcut that starts this game").chevron(this).view);
         more.addView(new Ui.Setting(this, "📨", "Share log", v -> shareLog(g.titleId)).value("This game's newest log").chevron(this).view);
+        more.addView(new Ui.Setting(this, "🧾", "Share build log", v -> dev.peanuts.ui.BuildLogUi.share(this, g.titleId, g.name)).value("Logs of this game's build, in one .zip").chevron(this).view);   // PEANUTS: Share build log
         String lp = Pack.libraryProblem(new File(g.packDir), g.titleId);
         File save = Folders.save(this, g);
         Ui.Details info = Ui.details(this, "Title ID: " + g.titleId + "\nGame: " + (PickedNup.is(this, g.gameDir) ? new File(g.gameDir).getName() + " (.nup used where it is, picked with the file picker)"

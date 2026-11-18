@@ -116,5 +116,12 @@
             android:authorities="${applicationId}.logs"
             android:exported="false"
             android:grantUriPermissions="true" />
+        <!-- PEANUTS begin: Share build log's bundles, read-only (dev.peanuts.build.BuildLogProvider) -->
+        <provider
+            android:name="dev.peanuts.build.BuildLogProvider"
+            android:authorities="${applicationId}.buildlog"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <!-- PEANUTS end -->
     </application>
 </manifest>

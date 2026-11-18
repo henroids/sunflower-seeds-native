@@ -1235,3 +1235,18 @@ it also goes to the built-in one when the app itself was started on the external
 `CompanionPresentation`) gets an activity there, `CompanionScreen`, whose window never takes the input focus. Its start still makes the built-in display the
 focused one, which leaves the controller with no window, so `Companion.refocusGame` starts the game's activity again on its display (singleTask: brought to
 the front; an intent with no title ID is a no-op in `GameActivity.onNewIntent`). No upstream-candidate general fix: the lines call Peanuts-owned code.
+
+### Round 23, Share build log (2026-11-18)
+
+A failed, stopped or interrupted build could not be reported: Share log sends game runs only, and the import wrote no log at all (issue #124 had none).
+Share build log puts the game's build log, its jobs' step logs and a summary into one `.zip` (`dev.peanuts.build.BuildLogShare`, PEANUTS.md 2026-11-18).
+All logic is in Peanuts' own files; the upstream lines only call it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | Settings › Share log's listener calls `BuildLogUi.shareLog(this, this::shareLog)` (unchanged when no build log is newer than the newest run); one Share build log row after the game page's Share log | `PEANUTS` |
+| `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 2 | The Prepare card gets `BuildLogUi.card` after Check for updates (shown while the job has failed or is paused); the Manage sheet one Share build log button | `PEANUTS` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | `dev.peanuts.build.BuildLogProvider`, `${applicationId}.buildlog`, not exported, read grants only | `PEANUTS begin` / `PEANUTS end` |
+| `android/app/.gitignore` | 1 | `!src/jvmtest/java/dev/peanuts/build/` under the existing marked line: `build/` hid the package's JVM test (`BuildLogJvmTest`) as it hid its sources | `PEANUTS` (the comment above, in the hunk) |
+
+Tests: `dm/tools/tests/test_android_build_log.py`. Upstream candidate: no (it serves Peanuts' build pipeline).

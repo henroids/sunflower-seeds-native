@@ -24,7 +24,8 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `dm/gfx/vk_android/vka_dev.c`, `vka_readiness.c` — (2026-11-17) call the Peanuts guest-buffer remap probe before trusting advertised placed-memory support; use the existing tested exported-alias path on failure. `peanuts/UPSTREAM-EDITS.md`, issue #47 follow-up.
    - `android/app/build.gradle` — applicationId / label (`-PnxAppId=<suffix>`: a development build beside the app, with its own data); (2026-11-18) `androidBuildsOf` and its use in `buildsOf`: a profile's `android_builds <version> ...` row names the builds this app builds and plays when not all of the profile's (the launcher reads the others as a version it does not have; the host and the packer still know every build row).
    - `android/app/src/main/AndroidManifest.xml` — new Peanuts-owned activities/services/aliases, each its own marked block (already used for
-     `CatalogActivity` and `GameHold`; 2026-11-13 added the `dev.peanuts.launch.LaunchActivity` alias, `peanuts/docs/LAUNCHERS.md`).
+     `CatalogActivity` and `GameHold`; 2026-11-13 added the `dev.peanuts.launch.LaunchActivity` alias, `peanuts/docs/LAUNCHERS.md`; 2026-11-18 the
+     `dev.peanuts.build.BuildLogProvider` provider, `${applicationId}.buildlog`, read-only: Share build log's bundles).
    - `android/app/src/main/java/dev/nxnative/android/AppStorage.java` — (2026-11-13) `pack()` prefers an existing pack already in the app's own storage,
      else a build folder's `<title ID>/pack` when the user set one (`PeanutsPrefs.buildPackDir`; Settings › Library › Build folder); (2026-11-13,
      code mods) the class and `pack()` made `public` so `dev.peanuts.build.ModdedBuild`/`Prepare` can ask for a modded variant's own pack folder by
@@ -46,6 +47,10 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      rail entry, a choice dialog's list and confirm button, the page's and a tab's entrance, Play. Additive only; `peanuts/UPSTREAM-EDITS.md` Round 7.
    - `android/app/src/main/java/dev/nxnative/android/Overlay.java` — (2026-11-17, SoC temperature) one `ITEMS` row (`soc`) and three lines in `tick()`: the flag, the `&& !soc` in the early return, and one call into `dev.peanuts.overlay.SocTemp.append(s)` (the line; `SocZones` reads `/sys/class/thermal`). Additive only. (2026-11-17, label / value table) two more `ITEMS` rows (`graph`, `driver`), `&& !dev.peanuts.overlay.Hud.extra(ctx)` in the early return, and `return dev.peanuts.overlay.Hud.table(...)` in place of `return s;` (Hud hands `s` back when the style is "classic").
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` (`overlayItems()`), `SidePanel.java` (the Overlay section) — (2026-11-17) one line each right after `Overlay.rows(...)`: `dev.peanuts.overlay.HudSettings.rows(<ctx>, box);` (the Style and Preset choices).
+   - Share build log (2026-11-18, `dev.peanuts.ui.BuildLogUi`, `peanuts/UPSTREAM-EDITS.md` Round 23): `MainActivity.java` Settings › Share log's listener is
+     `dev.peanuts.ui.BuildLogUi.shareLog(this, this::shareLog)` (the newest build instead, when a build log changed after the newest run), and one row after the
+     game page's Share log; `ondevice/.../Ondevice.java` one line in the Panel's constructor after the Check for updates button (`BuildLogUi.card`: the
+     button shows while the job has failed or is paused) and one button line in `manage()`.
    - `SidePanel.java` `look()` — (2026-11-17) one line after the `look(box, ...)` call: `dev.peanuts.ui.PanelPolish.apply(box);   // PEANUTS: ...` (segmented short radio groups, one look for headings, notes and buttons; styling only).
    - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` — (2026-11-17) one line after `GpuDriver.env(...)`: `dev.peanuts.overlay.Hud.driver(...)` with the selected driver's label, else `Readiness.driverWord` of the system facts (null reads "System"), for the table's DRV row.
    - `android/app/src/main/cpp/nxlaunch.c` — (2026-11-17, overlay graph in realtime) in `Java_dev_nxnative_android_Native_overlaySet`, one line before `nxhost_overlay_set`: `if (peanuts_ovl_block) peanuts_ovl_block(...)` (JNI entry points forwarded to `dm/peanuts`), with `#pragma weak peanuts_ovl_block` and its prototype beside the other weak host symbols. `android/host/CMakeLists.txt`: one line compiling `dm/peanuts/peanuts_graph.c`; `android/host/libnxhost.map`: one line exporting `peanuts_ovl_block` (the host exports only `nxhost_*` and `Java_*`). `dm/peanuts/peanuts.c`: `pn_graph_frame();` in `peanuts_tick`.
@@ -150,3 +155,15 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
      the game's `startActivity` takes the options of `dev.peanuts.Screens.gameStart(...)`: with Settings › Library › Swap screens on and another display present, the
      game starts there; null otherwise, the start as before. A game on another display (so also the app started there) leaves the built-in display to its
      companion (`CompanionScreen`, an activity: Android takes no Presentation on the default display). `AndroidManifest.xml`: the `CompanionScreen` activity (process `:game`). `peanuts/UPSTREAM-EDITS.md` Round 23.
+- 2026-11-18 (Share build log, issue #124's "no log attached"): one `.zip` per game with everything its build left. `dev.peanuts.build.BuildLog` is the
+  game's own build log, `<app files>/build-logs/<title ID>.log` (to `.1.log` at 2 MB), which `BuildService`, `ModBuildService` and `Prepare` write as
+  they go: the inputs with sizes, the folders and free space, the memory, the import's milestones, Prepare's choice of job, the progress every 5 % and
+  each change of step, and an `[end]` line; a run without one ended with the app's process. `BuildLogShare.make` finds the game's jobs as Prepare does
+  (`DumpCheck.workOf` of the listed game, the remembered job, the work folders each build noted, the build folder, one level of the game folder, and every
+  `<title ID>…-work` beside them, so builds with mods go to `mods/`). It zips the build log, each job's `job.json`, `env.txt` (secrets' values hidden)
+  and `logs/*.log` (each file as long as it was when opened, cut to its first 256 KB and last 768 KB past 1 MB, 24 MB in all), the app's own logcat lines
+  of the build's tags and of crashes, the newest ANR trace of each process, and `summary.txt` (app, device, memory, the build's and the jobs' states,
+  the worker plan, free space, the last `ApplicationExitInfo` of each process). Only `.log`, `.txt` and `.json` files go in (`BuildLogBundle.allowed`),
+  never keys, game files, saves or packs. `BuildLogProvider` serves it read-only; the sheet offers Share (the chooser on the app's display) and Save to
+  a folder (request 71 through `LibrarySettings.result`). Entry points: Home's stopped build card, the Prepare card and its Manage sheet, the game's
+  Storage tab, Settings › Share log, and ctl `share_build_log`. Tests: `dm/tools/tests/test_android_build_log.py` (`BuildLogJvmTest`).
