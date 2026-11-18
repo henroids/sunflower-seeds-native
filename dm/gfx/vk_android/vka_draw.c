@@ -2750,7 +2750,8 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
             static _Atomic int nd; if (tstats ? vka_texstats_desc_new(tstats, (int)g_res[i].binding, g_res[i].tid) : atomic_fetch_add(&nd, 1) < 32) { char why[320]; vka_tex_id_desc(g_res[i].tid, why, sizeof why); vka_img *im = ims[m - 1];
                 if (getenv("DM_VK_NANSCAN_DUMP") && im && im->d.format >= 0x79 && im->d.format <= 0x94) vka_tex_id_dump(g_res[i].tid);
                 vka_tex_id_check(g_res[i].tid);
-                VLOG("%s: fragment %016llx input binding %u dim %#x texture ID %d sampler %d: %s; image inited %d gpu_owned %d track %d", tstats ? "tex stats" : "NaN scan", (unsigned long long)sh[1]->key, g_res[i].binding, g_res[i].dim, g_res[i].tid, g_res[i].sid, why, im ? im->inited : -1, im ? im->gpu_owned : -1, im ? im->track : -1); } }
+                VLOG("%s: fragment %016llx input binding %u dim %#x texture ID %d sampler %d: %s; image inited %d gpu_owned %d track %d", tstats ? "tex stats" : "NaN scan", (unsigned long long)sh[1]->key, g_res[i].binding, g_res[i].dim, g_res[i].tid, g_res[i].sid, why, im ? im->inited : -1, im ? im->gpu_owned : -1, im ? im->track : -1);
+                if (tstats) { char st[1400]; vka_tex_id_storage(g_res[i].tid, st, sizeof st); VLOG("tex stats: fragment %016llx input binding %u texture ID %d: %s", (unsigned long long)tstats, g_res[i].binding, g_res[i].tid, st); } } }
         if (tstats) m = texstats_table(&d->b, sh[1]->key, g_res, n, ims, bs, ts, m, 64);   // DM_VK_TEX_STATS_TABLE: the record table's bindless textures too
         int on = R.on; vka_rp_end(); (void)on;
         vka_nan_inputs(g_cb, ims, bs, ts, m, tstats);
