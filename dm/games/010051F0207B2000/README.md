@@ -19,3 +19,5 @@ Android bundles 361 Vulkan pipeline keys recorded on Thor. With Turnip Gen8 V39 
 In [PR #86](https://github.com/igawa6/peanuts-native/pull/86), intermission88 tested the island at 30 fps on an AYN Thor with Turnip 27.0.0 R2. One of three boots crashed when the SDK read from address `0x24` at `sdk+0x37cdfc`. The cause of the null pointer is open.
 
 [nx2android](https://github.com/shirai91/nx2android/commit/7c9422aeba615c7a849dc314b387b14d708995d9) traced missing Mii heads and faces to a conditional depth clear in the Mii renderer.
+
+On the AYN Thor with Turnip Gen8 V39, both settings reached the Mii creator's face-balance screen at 30 fps. Enabling `render_cond` removed the host's ignored-condition warning, with the same visible face previews. The profile leaves the setting off pending a comparison of the in-game Mii models.
