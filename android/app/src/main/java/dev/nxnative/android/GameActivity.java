@@ -514,7 +514,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             int maximum = Prefs.paceMax(id);
             if (maximum > 60) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes
                 int hz = capDisplayHz(maximum);
-                env.add("DM_PRESENT_HZ=" + hz); env.add("DM_VSYNC_HZ=" + hz); env.add("DM_FPS_TARGET=0");
+                env.add("DM_PRESENT_HZ=" + hz); env.add("DM_VSYNC_HZ=" + hz);
+                if (prof == null || !prof.elapsedFrameStep) env.add("DM_FPS_TARGET=0");
+                if (prof != null && (prof.optInPresentRate() || prof.elapsedFrameStep)) env.add("DM_PRESENT_INTERVAL=display");
             }
             if (Prefs.chosenFpsCap(this, id)) { int pace = Prefs.paceCap(this, id); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60)); }
         } else if (cap >= 0) env.add("DM_FPS_TARGET=" + cap);
