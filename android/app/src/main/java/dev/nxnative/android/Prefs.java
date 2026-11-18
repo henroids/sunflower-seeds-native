@@ -115,7 +115,7 @@ final class Prefs {
     static int[] paceCaps(String titleId) {
         Profile p = Profile.of(titleId);
         if (p != null && !p.fpsModes.isEmpty()) return p.fpsModeCaps();
-        return p != null && (p.steps && !p.fpsLocker.contains(",time_ratio_f32,") && !p.fpsLockerPlan.contains(",clock,-,1") || p.fpsLocker.contains(",vsync_u32,")) ? new int[] {FrameRateCaps.GAME_OWNED, 0, 30, 20} : FrameRateCaps.rates(paceMax(titleId), p == null ? 20 : p.fpsLimitMin);
+        return p != null && (steps(titleId) || p.fpsLocker.contains(",vsync_u32,")) ? new int[] {FrameRateCaps.GAME_OWNED, 0, 30, 20} : FrameRateCaps.rates(paceMax(titleId), p == null ? 20 : p.fpsLimitMin);
     }
     static boolean paced(String titleId) { Profile p = Profile.of(titleId); return p != null && p.decoupled; }
     /** Games the host's frame limiter caps (hle_fpslock.c fps_limit_wait, DM_FPS_LIMIT): the paced ones, and those whose profile sets a default limit (game.tsv fps_limit, a game
@@ -125,7 +125,7 @@ final class Prefs {
     static boolean decouple(Context c, String titleId) { return of(c).getBoolean(gameKey("decouple", titleId), true); }
     static void decouple(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("decouple", titleId), on).commit(); }
     /** Games whose framework runs whole fixed steps a frame that the host holds (game.tsv fps_steps: hle_fpslock.c steps_tick), as Mario Kart World's */
-    static boolean steps(String titleId) { Profile p = Profile.of(titleId); return p != null && p.steps && !p.fpsLocker.contains(",time_ratio_f32,") && !p.fpsLockerPlan.contains(",clock,-,1"); }
+    static boolean steps(String titleId) { Profile p = Profile.of(titleId); return p != null && p.steps && !p.elapsedFrameStep && !p.fpsLocker.contains(",time_ratio_f32,") && !p.fpsLockerPlan.contains(",clock,-,1"); }
     /** Hold 60 fps (per game, default off), for steps games at the cap of 60: one step a frame always, where the game's own mode runs two (30 fps) after a frame its work
      *  overran. A frame that runs long then plays a little slower instead of dropping to 30 (DM_FPS_HOLD60=1 at start, Native.hold60Set while it runs) */
     static boolean fullVegetation(Context c, String titleId) { return of(c).getBoolean(gameKey("full_vegetation", titleId), Recommend.bool(rec(c, titleId, Recommend.VEGETATION), true)); }
