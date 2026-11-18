@@ -1199,3 +1199,20 @@ releases. They now ask `BuildConfig.NX_PEANUTS_ID`, which every `-PnxApp=peanuts
 | `android/app/src/main/java/dev/nxnative/android/Updater.java` | 1 | the update source: the Peanuts app's own releases | trailing `// PEANUTS: ...` |
 
 Upstream candidate: no (the three lines are Peanuts' own).
+
+### Round 22, the GPU driver page (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+Settings › GPU driver was three list dialogs (`GpuDriver.dialog`, its Install…, `DriverFetch`'s Download…): a source's releases showed as tags
+and file names, with no date, notes, size per release or hint which GPU a file is for. It is now a Peanuts page, `dev.peanuts.ui.DriverActivity`:
+the drivers on the phone to pick or remove, the download sources, a zip from the app's folder or picked anywhere; a source opens its releases
+with their dates, notes (`GitHubText`), files, sizes and the Adreno each file names, and Install downloads with its progress and picks the driver.
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | the GPU driver row's click, and `onActivityResult`'s `ReadinessActivity.FIX_DRIVER`: `dev.peanuts.ui.DriverActivity.open(this)` instead of `GpuDriver.dialog(this, PICK_DRIVER)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | the `DriverActivity` entry, not exported | trailing `<!-- PEANUTS: ... -->` |
+
+Upstream's classes keep doing the work, read through reflection (`DriverPort`): `GpuDriver.installed`, `selected`, `select`, `install` (so
+`DriverZip`'s checks stay the only way a zip gets in), `DriverZip.deleteTree`, `DriverFetch.REPOS` (the one list of sources), `GpuGl.name` and
+`PadFocus.watch` (Settings' focus frame). The page reads GitHub only once a source is opened, as `DriverFetch` does. `GpuDriver.dialog` and
+`DriverFetch.dialog` stay unchanged; nothing opens them any more. No upstream-candidate general fix: the hunks call Peanuts-owned code.
