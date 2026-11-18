@@ -2171,7 +2171,7 @@ static int thermal_capped(void) {
 }
 __attribute__((weak)) int dm_fps_limit_step(void) { return 0; }   // hle_fpslock.c; graphics unit tests have no host
 static int fps_step_cap(void) {
-    if (!dm_fps_state) return 0;
+    if (!dm_fps_state || dm_fps_elapsed_step()) return 0;
     uint32_t b = __atomic_load_n((uint32_t *)dm_fps_state, __ATOMIC_RELAXED); float t; memcpy(&t, &b, sizeof t);
     if (t <= 0) return 0;
     // Movies and a 30 fps target still need thermal samples: heat must reset the

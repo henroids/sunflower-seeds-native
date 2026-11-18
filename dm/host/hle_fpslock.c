@@ -642,11 +642,18 @@ static int limit_raw(void) { int l = atomic_load(&g_fps_limit); if (l < 0) l = f
 // before (a step of 4 vsyncs is not one the games' own logic uses). 0 = no limit, or no frame step. A framework's step count (a profile's fps_steps row, steps_tick) holds the limit the
 // same way: its steps a frame and its present interval are the limit's vsyncs
 static int limit_step(int l) { return l >= 60 ? 60 : l >= 30 ? 30 : l >= 20 ? 20 : 0; }
-int dm_fps_limit_step(void) { return dm_fps_state || steps_row() ? limit_step(limit_raw()) : 0; }
+int dm_fps_limit_step(void) { return (dm_fps_state && !dm_fps_elapsed_step()) || steps_row() ? limit_step(limit_raw()) : 0; }
 // The frame step's cap in the state page (+0, float; 0 = the stubs run the game's own logic): the frame rate cap (fps_target, the in-game panel's cap) and the frame limit's
 // step, whichever is lower. The stubs know 30 and 60 (several compare with 30.0): a 20 fps limit writes 30 there, and hle_nvn.c fps_step_cap takes the 20 from dm_fps_limit_step
 void dm_fps_step_fold(void) {
     if (!dm_fps_state) return;
+    if (dm_fps_elapsed_step()) {
+        int limit = limit_raw();
+        float rate = (float)(limit ? limit : dm_fps_target());
+        uint32_t bits; memcpy(&bits, &rate, sizeof bits);
+        __atomic_store_n((uint32_t *)dm_fps_state, bits, __ATOMIC_RELAXED);
+        return;
+    }
     uint32_t b = __atomic_load_n((uint32_t *)dm_fps_state, __ATOMIC_RELAXED); float was; memcpy(&was, &b, sizeof was);
     int t = dm_fps_target(), l = dm_fps_limit_step(), c = t == 30 || t == 60 ? t : 0;
     if (l && (!c || l < c)) c = l;
@@ -670,11 +677,13 @@ int nxhost_fps_decoupled(void) {
 static void fps_limit_wait(void) {
     if (!PLAT_ANDROID) return;   // only the Android launcher sets a frame limit
     int lim = limit_raw();
+    int fixed = dm_fps_elapsed_step() && (__atomic_load_n((const uint32_t *)(dm_fps_state + 0x24), __ATOMIC_RELAXED) || dm_movie_playing());
+    if (fixed) lim = 30;
     static uint64_t next;
     if (!lim || dm_fps_limit_step()) { next = 0; return; }   // none, or the frame step holds it (dm_fps_limit_step)
     uint64_t now = plat_abs_time(), period = 1000000000ull / (uint64_t)lim;   // the platform's monotonic clock and sleep (plat.h): clock_nanosleep is Linux only
     // PEANUTS: DM_VK_PACE_PANEL: a limit that is the panel's rate or a whole division of it ticks in the panel's measured refreshes (60 on a 59.83 Hz panel: 16.71 ms)
-    { uint64_t vka_panel_tick(uint64_t) __attribute__((weak)); if (&vka_panel_tick) period = vka_panel_tick(period); }
+    { uint64_t vka_panel_tick(uint64_t) __attribute__((weak)); if (!fixed && &vka_panel_tick) period = vka_panel_tick(period); }
     if (next > now && next - now <= period) { plat_wait_until(next); now = next; }
     next = (next > now || (next && now - next < period / 2) ? next : now) + period;   // keep the phase through small lateness, restart after a long frame
 }

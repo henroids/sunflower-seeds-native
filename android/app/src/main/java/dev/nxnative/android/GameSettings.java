@@ -753,7 +753,11 @@ final class GameSettings {
             String[] labels = new String[choices.length + 1];
             int pl = Prefs.profileLimit(g.titleId);   // the profile's own default (fps_limit), else the main screen's
             Integer rc = Prefs.recCap(a, g.titleId);
-            labels[0] = rc != null ? "Recommended (" + Prefs.paceLabel(rc) + ")" : pl > 0 ? "Default (this game's: " + Prefs.paceLabel(Prefs.paceOf(pl)) + ")" : "Default (Settings: " + Prefs.paceLabel(Prefs.paceOf(Prefs.fpsCap(a))) + ")";
+            Profile p = Profile.of(g.titleId);
+            if (rc != null) labels[0] = "Recommended (" + Prefs.paceLabel(rc) + ")";
+            else if (p != null && p.optInPresentRate()) labels[0] = "Default (Game owned)";
+            else if (pl > 0) labels[0] = "Default (this game's: " + Prefs.paceLabel(Prefs.paceOf(pl)) + ")";
+            else labels[0] = "Default (Settings: " + Prefs.paceLabel(Prefs.paceOf(Prefs.fpsCap(a))) + ")";
             int checked = 0, cur = Prefs.paceCap(a, g.titleId);
             for (int k = 0; k < choices.length; k++) { enabled[k + 1] = FrameRateCaps.contains(allowed, choices[k]); labels[k + 1] = Prefs.paceLabel(choices[k]) + (enabled[k + 1] ? "" : " · unavailable for this game"); if (Prefs.ownFpsCap(a, g.titleId) && choices[k] == cur) checked = k + 1; }
             new PadFocus.Builder(a).setTitle("Frame rate cap · " + g.name).setSingleChoiceItems(capItems(a, labels, enabled), checked, (x, w) -> {

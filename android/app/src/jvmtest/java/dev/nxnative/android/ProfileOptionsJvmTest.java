@@ -99,6 +99,13 @@ public final class ProfileOptionsJvmTest {
         check(Profile.parse(String.join("\t", highRate)).get(0).fpsLocker.equals(highRate[32]), "reviewed Warehouse rows survive profile parsing");
         check(Profile.parse(String.join("\t", highRate)).get(0).fpsLimitMax == 120, "profile opts in to 120");
         check(Profile.parse(String.join("\t", highRate)).get(0).fpsLimitMin == 20, "default lower cap remains 20");
+        Profile present = new Profile("010051F0207B2000", "Tomodachi Life", 0, "", "", "", "");
+        present.fpsLimitMax = 120;
+        check(!present.optInPresentRate(), "high cap alone does not change the presentation mode");
+        present.presentOnly = true;
+        check(present.optInPresentRate(), "present-only caps above 60 can opt in from Game owned");
+        present.fpsLimit = 30;
+        check(!present.optInPresentRate(), "an existing default cap keeps its presentation mode");
         highRate[34] = "30";
         check(Profile.parse(String.join("\t", highRate)).get(0).fpsLimitMin == 30, "reviewed timing correction lower bound");
         highRate[31] = "90";
