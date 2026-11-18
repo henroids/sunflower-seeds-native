@@ -90,6 +90,11 @@ public final class ProfileOptionsJvmTest {
         highRate[15] = "30"; highRate[31] = "120";
         highRate[33] = "a6bd61cfb142e663f59f4d92b4ed0474,r0x100,33008052,f303002a";
         check(Profile.parse(String.join("\t", highRate)).get(0).fpsLockerPlan.equals(highRate[33]), "reviewed code plan survives profile parsing");
+        // PEANUTS: alternate game updates can use stock timing without the other build's code plan.
+        Profile reviewed = Profile.parse(String.join("\t", highRate)).get(0);
+        check(reviewed.fpsLockerPlanMatches("a6bd61cfb142e663f59f4d92b4ed0474"), "reviewed main build gets its FPSLocker code plan");
+        check(!reviewed.fpsLockerPlanMatches("8e9978d50bdd20b4c8395a106c27ffde"), "another main build uses game timing");
+        check(reviewed.fpsLockerPlanMatches(null) && pOld.fpsLockerPlanMatches("8e9978d50bdd20b4c8395a106c27ffde"), "older packs and profiles keep their timing behavior");
         highRate[32] = "a6bd61cfb142e663f59f4d92b4ed0474,target_f32,0x62d3b68,2,0";
         check(Profile.parse(String.join("\t", highRate)).get(0).fpsLocker.equals(highRate[32]), "reviewed Warehouse rows survive profile parsing");
         check(Profile.parse(String.join("\t", highRate)).get(0).fpsLimitMax == 120, "profile opts in to 120");

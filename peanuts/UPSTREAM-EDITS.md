@@ -1158,3 +1158,10 @@ version moves. Device state: see the game's note.
 |---|---|---|---|
 | `dm/gfx/tools/shader_split.py` | 3 | `iga_entries`, `iga_member`, `iga_shaders` and their branch in `scan_file_in`: Alchemy's igArchive version 13 (`IGA\x1a`), whose files are LZMA in 0x8000-byte blocks placed by the archive's small / medium / large block tables; every file is decoded and its whole GLSLC outputs taken. The game's split went from 12 shaders (those in `main`) to 1,945. Checked on all 74,311 files of its 401 archives; the large table (a file over 0x7FFF sectors) follows the same rule and was met on no file. nxnative has an open pull request with a reader of its own (#1077), not used here. Test: `test_split_iga.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
 | `dm/host/hle_audren.c`, `dm/host/tests/t_audren_layout.c`, `dm/host/tests/t_audren_work.c`, `docs/reference/audio.md` | 71 | The host drives up to 4 audio renderers, each with its own state (`ar_t`), PCM blocks, render thread and output; it drove one, and a second `OpenAudioRenderer` logged `[RED] audren: a second renderer` and was never rendered. A hand port of nxnative 18b435ac38 and a334797d12 (MIT) onto this tree's clock pacing, catch-up queue and `DM_AUDREN_WAIT`, which stay, now per renderer. One renderer behaves as before; its log lines now name the renderer (`renderer 0 …`). Tests: the two host tests, built natively with ASan and UBSan, with a case of two renderers open at once. Not run on a device. Upstream candidate: yes (Banana Native 0.3.42 does not have it) | `PEANUTS(upstream-candidate)` on each file's first hunk, `PEANUTS` on the others |
+
+## Breath of the Wild 1.6.0
+
+| Files | Change | Marker |
+|---|---|---|
+| `Profile.java`, `GameActivity.java`, `ProfileOptionsJvmTest.java` | Fall back to game timing when a pack build has no matching FPSLocker plan | PEANUTS |
+| `dm/games/01007EF00011E000/` | Register the 1.6.0 executable, combine its shader tables with 1.9.0, and add its FPSLocker plan | PEANUTS |

@@ -63,6 +63,14 @@ final class Profile {
         for (int cap : fpsModeCaps()) if (cap == value) return value;
         return 0;   // an unsupported saved choice returns to the safe 60 fps default
     }
+    // PEANUTS: the ordinary FPSLocker code plan requires a matching main build.
+    boolean fpsLockerPlanMatches(String mainBuild) {
+        if (fpsLockerPlan.isEmpty() || mainBuild == null) return true;
+        for (String row : fpsLockerPlan.split(";"))
+            if (row.startsWith(mainBuild + ",")) return true;
+        return false;
+    }
+
     boolean fpsRestart(int started, int selected) {
         return (started == -2) != (selected == -2) || !fpsPlan120.isEmpty() && (started == 120) != (selected == 120);
     }

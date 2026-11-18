@@ -473,7 +473,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         Profile p = Profile.of(titleId());
         return p != null ? p.fpsRestart(fpsModeAtStart, selected) : (selected == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart;
     }
-    private String settingsEnv(String id, List<String> env) {
+    private String settingsEnv(String id, Pack pack, List<String> env) {   // PEANUTS: pass the pack build for FPSLocker selection
         // Game resolution: the game's own setting, else the main screen's: the window size the host gives the game (window_fn), or the graphics scale and operation
         // mode that give that size (graphics_scale rows), as its profile says (Profile.resolutionEnv); nothing for a game with neither
         Profile prof = Profile.of(id);
@@ -494,9 +494,11 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         GameUpscaler.env(this, id, env);   // the Upscaler (Game settings, the in-game panel): the game's own upscaler and the present's scaling
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
         fpsModeAtStart = Prefs.paceCap(this, id);
-        gameOwnedAtStart = Prefs.limited(id) && Prefs.paceCap(this, id) == FrameRateCaps.GAME_OWNED;
+        // PEANUTS: a supported update may lack this game's reviewed FPSLocker plan.
+        boolean hasFpsPlan = prof == null || prof.fpsLockerPlanMatches(BuildCheck.builds(pack).get("main"));
+        gameOwnedAtStart = !hasFpsPlan || Prefs.limited(id) && fpsModeAtStart == FrameRateCaps.GAME_OWNED;
         if (prof != null && prof.fpsPlan120.isEmpty() && (!prof.fpsLocker.isEmpty() || !prof.fpsLockerPlan.isEmpty()) && !gameOwnedAtStart) env.add("DM_FPSLOCKER_INTERVAL=1");
-        if (prof != null && !prof.fpsLockerPlan.isEmpty()) env.add("DM_FPSLOCKER_PLAN=" + prof.fpsLockerPlan);
+        if (prof != null && hasFpsPlan && !prof.fpsLockerPlan.isEmpty()) env.add("DM_FPSLOCKER_PLAN=" + prof.fpsLockerPlan);   // PEANUTS: only pass a plan the loader can apply
         if (prof != null && prof.fpsPlan120.isEmpty() && !prof.fpsLocker.isEmpty() && !gameOwnedAtStart) env.add("DM_FPSLOCKER=" + prof.fpsLocker);
         int cap = Prefs.fpsCap(this, id);   // the game's own frame rate cap (its in-game panel, its Game settings), else the main screen's (unset: the profile's fps_target)
         if (gameOwnedAtStart) {
@@ -556,14 +558,14 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private static final long READINESS_WAIT_MS = 8000;
 
     /** true: the start waits for the check (it calls start() again when the player may go on) */
-    private boolean readinessHold(String id) {
+    private boolean readinessHold(String id, Pack pack) {   // PEANUTS: pass the pack build for FPSLocker selection
         if (readinessDone) return false;
         File files = getExternalFilesDir(null);
         Prefs.pinDriver(this, id);   // a recommended driver stays the one this check probes for the whole start (Prefs.pinDriver)
         // the game's environment as start() will set it (the launcher's settings, then the user's lines, which win), less the paths start() sets: the check makes the
         // process's first Vulkan device, and a driver reads some variables only then (FD_DEV_FEATURES, TU_DEBUG: GitHub #40)
         List<String> genv = new ArrayList<>();
-        settingsEnv(id, genv);
+        settingsEnv(id, pack, genv);   // PEANUTS: pass the pack build for FPSLocker selection
         genv.addAll(AdvancedSettings.lines(this, id, PROTECTED));   // Advanced rows come before env.txt's lines
         genv.addAll(quietEnv(new File(files, "env.txt")));
         genv.addAll(envLines(Prefs.gameEnv(this, id)));
@@ -743,7 +745,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             Pack pack = Pack.read(packDir);
             String romfs = pack.romfsPath(game);   // a folder's RomFS folder, or <file>.nup:<selector>/romfs (NUP.md)
             if (romfs == null) throw new IOException(Nup.isNup(game) ? game.getName() + " has no " + pack.romfsSelector() + " with a RomFS" : "no RomFS in " + game);
-            if (readinessHold(id)) return;   // after the pack's own checks (a missing pack says so first), before the save is locked or anything is written
+            if (readinessHold(id, pack)) return;   // after the pack's own checks (a missing pack says so first), before the save is locked or anything is written (PEANUTS: pack build)
             // A .nup used where it is (PickedNup): the host gets a descriptor of it, fd:<n>/<name>, wherever it would get the file's path (DM_ROMFS, the add-on links);
             // it stays open for this process's life, and the host duplicates it for each image it opens (nup_image.h)
             int nupFd = PickedNup.is(this, game.getPath()) ? PickedNup.detachedFd(this, game) : -1;
@@ -791,7 +793,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
                 GameFonts.place(new File(getFilesDir(), "fonts"), GameFonts.EXT, fin.readAllBytes());
             } catch (java.io.FileNotFoundException e) {   // an APK built without fontTools: the host's [YELLOW] line says so
             } catch (IOException e) { unknownNotes.add("[nxlaunch] the button-icon font is not placed (" + e.getMessage() + "): button icons in game text draw as '?'"); }
-            String gpuNote = settingsEnv(id, env);
+            String gpuNote = settingsEnv(id, pack, env);   // PEANUTS: pass the pack build for FPSLocker selection
             cheatsMerged = false;   // PEANUTS: decided anew at each start (this screen's object may start a game again)
             cheatMods = dev.peanuts.mods.ModRuntime.cheatsDirs(game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: for cheatsEnv (ModCheats)
             cheatsEnv(id, pack, packDir, env);
