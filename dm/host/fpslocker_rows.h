@@ -11,7 +11,7 @@
 #define FPW_MAX_ROWS 16
 #define FPW_SPEC_SIZE 4096
 struct fpw_row {
-  uint64_t offset, chain[3];
+  uint64_t offset, chain[4]; // Four offsets after the module-relative pointer.
   unsigned nchain, kind, copies, direct, aux;
   union { // PEANUTS: keep integer tick scales exact.
     float a;
@@ -108,7 +108,8 @@ static inline int fpw_parse(const char *spec, const char *build,
       slash = strchr(path, '/');
       if (slash)
         *slash = 0;
-      if (r.nchain == 3 || !fpw_hex(path, &r.chain[r.nchain]))
+      if (r.nchain == sizeof r.chain / sizeof *r.chain ||
+          !fpw_hex(path, &r.chain[r.nchain]))
         return -1;
       r.nchain++;
     }

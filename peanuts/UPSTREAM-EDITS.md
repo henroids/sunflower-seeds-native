@@ -1181,3 +1181,7 @@ The Peanuts Android profile registers the updated executable, PC-generated shade
 ## Link's Awakening manual frame rate
 
 `Profile.java`, `GameActivity.java` and `SidePanel.java` share the PEANUTS-marked engine-target policy for explicit frame rate modes. `ProfileOptionsJvmTest.java` covers native, static-plan and dynamic FPSLocker modes. [Game note](../dm/games/01006BB00C6F0000/README.md#android-frame-rate-choices)
+
+## Kirby and the Forgotten Land frame rate
+
+The 1.1.0 profile uses reviewed FPSLocker rows for caps from 20 to 120 fps. `build.gradle` and `fpslocker_rows.h` accept four offsets after the module-relative pointer. `test_fpslocker_rows.py` covers the chain and rejects a fifth offset. [Game note](../dm/games/01004D300C5AE000/README.md#android-frame-limits-from-20-to-120)
