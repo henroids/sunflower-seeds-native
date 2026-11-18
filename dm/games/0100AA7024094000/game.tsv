@@ -1,0 +1,39 @@
+# Game profile of MLB The Show 26 (Switch, update 1.0.19 = v1245184)
+# Format: see dm/games/README.md
+# PEANUTS: a Peanuts Native profile (Banana Native has none for this title); whole file Peanuts' own
+# San Diego Studio's own engine, SDK 19.3.11, NVN. Modules main and sdk only.
+# The shaders are GLSLC outputs in the .fxbnvn files under NSW/SHADERS (an FXB\0 wrapper, uncompressed), read by shader_split.py's loose-file GLSLC path.
+# Status: provisional profile (dm/games/profile_guess.py from the survey); not packed or run on a device yet; memory values not measured yet
+
+# ---- Identity ----
+title_id	0100AA7024094000
+program_id	0100AA7024094000
+
+# ---- App ----
+name	MLB The Show 26
+ipa	MLBTheShow26.ipa
+app_category	public.app-category.games
+
+# ---- Versions ----
+build	v1245184	1.0.19	main=bcff897c9cb75a6c5f14a9feda1a1c1b	sdk=df7a3960c74c3a4803f826c587153252
+package	v1245184
+shader_versions	v1245184
+
+# ---- Files ----
+# every module main imports from
+modules	main sdk
+romfs_marker	NSW/AUDIO/PXP.SKX
+zip_store	.bik:.bk2:.bmp:.ctl:.dat:.dll:.dsd:.g4b:.key:.mex:.oeb:.skx:.spf:.tga:.xbn:.xvag:.metallib
+
+# ---- Memory ----
+# main sets a heap of at most the pool − 64 MB: a 3328 MB heap region
+mem_reserve	0x100000000
+mem_alias	0x10000000
+mem_stack	0x10000000
+app_pool	0xCD500000
+# the NPDM declares 0 MB of system resource: IsVirtualAddressMemoryEnabled is false, as on Horizon (Big Brain Academy: Brain vs. Brain sets a heap only then)
+sys_resource	0x0
+
+# ---- Shader split ----
+shader_groups	/NSW/=nsw /CROSS/=cross /AND/=and /PS4/=ps4 /FLUX/=flux /FRONTEND/=frontend /PS5/=ps5 /BOOT/=boot
+shader_note	MLB The Show 26 shaders
