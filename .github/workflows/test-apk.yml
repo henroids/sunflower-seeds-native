@@ -1,7 +1,9 @@
 # PEANUTS: builds the Sunflower Seeds test app on a GitHub-hosted Linux runner and publishes it as a release, which the app's updater offers (Updater.sources:
 # an app ID ending in .sunflowertest asks this repository's releases). The app is dev.nxnative.android.<app_id> with the profiles of the games given; the pack
 # comes from scripts/pack_android.py on a PC (-PnxPackEngine=fake). Every build is signed with the one key in the SIGN_KEYSTORE_B64 secret (a PKCS12 debug
-# keystore, base64: alias androiddebugkey, password android), so each release installs over the last. Version 0.2.<run number>, which only grows.
+# keystore, base64: alias androiddebugkey, password android), handed to the build through Gradle's injected signing properties (a debug keystore in ~/.android
+# is not what the runner's build signs with), and the APK's certificate is checked against SIGNER, so each release installs over the last. Version
+# 0.2.<run number>, which only grows.
 name: test-apk
 
 on:
@@ -41,6 +43,7 @@ jobs:
     timeout-minutes: 90
     env:
       VERSION: 0.2.${{ github.run_number }}
+      SIGNER: a18da09242e9bebbbec26e1b4a43e762d51522391b5a22cbc87299c8e1515a82   # the SHA-256 of the key's certificate, as apksigner prints it
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,7 +62,7 @@ jobs:
           KEY: ${{ secrets.SIGN_KEYSTORE_B64 }}
         run: |
           [ -n "$KEY" ] || { echo "::error::the SIGN_KEYSTORE_B64 secret is missing: without it each build has a new key and cannot install over the last"; exit 1; }
-          mkdir -p ~/.android && printf '%s' "$KEY" | base64 -d > ~/.android/debug.keystore
+          printf '%s' "$KEY" | base64 -d > "$RUNNER_TEMP/sign.keystore"
       - name: Build
         env:
           GAMES: ${{ inputs.games || '0100AA7024094000' }}
@@ -70,8 +73,12 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > android/app/local.properties
           cd android/app
           ./gradlew --no-daemon apk -PnxApp=peanuts "-PnxAppId=$APP_ID" "-PnxLabel=$LABEL" "-PnxGames=$GAMES" -PnxPackEngine=fake \
-            "-PnxVersion=$VERSION" "-PnxVersionCode=$((100 + ${{ github.run_number }}))"
+            "-PnxVersion=$VERSION" "-PnxVersionCode=$((100 + ${{ github.run_number }}))" \
+            "-Pandroid.injected.signing.store.file=$RUNNER_TEMP/sign.keystore" -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey -Pandroid.injected.signing.key.password=android
           mv out/nxnative-android-peanuts.apk "out/sunflower-seeds-test-$VERSION.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "out/sunflower-seeds-test-$VERSION.apk" | tee certs.txt
+          grep -q "SHA-256 digest: $SIGNER" certs.txt || { echo "::error::the APK is not signed with the SIGN_KEYSTORE_B64 key"; exit 1; }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sunflower-seeds-test-apk
