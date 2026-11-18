@@ -2418,16 +2418,17 @@ void vka_tex_id_take(int id, VkCommandBuffer cb) {
     if (n) vka_img_written(im);   // (its wgen past the source's: taken again only after the next write through it)
 }
 // PEANUTS end
-// PEANUTS begin: DM_VK_TEX_STATS: the latest GPU writes into images and into guest memory (copies, fills, updates, shader stores), so that a texture's report can name
-// what the GPU wrote over its storage, live or since dropped (vka_tex_id_storage). Recorded only while the switch is set; caller holds g_tmu
+// PEANUTS begin: DM_VK_TEX_STATS: GPU writes, so that a texture's report can name what the GPU wrote over its storage, live or since dropped (vka_tex_id_storage):
+// ring 0 each image's first GPU write (an image written once and dropped long before the report still shows), ring 1 the latest writes into guest memory (copies, fills,
+// updates, shader stores). Recorded only while the switch is set; caller holds g_tmu
 typedef struct { uint64_t lo, hi, serial, frame; uint32_t kind, fmt, w, h, layers, flags; } wlog_t;   // kind: 0 image, 1 copy, 2 fill, 3 update, 4 shader store
-enum { WLOG_N = 2048 };
-static wlog_t g_wlog[WLOG_N]; static uint32_t g_nwlog;
+enum { WLOG_N = 4096 };
+static wlog_t g_wlog[2][WLOG_N]; static uint32_t g_nwlog[2];
 static void wlog_add(uint32_t kind, uint64_t lo, uint64_t hi, const vka_img *im) {
     if (!vka_texstats_on()) return;
-    wlog_t *l = g_nwlog ? &g_wlog[(g_nwlog - 1) % WLOG_N] : NULL;
-    if (l && l->kind == kind && l->lo == lo && l->hi == hi) { l->frame = vka_frame(); return; }   // the same write again (a target drawn draw after draw)
-    g_wlog[g_nwlog++ % WLOG_N] = (wlog_t){lo, hi, im ? im->serial : 0, vka_frame(), kind, im ? im->d.format : 0, im ? im->w : 0, im ? im->h : 0, im ? im->layers : 0, im ? im->d.flags : 0};
+    int r = kind != 0; wlog_t *l = g_nwlog[r] ? &g_wlog[r][(g_nwlog[r] - 1) % WLOG_N] : NULL;
+    if (l && l->kind == kind && l->lo == lo && l->hi == hi) { l->frame = vka_frame(); return; }   // the same write again (one range updated draw after draw)
+    g_wlog[r][g_nwlog[r]++ % WLOG_N] = (wlog_t){lo, hi, im ? im->serial : 0, vka_frame(), kind, im ? im->d.format : 0, im ? im->w : 0, im ? im->h : 0, im ? im->layers : 0, im ? im->d.flags : 0};
 }
 // PEANUTS end
 void vka_img_written_at(vka_img *im, const char *file, int line) {
@@ -2441,8 +2442,8 @@ void vka_img_written_at(vka_img *im, const char *file, int line) {
     if (!im->gpu_owned && im->m.size >= big_min()) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 64)   // large images: the first GPU write (DM_VK_BIGIMG_MB)
         VLOG("large image serial %llu %ux%u layers %u format %#x (%.1f MiB): first GPU write at frame %llu (%s:%d), sampled by %u draws before, %u other textures over its storage", (unsigned long long)im->serial,
              im->w, im->h, im->layers, im->d.format, im->m.size / 1048576.0, (unsigned long long)vka_frame(), file, line, im->nsamp, im->novl); }
+    if (!im->wgen && im->mem) wlog_add(0, (uint64_t)(uintptr_t)im->mem, (uint64_t)(uintptr_t)im->mem + im->L.size, im);   // PEANUTS: DM_VK_TEX_STATS (vka_tex_id_storage)
     im->gpu_owned = 1; im->wgen = ++g_wgen;   // PEANUTS: wgen (take_src)
-    if (im->mem) wlog_add(0, (uint64_t)(uintptr_t)im->mem, (uint64_t)(uintptr_t)im->mem + im->L.size, im);   // PEANUTS: DM_VK_TEX_STATS (vka_tex_id_storage)
     im->last_fence = vka_fence_last();
     if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_written_locked(im);   // PEANUTS: texture readback: the write, its batch and (from the site's vka_rb_color) a colour target's use are noted, once a companion has asked for a texture
     if (img_wb_kind(im)) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 32)   // which GPU writes a copied-back linear texture takes (the copy-back covers the whole image)
@@ -3407,12 +3408,14 @@ void vka_tex_id_storage(int id, char *b, size_t n) {
                                             (unsigned long long)o->serial, (long long)(a - lo), o->d.format, o->w, o->h, o->layers, o->d.flags, o->gpu_owned); }
     if (!nl && k < n) k += (size_t)snprintf(b + k, n - k, "; no other live image over it");
     static const char *kn[] = {"image", "copy", "fill", "update", "shader store"};
-    int nw = 0; uint32_t e = g_nwlog, s0 = e > WLOG_N ? e - WLOG_N : 0;
-    for (uint32_t i = e; i-- > s0 && k < n;) { const wlog_t *w = &g_wlog[i % WLOG_N]; if (w->lo >= hi || w->hi <= lo) continue;
-        if (nw++ < 6) k += (size_t)snprintf(b + k, n - k, "%s %s %+lld+%#llx frame %llu", nw == 1 ? "; GPU writes over it (newest first):" : ",", kn[w->kind], (long long)(w->lo - lo),
-                                            (unsigned long long)(w->hi - w->lo), (unsigned long long)w->frame);
-        if (nw <= 6 && !w->kind && k < n) k += (size_t)snprintf(b + k, n - k, " (serial %llu format %#x %ux%u layers %u flags %#x)", (unsigned long long)w->serial, w->fmt, w->w, w->h, w->layers, w->flags); }
-    if (!nw && k < n) snprintf(b + k, n - k, "; no GPU write over it in the last %u logged", e - s0);
+    for (int r = 0; r < 2 && k < n; r++) {
+        int nw = 0; uint32_t e = g_nwlog[r], s0 = e > WLOG_N ? e - WLOG_N : 0;
+        for (uint32_t i = e; i-- > s0 && k < n;) { const wlog_t *w = &g_wlog[r][i % WLOG_N]; if (w->lo >= hi || w->hi <= lo) continue;
+            if (nw++ < 6) k += (size_t)snprintf(b + k, n - k, "%s %s %+lld+%#llx frame %llu", nw == 1 ? (r ? "; GPU memory writes over it (newest first):" : "; images first GPU-written over it (newest first):") : ",",
+                                                kn[w->kind], (long long)(w->lo - lo), (unsigned long long)(w->hi - w->lo), (unsigned long long)w->frame);
+            if (nw <= 6 && !w->kind && k < n) k += (size_t)snprintf(b + k, n - k, " (serial %llu format %#x %ux%u layers %u flags %#x)", (unsigned long long)w->serial, w->fmt, w->w, w->h, w->layers, w->flags); }
+        if (!nw && k < n) k += (size_t)snprintf(b + k, n - k, "; %s over it in the last %u logged", r ? "no GPU memory write" : "no image first GPU-written", e - s0);
+    }
     pthread_mutex_unlock(&g_tmu); nvn_pool_use(0);
 }
 // PEANUTS end
