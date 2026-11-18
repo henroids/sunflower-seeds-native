@@ -1158,3 +1158,18 @@ version moves. Device state: see the game's note.
 |---|---|---|---|
 | `dm/gfx/tools/shader_split.py` | 3 | `iga_entries`, `iga_member`, `iga_shaders` and their branch in `scan_file_in`: Alchemy's igArchive version 13 (`IGA\x1a`), whose files are LZMA in 0x8000-byte blocks placed by the archive's small / medium / large block tables; every file is decoded and its whole GLSLC outputs taken. The game's split went from 12 shaders (those in `main`) to 1,945. Checked on all 74,311 files of its 401 archives; the large table (a file over 0x7FFF sectors) follows the same rule and was met on no file. nxnative has an open pull request with a reader of its own (#1077), not used here. Test: `test_split_iga.py`. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
 | `dm/host/hle_audren.c`, `dm/host/tests/t_audren_layout.c`, `dm/host/tests/t_audren_work.c`, `docs/reference/audio.md` | 71 | The host drives up to 4 audio renderers, each with its own state (`ar_t`), PCM blocks, render thread and output; it drove one, and a second `OpenAudioRenderer` logged `[RED] audren: a second renderer` and was never rendered. A hand port of nxnative 18b435ac38 and a334797d12 (MIT) onto this tree's clock pacing, catch-up queue and `DM_AUDREN_WAIT`, which stay, now per renderer. One renderer behaves as before; its log lines now name the renderer (`renderer 0 …`). Tests: the two host tests, built natively with ASan and UBSan, with a case of two renderers open at once. Not run on a device. Upstream candidate: yes (Banana Native 0.3.42 does not have it) | `PEANUTS(upstream-candidate)` on each file's first hunk, `PEANUTS` on the others |
+
+### Round 23, Share build log (2026-11-18)
+
+A failed, stopped or interrupted build could not be reported: Share log sends game runs only, and the import wrote no log at all (issue #124 had none).
+Share build log puts the game's build log, its jobs' step logs and a summary into one `.zip` (`dev.peanuts.build.BuildLogShare`, PEANUTS.md 2026-11-18).
+All logic is in Peanuts' own files; the upstream lines only call it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | Settings › Share log's listener calls `BuildLogUi.shareLog(this, this::shareLog)` (unchanged when no build log is newer than the newest run); one Share build log row after the game page's Share log | `PEANUTS` |
+| `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 2 | The Prepare card gets `BuildLogUi.card` after Check for updates (shown while the job has failed or is paused); the Manage sheet one Share build log button | `PEANUTS` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | `dev.peanuts.build.BuildLogProvider`, `${applicationId}.buildlog`, not exported, read grants only | `PEANUTS begin` / `PEANUTS end` |
+| `android/app/.gitignore` | 1 | `!src/jvmtest/java/dev/peanuts/build/` under the existing marked line: `build/` hid the package's JVM test (`BuildLogJvmTest`) as it hid its sources | `PEANUTS` (the comment above, in the hunk) |
+
+Tests: `dm/tools/tests/test_android_build_log.py`. Upstream candidate: no (it serves Peanuts' build pipeline).

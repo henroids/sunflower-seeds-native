@@ -269,7 +269,7 @@ The app asks for the notification permission at your first build. Without it the
 
 ### What happens if the build is interrupted or the device sleeps?
 
-What is written so far stays. The game's card shows **Build stopped** with **Resume** or **Retry**, and the next build picks up what it can. If the screen going off stops the build on your device, turn on Settings › **Keep the screen on while preparing** and keep the device charging. A build can also pause by itself for heat or battery and then continue.
+What is written so far stays. The game's card shows **Build stopped** with **Resume** or **Retry**, and the next build picks up what it can. If it keeps stopping, send its **Share build log** (see "A build failed, stopped or the app closed during it"). If the screen going off stops the build on your device, turn on Settings › **Keep the screen on while preparing** and keep the device charging. A build can also pause by itself for heat or battery and then continue.
 
 ### It sits at the same percentage for a long time. Is it stuck?
 
@@ -411,6 +411,25 @@ Every run of a game writes a log. To send it:
 - the newest log of any run, including a Graphics self-test: Settings › **Share log**.
 
 After a crash the app's notice has a **Share log** button for that run.
+
+### A build failed, stopped or the app closed during it. What do I send?
+
+**Share build log** puts everything a build of one game left into one `.zip`, small enough to attach to an issue. It is on:
+
+- the game's card on Home while its build is stopped or failed;
+- the Prepare card while its job has failed or is paused, and in its **⋯** menu;
+- hold the game's cover › **Storage** tab › **Share build log**;
+- Settings › **Share log**, which asks whether you want the newest game run or the newest build when a build changed after the last run.
+
+The sheet says how many files the `.zip` holds and how big it is. Tap **Share**, or **Save to a folder** and attach the file from there. It holds:
+
+- the build's own log: what the import and the build did, from which files, with how much memory and space, and how the build ended;
+- each step's log of the game's build, and of a build with mods when there is one;
+- the job file and its test settings (`env.txt`; a value whose name looks like a password or a token is hidden);
+- the app's own messages of the build and of crashes;
+- a summary: the app's version, the device, its memory and free space, the build's state, and how Android ended the app's processes last (to free memory, a crash, or not responding).
+
+It never holds your keys, game files, `.nup` files, saves or packs. Folder paths and game names are in it, as in the game log. Long logs are cut to their first and last part. The app writes a build's own log only since it has **Share build log**: for a build made with an older version, the `.zip` has its step logs and the summary.
 
 ## GPU drivers
 
@@ -692,7 +711,7 @@ For a black screen, try another GPU driver first. On a device whose system drive
 
 Out of storage: the card offers **Free up space** and **Retry**. Free space on the volume the build writes to, then retry. The build picks up what it can.
 
-Out of memory, typically on an 8 GB device: update to 0.1.1 or later, which builds with fewer workers on low-memory devices. A build that Android ended for memory resumes with fewer workers, so tap **Resume**. Close other apps before a large build. If it still fails, build the game on a PC or a Mac, or report it.
+Out of memory, typically on an 8 GB device: update to 0.1.1 or later, which builds with fewer workers on low-memory devices. A build that Android ended for memory resumes with fewer workers, so tap **Resume**. Close other apps before a large build. If it still fails, build the game on a PC or a Mac, or report it with its **Share build log**: its summary says whether Android ended the build for memory.
 
 ### How do I report a bug well?
 
@@ -703,7 +722,8 @@ Open an issue at https://github.com/igawa6/peanuts-native/issues with:
 - the game, its title ID and its update version;
 - the app version and the GPU driver;
 - the Readiness check report (**Copy report**);
-- the log: hold the game's cover › **Storage** › **Share log**, or Settings › **Share log** for the newest log of any game.
+- the log: hold the game's cover › **Storage** › **Share log**, or Settings › **Share log** for the newest log of any game;
+- for a problem with a build (it fails, stops, never finishes, or the app closes during it): the `.zip` of **Share build log** instead, attached as it is.
 
 A screenshot or a short video helps for a wrong picture. Never attach or link game files, keys or firmware.
 

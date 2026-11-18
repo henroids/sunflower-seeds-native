@@ -251,6 +251,7 @@ final class Ondevice {
             update = Ui.button(a, "Check for updates", Ui.Kind.SOFT, v -> Updater.checkNow(a));
             update.setVisibility(View.GONE);
             Ui.add(card, update, 8);
+            dev.peanuts.ui.BuildLogUi.card(a, card, () -> job == null ? null : new String[] {job.titleId(), job.name(), job.state()});   // PEANUTS: Share build log while the job has failed or is paused
             load();
             show();
         }
@@ -739,6 +740,7 @@ final class Ondevice {
             View line = new View(a);
             line.setBackgroundColor(Ui.col(a, R.color.bn_card_stroke));
             Ui.add(box, line, 20, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+            Ui.add(box, Ui.button(a, "Share build log", Ui.Kind.QUIET, v -> { d[0].dismiss(); dev.peanuts.ui.BuildLogUi.share(a, j.titleId(), j.name()); }), 14, Ui.wrap());   // PEANUTS: Share build log
             if (running) Ui.add(box, Ui.small(a, "Pause first to forget or delete."), 14);
             Button f = Ui.button(a, "Forget this job…", Ui.Kind.QUIET, v -> { d[0].dismiss(); forget(); });
             f.setEnabled(!running);
