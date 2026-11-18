@@ -30,6 +30,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;   // PEANUTS: startup shader progress
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -247,6 +248,49 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (lp.leftMargin == l && lp.topMargin == t && lp.rightMargin == r) return;
         lp.leftMargin = l; lp.topMargin = t; lp.rightMargin = r;
         v.requestLayout();
+    }
+
+    // PEANUTS: show the cold pipeline build while the native host waits to start the game.
+    private final Runnable prewarmPoll = this::prewarmTick;
+    private LinearLayout prewarmCover;
+    private ProgressBar prewarmBar;
+    private TextView prewarmText;
+
+    private void prewarmTick() {
+        ui.removeCallbacks(prewarmPoll);
+        long progress = Native.prewarmProgress();
+        if (progress == 0) {
+            if (prewarmCover != null) {
+                rootView.removeView(prewarmCover);
+                prewarmCover = null;
+                prewarmBar = null;
+                prewarmText = null;
+            }
+            return;
+        }
+        if (progress > 0) {
+            int total = (int) (progress >>> 32), done = (int) progress;
+            if (prewarmCover == null) {
+                prewarmCover = new LinearLayout(this);
+                prewarmCover.setOrientation(LinearLayout.VERTICAL);
+                prewarmCover.setGravity(Gravity.CENTER);
+                prewarmCover.setBackgroundColor(0xff101714);
+                prewarmCover.setClickable(true);
+                prewarmText = new TextView(this);
+                prewarmText.setTextColor(Color.WHITE);
+                prewarmText.setTextSize(20);
+                prewarmText.setGravity(Gravity.CENTER);
+                prewarmCover.addView(prewarmText);
+                prewarmBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+                int width = Math.round(280 * getResources().getDisplayMetrics().density);
+                prewarmCover.addView(prewarmBar, new LinearLayout.LayoutParams(width, LinearLayout.LayoutParams.WRAP_CONTENT));
+                rootView.addView(prewarmCover, rootView.indexOfChild(pausedView), new FrameLayout.LayoutParams(-1, -1));
+            }
+            prewarmText.setText("Preparing shaders · " + done + " of " + total);
+            prewarmBar.setMax(total);
+            prewarmBar.setProgress(done);
+        }
+        ui.postDelayed(prewarmPoll, 150);
     }
 
     private boolean overlayOn() { return overlayEnv != null ? overlayEnv : Prefs.overlay(this); }
@@ -869,6 +913,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             // Read once the game has run a while (the host finds the game's limiter after it starts); the in-game panel updates it too
             ui.postDelayed(this::noteOwnRate, 30000);
             hostRunning = true;
+            prewarmTick();   // PEANUTS: startup shader progress
             if ("java".equals(testCrash)) { Native.note("[RED] DM_TEST_CRASH=java: an exception on the main thread in 10 s"); ExitWatch.testCrash(ui); }   // =native: nxlaunch.c
             if (readinessLine != null) Native.note(readinessLine + (triedAnyway ? "; the player chose Try anyway" : ""));   // the readiness check (readinessHold)
             Native.note("[nxlaunch] game: " + game + (nupFd >= 0 ? " (.nup used where it is, descriptor " + nupFd + ")" : Nup.isNup(game) ? " (.nup)" : " (folder)") + ", DM_ROMFS " + romfs
@@ -989,6 +1034,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         started = true;
         controls.setPicture(runStretch, runPictureSize);
         hostSetup();
+        prewarmTick();   // PEANUTS: restore the progress cover after recreation
         // The host is still stopped (the screen that went sent onStop; nothing runs before onStart). It stays paused when it was (the in-game panel's Pause, or a return
         // not yet continued), and is paused when pause-on-return is on, as a return from the background is: the overlay shows whenever the host is paused, a tap continues
         int hostPaused = Native.paused();
