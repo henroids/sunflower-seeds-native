@@ -1427,7 +1427,7 @@ static vka_res g_res[512];   // the NaN scan's own walk (DM_VK_NANSCAN_FS)
 // GPU runs the draw, and Unreal Engine has by then refilled its particle buffers for the next frame (the same game at boost level 3, at 60 fps: particles drawn from the next
 // frame's half-written data put infinite texels in the scene, which its temporal passes spread over the picture; slowed down, the picture was right)
 typedef struct { VkBuffer b; VkDeviceSize off, range; VkFormat f; VkBufferView v; } tbv_ent;
-static tbv_ent g_tbv[512]; static uint64_t g_tbv_gen;
+static tbv_ent g_tbv[512]; static uint64_t g_tbv_gen; static int g_tbv_n;
 static void tbv_destroy(void *v) { vk.vkDestroyBufferView(V.dev, (VkBufferView)(uintptr_t)v, NULL); }
 // PEANUTS begin: a read-only texel buffer over a range a storage texel buffer's stores have written in work that is not done (DM_VK_TBUF_GW, live, default 1; vka_tbuf.h):
 // not the CPU's copy, whose bytes are older than those stores. g_tbuf_disp: a dispatch's bindings are being resolved (vka_dispatch: no pass is open, a copy can be recorded);
@@ -1561,8 +1561,9 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
         return VK_NULL_HANDLE; }
     uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements; if (texel && bytes / texel > mx) bytes = mx * texel;
     if (storage && (r->flags & (DMSH_VK_BF_RW | DMSH_VK_BF_ATOMIC)) && VKA_ENV("DM_VK_TBUF_GW", 1)) vka_tex_gw_tbuf(addr, bytes);   // PEANUTS: the shader may store into it: the CPU does not have those bytes until this submission is done
+    // the views are let go when guest memory is remapped, and when the table is full: MLB The Show 26 fills it a few minutes into a game, and every new view after that was refused
     uint64_t gen = vka_mem_gen();
-    if (gen != g_tbv_gen) { for (int i = 0; i < 512; i++) if (g_tbv[i].v) vka_after(vka_fence_last() + 1, tbv_destroy, (void *)(uintptr_t)g_tbv[i].v);
+    if (gen != g_tbv_gen || g_tbv_n > 448) { g_tbv_n = 0; for (int i = 0; i < 512; i++) if (g_tbv[i].v) vka_after(vka_fence_last() + 1, tbv_destroy, (void *)(uintptr_t)g_tbv[i].v);
         memset(g_tbv, 0, sizeof g_tbv); g_tbv_gen = gen; }
     uint32_t h = (uint32_t)((((uintptr_t)b ^ (o * 0x9e3779b97f4a7c15ull) ^ (bytes << 7) ^ ((uint64_t)f << 40)) * 0x9e3779b97f4a7c15ull) >> 55);
     for (uint32_t n = 0; n < 512; n++, h = (h + 1) & 511) {
@@ -1571,10 +1572,10 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
         if (e->v) continue;
         VkBufferViewCreateInfo ci = {VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO, .buffer = b, .format = f, .offset = o, .range = bytes};
         VkBufferView v = VK_NULL_HANDLE; if (vk.vkCreateBufferView(V.dev, &ci, NULL, &v)) { VRED_ONCE("vkCreateBufferView failed (shader %016llx binding %u)", (unsigned long long)sh->key, r->binding); return VK_NULL_HANDLE; }
-        *e = (tbv_ent){b, o, bytes, f, v};
+        *e = (tbv_ent){b, o, bytes, f, v}; g_tbv_n++;
         return v;
     }
-    VRED_ONCE("more than 512 texel buffer views at once"); return VK_NULL_HANDLE;
+    return VK_NULL_HANDLE;   // (not reached: the table is emptied before it is this full)
 }
 // One stage's results as descriptor writes. 0 = the draw cannot run (logged)
 // PEANUTS begin: resolution scale: the translated shaders' own scale code (Ryujinx's, vka_resscale.inc) reads the support buffer. render_scale[0] divides gl_FragCoord.xy
