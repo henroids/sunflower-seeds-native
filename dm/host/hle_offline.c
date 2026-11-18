@@ -141,9 +141,10 @@ HLE_FORCE("_ZN2nn4nifm18GetCurrentIpConfigEPNS0_10Ipv4ConfigEPiPNS0_10Ipv6Config
           void *v4, int *n4, void *v6, int *n6, int c4, int c6) { (void)v4; (void)v6; (void)c4; (void)c6; if (n4) *n4 = 0; if (n6) *n6 = 0; return RES_FAIL; }
 // EnvironmentIdentifier = char[8]: retail environment "lp1"
 HLE_FORCE("_ZN2nn3nsd24GetEnvironmentIdentifierEPNS0_21EnvironmentIdentifierE", "server environment name: retail lp1", void, h_nsd_EnvId, char *out) { memset(out, 0, 8); memcpy(out, "lp1", 3); }
-// The application server environment of that same retail environment: 0. The SDK asks the nsd:a / nsd:u service itself, which the host does not serve, and aborts when it
-// cannot connect (MLB The Show 26, SDK 19.3.11: Result 0xe8d at sdk+0x3f4cfc, under GetApplicationServerEnvironmentType, as its opening video starts)
-HLE_FORCE("_ZN2nn3nsd35GetApplicationServerEnvironmentTypeEv", "application server environment: retail (0), as lp1", int, h_nsd_AppSrvEnv, void) { return 0; }
+// The server environment type of that same retail environment: 0. nn::oe::GetServerEnvironmentType passes straight on to nn::nsd::GetApplicationServerEnvironmentType,
+// which asks the nsd:a / nsd:u service itself, which the host does not serve, and aborts when it cannot connect (MLB The Show 26, SDK 19.3.11: Result 0xe8d at
+// sdk+0x3f4cfc as its opening video starts). The game imports the oe name, so that is the one to take over
+HLE_FORCE("_ZN2nn2oe24GetServerEnvironmentTypeEv", "server environment type: retail (0), as lp1", int, h_oe_SrvEnv, void) { return 0; }
 
 // ---------- friends: newer SDK overloads ----------
 HLE_FORCE("_ZN2nn7friends12SetAllocatorEPFPvmEPFvS1_mE", "friends library allocator; no session is created, ignored", void, h_fr_SetAlloc, void *a, void *f) { (void)a; (void)f; }
