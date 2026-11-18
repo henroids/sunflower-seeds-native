@@ -7,10 +7,11 @@ import android.os.Bundle;
 
 import java.util.Set;
 
-/** The app's own pages besides Home (Companions, Readiness check, Graphics self-test): the second display keeps Peanuts' page while one is in front */
+/** The second display keeps Peanuts' page while a launcher settings page is in front. */
 public final class AppScreens {
     static final String STATE = "dev.peanuts.APP_PAGE";
-    private static final Set<String> PAGES = Set.of("dev.peanuts.CatalogActivity", "dev.nxnative.android.ReadinessActivity", "dev.nxnative.android.SelftestActivity");
+    private static final Set<String> PAGES = Set.of("dev.peanuts.CatalogActivity", DriverActivity.class.getName(),
+            "dev.nxnative.android.ReadinessActivity", "dev.nxnative.android.SelftestActivity");
 
     private AppScreens() {}
 
