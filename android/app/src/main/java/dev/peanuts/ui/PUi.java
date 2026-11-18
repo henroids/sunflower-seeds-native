@@ -151,7 +151,7 @@ public final class PUi {
             addView(text, fill());
             copy = button(c, "Copy details", Kind.QUIET, v -> {
                 android.content.ClipboardManager cm = c.getSystemService(android.content.ClipboardManager.class);
-                if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Peanuts Native details", text.getText()));   // PEANUTS: rebrand
+                if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Sunflower Seeds Native details", text.getText()));   // PEANUTS: rebrand
                 android.widget.Toast.makeText(c, "Details copied", android.widget.Toast.LENGTH_SHORT).show();
             });
             copy.setPadding(dp(c, 4), 0, dp(c, 4), 0);

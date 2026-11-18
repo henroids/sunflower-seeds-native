@@ -79,7 +79,7 @@ final class CompanionPresentation extends Presentation {
         textRoot.setGravity(Gravity.CENTER_HORIZONTAL);
         textRoot.setPadding(32, 48, 32, 32);
         textRoot.setBackgroundColor(Color.rgb(0x14, 0x12, 0x0c));
-        textRoot.addView(text("Peanuts Native", 30, Color.rgb(0xff, 0xd9, 0x5a), Typeface.DEFAULT_BOLD));
+        textRoot.addView(text("Sunflower Seeds Native", 30, Color.rgb(0xff, 0xd9, 0x5a), Typeface.DEFAULT_BOLD));
         textRoot.addView(text(gameName, 22, Color.WHITE, Typeface.DEFAULT));
         values = text("", 18, Color.LTGRAY, Typeface.MONOSPACE);
         values.setGravity(Gravity.START);
