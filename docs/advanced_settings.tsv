@@ -728,6 +728,7 @@ DM_VK_TEX_MEMO	developer	Memory			text			both
 DM_VK_TEX_PEEK	developer	Diagnostics			text			both						
 DM_VK_TEX_PEEK_FROM	developer	Diagnostics			text			both						
 DM_VK_TEX_PEEK_LINES	developer	Diagnostics			text			both						
+DM_VK_TEX_PEEK_MEM	developer	Diagnostics			text			both						
 DM_VK_TEX_RETYPE	developer	Graphics			text			both						
 DM_VK_TEX_SOFT	advanced	Memory	Soft textures	the game runs out of memory; large textures lose their finest level and look a little softer	toggle	Off=0;On=1	The game's profile decides	game	Textures look slightly softer. Not measured on every game.				lmk-kill;killed;out of memory	
 DM_VK_TEX_SOFT_LEVELS	advanced	Memory	Soft texture levels	the game still runs out of memory with Soft textures on (more levels save more, textures get softer)	choice	1 level=1;2 levels=2;3 levels=3	1 level	game	Textures look softer with more levels.					

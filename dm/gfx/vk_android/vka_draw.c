@@ -1234,6 +1234,12 @@ static int tex_peek_on(uint64_t key) {
     return hit && vka_frame() >= (uint64_t)VKA_ENV("DM_VK_TEX_PEEK_FROM", 0) && atomic_load(&g_tpeek_lines) < VKA_ENV("DM_VK_TEX_PEEK_LINES", 400);
 }
 static int tex_peek_room(void) { return atomic_fetch_add(&g_tpeek_lines, 1) < VKA_ENV("DM_VK_TEX_PEEK_LINES", 400); }
+// PEANUTS: DM_VK_TEX_PEEK_MEM=<hex address> (live): only the bindings and targets whose texture's storage holds that guest address (who reads, draws or stores a texture
+// nothing seems to fill, whatever texture object stands for its storage)
+static int tex_peek_mem(const uint8_t *mem, uint64_t size) {
+    char b[32]; if (!vka_env_str("DM_VK_TEX_PEEK_MEM", b, sizeof b) || !*b) return 1;
+    uintptr_t a = (uintptr_t)strtoull(b, NULL, 16); return mem && a >= (uintptr_t)mem && a < (uintptr_t)mem + size;
+}
 static int tex_peek_new(uint64_t h) {   // a line not logged yet (each binding, texture ID and outcome, each target and range: once a run)
     static _Atomic uint64_t seen[8192]; h |= 1;
     for (uint32_t i = (uint32_t)(h ^ h >> 29) & 8191, n = 0; n < 8192; i = (i + 1) & 8191, n++) {
@@ -1243,7 +1249,8 @@ static int tex_peek_new(uint64_t h) {   // a line not logged yet (each binding, 
     return 0;
 }
 static void tex_peek(uint64_t key, int st, const vka_res *r, VkImageView v, int storage) {
-    if (!tex_peek_on(key) || !tex_peek_new((key * 0x9E3779B97F4A7C15ull) ^ ((uint64_t)r->binding << 48) ^ ((uint64_t)(uint32_t)r->tid << 8) ^ (uint64_t)(v != 0) ^ ((uint64_t)st << 40)) || !tex_peek_room()) return;
+    { const uint8_t *m; uint64_t n; if (!tex_peek_on(key) || !vka_tex_id_span(r->tid, &m, &n) || !tex_peek_mem(m, n)) return; }
+    if (!tex_peek_new((key * 0x9E3779B97F4A7C15ull) ^ ((uint64_t)r->binding << 48) ^ ((uint64_t)(uint32_t)r->tid << 8) ^ (uint64_t)(v != 0) ^ ((uint64_t)st << 40)) || !tex_peek_room()) return;
     char why[400]; vka_tex_id_peek(r->tid, why, sizeof why);
     uint64_t vka_frame(void);
     void vka_samp_peek(int id, char *out, size_t n); char sw[300]; vka_samp_peek(r->sid, sw, sizeof sw);   // PEANUTS: the sampler's wrap modes
@@ -1251,7 +1258,7 @@ static void tex_peek(uint64_t key, int st, const vka_res *r, VkImageView v, int 
          storage ? " (storage)" : "", r->tid, r->sid, sw, v ? "made" : "none", why);
 }
 static void rt_peek(const char *what, int i, const tex_t *t, const vka_img *im, uint32_t lv, uint32_t l0, uint32_t nl) {
-    if (!tex_peek_on(0) || !tex_peek_new((t->serial * 0xC2B2AE3D27D4EB4Full) ^ ((uint64_t)lv << 56) ^ ((uint64_t)l0 << 40) ^ ((uint64_t)nl << 24) ^ (uint64_t)(uint8_t)what[0]) || !tex_peek_room()) return;
+    if (!tex_peek_on(0) || !tex_peek_mem(t->mem, t->L.size) || !tex_peek_new((t->serial * 0xC2B2AE3D27D4EB4Full) ^ ((uint64_t)lv << 56) ^ ((uint64_t)l0 << 40) ^ ((uint64_t)nl << 24) ^ (uint64_t)(uint8_t)what[0]) || !tex_peek_room()) return;
     uint64_t vka_frame(void);
     VLOG("rt peek: frame %llu %s %d: serial %llu target %d format %#x %ux%ux%u levels %u mem %p; drawn level %u layers %u+%u; image serial %llu mem %p %ux%u layers %u levels %u", (unsigned long long)vka_frame(), what, i,
          (unsigned long long)t->serial, t->d.target, t->d.format, t->d.width, t->d.height, t->d.depth, t->d.levels, (void *)t->mem, lv, l0, nl,

@@ -3419,6 +3419,11 @@ void vka_tex_id_storage(int id, char *b, size_t n) {
     pthread_mutex_unlock(&g_tmu); nvn_pool_use(0);
 }
 // PEANUTS end
+int vka_tex_id_span(int id, const uint8_t **mem, uint64_t *size) {   // PEANUTS: texture ID id's guest storage (DM_VK_TEX_PEEK_MEM); 0 = not registered
+    pthread_mutex_lock(&g_tmu);
+    int ok = id > 0 && id < g_ntreg && g_treg[id].t.serial; *mem = ok ? g_treg[id].t.mem : NULL; *size = ok ? g_treg[id].t.L.size : 0;
+    pthread_mutex_unlock(&g_tmu); return ok;
+}
 // DM_VK_TEX_PEEK (vka_draw.c): a texture ID and what it stands for, with the guest storage and the image, to tell which textures share an image
 void vka_tex_id_peek(int id, char *b, size_t n) {
     pthread_mutex_lock(&g_tmu);
