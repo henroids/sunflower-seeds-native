@@ -1532,8 +1532,9 @@ static VkBufferView tbuf_view(const vka_shader *sh, int tid, const vka_res *r, i
         }
     }
     if (run < bytes || (o % al)) {
-        static _Atomic int nm; if (atomic_fetch_add(&nm, 1) < 8) VRED("shader %016llx binding %u: the buffer texture at %#llx (%llu bytes) is %s: it reads as an empty texel buffer", (unsigned long long)sh->key, r->binding,
-            (unsigned long long)addr, (unsigned long long)bytes, run < bytes ? "not in placed guest memory" : "not aligned to the device's texel buffer offset");
+        static _Atomic int nm; if (atomic_fetch_add(&nm, 1) < 8) VRED("shader %016llx binding %u: the buffer texture at %#llx (%llu bytes) is %s: it reads as an empty texel buffer (%s%s, flags %#x, path %d)", (unsigned long long)sh->key, r->binding,
+            (unsigned long long)addr, (unsigned long long)bytes, run < bytes ? "not in placed guest memory" : "not aligned to the device's texel buffer offset",
+            storage ? "storage" : "uniform", writes ? ", written" : "", (unsigned)r->flags, path);
         return VK_NULL_HANDLE; }
     uint64_t mx = (uint64_t)V.props.limits.maxTexelBufferElements; if (texel && bytes / texel > mx) bytes = mx * texel;
     if (storage && (r->flags & (DMSH_VK_BF_RW | DMSH_VK_BF_ATOMIC)) && VKA_ENV("DM_VK_TBUF_GW", 1)) vka_tex_gw_tbuf(addr, bytes);   // PEANUTS: the shader may store into it: the CPU does not have those bytes until this submission is done
