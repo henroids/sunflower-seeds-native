@@ -3505,6 +3505,14 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
                 VLOG("bindings of %016llx: binding %u elem %u what %u desc %u dim %#x flags %#x tid %d sid %d addr %#llx size %#llx %s", (unsigned long long)sh[5]->key, x->binding, x->elem, x->what, x->desc,
                      x->dim, x->flags, x->tid, x->sid, (unsigned long long)x->addr, (unsigned long long)x->size, why); }
     }
+    if (vka_texstats_probe(sh[5]->key)) {   // PEANUTS: DM_VK_TEX_STATS with a compute shader's key: its sampled inputs, described and scanned before the dispatch, as a draw's
+        static vka_img *ims[64]; static int bs[64], ts[64]; int m = 0; uint64_t k = sh[5]->key;
+        for (int i = 0; i < g_wk.n[5] && m < 64; i++) { const vka_res *x = &g_wk.r[5][i]; if (x->what != VKA_R_TEX || !x->tid) continue;
+            ims[m] = vka_tex_id_img(x->tid, g_cb); bs[m] = (int)x->binding; ts[m++] = x->tid;
+            if (vka_texstats_desc_new(k, (int)x->binding, x->tid)) { char why[320], st[1400]; vka_tex_id_desc(x->tid, why, sizeof why); vka_tex_id_storage(x->tid, st, sizeof st);
+                VLOG("tex stats: compute %016llx input binding %u texture ID %d: %s; %s", (unsigned long long)k, x->binding, x->tid, why, st); } }
+        vka_nan_inputs(g_cb, ims, bs, ts, m, k);
+    }
     // A game's NDSR upscaler (agl's neural super resolution: the scene's colour to the upscaler's target): its tensor (HMMA) arithmetic has no Adreno equivalent and runs
     // emulated, 5-7.6 ms of the GPU a frame on an Adreno 840 with Qualcomm's driver and 29-36 with Turnip v32 (Ocarina of Time), more the larger its output. DM_VK_NDSR
     // (live; the launcher's Upscaler setting) picks what runs instead: 0 = the game's network, 1 = a linear stretch of its input onto its output, 2 = FSR 1,
