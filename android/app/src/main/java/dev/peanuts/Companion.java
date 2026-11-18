@@ -45,6 +45,7 @@ public final class Companion {
     /** The game left the foreground (GameActivity.onStop): the companion's window is taken off the second display until {@link #back}. */
     public static void away() {
         away = true;
+        if (screenUp) { screenUp = false; CompanionScreen.close(); Log.i(TAG, "the game left the foreground: the companion's screen is closed until it is back"); }
         if (shown != null) {
             // Hidden, not dismissed: a window made again came back black until the companion drew something new (its page is only sent when it changes)
             try { shown.hide(); } catch (RuntimeException ignored) {}
@@ -64,6 +65,24 @@ public final class Companion {
         if (allowed && listenerDm != null) show(game, decidingGameName, listenerDm);
     }
 
+    /** Whether the built-in display's companion activity (CompanionScreen, Swap screens) should be up now */
+    static boolean screenWanted() { return screenUp && !stopped && !away; }
+    private static boolean screenUp;
+
+    /** CompanionScreen is up: its start made the built-in display the focused one, which would leave the controller with no window (its own never takes the
+     *  focus). The game's activity is started again on its own display: it is singleTask, so that only brings it to the front, and an intent with no title ID
+     *  is a no-op in its onNewIntent. Its display, and the controller, are the game's again. */
+    static void refocusGame() {
+        Activity game = decidingGame;
+        Display d = game != null ? game.getDisplay() : null;
+        if (game == null || d == null || stopped || away || game.isFinishing()) return;
+        try {
+            game.startActivity(new android.content.Intent(game, game.getClass()).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            | android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
+                    android.app.ActivityOptions.makeBasic().setLaunchDisplayId(d.getDisplayId()).toBundle());
+        } catch (RuntimeException e) { Log.w(TAG, "the game's display did not take the focus back: " + e); }
+    }
+
     /** Starts the game hold and, once the host has decided whether a companion loaded, shows it (or leaves the display alone). Keeps trying as displays come and go. */
     public static void start(Activity game, String gameName) {
         if (listener != null) return;
@@ -72,6 +91,7 @@ public final class Companion {
         stopped = false;
         allowed = false;
         away = false;
+        screenUp = false;
         DisplayManager dm = (DisplayManager) game.getSystemService(Activity.DISPLAY_SERVICE);
         listener = new DisplayManager.DisplayListener() {
             @Override public void onDisplayAdded(int id) { if (allowed) show(game, gameName, dm); }
@@ -92,6 +112,7 @@ public final class Companion {
         ui.removeCallbacksAndMessages(null);
         if (held != null) { GameHold.stop(held); held = null; }
         if (shown != null) { try { shown.dismiss(); } catch (RuntimeException ignored) {} shown = null; }
+        screenUp = false; CompanionScreen.close();
         if (listenerDm != null && listener != null) { try { listenerDm.unregisterDisplayListener(listener); } catch (RuntimeException ignored) {} }
         listener = null; listenerDm = null;   // unregistered: the listener holds the game activity, and DisplayManager's listeners outlive it
     }
@@ -122,9 +143,19 @@ public final class Companion {
     }
 
     private static void show(Activity game, String gameName, DisplayManager dm) {
-        if (shown != null || away || game.isFinishing() || game.isDestroyed()) return;   // away: shown again by back()
+        if (shown != null || screenUp || away || game.isFinishing() || game.isDestroyed()) return;   // away: shown again by back()
         Display d = secondDisplay(game, dm);
         if (d == null) { Log.i(TAG, "no second display: companion not shown"); return; }
+        if (d.getDisplayId() == Display.DEFAULT_DISPLAY) {   // Swap screens: Android takes no Presentation there, the page gets an activity (CompanionScreen)
+            try {
+                screenUp = true;
+                game.startActivity(new android.content.Intent(game, CompanionScreen.class).putExtra("name", gameName)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
+                        android.app.ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY).toBundle());
+                Log.i(TAG, "companion on the built-in display (Swap screens)");
+            } catch (RuntimeException e) { screenUp = false; Log.w(TAG, "companion not shown on the built-in display: " + e); }
+            return;
+        }
         try {
             shown = new CompanionPresentation(game, d, gameName);
             shown.show();
@@ -135,14 +166,19 @@ public final class Companion {
         }
     }
 
-    /** The first display that is not the game's own: the Thor lists its Screen-2 only under DISPLAY_CATEGORY_PRESENTATION, an emulator's overlay only in the plain list, so both are read. */
+    /** The first display that is not the game's own: the Thor lists its Screen-2 only under DISPLAY_CATEGORY_PRESENTATION, an emulator's overlay only in the plain list, so both are read.
+     *  With Swap screens on and the game started on another display (dev.peanuts.Screens), the companion takes the built-in, default display. */
     static Display secondDisplay(Activity game, DisplayManager dm) {
         int own = game.getDisplay() != null ? game.getDisplay().getDisplayId() : Display.DEFAULT_DISPLAY;
+        if (own != Display.DEFAULT_DISPLAY && PeanutsPrefs.swapScreens(game)) {
+            Display builtIn = dm.getDisplay(Display.DEFAULT_DISPLAY);
+            return builtIn != null && builtIn.isValid() ? builtIn : null;
+        }
         for (Display d : displays(dm)) if (d.getDisplayId() != own && d.getDisplayId() != Display.DEFAULT_DISPLAY && d.isValid()) return d;
         return null;
     }
 
-    private static java.util.Collection<Display> displays(DisplayManager dm) {
+    static java.util.Collection<Display> displays(DisplayManager dm) {
         Map<Integer, Display> all = new LinkedHashMap<>();
         for (Display d : dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)) all.put(d.getDisplayId(), d);
         for (Display d : dm.getDisplays()) all.put(d.getDisplayId(), d);

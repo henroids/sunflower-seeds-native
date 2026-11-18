@@ -35,7 +35,7 @@ public final class LibrarySettings {
     public static final int REQ_MOD_FOLDER = 69, REQ_MOD_ZIP = 70;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static String fontsState;   // "Reading the firmware…" and what came of it, while the rows show
-    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow;
+    private static PUi.Setting gameRow, updateRow, dlcRow, keysRow, fontsRow, buildRow, companionsRow, hapticsRow, motionRow, swapRow;
     private static Activity rowsOf;
 
     private LibrarySettings() {}
@@ -82,6 +82,16 @@ public final class LibrarySettings {
             refreshRows();
         });
         card.addView(motionRow.view);
+        // Swap screens: only where there is a second display to swap with (dev.peanuts.Screens)
+        swapRow = null;
+        if (dev.peanuts.Companion.hasSecondDisplay(a)) {
+            swapRow = new PUi.Setting(a, "🔃", "Swap screens", v -> {
+                PeanutsPrefs.swapScreens(a, !PeanutsPrefs.swapScreens(a));
+                Haptics.play(v, Haptics.Word.CLICK);
+                refreshRows();
+            });
+            card.addView(swapRow.view);
+        }
         companionsRow = new PUi.Setting(a, "🖥️", "Companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
                 .chevron(a);
         card.addView(companionsRow.view);
@@ -120,6 +130,9 @@ public final class LibrarySettings {
                 : "System: follows Android's touch feedback setting. Tap to turn the app's own haptics off.");
         if (motionRow != null) motionRow.value(PeanutsPrefs.motionReduced(a) ? "Reduced: fades and progress only. Tap to follow the system's animation setting again."
                 : "System: follows Android's animation setting. Tap for reduced motion (fades and progress only).");
+        if (swapRow != null) swapRow.value(PeanutsPrefs.swapScreens(a)
+                ? "On: games start on the other screen, the companion is on this one. Tap to swap back. Takes effect at the next game start."
+                : "Off: games start on this screen, the companion is on the other one. Tap to swap, for a clip-on top screen. Takes effect at the next game start.");
     }
 
     static String keysValue(Activity a) {
