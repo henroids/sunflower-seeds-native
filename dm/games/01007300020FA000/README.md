@@ -17,6 +17,7 @@ Update 1.0.1 (v65536) over the base game. PlatinumGames' engine, SDK 6.4.0, NVN,
 - 82 PKZ archives, version `0x10000`, holding 8,556 Zstandard-compressed entries, alongside Bink 2 movies (`.bk2`) and Wwise banks and streams. The PKZ directory and name-table layout matches version `0x20000`; every entry's bounds were checked and one entry per archive was decoded before extending the reader.
 - `root.pkz` contains PlatinumGames DAT shader archives. The full split finds 1,348 distinct shaders: 540 vertex, 738 pixel, 70 compute. Single-stage programs produce 1,620 cover pairs. All 1,348 compile for Mac and iOS, with zero undecoded bindings and zero unfillable driver-bank reads.
 - GPU code versions in the root shader archives include 1.9, 1.12 and 1.15, despite the linked SDK being 6.4.0. The game sets upper-left window origin, near-zero depth, a 1600×900 swap chain and present interval 2.
+- Android bundles 186 Vulkan pipeline keys recorded on Thor. With Turnip Gen8 V39 and an empty cache, “Preparing shaders” built 163 pipelines in 3.4 seconds. The next launch reused the cache and skipped the progress screen. [Cold startup](../../../docs/reference/rendering.md#a-draw-skipped-for-its-pipeline-left-a-result-the-game-kept-android)
 
 ## Services and SDK
 

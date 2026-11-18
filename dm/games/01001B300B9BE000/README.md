@@ -26,6 +26,7 @@ Experimental display-paced caps offer 20, 30, 40, 45, 60, 90 and 120 fps, with G
 
 ## Shaders
 
+- Android bundles 123 Vulkan pipeline keys recorded on Thor. With Turnip Gen8 V39 and an empty cache, “Preparing shaders” built 104 pipelines in 2.3 seconds. The next launch reused the cache and skipped the progress screen. [Cold startup](../../../docs/reference/rendering.md#a-draw-skipped-for-its-pipeline-left-a-result-the-game-kept-android)
 - **Current:** 1,324 (562 vertex, 762 pixel, no compute), from the zlib streams of the packages: [Diablo III's console packages](../../../docs/reference/shaders.md#diablo-iiis-console-packages). The split reads all 16 GB in 26 s.
 - The packages start `D4 C3 B2 A1` (version 7) and are not CRI's CPK despite the extension. Each file in them is stored or one zlib stream behind `{u32 decoded length, u16 stored length}`; the game's SNO assets (`0xdeadbeef` headers) are such streams, and the shader assets hold each program as a control section (0x850 bytes) directly followed by its code area. The archive's own tables (bit-packed, with 64-bit name hashes) are not read; the reader is at `main+0x76088c` and `main+0x7611b0` in 2.7.7.
 - Each shader is a program of one stage (`#D3@` in `SINGLE_STAGE`): the pairs table pairs every vertex shader with a cover of the pixel shaders' inputs.
