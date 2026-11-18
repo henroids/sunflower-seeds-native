@@ -768,6 +768,7 @@ typedef struct { uint64_t lo, hi, src, seq, fence; uint32_t kind, value; uint8_t
 static gw_t *g_gw; static int g_ngw, g_gwcap; static uint64_t g_gwseq = 1, g_gw_over, g_gw_late;
 static uint64_t g_gw_done;   // PEANUTS: (under g_tmu) vka_done() as the last vka_tex_prepare read it for the done writes it dropped (vka_tex_gw_tbuf_pending)
 static _Atomic int g_gw_tb;   // PEANUTS: the entries of g_gw that are a storage texel buffer's stores (GW_OPAQUE with value 1: vka_tex_gw_tbuf), so vka_tex_gw_tbuf_pending need not look when there is none. Changed under g_tmu
+static void wlog_add(uint32_t kind, uint64_t lo, uint64_t hi, const vka_img *im);   // PEANUTS: DM_VK_TEX_STATS (below)
 static void gw_add(int kind, uint64_t dst, uint64_t n, uint64_t src, uint32_t value, const void *data) {
     if (!n) return;
     vka_tbuf_wrote(dst, n);   // (images of buffer textures over it are copied again at their next use)
@@ -788,6 +789,7 @@ static void gw_add(int kind, uint64_t dst, uint64_t n, uint64_t src, uint32_t va
         }
     uint8_t *cp = NULL; if (kind == GW_UPDATE && (cp = malloc(n))) memcpy(cp, data, n); else if (kind == GW_UPDATE) kind = GW_OPAQUE;
     g_gw[g_ngw++] = (gw_t){dst, dst + n, src, g_gwseq++, 0, (uint32_t)kind, value, cp};
+    wlog_add(kind == GW_COPY ? 1 : kind == GW_FILL ? 2 : kind == GW_UPDATE ? 3 : 4, dst, dst + n, NULL);   // PEANUTS: DM_VK_TEX_STATS (vka_tex_id_storage)
     if (kind == GW_OPAQUE && value) atomic_fetch_add_explicit(&g_gw_tb, 1, memory_order_relaxed);   // PEANUTS: (g_gw_tb)
     pthread_mutex_unlock(&g_tmu);
 }
@@ -2416,6 +2418,18 @@ void vka_tex_id_take(int id, VkCommandBuffer cb) {
     if (n) vka_img_written(im);   // (its wgen past the source's: taken again only after the next write through it)
 }
 // PEANUTS end
+// PEANUTS begin: DM_VK_TEX_STATS: the latest GPU writes into images and into guest memory (copies, fills, updates, shader stores), so that a texture's report can name
+// what the GPU wrote over its storage, live or since dropped (vka_tex_id_storage). Recorded only while the switch is set; caller holds g_tmu
+typedef struct { uint64_t lo, hi, serial, frame; uint32_t kind, fmt, w, h, layers, flags; } wlog_t;   // kind: 0 image, 1 copy, 2 fill, 3 update, 4 shader store
+enum { WLOG_N = 2048 };
+static wlog_t g_wlog[WLOG_N]; static uint32_t g_nwlog;
+static void wlog_add(uint32_t kind, uint64_t lo, uint64_t hi, const vka_img *im) {
+    if (!vka_texstats_on()) return;
+    wlog_t *l = g_nwlog ? &g_wlog[(g_nwlog - 1) % WLOG_N] : NULL;
+    if (l && l->kind == kind && l->lo == lo && l->hi == hi) { l->frame = vka_frame(); return; }   // the same write again (a target drawn draw after draw)
+    g_wlog[g_nwlog++ % WLOG_N] = (wlog_t){lo, hi, im ? im->serial : 0, vka_frame(), kind, im ? im->d.format : 0, im ? im->w : 0, im ? im->h : 0, im ? im->layers : 0, im ? im->d.flags : 0};
+}
+// PEANUTS end
 void vka_img_written_at(vka_img *im, const char *file, int line) {
     if (!im) return;
     if (im->par) vka_img_written_at(im->par, file, line);   // a level child's write is its parent's
@@ -2428,6 +2442,7 @@ void vka_img_written_at(vka_img *im, const char *file, int line) {
         VLOG("large image serial %llu %ux%u layers %u format %#x (%.1f MiB): first GPU write at frame %llu (%s:%d), sampled by %u draws before, %u other textures over its storage", (unsigned long long)im->serial,
              im->w, im->h, im->layers, im->d.format, im->m.size / 1048576.0, (unsigned long long)vka_frame(), file, line, im->nsamp, im->novl); }
     im->gpu_owned = 1; im->wgen = ++g_wgen;   // PEANUTS: wgen (take_src)
+    if (im->mem) wlog_add(0, (uint64_t)(uintptr_t)im->mem, (uint64_t)(uintptr_t)im->mem + im->L.size, im);   // PEANUTS: DM_VK_TEX_STATS (vka_tex_id_storage)
     im->last_fence = vka_fence_last();
     if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_written_locked(im);   // PEANUTS: texture readback: the write, its batch and (from the site's vka_rb_color) a colour target's use are noted, once a companion has asked for a texture
     if (img_wb_kind(im)) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 32)   // which GPU writes a copied-back linear texture takes (the copy-back covers the whole image)
@@ -3377,6 +3392,30 @@ void vka_tex_id_desc(int id, char *b, size_t n) {
              v && v->set_target ? v->target : -1, v && v->set_layers ? v->min_layer : 0, v && v->set_layers ? v->nlayers : 0, v && v->set_format ? v->format : 0,
              im ? "made" : m ? "refused" : "not made", im ? im->w : 0, im ? im->h : 0, im ? im->depth : 0, im ? im->layers : 0, im ? im->usage : 0);
 }
+// PEANUTS begin: DM_VK_TEX_STATS: where texture ID id's storage is, whether it holds data now, the live images over it and the GPU writes logged over it (wlog_add),
+// to tell a texture the CPU or GPU fills where the image never sees it from one that nothing fills
+void vka_tex_id_storage(int id, char *b, size_t n) {
+    nvn_pool_use(1); pthread_mutex_lock(&g_tmu);   // (guest storage is read: no pool is finalized under it)
+    if (id <= 0 || id >= g_ntreg || !g_treg[id].t.serial || !g_treg[id].t.mem) { snprintf(b, n, "no storage"); pthread_mutex_unlock(&g_tmu); nvn_pool_use(0); return; }
+    const tex_t *t = &g_treg[id].t; uint64_t lo = (uint64_t)(uintptr_t)t->mem, hi = lo + t->L.size;
+    int sp = 0, live = !t->pool || nvn_pool_live(t->pool, NULL, &sp);
+    size_t k = (size_t)snprintf(b, n, "storage %p+%#llx, %s", (const void *)t->mem, (unsigned long long)t->L.size,
+                                !live ? "pool finalized" : sp ? "sparse pool" : mem_any_mapped(t->mem, t) ? "holds data" : "all zero");
+    int nl = 0; for (int i = 0; i < g_nlive && k < n; i++) { const vka_img *o = g_live[i]; uint64_t a = (uint64_t)(uintptr_t)o->mem;
+        if (!o->mem || o->serial == t->serial || a >= hi || a + o->L.size <= lo) continue;
+        if (nl++ < 6) k += (size_t)snprintf(b + k, n - k, "%s serial %llu at %+lld format %#x %ux%u layers %u flags %#x gpu_owned %d", nl == 1 ? "; live images over it:" : ",",
+                                            (unsigned long long)o->serial, (long long)(a - lo), o->d.format, o->w, o->h, o->layers, o->d.flags, o->gpu_owned); }
+    if (!nl && k < n) k += (size_t)snprintf(b + k, n - k, "; no other live image over it");
+    static const char *kn[] = {"image", "copy", "fill", "update", "shader store"};
+    int nw = 0; uint32_t e = g_nwlog, s0 = e > WLOG_N ? e - WLOG_N : 0;
+    for (uint32_t i = e; i-- > s0 && k < n;) { const wlog_t *w = &g_wlog[i % WLOG_N]; if (w->lo >= hi || w->hi <= lo) continue;
+        if (nw++ < 6) k += (size_t)snprintf(b + k, n - k, "%s %s %+lld+%#llx frame %llu", nw == 1 ? "; GPU writes over it (newest first):" : ",", kn[w->kind], (long long)(w->lo - lo),
+                                            (unsigned long long)(w->hi - w->lo), (unsigned long long)w->frame);
+        if (nw <= 6 && !w->kind && k < n) k += (size_t)snprintf(b + k, n - k, " (serial %llu format %#x %ux%u layers %u flags %#x)", (unsigned long long)w->serial, w->fmt, w->w, w->h, w->layers, w->flags); }
+    if (!nw && k < n) snprintf(b + k, n - k, "; no GPU write over it in the last %u logged", e - s0);
+    pthread_mutex_unlock(&g_tmu); nvn_pool_use(0);
+}
+// PEANUTS end
 // DM_VK_TEX_PEEK (vka_draw.c): a texture ID and what it stands for, with the guest storage and the image, to tell which textures share an image
 void vka_tex_id_peek(int id, char *b, size_t n) {
     pthread_mutex_lock(&g_tmu);
