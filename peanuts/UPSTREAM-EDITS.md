@@ -1177,3 +1177,7 @@ Added the Peanuts profile and game index entry for `01009720213B0000`. The gener
 ## DAVE THE DIVER 1.0.6.1267
 
 The Peanuts Android profile registers the updated executable, PC-generated shader tables and a Vulkan startup prewarm seed from Thor. The exact build uses the shared `step_ticks_u32` memory operation to scale Unity's fixed timestep to the 20–120 fps caps. The generated tables and binary seed are listed in `upstream-unmarked.txt`. [Game note](../dm/games/010097F018538000/README.md)
+
+## Link's Awakening manual frame rate
+
+`Profile.java`, `GameActivity.java` and `SidePanel.java` share the PEANUTS-marked engine-target policy for explicit frame rate modes. `ProfileOptionsJvmTest.java` covers native, static-plan and dynamic FPSLocker modes. [Game note](../dm/games/01006BB00C6F0000/README.md#android-frame-rate-choices)
