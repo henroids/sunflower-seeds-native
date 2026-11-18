@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sunflower Seeds rebrand overlay: a striped sunflower seed (no game art), tilted 12 degrees, replacing the peanut. Same resource name (ic_banana) so it wins over src/main's; the main screen's drifting background tile (BananaBackgroundView). 108 x 108, inside the 66 dp safe circle. -->
+<!-- Sunflower Seeds rebrand overlay: the sunflower seed (no game art), tilted 12 degrees; its light stripes join a ring inside the edge. Same resource name (ic_banana) so it wins over src/main's. Drawn by the main screen's drifting background (BananaBackgroundView) and, through the ic_banana_happy alias in values/drawables.xml, by the header badge (Ui.badge) and the adaptive icon's foreground. 108 x 108, inside the 66 dp safe circle. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
     <group android:rotation="-12" android:pivotX="54" android:pivotY="54">
         <!-- the shell -->

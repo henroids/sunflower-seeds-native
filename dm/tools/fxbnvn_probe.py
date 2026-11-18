@@ -2,7 +2,7 @@
 # MLB The Show 26 (0100AA7024094000) bring-up: what is inside the game's .fxbnvn shader files, without writing any game data out.
 # The survey found no BNSH / BAHS at the top level; NSW/SHADERS holds 468 files, 456 of them .fxbnvn. This reads them straight from the .nup
 # and prints only structure: sizes, the first 16 header bytes, and where known magics sit (NVN control sections, code area headers, BNSH,
-# compression frames). Nothing it prints is shader code or game content, so the output is safe to share.
+# zstd and lz4 frames; 2-byte zlib headers are left out, as they match by chance in this much data). Nothing it prints is shader code or game content, so the output is safe to share.
 #   ~/peanuts-env/bin/python dm/tools/fxbnvn_probe.py "<Game>.nup" [--ext .fxbnvn] [--detail 3] > probe.txt
 import argparse, collections, re, sys
 from pathlib import Path
@@ -19,8 +19,6 @@ MAGICS = {
     'GLSLC out (0x19866891)': bytes.fromhex('91688619'),
     'zstd frame': bytes.fromhex('28b52ffd'),
     'lz4 frame': bytes.fromhex('04224d18'),
-    'zlib 78da': bytes.fromhex('78da'),
-    'zlib 789c': bytes.fromhex('789c'),
 }
 
 

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sunflower Seeds rebrand: the seed has no face, so the "happy" marks (Ui.badge, ic_launcher_foreground.xml, ic_launcher_monochrome.xml) are the plain
+     seed and its silhouette. Aliases, so each drawing lives in one file. -->
+<resources>
+    <drawable name="ic_banana_happy">@drawable/ic_banana</drawable>
+    <drawable name="ic_banana_happy_mono">@drawable/ic_banana_mono</drawable>
+</resources>
