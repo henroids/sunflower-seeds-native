@@ -20,7 +20,7 @@ Each game start writes a log. To send it:
 
 ## Common problems
 
-- **The game is not on the list or says "Not in this app version":** your app does not include that game. Settings ›
+- **The game is not on the list or says "Not Supported Yet":** your app does not include that game. Settings ›
   **About** lists the games it has.
 - **The card says the version is untested:** your dump is another version than the one the game was tested with. It
   may still work; the app asks before it starts.

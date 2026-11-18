@@ -166,10 +166,10 @@ If the home screen says **No games found in …**, put your files in that folder
 | **Build stopped** | The build failed or was stopped. Its card says why. |
 | **Wrong version** | Your update is not one this app version supports. |
 | **File gone** | A file of this game is no longer where the app found it. |
-| **Not in this app version** | This app version has no profile for the game. |
+| **Not Supported Yet** | This app version has no profile for the game. |
 | A green badge with two bars, bottom right | A companion is installed for this game. |
 
-The filters at the top are **All**, **Building** (only while something builds), **Ready**, **Build needed** and **Not in this app version**. **Wrong version** and **File gone** games are under **Build needed**. **Find** searches by name.
+The filters at the top are **All**, **Building** (only while something builds), **Ready**, **Build needed** and **Not Supported Yet**. **Wrong version** and **File gone** games are under **Build needed**. **Find** searches by name.
 
 ### What does "Wrong version" mean, and how do I fix it?
 
@@ -216,7 +216,7 @@ For a version that is not on the list, the button reads **Build anyway**. It ask
 
 It is a try, not a supported path. If it fails, use the supported update and build again. Do not report bugs for a game built this way without saying so.
 
-### What does "Not in this app version" mean, and what can I do?
+### What does "Not Supported Yet" mean, and what can I do?
 
 Every game needs a profile built into the app. This app version has none for that game, so it cannot be built or played. There is no Build button for it: its sheet only says **This app version does not include … Install a build that includes it.**
 
@@ -228,7 +228,7 @@ How the three labels differ:
 
 | Label | The problem | Can you fix it? |
 |---|---|---|
-| **Not in this app version** | The app has no profile for the game. | No. Only a newer app version can. |
+| **Not Supported Yet** | The app has no profile for the game. | No. Only a newer app version can. |
 | **Wrong version** | The app supports the game, but not the update you have. | Yes: use a supported update, or try **Build anyway**. |
 | **File gone** | The app supports the game, but a file it found is missing now. | Yes: put the file back, or pick it again. |
 

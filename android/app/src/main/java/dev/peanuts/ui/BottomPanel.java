@@ -347,7 +347,7 @@ final class BottomPanel extends Presentation {
         setKey(buildOpen, pad ? "A" : null);
         Context c = getContext();
         int ink = settingsBtn.getCurrentTextColor();
-        Drawable d = pad ? new KeyGlyph(c, "X", ink, PUi.col(c, R.color.bn_bg)) : c.getDrawable(R.drawable.ic_settings).mutate();
+        Drawable d = pad ? BottomScreen.settingsGlyph(c) : c.getDrawable(R.drawable.ic_settings).mutate();
         if (!pad) d.setTint(ink);
         int s = PUi.dp(c, 22);
         d.setBounds(0, 0, s, s);

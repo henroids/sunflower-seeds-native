@@ -25,8 +25,10 @@ class SwapScreens(unittest.TestCase):
         self.assertIn('d.getDisplayId() == activeGameDisplay', bottom)
         self.assertNotIn('applyHeader', bottom)
         main = (JAVA / 'dev/nxnative/android/MainActivity.java').read_text(encoding='utf-8')
-        self.assertIn('ic_settings, "Settings (X)"', main)
-        self.assertIn('"X Settings"', main)
+        self.assertIn('headerAction(this, R.drawable.ic_settings, "Settings"', main)
+        self.assertIn('"Settings (X)", dev.peanuts.ui.BottomScreen.settingsGlyph(this)', main)
+        panel = (JAVA / 'dev/peanuts/ui/BottomPanel.java').read_text(encoding='utf-8')
+        self.assertIn('pad ? BottomScreen.settingsGlyph(c)', panel)
         dispatch = main.split('public boolean dispatchKeyEvent(KeyEvent e)', 1)[1].split('return super.dispatchKeyEvent(e);', 1)[0]
         self.assertIn('KeyEvent.KEYCODE_BUTTON_X && !settingsPage && settingsGame == null && !advancedOpen', dispatch)
         self.assertIn('e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) page(true)', dispatch)

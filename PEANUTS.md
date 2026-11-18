@@ -190,4 +190,4 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   of a game with a companion turns the card into a start page, and the game's process shows the same page (`GameScreen`) until the companion is
   up, also from a shortcut or a frontend; without one the second display is Android's, or the game's cover with Settings › Library ›
   **Games without a companion** (`PeanutsPrefs.bottomScreenInGames`). Seen on the emulator (Android 13, a 1240x1080 and a 1920x1080 second display, hot-plugged both ways):
-  the logo page, Settings by X and back, the cards of a game to build and of one not in this app version, the setting off. Not yet run on the Thor.
+  the logo page, Settings by X and back, the cards of a game to build and of one marked Not Supported Yet, the setting off. Not yet run on the Thor.

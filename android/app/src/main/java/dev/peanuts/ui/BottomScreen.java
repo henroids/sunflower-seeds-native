@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -21,12 +22,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import dev.nxnative.android.R;
 import dev.peanuts.Companion;
 import dev.peanuts.PeanutsPrefs;
 
 /**
  * The launcher on a second display: the focused cover and its actions, else the logo.
- * Shown while MainActivity is started, hidden while a game runs. Home drops its header meanwhile.
+ * Shown while MainActivity is started and hidden while a game runs.
  */
 public final class BottomScreen {
     static final String TAG = "peanuts";
@@ -85,6 +87,10 @@ public final class BottomScreen {
     private static final Set<String> pages = new HashSet<>();  // the app's other pages in front (AppScreens)
 
     private BottomScreen() {}
+
+    public static Drawable settingsGlyph(Context c) {
+        return new BottomPanel.KeyGlyph(c, "X", PUi.col(c, R.color.bn_accent), PUi.col(c, R.color.bn_bg));
+    }
 
     // ---- Hooks ----
 

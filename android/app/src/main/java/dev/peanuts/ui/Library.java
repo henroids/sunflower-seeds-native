@@ -63,8 +63,8 @@ import java.util.function.Predicate;
 
 /**
  * Banana's Home is the library (SPEC.md, SPEC3.md): {@link #fill} is the one call MainActivity.refresh makes for its game box. It lays out the filter row (All ·
- * Building · Ready · Build needed · Not in this app version, Find), then one cover grid (Eden's shape in Banana's clothes: PUi.tile at cell size with the NACP icon,
- * the name under it, the state on the cover, four columns on a handheld), ordered Building → Ready by last played → Build needed A–Z → Not in this app version A–Z,
+ * Building · Ready · Build needed · Not Supported Yet, Find), then one cover grid (Eden's shape in Banana's clothes: PUi.tile at cell size with the NACP icon,
+ * the name under it, the state on the cover, four columns on a handheld), ordered Building → Ready by last played → Build needed A–Z → Not Supported Yet A–Z,
  * no sections. A tap plays a ready game (Banana's launch) or opens the game sheet; a long press (or Y) opens Banana's Manage sheet for a listed game. The Building
  * filter exists only while something runs and holds the full cards: the build card (Ondevice's shape: status, a sentence, the bar, Stop/Retry and a disabled Play)
  * and upstream's progress card (Ondevice); everywhere else the building game is a cover with a progress strip and a "Building · N %" chip that opens that filter.
@@ -258,18 +258,40 @@ public final class Library {
 
     // ---- Screens off (Home's header, left of the Settings gear) ----
 
-    private static android.widget.Button screensOffB;
+    private static View screensOffB;
+
+    /** An icon above its caption in Home's header. The optional key glyph is shown beside the caption. */
+    public static View headerAction(Activity a, int iconRes, String label, String description, Drawable key, View.OnClickListener action) {
+        LinearLayout column = new LinearLayout(a);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
+        ImageView icon = PUi.iconButton(a, iconRes, description, PUi.Kind.TONAL, action);
+        icon.setImageDrawable(PUi.icon(a, iconRes, R.color.bn_accent));
+        column.addView(icon);
+
+        TextView caption = PUi.text(a, label, 10, R.color.bn_accent, 700);
+        caption.setSingleLine(true);
+        caption.setGravity(Gravity.CENTER);
+        caption.setPadding(0, PUi.dp(a, 2), 0, 0);
+        caption.setMinHeight(PUi.dp(a, 24));
+        caption.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        if (key != null) {
+            caption.setCompoundDrawablesRelativeWithIntrinsicBounds(key, null, null, null);
+            caption.setCompoundDrawablePadding(PUi.dp(a, 4));
+        }
+        column.addView(caption, PUi.wrap());
+        return column;
+    }
 
     /**
      * The "Screens off" button of Home's header (MainActivity.buildHome puts it left of the Settings gear): shown only while a build runs or waits. A long build
      * with a card that hardly changes marks an OLED panel, so it turns every screen black until a tap (ScreensOff); render() shows and hides it
      */
     public static View screensOffButton(Activity a) {
-        android.widget.Button b = PUi.button(a, "Screens off", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> ScreensOff.show(a)));
-        b.setContentDescription("Screens off while a build runs");
-        b.setVisibility(View.GONE);
-        screensOffB = b;
-        return b;
+        screensOffB = headerAction(a, R.drawable.ic_screens_off, "Screens off", "Screens off while a build runs", null,
+                Haptics.on(Haptics.Word.CLICK, v -> ScreensOff.show(a)));
+        screensOffB.setVisibility(View.GONE);
+        return screensOffB;
     }
 
     // ---- The hook ----
@@ -805,7 +827,7 @@ public final class Library {
         }
         chip(chipRow, "Ready " + ready, READY);
         chip(chipRow, "Build needed " + toBuild, BUILD);
-        chip(chipRow, "Not in this app version " + noProfile, NO_PROFILE);
+        chip(chipRow, a.getString(R.string.not_supported_yet) + " " + noProfile, NO_PROFILE);
         if (hidden > 0) {
             // Found in review: lets the player see and remove a confirmed-missing (or currently unreachable) game themselves, through upstream's
             // own "Game file gone → Remove" dialog, instead of this code ever deleting the record on its own
@@ -1046,7 +1068,7 @@ public final class Library {
         boolean fileGone = vs == LibraryScanner.VersionState.FILE_GONE, wrongVersion = vs == LibraryScanner.VersionState.UNSUPPORTED;
         String buildWords = fileGone ? "File gone" : wrongVersion ? "Wrong version" : "Build needed";
         CharSequence state = building ? (stopped ? "Build stopped" : PUi.joined("Building", ownBuild ? b.percent + " %" : "preparing"))
-                : st == READY ? "Ready" : st == BUILD ? buildWords : "Not in this app version";
+                : st == READY ? "Ready" : st == BUILD ? buildWords : a.getString(R.string.not_supported_yet);
 
         LinearLayout cell = new LinearLayout(a);
         cell.setOrientation(LinearLayout.VERTICAL);
@@ -1100,7 +1122,7 @@ public final class Library {
             int text = fileGone || wrongVersion ? R.color.bn_danger : R.color.bn_on_banana;
             cover.addView(mark(pill, PUi.col(a, fill), text, false, Gravity.TOP | Gravity.START));
         } else {
-            cover.addView(mark("Not in this app version", PUi.col(a, R.color.bn_danger_tint), R.color.bn_danger, false, Gravity.TOP | Gravity.START));
+            cover.addView(mark(a.getString(R.string.not_supported_yet), PUi.col(a, R.color.bn_danger_tint), R.color.bn_danger, false, Gravity.TOP | Gravity.START));
         }
         if (companion) cover.addView(companionBadge(building && !stopped));
 
@@ -1279,7 +1301,7 @@ public final class Library {
             k.found = found(r.title);
             k.primary = tap; k.primaryLabel = "Build…"; k.primaryIcon = R.drawable.ic_build;   // the sheet, as the tap
         } else {
-            k.kind = BottomScreen.Card.K_NO_PROFILE; k.state = "Not in this app version";
+            k.kind = BottomScreen.Card.K_NO_PROFILE; k.state = a.getString(R.string.not_supported_yet);
             if (r.game != null) { k.second = hold; k.secondLabel = "Game page"; }
         }
         BottomScreen.focus(k, null);

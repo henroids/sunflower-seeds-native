@@ -256,39 +256,20 @@ public final class MainActivity extends Activity {
     /** The player wiki (its pages are written and kept up to date on the project's site, so the app links to it and keeps no copy) */
     static final String WIKI_URL = "https://github.com/igawa6/peanuts-native/blob/main/peanuts/docs/FAQ.md";   // PEANUTS: this fork's questions and answers (upstream: Banana Native's player wiki, which describes that app's screens and games)
 
-    /** Home's header buttons: the wiki, then Settings */
+    // PEANUTS begin: Home header actions share their icon and caption style
     private View headerButtons() {
-        LinearLayout r = Ui.row(this);
-        r.setGravity(android.view.Gravity.TOP);   // the gear lines up with the book, whose label hangs below
-        LinearLayout wiki = new LinearLayout(this);   // the book with a small WIKI under it, so the button says what it opens
-        wiki.setOrientation(LinearLayout.VERTICAL);
-        wiki.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        wiki.addView(Ui.iconButton(this, R.drawable.ic_wiki, "Questions and answers", Ui.Kind.TONAL, v -> openLink(WIKI_URL)));   // PEANUTS: was "Player wiki" (WIKI_URL)
-        TextView label = Ui.text(this, "FAQ", 10, R.color.bn_text_2, 700);   // PEANUTS: was "WIKI" (WIKI_URL)
-        label.setPadding(0, Ui.dp(this, 2), 0, 0);
-        label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);   // the button already says "Player wiki"
-        label.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        label.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        wiki.addView(label, new LinearLayout.LayoutParams(Ui.dp(this, 44), ViewGroup.LayoutParams.WRAP_CONTENT));   // as wide as the book, so the text is centred under it
-        r.addView(wiki);
-        // PEANUTS begin: pair the Settings gear with its Home controller shortcut
-        LinearLayout settings = new LinearLayout(this);
-        settings.setOrientation(LinearLayout.VERTICAL);
-        settings.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        settings.setMinimumWidth(Ui.dp(this, 60));
-        settings.addView(Ui.iconButton(this, R.drawable.ic_settings, "Settings (X)", Ui.Kind.TONAL, v -> page(true)));
-        TextView hint = Ui.text(this, "X Settings", 10, R.color.bn_text_2, 700);
-        hint.setSingleLine(true);
-        hint.setGravity(android.view.Gravity.CENTER);
-        hint.setPadding(0, Ui.dp(this, 2), 0, 0);
-        hint.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        settings.addView(hint, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout row = Ui.row(this);
+        row.setGravity(android.view.Gravity.TOP);
+        row.addView(dev.peanuts.ui.Library.headerAction(this, R.drawable.ic_wiki, "FAQ",
+                "Questions and answers", null, v -> openLink(WIKI_URL)));
+        View settings = dev.peanuts.ui.Library.headerAction(this, R.drawable.ic_settings, "Settings",
+                "Settings (X)", dev.peanuts.ui.BottomScreen.settingsGlyph(this), v -> page(true));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.leftMargin = Ui.dp(this, 10);
-        r.addView(settings, lp);
-        // PEANUTS end
-        return r;
+        lp.setMarginStart(Ui.dp(this, 10));
+        row.addView(settings, lp);
+        return row;
     }
+    // PEANUTS end
 
     private void buildHome(LinearLayout content) {
         overlayRow = null;
@@ -684,7 +665,7 @@ public final class MainActivity extends Activity {
         c.addView(name, np);
         GameMeta.loadControl(new File(g.gameDir), Edition.control(this, g), m -> { if (m.icon != null) Ui.tileIcon(tile, m.icon); });   // with the edition switch on, program 1's icon
         boolean other = Profile.of(g.titleId) == null;   // no profile in this APK: it cannot run here (Profile.missing says why)
-        TextView st = other ? Ui.status(this, "Not in this app version", R.color.bn_danger) : Ui.status(this, "Checking\u2026", R.color.bn_text_2);
+        TextView st = other ? Ui.status(this, getString(R.string.not_supported_yet), R.color.bn_danger) : Ui.status(this, "Checking\u2026", R.color.bn_text_2);   // PEANUTS: shared unsupported-game label
         st.setTextSize(12);
         st.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams sp = Ui.wrap();
@@ -694,7 +675,7 @@ public final class MainActivity extends Activity {
         c.setForeground(Ui.ripple(this, Ui.round(0, dp(20), 0, 0)));   // a pressed state over the tile
         c.setOnLongClickListener(v -> { manage(g); return true; });
         if (other) {   // nothing on this tile can work in this app: the sentence is behind a badge (the page still has its folders, saves and Remove)
-            TextView n = Ui.warnChip(this, "Why?", "Not in this app version", Profile.missing(g.titleId, g.name));
+            TextView n = Ui.warnChip(this, "Why?", getString(R.string.not_supported_yet), Profile.missing(g.titleId, g.name));   // PEANUTS: shared unsupported-game label
             LinearLayout.LayoutParams wl = Ui.wrap();
             wl.topMargin = dp(8);
             c.addView(n, wl);
@@ -1279,7 +1260,7 @@ public final class MainActivity extends Activity {
         if (!ok.isEmpty()) m.append("Added: ").append(TextUtils.join(", ", ok)).append(".");
         if (!prepare.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append("Needs Prepare: ").append(TextUtils.join(", ", prepare))
                 .append(". No pack that fits was found: its card's Prepare makes one on this phone (one game at a time).");
-        if (!unsupported.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append("Not in this app version: ").append(TextUtils.join(", ", unsupported))
+        if (!unsupported.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append(getString(R.string.not_supported_yet)).append(": ").append(TextUtils.join(", ", unsupported))   // PEANUTS: shared unsupported-game label
                 .append(". Install a build that includes them (Settings › About lists the games this one has).");
         if (!noPack.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append("No pack found: ").append(TextUtils.join(", ", noPack))
                 .append(". Add it on its own to pick its pack folder.");
