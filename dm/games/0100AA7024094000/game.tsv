@@ -36,6 +36,13 @@ sys_resource	0x0
 # main sizes its heap as pool − used memory (0xc9400000 = pool − 64 MB); its rewritten modules take 0x5a00000 (90 MB), more than the default 64 MB, so that SetHeapSize failed (ResultLimitReached), nninitStartup aborted with 0x1003 at main+0x5b1b60 (first boot on an AYN Thor, both drivers). 96 MB covers the modules, as Catherine: Full Body's: docs/reference/memory.md#heap-sized-from-the-application-pool-less-used-memory
 mem_used	0x6000000
 
+# ---- Graphics ----
+# Generated faces (create-a-player, every generated player) sample a 16x16 B10G11R11 irradiance cube (flags 0) whose storage is empty at nvnTextureInitialize and that no GPU
+# pass, copy or flush ever fills: the CPU writes it later, and as a zero image it stayed 0. The face shader divides by the cube's luma, so 0/0 rendered the faces black.
+# tex_dirty_upload uploads a registered texture whose pages the CPU wrote after creating it (DM_VK_ZEROLOG, DM_VK_TEX_STATS on cae2f651a34a6bce, 0.2.22)
+tex_flush_upload	on
+tex_dirty_upload	on
+
 # ---- Shader split ----
 shader_groups	/NSW/=nsw /CROSS/=cross /AND/=and /PS4/=ps4 /FLUX/=flux /FRONTEND/=frontend /PS5/=ps5 /BOOT/=boot
 shader_note	MLB The Show 26 shaders
