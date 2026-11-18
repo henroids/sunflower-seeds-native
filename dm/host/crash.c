@@ -73,7 +73,14 @@ void crash_off(const char *tag, uint64_t a) {   // Also used by diag.c
 
     module_t *m = module_of((void *)a);
     Dl_info di;
-    if (m) fprintf(stderr, " %s%s%s+%#llx", tag, *tag ? "=" : "", m->name, a - (uint64_t)m->base);
+    if (m) {
+        uint64_t o = a - (uint64_t)m->base; const Elf64_Sym *f = NULL;
+        fprintf(stderr, " %s%s%s+%#llx", tag, *tag ? "=" : "", m->name, (unsigned long long)o);
+        // the module's own function the address is in (the nearest defined one below it, within 64 KiB): an SDK crash names the call the host does not take over
+        for (unsigned i = 0; i < m->nsym; i++) { const Elf64_Sym *s = &m->symtab[i];
+            if (s->st_shndx && (s->st_info & 0xf) == 2 /* STT_FUNC */ && s->st_value <= o && (!f || s->st_value > f->st_value)) f = s; }
+        if (f && o - f->st_value < 0x10000) fprintf(stderr, " <%s+%#llx>", m->strtab + f->st_name, (unsigned long long)(o - f->st_value));
+    }
     else if (dladdr((void *)a, &di) && di.dli_sname) fprintf(stderr, " %s%s%s+%#lx", tag, *tag ? "=" : "", di.dli_sname, (unsigned long)(a - (uint64_t)di.dli_saddr));
     // PEANUTS(upstream-candidate): general host fix, not Peanuts-specific — prints lib+offset for a stripped (hidden-visibility) build, where dladdr finds no symbol name.
     else if (dladdr((void *)a, &di) && di.dli_fname && di.dli_fbase) {   // a stripped library (the host builds hidden): its file and the offset in it, for a symbolizer on the unstripped build
