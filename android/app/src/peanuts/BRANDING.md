@@ -62,8 +62,9 @@ paths in code. Overriding the `ic_banana` drawable resource (above) is sufficien
 ## Sunflower Seeds rebrand (henroids/sunflower-seeds-native)
 
 This fork renames what the user sees to "Sunflower Seeds Native" and keeps every internal identifier (`-PnxApp=peanuts`, the `dev.peanuts` package,
-`PeanutsPrefs`, resource names, the `/sdcard/Peanut Roms` default) so upstream changes from Peanuts Native still merge.
+`PeanutsPrefs`, resource names, the `peanuts_build.py` / `push-pack.py` names) so upstream changes from Peanuts Native still merge.
 
 - Art: the four `ic_banana*` overlays above now draw a striped sunflower seed, tilted 12 degrees (no screens); the legacy `mipmap-*dpi` PNGs are rendered from the same art on the leaf-green circle.
 - Text: the Java literals listed above that read "Peanuts Native" read "Sunflower Seeds Native"; the About text credits Peanuts Native by igawa6, then Banana Native and nxnative.
+- Device folder: the PC scripts (`peanuts_build.py`, `push-pack.py`) default to `/sdcard/Sunflower Roms`; the app itself has no default and uses the folder picked in Settings › Library.
 - Test app: `.github/workflows/test-apk.yml` builds `dev.nxnative.android.sunflowertest`, labelled "Sunflower Seeds test".
