@@ -2404,8 +2404,9 @@ void vka_tex_id_bc_take(int id, VkCommandBuffer cb) {
         rc[n++] = (VkImageCopy){s, {0, 0, 0}, d, {0, 0, 0}, {sw, sh, 1}};
     }
     im->bc_gen = src->wgen;
-    static _Atomic int nl; if (atomic_fetch_add(&nl, 1) < 8) VLOG("block image: texture serial %llu %ux%u format %#x takes %u levels of the GPU-written blocks of serial %llu %ux%u format %#x over its storage",
+    static _Atomic int nl; if (!im->bc_gen_logged && atomic_fetch_add(&nl, 1) < 96) VLOG("block image: texture serial %llu %ux%u format %#x takes %u levels of the GPU-written blocks of serial %llu %ux%u format %#x over its storage",
         (unsigned long long)im->serial, im->w, im->h, im->d.format, n, (unsigned long long)src->serial, src->w, src->h, src->d.format);
+    im->bc_gen_logged = 1;   // (each texture's first take logged, 96 at most)
     if (n) { vka_barrier(cb); vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, im->img, VK_IMAGE_LAYOUT_GENERAL, n, rc); vka_barrier(cb); }
     pthread_mutex_unlock(&g_tmu);
     if (n) vka_img_written(im);   // (its own wgen: a compressed image is never a block source)
