@@ -271,7 +271,7 @@ typedef struct vka_img {
     uint32_t w, h, depth, layers, levels, samples; uint64_t bytes;
     VkImageCreateFlags cflags; uint32_t nvf; VkFormat vf[6];   // as created: flags and the view format list (none: nvf 0), for imageless framebuffers (DM_VK_CLASSIC_RP)
     int refs, inited, gpu_owned, cpu_dirty;
-    uint64_t wgen, bc_gen;   // PEANUTS: wgen: its last GPU write's number (vka_img_written); bc_gen: a compressed image's, the wgen of the block image it last took (vka_tex.c bc_src)
+    uint64_t wgen, bc_gen; int bc_gen_logged;   // PEANUTS: wgen: its last GPU write's number (vka_img_written); bc_gen: a compressed image's, the wgen of the block image it last took (vka_tex.c bc_src)
     int is_video;
     uint64_t last_frame;
     uint64_t linger;         // PEANUTS: the frame a GPU-drawn image's last texture object was finalized in, kept for one of the same storage and shape (vka_tex.c linger_*); 0 = not lingering
