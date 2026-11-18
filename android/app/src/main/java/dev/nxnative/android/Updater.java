@@ -106,6 +106,7 @@ final class Updater {
     static boolean available(Context c) { return !sources(c).isEmpty(); }
 
     static final String PEANUTS_REPO = "igawa6/peanuts-native";   // PEANUTS: where the Peanuts app's releases are published
+    static final String SUNFLOWER_REPO = "henroids/sunflower-seeds-native";   // PEANUTS: the Sunflower Seeds test app's releases (.github/workflows/test-apk.yml)
 
     /** The sources this app asks, in order: UpdateCheck.SOURCES in the release app, those update.txt names in a test app (none without it) */
     static List<UpdateCheck.Source> sources(Context c) {
@@ -113,6 +114,7 @@ final class Updater {
         java.util.Map<String, String> o = override(c);
         List<UpdateCheck.Source> l = new ArrayList<>();
         if (o.isEmpty() && BuildConfig.APPLICATION_ID.endsWith(".peanuts")) { l.add(UpdateCheck.github(PEANUTS_REPO)); return l; }   // PEANUTS: the Peanuts app's own releases, not Banana Native's
+        if (o.isEmpty() && BuildConfig.APPLICATION_ID.endsWith(".sunflowertest")) { l.add(UpdateCheck.github(SUNFLOWER_REPO)); return l; }   // PEANUTS: the Sunflower Seeds test app's own releases
         if (o.containsKey("repo")) l.add(UpdateCheck.github(o.get("repo")));
         if (o.containsKey("forgejo")) l.add(UpdateCheck.forgejo(o.get("forgejo")));
         if (o.containsKey("url")) {
