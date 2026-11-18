@@ -4,17 +4,18 @@
     <group android:rotation="-12" android:pivotX="54" android:pivotY="54">
         <!-- the shell -->
         <path android:fillColor="#FF2E2B29" android:pathData="M54,16 C67,16 75,26 74,40 C73,58 63,77 54,93 C45,77 35,58 34,40 C33,26 41,16 54,16 Z" />
-        <!-- the stripes, clipped to the shell -->
+        <!-- the light stripes, clipped to the shell: a ring inside the edge (the shell scaled to 0.8) that the inner stripes run into -->
         <group>
             <clip-path android:pathData="M54,16 C67,16 75,26 74,40 C73,58 63,77 54,93 C45,77 35,58 34,40 C33,26 41,16 54,16 Z" />
-            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.8" android:strokeLineCap="round" android:pathData="M54,20 C54,42 54,66 54,90" />
-            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.8" android:strokeLineCap="round" android:pathData="M45.5,22 C40.5,38 42.5,60 51,86" />
-            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.8" android:strokeLineCap="round" android:pathData="M62.5,22 C67.5,38 65.5,60 57,86" />
-            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.4" android:strokeLineCap="round" android:pathData="M38.5,31 C36.5,47 41,64 48,80" />
-            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.4" android:strokeLineCap="round" android:pathData="M69.5,31 C71.5,47 67,64 60,80" />
+            <group android:scaleX="0.8" android:scaleY="0.8" android:pivotX="54" android:pivotY="50">
+                <path android:strokeColor="#FFEDE3CB" android:strokeWidth="3.4" android:strokeLineJoin="round" android:pathData="M54,16 C67,16 75,26 74,40 C73,58 63,77 54,93 C45,77 35,58 34,40 C33,26 41,16 54,16 Z" />
+            </group>
+            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.8" android:strokeLineCap="round" android:pathData="M54,23 C54,44 54,66 54,84" />
+            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.6" android:strokeLineCap="round" android:pathData="M46.5,26 C42.5,40 44,60 52,80" />
+            <path android:strokeColor="#FFEDE3CB" android:strokeWidth="2.6" android:strokeLineCap="round" android:pathData="M61.5,26 C65.5,40 64,60 56,80" />
         </group>
         <!-- the shine -->
-        <path android:fillColor="#2EFFFFFF" android:pathData="M48,22 C43,26 40,32 40,39 C40,42 41,45 42,47 C43,37 46,29 51,23 C50,22 49,22 48,22 Z" />
+        <path android:fillColor="#29FFFFFF" android:pathData="M47,21 C42,24 39,30 38.5,37 C38.5,39 38.8,41 39.3,42.5 C40.5,33 43,26 49,21.5 C48.4,21 47.7,20.8 47,21 Z" />
         <!-- the outline -->
         <path android:fillColor="#00000000" android:strokeColor="#FF1A1816" android:strokeWidth="2" android:strokeLineJoin="round" android:pathData="M54,16 C67,16 75,26 74,40 C73,58 63,77 54,93 C45,77 35,58 34,40 C33,26 41,16 54,16 Z" />
     </group>
