@@ -59,7 +59,7 @@ static int g_suspended;
 // uses it, "AudioOut ... was not created by the host"). A call on an output still opening waits for the open to finish, giving up the guest core meanwhile, as a service call would
 static const void *g_opening[AOMAX]; static pthread_cond_t g_opened = PTHREAD_COND_INITIALIZER;
 static int opening(const void *g) { for (int i = 0; i < AOMAX; i++) if (g_opening[i] == g) return 1; return 0; }
-static aout *ao(const void *g) {
+static aout *ao_find(const void *g) {
     aout *a = objmap_get(g);
     if (!a) {
         dm_host_work++; pthread_mutex_lock(&g_aos_lock);
@@ -67,6 +67,10 @@ static aout *ao(const void *g) {
         pthread_mutex_unlock(&g_aos_lock); dm_host_work--;
         a = objmap_get(g);
     }
+    return a;
+}
+static aout *ao(const void *g) {
+    aout *a = ao_find(g);
     if (!a) die("AudioOut %p was not created by the host", g);
     return a;
 }
@@ -75,6 +79,14 @@ static const char *site(void *lr, char *buf, size_t n) {
     module_t *m = lr ? module_of(lr) : NULL;
     if (m) snprintf(buf, n, "%s+%#llx", m->name, (unsigned long long)((uint8_t *)lr - m->base)); else snprintf(buf, n, "host");
     return buf;
+}
+// A call on an AudioOut no open has named yet: NULL, and the caller answers as for a closed output (stopped, nothing queued or released, calls that change it do nothing).
+// MLB The Show 26: COnline starts its headset thread, which opens the voice-chat output, and calls into that output itself straight after, before the open (0.2.12, both drivers)
+static aout *ao_or_closed(const void *g, const char *what, void *lr) {
+    aout *a = ao_find(g);
+    static _Atomic int n;
+    if (!a && atomic_fetch_add(&n, 1) < 16) { char b[64]; LOG("[RED] audio: %s on AudioOut %p before it was opened (call site %s): answered as a closed output", what, g, site(lr, b, sizeof b)); }
+    return a;
 }
 // Start / Stop / Close: at most 32 lines per output; middleware calls them only at init, suspend and resume, more means it keeps toggling
 static void au_note(aout *a, const char *what, void *lr) {
@@ -651,7 +663,8 @@ static void au_release_pending(aout *a) {
     if (released) { if (a->event) notify_release(a); if (a->rel_sem) plat_sem_signal(a->rel_sem); }
 }
 static void au_stop_at(void *g, void *lr) {   // lr NULL: the stop inside Close, not logged separately
-    aout *a = ao(g);
+    aout *a = lr ? ao_or_closed(g, "Stop", lr) : ao(g);
+    if (!a) return;
     pthread_mutex_lock(&g_aos_lock);
     int was = atomic_exchange_explicit(&a->state, STATE_STOPPED, memory_order_acq_rel);
     if (lr) au_note(a, was == STATE_STARTED ? "Stop" : "Stop (already stopped)", lr);
@@ -661,7 +674,9 @@ static void au_stop_at(void *g, void *lr) {   // lr NULL: the stop inside Close,
 }
 HLE_FORCE_BIG("_ZN2nn5audio12StopAudioOutEPNS0_8AudioOutE", "stop playback", void, h_au_Stop, void *g) { au_stop_at(g, dm_bigstack_caller(__builtin_return_address(0))); }
 static void au_close(void *g, void *lr) {
-    au_note(ao(g), "Close", lr);
+    aout *c = ao_or_closed(g, "Close", lr);
+    if (!c) return;
+    au_note(c, "Close", lr);
     au_stop_at(g, NULL);
     aout *a = objmap_del(g);
     atomic_store_explicit(&a->notify_run, 0, memory_order_release);
@@ -680,22 +695,33 @@ static void au_close(void *g, void *lr) {
     au_info(g, ch, STATE_STOPPED);
 }
 HLE_FORCE_BIG("_ZN2nn5audio13CloseAudioOutEPNS0_8AudioOutE", "close the audio output", void, h_au_Close, void *g) { au_close(g, dm_bigstack_caller(__builtin_return_address(0))); }
-HLE_FORCE("_ZN2nn5audio16GetAudioOutStateEPKNS0_8AudioOutE", "playback state", int, h_au_State, const void *g) { return atomic_load_explicit(&ao(g)->state, memory_order_acquire); }
+HLE_FORCE("_ZN2nn5audio16GetAudioOutStateEPKNS0_8AudioOutE", "playback state", int, h_au_State, const void *g) {
+    aout *a = ao_or_closed(g, "GetAudioOutState", __builtin_return_address(0));
+    return a ? atomic_load_explicit(&a->state, memory_order_acquire) : STATE_STOPPED;
+}
 // Pokémon Legends: Z-A (SDK 19): Wwise's sink wakeup thread (main+0x30faae8) asks after every release event and marks the sink starved at 0; the SDK's own version read the audout session the host never made
 HLE_FORCE("_ZN2nn5audio22GetAudioOutBufferCountEPKNS0_8AudioOutE", "buffers appended and not yet played to the end (the one playing included)", unsigned, h_au_BufCount, const void *g) {
-    aout *a = ao(g);
+    aout *a = ao_or_closed(g, "GetAudioOutBufferCount", __builtin_return_address(0));
+    if (!a) return 0;
     return atomic_load_explicit(&a->q_tail, memory_order_acquire) - atomic_load_explicit(&a->q_head, memory_order_acquire);
 }
-HLE_FORCE("_ZN2nn5audio21GetAudioOutSampleRateEPKNS0_8AudioOutE", "sample rate", int, h_au_Rate, const void *g) { (void)ao(g); return RATE; }
-HLE_FORCE("_ZN2nn5audio23GetAudioOutChannelCountEPKNS0_8AudioOutE", "channel count", int, h_au_Ch, const void *g) { return ao(g)->ch; }
+HLE_FORCE("_ZN2nn5audio21GetAudioOutSampleRateEPKNS0_8AudioOutE", "sample rate", int, h_au_Rate, const void *g) { (void)g; return RATE; }
+HLE_FORCE("_ZN2nn5audio23GetAudioOutChannelCountEPKNS0_8AudioOutE", "channel count", int, h_au_Ch, const void *g) {
+    aout *a = ao_or_closed(g, "GetAudioOutChannelCount", __builtin_return_address(0));
+    return a ? a->ch : 2;
+}
 HLE_FORCE("_ZN2nn5audio15GetAudioOutNameEPKNS0_8AudioOutE", "device name; the host has only the default device", const char *, h_au_Name, const void *g) { (void)g; return "DeviceOut"; }
-HLE_FORCE("_ZN2nn5audio23GetAudioOutSampleFormatEPKNS0_8AudioOutE", "sample format; PCM16 only", int, h_au_Fmt, const void *g) { (void)ao(g); return FMT_PCM16; }
+HLE_FORCE("_ZN2nn5audio23GetAudioOutSampleFormatEPKNS0_8AudioOutE", "sample format; PCM16 only", int, h_au_Fmt, const void *g) { (void)g; return FMT_PCM16; }
 // STEINS;GATE RE:BOOT (SDK 20) sets its movie sound's output volume right after opening it; the SDK's versions call the audout session the host never made (a null read at sdk+0x1f2314)
 HLE_FORCE("_ZN2nn5audio17SetAudioOutVolumeEPNS0_8AudioOutEf", "output volume; a gain on the samples the host plays", void, h_au_SetVol, void *g, float v) {
-    if (!(v >= 0.f)) v = 0.f; uint32_t b; memcpy(&b, &v, 4); atomic_store_explicit(&ao(g)->vol, b, memory_order_relaxed);
+    aout *a = ao_or_closed(g, "SetAudioOutVolume", __builtin_return_address(0));
+    if (!a) return;
+    if (!(v >= 0.f)) v = 0.f; uint32_t b; memcpy(&b, &v, 4); atomic_store_explicit(&a->vol, b, memory_order_relaxed);
 }
 HLE_FORCE("_ZN2nn5audio17GetAudioOutVolumeEPKNS0_8AudioOutE", "output volume", float, h_au_GetVol, const void *g) {
-    uint32_t b = atomic_load_explicit(&ao(g)->vol, memory_order_relaxed); float v; memcpy(&v, &b, 4); return v;
+    aout *a = ao_or_closed(g, "GetAudioOutVolume", __builtin_return_address(0));
+    if (!a) return 1.f;
+    uint32_t b = atomic_load_explicit(&a->vol, memory_order_relaxed); float v; memcpy(&v, &b, 4); return v;
 }
 
 HLE_FORCE("_ZN2nn5audio21SetAudioOutBufferInfoEPNS0_14AudioOutBufferEPvmm", "buffer description; written into the first 24 bytes of the guest struct", void, h_au_SetBuf, gbuf *b, void *p, uint64_t cap, uint64_t size) {
@@ -704,7 +730,8 @@ HLE_FORCE("_ZN2nn5audio21SetAudioOutBufferInfoEPNS0_14AudioOutBufferEPvmm", "buf
 HLE_FORCE("_ZN2nn5audio28GetAudioOutBufferDataPointerEPKNS0_14AudioOutBufferE", "buffer data pointer", void *, h_au_BufPtr, const gbuf *b) { return b->ptr; }
 HLE_FORCE("_ZN2nn5audio25GetAudioOutBufferDataSizeEPKNS0_14AudioOutBufferE", "buffer data size", uint64_t, h_au_BufSize, const gbuf *b) { return b->size; }
 HLE_FORCE("_ZN2nn5audio20AppendAudioOutBufferEPNS0_8AudioOutEPNS0_14AudioOutBufferE", "append a buffer to play", unsigned, h_au_Append, void *g, gbuf *b) {
-    aout *a = ao(g);
+    aout *a = ao_or_closed(g, "AppendAudioOutBuffer", __builtin_return_address(0));
+    if (!a) return 0;
     // Diagnostic switch DM_AUDIO_DUMP=<file>: every PCM block the game appends is written out as is (16-bit, 48 kHz, channel count per the OpenAudioOut log, usually 6). Used to judge "did a given sound play or not":
     // cross-correlate the original game's audio against it (this is how the tier-one drop sound was verified). The file is opened only when the variable is set; when unset this costs only one extra cached check
     { static FILE *df; static int on = -1; if (on < 0) { const char *e = getenv("DM_AUDIO_DUMP"); on = e != NULL; if (on && !(df = fopen(e, "wb"))) LOG("[RED] DM_AUDIO_DUMP cannot open %s", e); }
@@ -718,7 +745,8 @@ HLE_FORCE("_ZN2nn5audio20AppendAudioOutBufferEPNS0_8AudioOutEPNS0_14AudioOutBuff
     return ok;      // bool: false when the queue is full (the real device has a limit too)
 }
 HLE_FORCE("_ZN2nn5audio25GetReleasedAudioOutBufferEPNS0_8AudioOutE", "get a played buffer; NULL if none", gbuf *, h_au_Released, void *g) {
-    aout *a = ao(g); gbuf *b = NULL;
+    aout *a = ao_or_closed(g, "GetReleasedAudioOutBuffer", __builtin_return_address(0)); gbuf *b = NULL;
+    if (!a) return NULL;
     pthread_mutex_lock(&a->m);
     uint32_t rr = atomic_load_explicit(&a->rel_head, memory_order_relaxed);
     uint32_t rw = atomic_load_explicit(&a->rel_tail, memory_order_acquire);
