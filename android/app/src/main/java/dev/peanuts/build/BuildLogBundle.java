@@ -45,16 +45,17 @@ public final class BuildLogBundle {
     /** Bundles older than this are deleted when a new one is made, and never more than {@link #KEEP} are kept */
     public static final long MAX_AGE = 24L * 3600 * 1000;
     public static final int KEEP = 5;
-    private static final Pattern NAME = Pattern.compile("build-log-[0-9A-F]{16}-[0-9]{8}-[0-9]{6}\\.zip");
+    private static final Pattern NAME = Pattern.compile("build-log-[0-9A-F]{16}-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{32})?\\.zip");
     private static final Pattern SECRET = Pattern.compile(".*(KEY|TOKEN|SECRET|PASS|AUTH|COOKIE|CREDENTIAL).*");
 
     private BuildLogBundle() {}
 
     // ---- Names ----
 
-    /** build-log-&lt;title ID&gt;-&lt;yyyyMMdd-HHmmss&gt;.zip */
+    /** The timestamp is readable and each export gets its own file. */
     public static String zipName(String titleId, long time) {
-        return "build-log-" + BuildLog.title(titleId) + "-" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date(time)) + ".zip";
+        String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date(time));
+        return "build-log-" + BuildLog.title(titleId) + "-" + stamp + "-" + java.util.UUID.randomUUID().toString().replace("-", "") + ".zip";
     }
 
     /** Whether a name is one {@link #zipName} makes: no folder, no other file of the app's storage */
@@ -228,7 +229,9 @@ public final class BuildLogBundle {
             this.total = total;
             File d = out.getAbsoluteFile().getParentFile();
             if (d != null && !d.isDirectory() && !d.mkdirs()) throw new IOException("cannot make " + d);
-            z = new ZipOutputStream(new FileOutputStream(part));
+            if (!part.createNewFile()) throw new IOException("another export is writing " + out.getName());
+            try { z = new ZipOutputStream(new FileOutputStream(part)); }
+            catch (IOException | RuntimeException e) { part.delete(); throw e; }
             z.setLevel(9);
         }
 
@@ -310,9 +313,9 @@ public final class BuildLogBundle {
         /** Closes the zip and gives it its name; the zip */
         public File finish() throws IOException {
             z.close();
-            done = true;
-            if (out.exists() && !out.delete()) throw new IOException("cannot replace " + out);
+            if (out.exists()) throw new IOException("a bundle already exists: " + out);
             if (!part.renameTo(out)) throw new IOException("cannot name " + out);
+            done = true;
             return out;
         }
 

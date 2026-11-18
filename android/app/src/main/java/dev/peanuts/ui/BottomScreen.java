@@ -68,6 +68,7 @@ public final class BottomScreen {
     }
 
     private static Activity owner;          // the MainActivity
+    private static int activeGameDisplay = Display.INVALID_DISPLAY;
     private static BottomPanel panel;
     private static DisplayManager dm;
     private static DisplayManager.DisplayListener displays;
@@ -255,9 +256,14 @@ public final class BottomScreen {
     /** From the game's process (Companion.tell) */
     private static final BroadcastReceiver companionState = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) {
+            String state = i.getStringExtra("state");
+            int previous = activeGameDisplay;
+            activeGameDisplay = "stopped".equals(state) || "away".equals(state)
+                    ? Display.INVALID_DISPLAY : i.getIntExtra("game_display", Display.INVALID_DISPLAY);
+            if (previous != activeGameDisplay) show();
             Launch l = launch;
             if (l == null) return;
-            l.said = i.getStringExtra("state");
+            l.said = state;
             if (!started) handOff();
         }
     };
@@ -270,6 +276,7 @@ public final class BottomScreen {
         UI.removeCallbacks(leaveLater);
         Display d = panel != null && panel.getDisplay() != null && panel.getDisplay().isValid() ? panel.getDisplay() : secondDisplay(a);
         if (d == null) { hide(); return; }
+        if (d.getDisplayId() == activeGameDisplay) { hide(); return; }
         if (panel != null && (panel.getDisplay() == null || panel.getDisplay().getDisplayId() != d.getDisplayId())) { dismiss(); }
         boolean was = showing();
         if (panel == null) {
@@ -319,7 +326,8 @@ public final class BottomScreen {
     private static void applyHeader() {
         View h = header;
         if (h == null) return;
-        int want = showing() ? View.GONE : View.VISIBLE;
+        Display d = panel == null ? null : panel.getDisplay();
+        int want = showing() && d != null && on(d) ? View.GONE : View.VISIBLE;
         if (h.getVisibility() != want) h.setVisibility(want);
     }
 
@@ -403,6 +411,7 @@ public final class BottomScreen {
                 if (d == null || d.getDisplayId() != id) return;
                 if (!panel.fits()) { dismiss(); show(); return; }
                 if (showing()) panel.setActive(on(d));   // the screen turned off or on
+                applyHeader();
             }
         };
         dm.registerDisplayListener(displays, UI);

@@ -47,7 +47,7 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      rail entry, a choice dialog's list and confirm button, the page's and a tab's entrance, Play. Additive only; `peanuts/UPSTREAM-EDITS.md` Round 7.
    - `android/app/src/main/java/dev/nxnative/android/Overlay.java` — (2026-11-17, SoC temperature) one `ITEMS` row (`soc`) and three lines in `tick()`: the flag, the `&& !soc` in the early return, and one call into `dev.peanuts.overlay.SocTemp.append(s)` (the line; `SocZones` reads `/sys/class/thermal`). Additive only. (2026-11-17, label / value table) two more `ITEMS` rows (`graph`, `driver`), `&& !dev.peanuts.overlay.Hud.extra(ctx)` in the early return, and `return dev.peanuts.overlay.Hud.table(...)` in place of `return s;` (Hud hands `s` back when the style is "classic").
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` (`overlayItems()`), `SidePanel.java` (the Overlay section) — (2026-11-17) one line each right after `Overlay.rows(...)`: `dev.peanuts.overlay.HudSettings.rows(<ctx>, box);` (the Style and Preset choices).
-   - Share build log (2026-11-18, `dev.peanuts.ui.BuildLogUi`, `peanuts/UPSTREAM-EDITS.md` Round 23): `MainActivity.java` Settings › Share log's listener is
+   - Share build log (2026-11-18, `dev.peanuts.ui.BuildLogUi`, `peanuts/UPSTREAM-EDITS.md` Round 24): `MainActivity.java` Settings › Share log's listener is
      `dev.peanuts.ui.BuildLogUi.shareLog(this, this::shareLog)` (the newest build instead, when a build log changed after the newest run), and one row after the
      game page's Share log; `ondevice/.../Ondevice.java` one line in the Panel's constructor after the Check for updates button (`BuildLogUi.card`: the
      button shows while the job has failed or is paused) and one button line in `manage()`.
@@ -152,8 +152,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - 2026-11-17 (side panel polish): overlay Preset / Style / Position / Size are four compact rows (value in the accent colour, a tap opens a single-choice dialog; the item switches show only for Custom) in `HudSettings`; `dev.peanuts.ui.PanelPolish` restyles a tab after `SidePanel.look()`: radio groups of up to 4 options with labels up to 12 chars become segmented controls, `head()` headings (bold, no side padding, top gap), `note()` texts (light grey 12 sp) and all-caps Buttons get one look each; views are tagged, so it is idempotent.
 
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` (`startWithDriver`), `FrontendLaunch.java` — (2026-11-18, Swap screens, GitHub issue #131)
-     the game's `startActivity` takes the options of `dev.peanuts.Screens.gameStart(...)`: with Settings › Library › Swap screens on and another display present, the
-     game starts there; null otherwise, the start as before. A game on another display (so also the app started there) leaves the built-in display to its
+     `dev.peanuts.Screens.startGame(...)` starts the game on the external display when Swap screens is on. It falls back to the current display if the external one is unavailable. A game on another display (so also the app started there) leaves the built-in display to its
      companion (`CompanionScreen`, an activity: Android takes no Presentation on the default display). `AndroidManifest.xml`: the `CompanionScreen` activity (process `:game`). `peanuts/UPSTREAM-EDITS.md` Round 23.
 - 2026-11-18 (Share build log, issue #124's "no log attached"): one `.zip` per game with everything its build left. `dev.peanuts.build.BuildLog` is the
   game's own build log, `<app files>/build-logs/<title ID>.log` (to `.1.log` at 2 MB), which `BuildService`, `ModBuildService` and `Prepare` write as

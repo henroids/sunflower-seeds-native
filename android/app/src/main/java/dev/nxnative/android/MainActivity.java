@@ -1533,7 +1533,7 @@ public final class MainActivity extends Activity {
         // PEANUTS end
         dev.peanuts.ctl.Ctl.started(listId, g.gameDir, g.packDir);   // PEANUTS: a control command's Play learns that the game was started, and with which pack
         dev.peanuts.GameReturn.remember(this, listId, g.name, g.gameDir, g.packDir);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
-        startActivity(intent, dev.peanuts.Screens.gameStart(this, intent));   // PEANUTS: Swap screens starts the game on the other display (dev.peanuts.Screens, #131)
+        dev.peanuts.Screens.startGame(this, intent);   // PEANUTS: Swap screens falls back to the current display if Android refuses the other one (#131)
     }
 
     /** The overlay's master switch and its items (Overlay.rows); the main screen's switch follows the master switch */

@@ -128,6 +128,8 @@ public final class GitHubTextJvmTest {
         eq("1.0.0", CompanionNotes.gameVersion("Persona 3 Portable (0100DCD01525A000), base game 1.0.0.\n\nThree fixes after 1.0.0."));
         eq("Brilliant Diamond has its own package.", CompanionNotes.body("Install over 1.0.1: in Eden Duo, long-press the game → **Add-ons** → **Install**, and pick this file "
                 + "(don't rename it). Requires Eden Duo 1.2.1 or newer. Brilliant Diamond has its own package."));
+        String changelog = "- Fixes a display regression shared with Eden Duo.\n- Improves frame pacing.";
+        eq(changelog, CompanionNotes.body(changelog));
         eq("", CompanionNotes.gameVersion("Encounter tables and battle icons are now read from your game files."));
         eq("Encounter tables and battle icons are now read from your game files.", CompanionNotes.body("Encounter tables and battle icons are now read from your game files."));
         eq("", CompanionNotes.body(null));

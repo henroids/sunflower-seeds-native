@@ -49,6 +49,13 @@ class Wiring(unittest.TestCase):
         self.assertEqual(re.findall(r'\bload\(', page).count('load('), 2, 'load() is defined once and called once')
         self.assertIn('if (r == null || System.currentTimeMillis() - r.at > CACHE_MS) { load(repo);', page)
 
+    def test_file_and_download_share_one_install_guard(self):
+        page = (UI / 'DriverActivity.java').read_text(encoding='utf-8')
+        for signature in ('private void installFile(', 'private void download('):
+            method = page[page.index(signature):]
+            self.assertRegex(method, r'\{\s*if \(installing\) return;\s*installing = true;')
+        self.assertEqual(page.count('installFinished();'), 2)
+
 
 if __name__ == '__main__':
     unittest.main()

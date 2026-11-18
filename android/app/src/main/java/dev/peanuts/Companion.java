@@ -51,7 +51,11 @@ public final class Companion {
 
     private static void tell(android.content.Context c, String state) {
         if (c == null) return;
-        try { c.sendBroadcast(new android.content.Intent(STATE).setPackage(c.getPackageName()).putExtra("state", state)); } catch (RuntimeException ignored) {}
+        Display d = c instanceof Activity ? ((Activity) c).getDisplay() : null;
+        try {
+            c.sendBroadcast(new android.content.Intent(STATE).setPackage(c.getPackageName()).putExtra("state", state)
+                    .putExtra("game_display", d == null ? Display.INVALID_DISPLAY : d.getDisplayId()));
+        } catch (RuntimeException ignored) {}
     }
 
     /** Until decide(): the start page if a companion is installed, the game's cover if Settings keep one, else nothing */
@@ -79,7 +83,10 @@ public final class Companion {
 
     private static void openPage(Activity game) {
         if (wanted < 0 || listenerDm == null) return;
-        GameScreen.open(game, secondDisplay(game, listenerDm), titleId(game), decidingGameName, wanted);
+        Display d = secondDisplay(game, listenerDm);
+        // The built-in display only accepts an activity, which opens when the companion is ready.
+        if (d != null && d.getDisplayId() != Display.DEFAULT_DISPLAY)
+            GameScreen.open(game, d, titleId(game), decidingGameName, wanted);
     }
 
     /** What is really on the second display now; nothing: {@code otherwise} */
@@ -93,6 +100,7 @@ public final class Companion {
     /** The game left the foreground (GameActivity.onStop): the companion's window is taken off the second display until {@link #back}. */
     public static void away() {
         away = true;
+        tell(decidingGame, "away");
         if (screenUp) { screenUp = false; CompanionScreen.close(); Log.i(TAG, "the game left the foreground: the companion's screen is closed until it is back"); }
         GameScreen.away();
         if (shown != null) {
@@ -108,6 +116,7 @@ public final class Companion {
         if (!away) return;
         away = false;
         if (stopped) return;
+        tellPage(game, "free");
         if (wanted >= 0) { if (GameScreen.mode() < 0) openPage(game); else GameScreen.back(); }
         if (shown != null) {
             try { shown.show(); try { Bridge.present(true); } catch (UnsatisfiedLinkError ignored) {} return; } catch (RuntimeException e) { Log.w(TAG, "companion not shown again: " + e); shown = null; }   // its display went away meanwhile
@@ -212,7 +221,14 @@ public final class Companion {
                                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
                         android.app.ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY).toBundle());
                 Log.i(TAG, "companion on the built-in display (the game is on another one)");
-            } catch (RuntimeException e) { screenUp = false; Log.w(TAG, "companion not shown on the built-in display: " + e); }
+                wanted = -1;
+                GameScreen.close();
+                tell(game, "shown");
+            } catch (RuntimeException e) {
+                screenUp = false;
+                Log.w(TAG, "companion not shown on the built-in display: " + e);
+                settle(game);
+            }
             return;
         }
         try {

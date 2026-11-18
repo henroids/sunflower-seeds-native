@@ -8,15 +8,22 @@ JAVA = ROOT / 'android/app/src/main/java'
 
 
 class SwapScreens(unittest.TestCase):
-    def test_both_game_starts_take_the_screens_options(self):
+    def test_both_game_starts_use_the_same_fallback(self):
         for f in ('dev/nxnative/android/MainActivity.java', 'dev/nxnative/android/FrontendLaunch.java'):
             src = (JAVA / f).read_text(encoding='utf-8')
-            self.assertRegex(src, r'startActivity\((\w+), dev\.peanuts\.Screens\.gameStart\(this, \1\)\);\s+// PEANUTS:', f)
+            self.assertRegex(src, r'dev\.peanuts\.Screens\.startGame\(this, \w+\);\s+// PEANUTS:', f)
 
     def test_off_means_the_start_as_before(self):
         src = (JAVA / 'dev/peanuts/Screens.java').read_text(encoding='utf-8')
-        body = src[src.index('public static Bundle gameStart'):]
-        self.assertLess(body.index('if (!PeanutsPrefs.swapScreens(c)) return null;'), body.index('setLaunchDisplayId'))
+        body = src[src.index('public static void startGame'):]
+        self.assertLess(body.index('PeanutsPrefs.swapScreens(launcher) ? external(launcher) : null'), body.index('setLaunchDisplayId'))
+        self.assertLess(body.index('manager.isActivityStartAllowedOnDisplay'), body.index('setLaunchDisplayId'))
+        self.assertLess(body.index('catch (SecurityException | IllegalArgumentException e)'), body.index('launcher.startActivity(intent);'))
+
+    def test_launcher_panel_yields_to_an_external_game_and_keeps_settings_when_display_is_off(self):
+        bottom = (JAVA / 'dev/peanuts/ui/BottomScreen.java').read_text(encoding='utf-8')
+        self.assertIn('d.getDisplayId() == activeGameDisplay', bottom)
+        self.assertIn('d != null && on(d) ? View.GONE : View.VISIBLE', bottom)
 
     def test_companion_takes_the_display_the_game_is_not_on(self):
         src = (JAVA / 'dev/peanuts/Companion.java').read_text(encoding='utf-8')

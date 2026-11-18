@@ -85,6 +85,9 @@ public final class DriverActivity extends Activity {
     /** A source's releases as last read (this process): kept a few minutes, so going back and forth reads GitHub once */
     private static final class Read { final long at = System.currentTimeMillis(); List<Release> releases; String error; }
     private static final Map<String, Read> READ = new HashMap<>();
+    // Both entry points and recreated pages share the same main-thread install guard.
+    private static boolean installing;
+    private static DriverActivity visiblePage;
 
     /** A file being installed or done: its progress, then its result */
     private static final class Job { final String url; volatile long done, total; boolean finished; String result; boolean failed; Job(String url) { this.url = url; } }
@@ -97,7 +100,7 @@ public final class DriverActivity extends Activity {
     private ProgressBar jobBar;
     private TextView jobText;
     private String fileResult;   // the last install from a file, on the main page
-    private boolean fileFailed, fileBusy;
+    private boolean fileFailed;
     private String focusSource;   // the source row to focus when its page closes
     private final java.util.Set<String> openNotes = new java.util.HashSet<>();   // the releases whose notes are open (source, title)
 
@@ -116,7 +119,22 @@ public final class DriverActivity extends Activity {
             m.setAccessible(true);
             m.invoke(null, getWindow());
         } catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "focus frame: " + e); }
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        visiblePage = this;
         render();
+    }
+
+    @Override protected void onStop() {
+        if (visiblePage == this) visiblePage = null;
+        super.onStop();
+    }
+
+    private static void installFinished() {
+        installing = false;
+        if (visiblePage != null && !visiblePage.isFinishing()) visiblePage.render();
     }
 
     @Override public void onBackPressed() {
@@ -176,14 +194,14 @@ public final class DriverActivity extends Activity {
         for (File z : zips) {
             LinearLayout r = row(z.getName(), "In the app's driver folder.", null);
             Button b = PUi.button(this, "Install", PUi.Kind.TONAL, v -> installFile(z.getName(), () -> DriverPort.install(this, z)));
-            b.setEnabled(!fileBusy);
+            b.setEnabled(!installing);
             r.addView(b);
             files.addView(r);
         }
         LinearLayout pick = row("Pick a zip file", "A driver zip with its meta.json, from anywhere on the phone.", v -> pickZip());
         pick.addView(chevron());
         files.addView(pick);
-        if (fileBusy) {
+        if (installing) {
             ProgressBar bar = PUi.progress(this);
             bar.setIndeterminate(true);
             PUi.add(content, bar, 12);
@@ -218,20 +236,24 @@ public final class DriverActivity extends Activity {
     }
 
     private void pick(DriverPort.Driver d) {
+        if (installing) return;
         try { DriverPort.select(this, d); } catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "pick driver: " + e); }
         Haptics.quiet(150);
         render();
     }
 
     private void remove(DriverPort.Driver d) {
+        if (installing) return;
         PUi.confirmDanger(this, "Remove " + d.name + "?", "Deleted: the app's copy of this driver.\n\nKept: the zip you installed it from, your games, packs and saves. "
                 + "A game that used it starts with the phone's own driver until you pick another.", "Remove driver", () -> {
+            if (installing) return;
             try { DriverPort.remove(this, d); } catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "remove driver: " + e); }
             render();
         });
     }
 
     private void pickZip() {
+        if (installing) return;
         startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")   // some providers label zips otherwise
                 .putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"application/zip", "application/x-zip-compressed", "application/octet-stream"}), REQ_ZIP);
     }
@@ -248,15 +270,16 @@ public final class DriverActivity extends Activity {
 
     /** A zip from the phone: installed and picked off the main thread, the result on the main page */
     private void installFile(String name, Install install) {
-        if (fileBusy) return;
-        fileBusy = true; fileResult = null;
+        if (installing) return;
+        installing = true;
+        fileResult = null;
         render();
         new Thread(() -> {
             String msg; boolean failed = false;
             try { DriverPort.Driver d = install.run(); DriverPort.select(this, d); msg = "Installed and picked " + d.name + ". It applies from the next game start."; }
             catch (Throwable e) { failed = true; msg = "Not installed: " + reason(e) + ". The drivers and your choice are as they were."; Log.w(TAG, "driver " + name + ": " + e); }
             String m = msg; boolean f = failed;
-            ui.post(() -> { fileBusy = false; fileResult = m; fileFailed = f; if (!isFinishing() && !isDestroyed()) render(); });
+            ui.post(() -> { fileResult = m; fileFailed = f; installFinished(); });
         }, "peanuts-driver-file").start();
     }
 
@@ -357,7 +380,7 @@ public final class DriverActivity extends Activity {
             new AlertDialog.Builder(this).setTitle("Install " + a.name + "?").setMessage("It is made for " + gpus + ". This phone has an " + DriverPort.gpu()
                     + ", so games may not start with it. You can pick System again at any time.").setPositiveButton("Install", (d, w) -> download(a)).setNegativeButton("Cancel", null).show();
         });
-        b.setEnabled(job == null || job.finished);
+        b.setEnabled(!installing);
         if (beside != null) top.addView(beside);
         top.addView(b);
         box.addView(top);
@@ -384,7 +407,8 @@ public final class DriverActivity extends Activity {
 
     /** Downloads a file into the cache with its progress, installs it through upstream and picks it */
     private void download(Asset a) {
-        if (job != null && !job.finished) return;
+        if (installing) return;
+        installing = true;
         Job j = job = new Job(a.url);
         j.total = a.size;
         render();
@@ -420,7 +444,7 @@ public final class DriverActivity extends Activity {
                 Log.w(TAG, "driver download " + a.url + ": " + e);
             } finally { if (tmp != null && !tmp.delete()) tmp.deleteOnExit(); }
             String m = msg; boolean f = failed;
-            ui.post(() -> { j.finished = true; j.result = m; j.failed = f; if (!isFinishing() && !isDestroyed()) render(); });
+            ui.post(() -> { j.finished = true; j.result = m; j.failed = f; installFinished(); });
         }, "peanuts-driver-download").start();
     }
 

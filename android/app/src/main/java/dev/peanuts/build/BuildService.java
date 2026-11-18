@@ -309,7 +309,7 @@ public final class BuildService extends Service {
                 progress("import", pct, step + (total > 0 ? String.format(Locale.getDefault(), ": %d %%", Math.min(100, done * 100 / total)) : ""));
             });
             if (cancelled) { tmp.delete(); throw new BuildListener.Failure("Build cancelled." + kept, BuildListener.CANCELLED); }
-            if (rc != 0) { log("import: the importer returned " + rc + ": " + Importer.lastError() + " (after " + (System.currentTimeMillis() - importStart) / 1000 + " s)"); tmp.delete(); throw new IOException("Import failed: " + Importer.lastError() + (again ? "." + kept : "")); }
+            if (rc != 0) { tmp.delete(); log("import: the importer returned " + rc + ": " + Importer.lastError() + " (after " + (System.currentTimeMillis() - importStart) / 1000 + " s)"); throw new IOException("Import failed: " + Importer.lastError() + (again ? "." + kept : "")); }
             // A pack made from the file this import replaces (Import again, or inputs newer than the .nup) was made from other game files: marked before the
             // new file takes the old one's place, so no moment has the new file with a pack that counts as up to date (PackNote, Prepare.run0)
             if (out.isFile()) markPacksStale(r, out);

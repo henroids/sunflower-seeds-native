@@ -1,10 +1,11 @@
 package dev.peanuts;
 
+import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.display.DisplayManager;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.Display;
 
@@ -17,16 +18,25 @@ public final class Screens {
     private Screens() {}
 
     /**
-     * MainActivity and FrontendLaunch (PEANUTS hooks): the options a game's start goes with. With Swap screens on and an external display present, the
-     * game's activity starts there, in a task of its own; otherwise null, the start as before.
+     * Start on the external display when requested and allowed. If it disappears or Android
+     * rejects the launch, retry on the launcher's display with the original intent.
      */
-    public static Bundle gameStart(Context c, Intent intent) {
-        if (!PeanutsPrefs.swapScreens(c)) return null;
-        Display d = external(c);
-        if (d == null) { Log.i(Companion.TAG, "Swap screens is on, but there is no other display: the game starts on this one"); return null; }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        Log.i(Companion.TAG, "Swap screens: the game starts on display " + d.getDisplayId() + " \"" + d.getName() + "\"");
-        return ActivityOptions.makeBasic().setLaunchDisplayId(d.getDisplayId()).toBundle();
+    public static void startGame(Activity launcher, Intent intent) {
+        Display d = PeanutsPrefs.swapScreens(launcher) ? external(launcher) : null;
+        if (d != null) {
+            Intent external = new Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                ActivityManager manager = launcher.getSystemService(ActivityManager.class);
+                int id = d.getDisplayId();
+                if (manager != null && manager.isActivityStartAllowedOnDisplay(launcher, id, external)) {
+                    launcher.startActivity(external, ActivityOptions.makeBasic().setLaunchDisplayId(id).toBundle());
+                    return;
+                }
+            } catch (SecurityException | IllegalArgumentException e) {
+                Log.w(Companion.TAG, "Swap screens: external display refused the game", e);
+            }
+        }
+        launcher.startActivity(intent);
     }
 
     /** The first valid display besides the default one, as the companion finds it (presentation displays first) */

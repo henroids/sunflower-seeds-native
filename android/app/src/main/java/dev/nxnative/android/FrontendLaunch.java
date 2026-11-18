@@ -162,7 +162,7 @@ public final class FrontendLaunch extends Activity {
         // PEANUTS end
         Intent play = new Intent(this, GameActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", pack).putExtra("frontend", true);   // PEANUTS: pack, not g.packDir
-        startActivity(play, dev.peanuts.Screens.gameStart(this, play));   // PEANUTS: Swap screens starts the game on the other display (dev.peanuts.Screens, #131)
+        dev.peanuts.Screens.startGame(this, play);   // PEANUTS: Swap screens falls back to the current display if Android refuses the other one (#131)
         dev.peanuts.GameReturn.remember(this, g.titleId, g.name, g.gameDir, pack);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
         finish();
     }

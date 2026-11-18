@@ -1188,15 +1188,13 @@ The 1.1.0 profile uses reviewed FPSLocker rows for caps from 20 to 120 fps. `bui
 
 ### Round 21, a Peanuts build known by its build, not its application ID (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
 
-`-PnxAppId` (Round 14) gives a development build its own application ID, `peanutstest` in `peanuts/docs/NEW-GAME.md`. Three Peanuts hunks asked
-whether the ID ends in `.peanuts`, so such a build took Banana Native's button mapping and credits, and looked for updates among Banana Native's
-releases. They now ask `BuildConfig.NX_PEANUTS_ID`, which every `-PnxApp=peanuts` build sets, whatever its ID.
+`-PnxAppId` (Round 14) gives a development build its own application ID, `peanutstest` in `peanuts/docs/NEW-GAME.md`. The default button map and credits use `BuildConfig.NX_PEANUTS_ID` for every Peanuts build. Automatic release checks use the standard installation ID. Side-by-side builds can configure their own source with `update.txt`.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
 | `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | Settings › About: the fork's credits | trailing `// PEANUTS: ...` |
 | `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `padMap()`: the Peanuts default button mapping | trailing `// PEANUTS: ...` |
-| `android/app/src/main/java/dev/nxnative/android/Updater.java` | 1 | the update source: the Peanuts app's own releases | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/Updater.java` | 1 | the Peanuts release feed applies to the standard package ID | trailing `// PEANUTS: ...` |
 
 Upstream candidate: no (the three lines are Peanuts' own).
 
@@ -1226,17 +1224,16 @@ it also goes to the built-in one when the app itself was started on the external
 
 | File | Hunks | Hook | Marker |
 |---|---|---|---|
-| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `startWithDriver()`: `startActivity(intent, Screens.gameStart(this, intent))` | trailing `// PEANUTS: ...` |
-| `android/app/src/main/java/dev/nxnative/android/FrontendLaunch.java` | 1 | the game's start: the intent as a local `play`, `startActivity(play, Screens.gameStart(this, play))` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `startWithDriver()`: `Screens.startGame(this, intent)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/FrontendLaunch.java` | 1 | the game's start: the intent as a local `play`, `Screens.startGame(this, play)` | trailing `// PEANUTS: ...` |
 | `android/app/src/main/AndroidManifest.xml` | 1 | `dev.peanuts.CompanionScreen`, process `:game`, its own task affinity, single instance | trailing `<!-- PEANUTS: ... -->` |
 
-`Screens.gameStart` returns null (the start as before) unless the setting is on and another display exists; then the game starts there in a task of its own
-(`ActivityOptions.setLaunchDisplayId`). Android refuses a `Presentation` on the default display, so the companion page (now `CompanionPage`, shared with
+`Screens.startGame` checks whether Android allows the external display and retries on the current display if the external launch fails. Android refuses a `Presentation` on the default display, so the companion page (now `CompanionPage`, shared with
 `CompanionPresentation`) gets an activity there, `CompanionScreen`, whose window never takes the input focus. Its start still makes the built-in display the
 focused one, which leaves the controller with no window, so `Companion.refocusGame` starts the game's activity again on its display (singleTask: brought to
 the front; an intent with no title ID is a no-op in `GameActivity.onNewIntent`). No upstream-candidate general fix: the lines call Peanuts-owned code.
 
-### Round 23, Share build log (2026-11-18)
+### Round 24, Share build log (2026-11-18)
 
 A failed, stopped or interrupted build could not be reported: Share log sends game runs only, and the import wrote no log at all (issue #124 had none).
 Share build log puts the game's build log, its jobs' step logs and a summary into one `.zip` (`dev.peanuts.build.BuildLogShare`, PEANUTS.md 2026-11-18).

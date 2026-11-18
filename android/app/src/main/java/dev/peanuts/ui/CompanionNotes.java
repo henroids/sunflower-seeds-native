@@ -16,7 +16,8 @@ final class CompanionNotes {
     // the paragraph's start or after a "thank you! ": a name may hold a full stop ("Super Mario Bros. Wonder")
     private static final Pattern GAME = Pattern.compile("(?:^|(?<=!\\s))[^\\n!?]*?\\(\\s*`?[0-9A-Fa-f]{16}`?\\s*\\),\\s*(?:game versions?|base game|Switch update)\\s+([^\\n]+?)\\.(?=\\s|$)\\s*");
     private static final Pattern SHA = Pattern.compile("(?im)^[ \\t]*SHA-?256[^:\\n]*:[ \\t]*`?[0-9a-f]{64}`?[ \\t]*$");
-    private static final Pattern EDEN = Pattern.compile("(?i)eden duo|long-press|rename it|renaming it");
+    private static final Pattern EDEN_INSTALL = Pattern.compile("(?i)^\\s*(?:[-*+•]\\s+|\\d+[.)]\\s+)?(?:install[^:\\n]*:\\s*)?(?:in eden duo,?\\s+)?long-press\\b.*\\badd-ons\\b");
+    private static final Pattern EDEN_REQUIREMENT = Pattern.compile("(?i)^\\s*requires eden duo\\b");
     private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+(?=\\S)");
     private static final Pattern LIST_LINE = Pattern.compile("(?m)^\\s*(?:[-*+•]\\s|\\d{1,9}[.)]\\s)");
 
@@ -35,7 +36,7 @@ final class CompanionNotes {
         for (int i = 0; i < ps.size(); i++) {
             String p = ps.get(i);
             if (i == 0) p = GAME.matcher(p).replaceFirst("");
-            if (EDEN.matcher(p).find()) p = LIST_LINE.matcher(p).find() ? lines(p) : sentences(p);
+            p = stripInstall(p);
             if (!p.trim().isEmpty()) out.add(p.trim());
         }
         return String.join("\n\n", out);
@@ -63,17 +64,16 @@ final class CompanionNotes {
 
     private static String first(List<String> ps) { return ps.isEmpty() ? "" : ps.get(0); }
 
-    /** A paragraph's sentences without those about Eden Duo */
-    private static String sentences(String p) {
-        StringBuilder b = new StringBuilder();
-        for (String s : SENTENCE_END.split(p.trim())) if (!EDEN.matcher(s).find()) b.append(b.length() > 0 ? " " : "").append(s.trim());
-        return b.toString();
-    }
-
-    /** A list's lines without those about Eden Duo */
-    private static String lines(String p) {
-        StringBuilder b = new StringBuilder();
-        for (String l : p.split("\n")) if (!EDEN.matcher(l).find()) b.append(b.length() > 0 ? "\n" : "").append(l);
-        return b.toString();
+    /** Keep ordinary notes, including changelog entries that mention Eden Duo. */
+    private static String stripInstall(String p) {
+        boolean list = LIST_LINE.matcher(p).find();
+        String[] parts = list ? p.split("\n") : SENTENCE_END.split(p.replace('\n', ' ').trim());
+        boolean hasInstall = false;
+        for (String part : parts) if (EDEN_INSTALL.matcher(part).find()) hasInstall = true;
+        if (!hasInstall) return p;
+        List<String> out = new ArrayList<>();
+        for (String part : parts)
+            if (!EDEN_INSTALL.matcher(part).find() && !EDEN_REQUIREMENT.matcher(part).find()) out.add(list ? part : part.trim());
+        return String.join(list ? "\n" : " ", out);
     }
 }

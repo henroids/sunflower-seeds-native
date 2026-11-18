@@ -22,7 +22,7 @@ import java.util.zip.ZipFile;
  * The rules of Share build log that need no phone (no argument; prints "ok" or throws):
  * <ul>
  * <li>the build log: lines with the time, its run markers, the move to .1.log, the newest title, a title ID that is not one written nowhere;</li>
- * <li>the bundle's names (only build-log-&lt;title ID&gt;-&lt;time&gt;.zip) and the cleaning of old bundles;</li>
+ * <li>unique bundle names and the cleaning of old bundles;</li>
  * <li>env.txt lines with a secret's name keep the name only;</li>
  * <li>the jobs: the plain build's and the builds with mods' beside it, a job of another title left out, one without job.json but with logs kept, a damaged
  *     job.json kept, a folder found twice once, two folders of one name kept apart;</li>
@@ -121,8 +121,11 @@ public final class BuildLogJvmTest {
 
     static void names(File dir) throws IOException {
         String n = BuildLogBundle.zipName(T.toLowerCase(), 1_700_000_000_000L);
-        check(n.matches("build-log-" + T + "-\\d{8}-\\d{6}\\.zip"), "the bundle's name: " + n);
+        check(n.matches("build-log-" + T + "-\\d{8}-\\d{6}-[0-9a-f]{32}\\.zip"), "the bundle's name: " + n);
         check(BuildLogBundle.validName(n), "its own name is valid");
+        String n2 = BuildLogBundle.zipName(T, 1_700_000_000_000L);
+        check(!n.equals(n2) && BuildLogBundle.validName(n2), "same-title exports in the same second use separate files");
+        check(BuildLogBundle.validName("build-log-" + T + "-20261118-201500.zip"), "older bundles remain readable");
         for (String bad : new String[] {null, "", "../" + n, "x/" + n, n + ".part", "build-log-" + T + ".zip", "build-log-0100152000022000-20261118-201500.zip.log",
                 "prod.keys", T + ".log", "build-log-01001520000220000-20261118-201500.zip", "build-log-0100152000022000-20261118-201500.ZIP"})
             check(!BuildLogBundle.validName(bad), "not a bundle name: " + bad);
