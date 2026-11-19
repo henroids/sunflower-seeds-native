@@ -124,9 +124,9 @@ public final class LibrarySettings {
         refreshRows();
     }
 
-    private static String companionsValue(Activity a) {
+    private static CharSequence companionsValue(Activity a) {
         String base = "The catalog: install, update or remove a game's companion";
-        return PeanutsPrefs.developerReadout(a) ? base + " · developer readout on (long press to turn off)" : base;
+        return PeanutsPrefs.developerReadout(a) ? PUi.joined(base, "developer readout on (long press to turn off)") : base;
     }
 
     private static void refreshRows() {
@@ -136,9 +136,9 @@ public final class LibrarySettings {
         gameRow.value(g != null ? g : "Not set. Every NSP, XCI, .nup and dump folder inside is shown on Home.");
         List<String> builds = PeanutsPrefs.buildDirs(a);
         buildRow.value(builds.isEmpty() ? "Add a folder on the phone or SD card"
-                : "Default: " + builds.get(0) + (builds.size() > 1 ? " · " + builds.size() + " folders" : ""));
-        updateRow.value(u != null ? u + " · hold to forget" : "Optional. Another folder with update NSPs, matched to their games by title ID.");
-        dlcRow.value(d != null ? d + " · hold to forget" : "Optional. Another folder with DLC NSPs, matched to their games by title ID.");
+                : PUi.joined("Default: " + builds.get(0), builds.size() > 1 ? builds.size() + " folders" : null));
+        updateRow.value(u != null ? PUi.joined(u, "hold to forget") : "Optional. Another folder with update NSPs, matched to their games by title ID.");
+        dlcRow.value(d != null ? PUi.joined(d, "hold to forget") : "Optional. Another folder with DLC NSPs, matched to their games by title ID.");
         keysRow.value(keysValue(a));
         fontsRow.value(fontsValue(a, "Used by games and companions. Missing characters in Android's fonts can prevent a game from starting."));
         if (companionsRow != null) companionsRow.value(companionsValue(a));
@@ -160,9 +160,9 @@ public final class LibrarySettings {
         }
     }
 
-    static String keysValue(Activity a) {
+    static CharSequence keysValue(Activity a) {
         if (!PeanutsPrefs.hasKeys(a)) return "Needed to build a game (Build asks for them). Tap to pick the prod.keys from your own console.";
-        return "prod.keys is in the app (" + PeanutsPrefs.keysFile(a).length() + " bytes)" + (ImporterPort.get().available() ? "" : " · the importer is not in this build");
+        return PUi.joined("prod.keys is in the app (" + PeanutsPrefs.keysFile(a).length() + " bytes)", ImporterPort.get().available() ? null : "the importer is not in this build");
     }
 
     private static String firmwareTried;   // the firmware path a read was last started for by firmwareAfterAccess: once a path, not at every drawing of the row
@@ -184,12 +184,12 @@ public final class LibrarySettings {
         refreshRows();
     }
 
-    static String fontsValue(Activity a, String none) {
+    static CharSequence fontsValue(Activity a, String none) {
         firmwareAfterAccess(a);
         String fw = PeanutsPrefs.firmwareDir(a);
         if (fontsState != null) return fontsState;
         if (PeanutsPrefs.hasFonts(a)) return "Firmware added" + (fw != null ? " from " + fw : "");
-        return fw != null ? fw + " · not added yet" : none;
+        return fw != null ? PUi.joined(fw, "not added yet") : none;
     }
 
     /** Home's first-run card: the two optional folders in a small sheet */
@@ -501,7 +501,7 @@ public final class LibrarySettings {
                                 Library.rescan(a);
                             });
                         }, "peanuts-free-space").start()))
-                        .value("Original " + size + " · " + f.getName()).view);
+                        .value(PUi.joined("Original " + size, f.getName())).view);
             }
         }
         d[0] = PUi.sheet(a, "Free up space", box).setPositiveButton("Done", null).show();

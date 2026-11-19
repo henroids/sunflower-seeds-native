@@ -828,7 +828,7 @@ public final class Library {
         if (hidden > 0) {
             // Found in review: lets the player see and remove a confirmed-missing (or currently unreachable) game themselves, through upstream's
             // own "Game file gone → Remove" dialog, instead of this code ever deleting the record on its own
-            Button hideB = PUi.button(a, hidden + " hidden · " + (showHidden ? "Hide" : "Show"),
+            Button hideB = PUi.button(a, PUi.joined(hidden + " hidden", showHidden ? "Hide" : "Show"),
                     PUi.Kind.QUIET, v -> { Haptics.play(v, Haptics.Word.CLICK); showHidden = !showHidden; render(); });
             hideB.setOnKeyListener(shoulders);
             focusRing(hideB, Color.TRANSPARENT);
@@ -839,7 +839,7 @@ public final class Library {
         }
         chips.addView(chipRow, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         top.addView(chips, PUi.weight());
-        Button findB = PUi.button(a, find.isEmpty() ? "Find" : "Find · " + find, PUi.Kind.QUIET, Haptics.on(Haptics.Word.CLICK, v -> findDialog()));
+        Button findB = PUi.button(a, find.isEmpty() ? "Find" : PUi.joined("Find", find), PUi.Kind.QUIET, Haptics.on(Haptics.Word.CLICK, v -> findDialog()));
         findB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_search, R.color.bn_accent), null, null, null);
         findB.setCompoundDrawablePadding(PUi.dp(a, 6));
         findB.setOnKeyListener(shoulders);
@@ -1403,8 +1403,8 @@ public final class Library {
         n.setMaxLines(2);
         n.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(n);
-        String about = t == null ? "" : t.versionText() + (t.base != null && !t.base.publisher.isEmpty() ? (t.versionText().isEmpty() ? "" : " · ") + t.base.publisher : "");
-        if (!about.isEmpty()) info.addView(PUi.small(a, about));
+        CharSequence about = t == null ? "" : PUi.joined(t.versionText(), t.base != null ? t.base.publisher : null);
+        if (about.length() > 0) info.addView(PUi.small(a, about));
         buildStatus = PUi.status(a, "", R.color.bn_accent);
         buildStatus.setPadding(0, PUi.dp(a, 2), 0, 0);
         info.addView(buildStatus);
@@ -1628,8 +1628,8 @@ public final class Library {
                 .value(game != null ? game : "Required. Every NSP, XCI, .nup and dump folder inside is shown on this screen.").chevron(a).view, 0);
         // P5: folded in as its own numbered step, same Setting-row shape as the other three, instead of a quiet text button below the action row
         String updateDir = PeanutsPrefs.updateDir(a), dlcDir = PeanutsPrefs.dlcDir(a);
-        String updDlcValue = updateDir == null && dlcDir == null ? "Point at your update and DLC files if they're not inside the game folder already. Skip if everything's together."
-                : (updateDir != null ? "Update: " + updateDir : "Update: not set") + (dlcDir != null ? " · DLC: " + dlcDir : "");
+        CharSequence updDlcValue = updateDir == null && dlcDir == null ? "Point at your update and DLC files if they're not inside the game folder already. Skip if everything's together."
+                : PUi.joined(updateDir != null ? "Update: " + updateDir : "Update: not set", dlcDir != null ? "DLC: " + dlcDir : null);
         PUi.add(c, new PUi.Setting(a, "⬆️", "Updates & DLC", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.extraFolders(a))).value(updDlcValue).chevron(a).view, 0);
         PUi.add(c, new PUi.Setting(a, "🔤", "Firmware", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickFirmwareSource(a)))
                 .value(LibrarySettings.fontsValue(a, "Needed before building. A missing font can crash some games at boot.")).chevron(a).view, 0);
