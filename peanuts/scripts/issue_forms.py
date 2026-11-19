@@ -76,6 +76,16 @@ def line(id_, label, description=None, placeholder=None, required=False):
     return field('input', id_, label, description, placeholder, required=required)
 
 
+def save_zip(label, why):
+    """The optional save field (Game problem, Setup or app problem): the app's Back up saves, or the backup folder with its manifest zipped"""
+    return text('save', label, why + (
+        "Hold the game's cover › **Saves** › **Back up saves**. If it makes a `.zip`, drag that file into this box. Otherwise zip the newest "
+        "folder in `Switch2/save-backups/<title ID>/` together with the `.manifest.tsv` beside it (then **Import save** checks every file), "
+        "and drag the zip in. GitHub takes files up to 25 MB.\n"
+        "A save holds your progress, not game data, so it is fine to attach; it can hold the names you gave in the game.\n"),
+        'Drag the save .zip here')
+
+
 def pick(id_, label, options, description=None, multiple=False, required=True):
     return field('dropdown', id_, label, description, options=options, multiple=multiple, required=required)
 
@@ -278,12 +288,12 @@ def game_problem():
             text('build_log', 'Build log, if the problem began after a build',
                  'When the game ran before and the problem began after it was built, prepared or updated again. ' + BUILD_LOG_HOW,
                  'Drag the build log .zip here'),
-            text('save', 'Save zip (strongly recommended)', (
-                "A save lets the problem be reproduced on another device instead of guessed at. Hold the game's cover › **Saves** › **Back up "
-                "saves**; if it asks where to put a `.zip`, save it and drag that file into this box. Otherwise zip the newest folder in "
-                "`Switch2/save-backups/<title ID>/` and drag the zip in. If the problem starts at a certain point, back up right there.\n"
-                "A save holds your progress only, not game data, so it is fine to attach. If you cannot attach it, say why.\n"),
-                 'Drag the save .zip here'),
+            save_zip('Save zip, to reproduce it', (
+                "With your save, the problem can be played on another device instead of guessed at: most of all when it happens at a certain "
+                "place or point in the game (for a crash before the title screen it is not needed). Back up right where the problem starts.\n")),
+            line('save_from', 'From the save to the problem',
+                 'Which slot or file to load and what to do from there. Say so if the save comes from another game version than the one '
+                 'picked above, a console or an emulator.', 'Slot 2: walk north out of the village; it freezes on the bridge'),
             anything('The values of the settings you changed, the readiness report, a phone cooler or charger, other apps open, screenshots '
                      'or a short video (a link to YouTube or similar is fine).'),
             searched([
@@ -381,7 +391,7 @@ def setup_problem():
                 'Installing or picking a GPU driver',
                 'Installing or updating a companion',
                 'Installing a mod',
-                'Saves (back up, restore, import, or a save from an emulator)',
+                'Saves (Back up saves, Restore saves, Import save, or a save from an emulator)',
                 'The second screen (which display shows what, Swap screens, an add-on screen)',
                 'A warning that the device is too hot',
                 'The app itself (it closes, a setting does not stick, the overlay, an app update)',
@@ -408,6 +418,9 @@ def setup_problem():
             text('log', 'Log or screenshots', (
                 "Settings › **Share log**, or a screenshot of the screen with the message. For storage problems, the folder's path as the app "
                 "shows it. For the library, the folder tree as text (names only, never the files).\n"), 'Drag the log or screenshots here'),
+            save_zip('Save zip, for a save problem', (
+                "When a save does not back up, restore, import or load: the save it is about, so the same steps can be tried with it. A save "
+                "from a console or an emulator: zip it as you tried to import it, and say where it came from in \"What happened\".\n")),
             anything('The readiness report, what you tried, anything that differs from a usual setup (a launcher, a custom ROM, a file '
                      'manager).'),
             searched(),

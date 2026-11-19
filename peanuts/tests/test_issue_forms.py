@@ -31,7 +31,7 @@ PROBLEM_FORMS = ('1_game_problem.yml', '2_build_problem.yml', '3_setup_problem.y
 APP_WORDS = ('Share build log', 'Share log', 'Save to a folder', 'Readiness check', 'Copy report', 'Ready, with limits', 'Not ready', 'Back up saves',
              'GPU driver', 'Swap screens', 'RAM saver', 'Frame generation', 'Frame rate cap', 'Game owned', 'Hold 60 fps', 'Dynamic resolution',
              'FSR sharpness', 'Upscaler', 'Use fast cores', 'Console mode', 'Advanced switches', 'Tester settings', 'Build again', 'Build anyway',
-             'Wrong version', 'File gone', 'Not Supported Yet', 'Firmware', 'Keys')
+             'Wrong version', 'File gone', 'Not Supported Yet', 'Firmware', 'Keys', 'Restore saves', 'Import save')
 
 
 def element(form, id_):
@@ -130,6 +130,17 @@ class IssueForms(unittest.TestCase):
         for name in ('1_game_problem.yml', '2_build_problem.yml'):
             opts = element(self.forms[name], 'checks')['attributes']['options']
             self.assertTrue(any(o.get('required') and 'title ID' in o['label'] for o in opts), name)
+
+    def test_a_save_can_come_along(self):
+        # a save lets a problem at a certain point be played again; it is never required, and a build has none
+        for name in ('1_game_problem.yml', '3_setup_problem.yml'):
+            save = element(self.forms[name], 'save')
+            self.assertFalse(required(save), name)
+            for w in ('Back up saves', 'save-backups/<title ID>/', '.manifest.tsv', '25 MB'):
+                self.assertIn(w, save['attributes']['description'], name)
+        self.assertFalse(required(element(self.forms['1_game_problem.yml'], 'save_from')))
+        for name in ('2_build_problem.yml', '4_builder_problem.yml'):
+            self.assertNotIn('save', [e.get('id') for e in self.forms[name]['body']], name)
 
     def test_the_game_list_is_the_catalog(self):
         games = catalog_mod.build(warn=lambda m: None)['games']

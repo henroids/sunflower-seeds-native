@@ -321,11 +321,18 @@ body:
   - type: textarea
     id: save
     attributes:
-      label: "Save zip (strongly recommended)"
+      label: "Save zip, to reproduce it"
       description: |
-        A save lets the problem be reproduced on another device instead of guessed at. Hold the game's cover › **Saves** › **Back up saves**; if it asks where to put a `.zip`, save it and drag that file into this box. Otherwise zip the newest folder in `Switch2/save-backups/<title ID>/` and drag the zip in. If the problem starts at a certain point, back up right there.
-        A save holds your progress only, not game data, so it is fine to attach. If you cannot attach it, say why.
+        With your save, the problem can be played on another device instead of guessed at: most of all when it happens at a certain place or point in the game (for a crash before the title screen it is not needed). Back up right where the problem starts.
+        Hold the game's cover › **Saves** › **Back up saves**. If it makes a `.zip`, drag that file into this box. Otherwise zip the newest folder in `Switch2/save-backups/<title ID>/` together with the `.manifest.tsv` beside it (then **Import save** checks every file), and drag the zip in. GitHub takes files up to 25 MB.
+        A save holds your progress, not game data, so it is fine to attach; it can hold the names you gave in the game.
       placeholder: "Drag the save .zip here"
+  - type: input
+    id: save_from
+    attributes:
+      label: "From the save to the problem"
+      description: "Which slot or file to load and what to do from there. Say so if the save comes from another game version than the one picked above, a console or an emulator."
+      placeholder: "Slot 2: walk north out of the village; it freezes on the bridge"
   - type: textarea
     id: extra
     attributes:

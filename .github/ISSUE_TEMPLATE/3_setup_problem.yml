@@ -21,7 +21,7 @@ body:
         - "Installing or picking a GPU driver"
         - "Installing or updating a companion"
         - "Installing a mod"
-        - "Saves (back up, restore, import, or a save from an emulator)"
+        - "Saves (Back up saves, Restore saves, Import save, or a save from an emulator)"
         - "The second screen (which display shows what, Swap screens, an add-on screen)"
         - "A warning that the device is too hot"
         - "The app itself (it closes, a setting does not stick, the overlay, an app update)"
@@ -224,6 +224,15 @@ body:
       description: |
         Settings › **Share log**, or a screenshot of the screen with the message. For storage problems, the folder's path as the app shows it. For the library, the folder tree as text (names only, never the files).
       placeholder: "Drag the log or screenshots here"
+  - type: textarea
+    id: save
+    attributes:
+      label: "Save zip, for a save problem"
+      description: |
+        When a save does not back up, restore, import or load: the save it is about, so the same steps can be tried with it. A save from a console or an emulator: zip it as you tried to import it, and say where it came from in "What happened".
+        Hold the game's cover › **Saves** › **Back up saves**. If it makes a `.zip`, drag that file into this box. Otherwise zip the newest folder in `Switch2/save-backups/<title ID>/` together with the `.manifest.tsv` beside it (then **Import save** checks every file), and drag the zip in. GitHub takes files up to 25 MB.
+        A save holds your progress, not game data, so it is fine to attach; it can hold the names you gave in the game.
+      placeholder: "Drag the save .zip here"
   - type: textarea
     id: extra
     attributes:
