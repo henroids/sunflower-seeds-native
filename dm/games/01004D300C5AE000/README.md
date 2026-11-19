@@ -2,6 +2,12 @@
 
 Update 1.1.0 (v65536) over the base game, SDK 11.4.0. HAL Laboratory's own engine on NintendoWare (G3d, Font, Fxt) with `nn::atk2` sound and NEX online. Modules `main`, `subsdk0` (NintendoSDK_movie 11.4.0) and `sdk`; no other profile ships these `sdk` and `subsdk0` builds. Plays on the Mac at 30 fps, as on the Switch: the online and difficulty prompts, the 1080p opening movie, the beach and the walk through Point of Arrival with its guide movies, the reveal of the city, inhaling a Blade Knight for the Sword ability, fights with Awoofies and Bronto Burts, the title screen and continuing a file. An unsigned IPA is built; iOS is untested.
 
+## Android first-launch shader preparation
+
+<!-- PEANUTS begin -->
+On AYN Thor with Turnip v26.2.0 R5, a first walk from the opening beach with an empty cache triggered the 7% draw warning. The renderer recorded 23,880 draws waiting for pipelines in a 300-frame window. The profile bundles 418 recorded Vulkan pipeline keys from the opening route (412 graphics and six compute), so the Android host can prepare them before gameplay. Later stages can introduce additional pipelines.
+<!-- PEANUTS end -->
+
 ## What it needs
 
 | Setting | Where | Why |
