@@ -93,6 +93,15 @@ def child_env(**kw):
 def peanuts_env(step):
     """step 'split': DM_SPLIT_DIRECT=1 (the targeted split reads a file's recorded containers only); 'shaders': DMSH_VK_ZSTD_LEVEL=6 (the phone's level)"""
     kw = dict(DM_SPLIT_DIRECT='1') if step == 'split' else dict(DMSH_VK_ZSTD_LEVEL='6')
+    # PEANUTS: a desktop checkout can build the locked translator. The phone has its own native one.
+    helper = REPO / 'peanuts/scripts'
+    if step == 'shaders' and 'XLATE' not in os.environ and (helper / 'prepare_pc_translator.py').is_file():
+        sys.path.insert(0, str(helper))
+        import prepare_pc_translator
+        try:
+            kw['XLATE'] = str(prepare_pc_translator.resolve())
+        except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+            raise Error(f'desktop translator: {error}') from error
     return {k: v for k, v in kw.items() if k not in os.environ}
 # PEANUTS end
 

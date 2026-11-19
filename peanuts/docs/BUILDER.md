@@ -24,6 +24,18 @@ On macOS and Linux the importer also needs zlib's headers (part of the Xcode com
 
 Set `NX_KEYS` to your `prod.keys`, or pass `--keys`. The default is `~/.switch/prod.keys`.
 
+### Desktop shader translator
+
+Peanuts Native 0.1.5 builds its desktop shader translator from source the first time a pack needs a new shader library. Install the .NET **SDK 10.0.114** for that first build. If the packer environment contains only the runtime, set `PEANUTS_DOTNET_SDK` to the full path of the SDK’s `dotnet` executable. The launcher preserves an explicit `XLATE` selection. Later builds reuse the verified translator under `peanuts/.build/pc-translator/`. Cached shader libraries and code-only packs can be used without preparing a translator.
+
+For an offline build set `PEANUTS_NUGET_SOURCE` to a local NuGet feed containing the packages required by `dm/third_party/ryujinx/Directory.Packages.props` and their dependencies. A populated NuGet global-packages folder works as a local feed. To prepare explicitly and print the value for `XLATE`, run:
+
+```sh
+python3 peanuts/scripts/prepare_pc_translator.py --source "$HOME/.nuget/packages"
+```
+
+The helper verifies the three portable DLL fingerprints and the translator’s embedded source digest against `dm/gfx/tools/dmsh_chain.lock` before publishing its cache directory. SDK 10.0.114 reproduced all three locked DLLs byte for byte on x86-64 Linux. Other platforms check the same fingerprints. Both the Peanuts desktop launchers and direct calls to `scripts/pack_android.py` select the result automatically. On Windows use the packer environment’s `python` and a Windows path for the feed.
+
 ### Linux
 
 Two ways to get the packer environment. Either way the importer needs cmake, gcc and zlib's headers, and `--push` needs `adb`.
