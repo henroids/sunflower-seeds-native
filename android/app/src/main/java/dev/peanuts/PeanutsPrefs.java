@@ -83,12 +83,23 @@ public final class PeanutsPrefs {
     public static boolean developerReadout(Context c) { return of(c).getBoolean("developer_readout", false); }
     public static void developerReadout(Context c, boolean on) { of(c).edit().putBoolean("developer_readout", on).apply(); }
 
+    /** Settings > Library > Bottom screen, on by default */
+    public static boolean bottomScreen(Context c) { return of(c).getBoolean("bottom_screen", true); }
+    public static void bottomScreen(Context c, boolean on) { of(c).edit().putBoolean("bottom_screen", on).apply(); }
+    /** Settings > Library > Games without a companion: their cover stays on the second display, off by default */
+    public static boolean bottomScreenInGames(Context c) { return of(c).getBoolean("bottom_screen_games", false); }
+    public static void bottomScreenInGames(Context c, boolean on) { of(c).edit().putBoolean("bottom_screen_games", on).apply(); }
+
     /** Settings > Library > Haptics: false (default) = the launcher's haptics follow the system's touch feedback setting, true = none at all */
     public static boolean hapticsOff(Context c) { return of(c).getBoolean("haptics_off", false); }
     public static void hapticsOff(Context c, boolean off) { of(c).edit().putBoolean("haptics_off", off).apply(); }
     /** Settings > Library > Motion: false (default) = the launcher's animations follow the system's animator scale, true = fades and the progress fill only */
     public static boolean motionReduced(Context c) { return of(c).getBoolean("motion_reduced", false); }
     public static void motionReduced(Context c, boolean on) { of(c).edit().putBoolean("motion_reduced", on).apply(); }
+    /** Settings > Library > Swap screens: false (default) = the game on the built-in screen and the companion on the other display, true = the other way round
+     *  (a clip-on top screen that Android lists as the external display, GitHub issue #131). dev.peanuts.Screens applies it */
+    public static boolean swapScreens(Context c) { return of(c).getBoolean("swap_screens", false); }
+    public static void swapScreens(Context c, boolean on) { of(c).edit().putBoolean("swap_screens", on).apply(); }
 
     /** The roots the library scans: the game folder first, then the update and DLC folders when set and different, then the build folder (walked the same
      *  two levels deep, so its {@code <title ID>/<name>.nup} entries are found) */

@@ -1185,3 +1185,86 @@ The Peanuts Android profile registers the updated executable, PC-generated shade
 ## Kirby and the Forgotten Land frame rate
 
 The 1.1.0 profile uses reviewed FPSLocker rows for caps from 20 to 120 fps. `build.gradle` and `fpslocker_rows.h` accept four offsets after the module-relative pointer. `test_fpslocker_rows.py` covers the chain and rejects a fifth offset. [Game note](../dm/games/01004D300C5AE000/README.md#android-frame-limits-from-20-to-120)
+
+### Round 21, a Peanuts build known by its build, not its application ID (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+`-PnxAppId` (Round 14) gives a development build its own application ID, `peanutstest` in `peanuts/docs/NEW-GAME.md`. The default button map and credits use `BuildConfig.NX_PEANUTS_ID` for every Peanuts build. Automatic release checks use the standard installation ID. Side-by-side builds can configure their own source with `update.txt`.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | Settings › About: the fork's credits | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `padMap()`: the Peanuts default button mapping | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/Updater.java` | 1 | the Peanuts release feed applies to the standard package ID | trailing `// PEANUTS: ...` |
+
+Upstream candidate: no (the three lines are Peanuts' own).
+
+### Round 22, the GPU driver page (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+Settings › GPU driver was three list dialogs (`GpuDriver.dialog`, its Install…, `DriverFetch`'s Download…): a source's releases showed as tags
+and file names, with no date, notes, size per release or hint which GPU a file is for. It is now a Peanuts page, `dev.peanuts.ui.DriverActivity`:
+the drivers on the phone to pick or remove, the download sources, a zip from the app's folder or picked anywhere; a source opens its releases
+with their dates, notes (`GitHubText`), files, sizes and the Adreno each file names, and Install downloads with its progress and picks the driver.
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | the GPU driver row's click, and `onActivityResult`'s `ReadinessActivity.FIX_DRIVER`: `dev.peanuts.ui.DriverActivity.open(this)` instead of `GpuDriver.dialog(this, PICK_DRIVER)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | the `DriverActivity` entry, not exported | trailing `<!-- PEANUTS: ... -->` |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 1 | the per-game GPU driver row opens `DriverActivity.openForGame` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/DriverFetch.java` | 1 | Balemuni Turnip and JimVulkan PanVK release sources in the shared driver list | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | refresh game settings on return and open the same per-game page from the system-driver launch warning | `// PEANUTS: ...` and existing `PEANUTS` block |
+
+Upstream's classes keep doing the work, read through reflection (`DriverPort`): `GpuDriver.installed`, `selected`, `select`, `install` (so
+`DriverZip`'s checks stay the only way a zip gets in), `DriverZip.deleteTree`, `DriverFetch.REPOS` (the one list of sources), `GpuGl.name` and
+`PadFocus.watch` (Settings' focus frame). The page reads GitHub only once a source is opened, as `DriverFetch` does. `GpuDriver.dialog` and
+`DriverFetch.dialog` stay unchanged; nothing opens them any more. No upstream-candidate general fix: the hunks call Peanuts-owned code.
+
+### Round 23, Swap screens (2026-11-18, GitHub issue #131)
+
+Some dual-screen setups attach the top screen over USB-C, so Android lists the built-in bottom screen as the default display and the clip-on top screen as an
+external one (the Retroid Pocket 5 with its Dual Screen Add-On): the game started on the bottom and the companion on the top. Settings › Library › Swap screens
+(`PeanutsPrefs.swapScreens`, only shown with a second display) starts the game on the external display. The companion takes the display the game is not on, so
+it also goes to the built-in one when the app itself was started on the external display, with the setting off.
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | `startWithDriver()`: `Screens.startGame(this, intent)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/FrontendLaunch.java` | 1 | the game's start: the intent as a local `play`, `Screens.startGame(this, play)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | `dev.peanuts.CompanionScreen`, process `:game`, its own task affinity, single instance | trailing `<!-- PEANUTS: ... -->` |
+
+`Screens.startGame` checks whether Android allows the external display and retries on the current display if the external launch fails. Android refuses a `Presentation` on the default display, so the companion page (now `CompanionPage`, shared with
+`CompanionPresentation`) gets an activity there, `CompanionScreen`, whose window never takes the input focus. Its start still makes the built-in display the
+focused one, which leaves the controller with no window, so `Companion.refocusGame` starts the game's activity again on its display (singleTask: brought to
+the front; an intent with no title ID is a no-op in `GameActivity.onNewIntent`). No upstream-candidate general fix: the lines call Peanuts-owned code.
+
+### Round 24, Share build log (2026-11-18)
+
+A failed, stopped or interrupted build could not be reported: Share log sends game runs only, and the import wrote no log at all (issue #124 had none).
+Share build log puts the game's build log, its jobs' step logs and a summary into one `.zip` (`dev.peanuts.build.BuildLogShare`, PEANUTS.md 2026-11-18).
+All logic is in Peanuts' own files; the upstream lines only call it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | Settings › Share log's listener calls `BuildLogUi.shareLog(this, this::shareLog)` (unchanged when no build log is newer than the newest run); one Share build log row after the game page's Share log | `PEANUTS` |
+| `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 2 | The Prepare card gets `BuildLogUi.card` after Check for updates (shown while the job has failed or is paused); the Manage sheet one Share build log button | `PEANUTS` |
+| `android/app/src/main/AndroidManifest.xml` | 1 | `dev.peanuts.build.BuildLogProvider`, `${applicationId}.buildlog`, not exported, read grants only | `PEANUTS begin` / `PEANUTS end` |
+| `android/app/.gitignore` | 1 | `!src/jvmtest/java/dev/peanuts/build/` under the existing marked line: `build/` hid the package's JVM test (`BuildLogJvmTest`) as it hid its sources | `PEANUTS` (the comment above, in the hunk) |
+
+Tests: `dm/tools/tests/test_android_build_log.py`. Upstream candidate: no (it serves Peanuts' build pipeline).
+
+### Round 20, the launcher on the second display (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
+
+While the launcher is in front, the second display shows the cover the D-pad is on and what can be done with it (`dev.peanuts.ui.BottomScreen`,
+`BottomPanel`, all Peanuts-owned). Home keeps the Settings gear visible and labels its X shortcut.
+
+| File | Hunks | Hook | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 3 | `buildHome()` supplies the panel's Settings action; `headerButtons()` labels the gear; `dispatchKeyEvent()` handles X directly on Home | `// PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/BananaBackgroundView.java` | 2 | `onDraw()` and `popAt()`, after `wx, wy`: `BackgroundFlow.drift(this, BananaGrid.GRID_DEG, BananaGrid.SPEED_X_DP, BananaGrid.SPEED_Y_DP)` replaces them when not null | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/NxApp.java` | 1 | `onCreate()`: `AppScreens.install(this)`, so the Readiness check and the Graphics self-test (their own processes) keep the second display's page | trailing `// PEANUTS: ...` |
+
+The second hook makes the two screens' backgrounds one field: `BackgroundFlow` returns the grid's drift (BananaGrid's `wx, wy`) that puts this view's
+grid where the field's is (the two displays placed as on the device, one phase for both), or null without the bottom screen, and the view draws as before.
+The same drift goes into `popAt`, so a tap pops the banana where it is drawn. Since 0.1.4 the grid names each banana by its row and column (BananaGrid):
+the drift is passed unwrapped, as upstream does.
+
+The secondary panel’s lifecycle, focus and build controls live in `dev.peanuts.ui`.

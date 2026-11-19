@@ -19,7 +19,7 @@ A shared log lists the settings you changed from the defaults (the Advanced swit
 
 | What you see | What to try |
 |---|---|
-| The game is not on the list, or says "Not in this app version" | Your app does not include it. Settings > **About** lists the games. Update the app ([Updates](Updates)). |
+| The game is not on the list, or says "Not Supported Yet" | Your app does not include it. Settings > **About** lists the games. Update the app ([Updates](Updates)). |
 | The card says the version is untested | Your dump is another version than the tested one. It may still work; the app asks before starting. |
 | Preparing stopped | Read the card, tap **Retry**. Close other apps if memory ran out; free space if storage is full. |
 | Prepare says "Paused: the phone is too hot" | Let the phone cool; it goes on by itself. |
