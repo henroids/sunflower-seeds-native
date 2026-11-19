@@ -72,6 +72,13 @@ Peanuts Native 0.1.5 includes 39 games. The Companion column shows whether a gam
 
 On the 0.1.5 verification build, an AYN Thor with Turnip v26.2.0 R5 reached the rooftop fight in Demon Slayer 2 and the opening cave in Tears of the Kingdom. Kirby and the Forgotten Land skipped no draws in the opening walk with either a fresh or a saved shader cache.
 
+### 0.1.6 additions
+
+<!-- PEANUTS: Android game validation -->
+| Game | Title ID | Game update | Thor validation |
+|---|---|---|---|
+| Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | Hotel lobby playable with Turnip v26.2.0 R5 and fixed docked resolution. Lamp-lit floors can flicker. |
+
 ## What you need
 
 - A dual-screen Android handheld. Peanuts Native is developed and tested on the AYN Thor. On a single-screen phone the
