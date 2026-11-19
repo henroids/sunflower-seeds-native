@@ -2126,7 +2126,8 @@ The shaders step keeps a copy of the last library it wrote in `no_backup/reuse/<
 shaders all the same. Only this version's copy; at most 4 GB for every game together (`PN_REUSE_KEEP_MB`), the games built longest ago going first; none that
 would leave less than 2 GB free. The same library listed twice (the pack's and the copy) counts once. The rewrite's record keeps a copy of each module's files
 too (`rewrite_reuse.py record`, `no_backup/reuse/<title ID>/rewrite/<module>.files/`), and a pack without the module gets it back when its part and every file
-are the recorded ones (`restore`), in place of a rewrite.
+are the recorded ones (`restore`), in place of a rewrite. On the Thor (ACNH, `incremental-check.py new-folder`, 2026-11-19): a Build in an empty Build folder
+with the app's caches kept took 1 min 16 s (a full build 7 min 55 s), the library and the modules byte for byte the full build's; the library copy is 96 MB.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|

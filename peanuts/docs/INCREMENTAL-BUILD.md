@@ -153,6 +153,22 @@ ACNH's DLC brings no shaders of its own that the phone's split finds (the split 
 same 9,766. An Import again went from 7 min 31 s to 1 min 2 s; what is left of it is mostly the import (the whole `.nup` written again) and the 202 shaders
 translated to check the kept ones. A build from nothing is a minute faster too (the split's 56 s are 12 s); its largest part is the rewrite, `main` on one core.
 
+With the caches apart from the pack (the last library and each module's rewrite in the app's storage), the same scenarios and `new-folder`, 2026-11-19:
+
+| Run | Import | Rewrite | Split | Shaders | Pack | Whole build | Byte for byte as the full build |
+|---|---|---|---|---|---|---|---|
+| Full build | 25 s | 3 min 23 s | 13 s | 3 min 42 s (9,766 translated) | 8 s | 7 min 55 s | |
+| Import again | 25 s | not run | 10 s | 19 s (9,564 kept from the app's copy, 202 of 202 checked equal) | 8 s | 1 min 7 s | library and modules: yes |
+| Another Build folder, empty, the app's caches kept | 27 s | 9 s (`main`, `subsdk0`, `sdk` from the app's copies) | 11 s | 19 s (9,564 kept from the app's copy) | 6 s | **1 min 16 s** | library and modules: yes |
+| The base and the update alone | 26 s | 3 min 16 s | 13 s | 2 min 32 s | 4 s | 6 min 36 s | |
+| Its DLC added, Import again | 24 s | not run | 12 s | 18 s (9,564 kept, 202 checked) | 8 s | 1 min 6 s | library and modules: yes |
+
+A Build in another, empty Build folder (or after the build was deleted) took a full build's time before, 7 to 8 minutes; with the caches it is 1 min 16 s:
+the `.nup` made again from the game's files, the split's files, the shaders and the three modules from the app's storage. Its log showed each cache used. The
+shader library copy is 96 MB. The full build's shaders step took 70 s longer than the other build from nothing of the same run, for the same 9,766 shaders (the
+phone warm from builds just before it, on a 0.5 A port); the copies add no time that shows (the rewrite of the build without the DLC 3 min 16 s, its shaders
+2 min 32 s, as before them).
+
 ## Checking it on a phone
 
 `peanuts/scripts/incremental-check.py` runs the scenarios above on a phone through adb and the control interface (`peanuts/docs/CONTROL.md`) and compares the
