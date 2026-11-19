@@ -42,6 +42,7 @@ NOT_THESE = {'dev.nxnative.android.peanuts', 'dev.nxnative.android.play', 'dev.b
 TESTS = 'Tests'   # the check's folder in the app's Build folder: <build folder>/Tests/<title ID>/<scenario>/... (the library walks two folders deep, so a check's
                   # .nup files, four deeper, are never listed as a game; nor is it a <title ID>/pack the launcher looks for)
 POLL = 2.0
+CHECK_END = r'^\[pack\] [0-9-]+ [0-9:]+ check: '   # the line ReuseCheck.log writes when a full check ends (grep -E and re alike)
 STEPS = ('import', 'identify', 'rewrite', 'split', 'shaders', 'pack')
 
 
@@ -227,8 +228,9 @@ class Check:
         return int(out) if out.isdigit() else 0
 
     def check_ends(self, folder):
-        """How many full checks of this folder's job have ended (ReuseCheck.log's "check: …" lines in its check.log)"""
-        return self.check_count(folder, '] check: ')
+        """How many full checks of this folder's job have ended (ReuseCheck.log's "[pack] <date> <time> check: …" lines in its check.log)"""
+        out = self.p.sh(f"grep -cE {shlex.quote(CHECK_END)} {shlex.quote(self.check_log(folder))} 2>/dev/null || true").strip()
+        return int(out) if out.isdigit() else 0
 
     def wait_check(self, label, folder, before):
         """The full check a build that kept shaders leaves due (check.todo), which the app starts at the build's end while the phone is plugged in with 40 % or
@@ -246,7 +248,7 @@ class Check:
             if time.monotonic() - t0 > 2400: raise RuntimeError(f'{label}: the full check still runs after 40 minutes')
         text = self.p.sh(f'cat {shlex.quote(self.check_log(folder))} 2>/dev/null || true')
         last = text[text.rfind('\n== ') + 1:] if '\n== ' in text else text
-        lines = [l.strip() for l in last.splitlines() if 'reuse full check' in l or '] check: ' in l]
+        lines = [l.strip() for l in last.splitlines() if 'reuse full check' in l or re.search(CHECK_END, l)]
         rec = {'seconds': round(time.monotonic() - t0), 'lines': lines, 'ok': any("are a full translation's byte for byte" in l for l in lines),
                'replaced': any('[RED] reuse full check' in l for l in lines)}
         print(f'{label}: the full check: {rec["seconds"]} s after the build', flush=True)
