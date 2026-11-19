@@ -61,6 +61,9 @@ own check, the split against the profile, every module through spirv-val.
 - `shaders.log` lines: `reuse: <library>: N shaders kept (...), M translated to check them`, then `reuse check: M of M shaders translated to check are the
   older library's byte for byte; N shaders kept`, and `reuse: this library kept for the next build of this game (S MB)` (or why not). The card shows
   "Translating M new shaders (the other N are reused)" from the tool's own count.
+- The ready message (the card and the notification) says what the build took from earlier builds, from the reuse lines of the steps that ran in it
+  (`dev.peanuts.build.BuildReuse`): "Animal Crossing: New Horizons is ready to play. It took 1 min 16 s: 9,564 shaders, 3 modules and 91 game files came from
+  earlier builds." A build that kept nothing, or whose check failed, says nothing more. The build log has it as `reused: …`.
 
 ## The rewrite: a module whose own part did not change
 
@@ -185,7 +188,7 @@ python3 peanuts/scripts/incremental-check.py --package dev.nxnative.android.<suf
 
 ## Tests
 
-`peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
+`peanuts/tests/test_build_reuse.py` (the ready message: the last run of each step's log, only the steps this build ran, a failed check, the words the tools print). `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
 and a new pair (exactly those and the vertex shaders they pad are translated), pairs that change in the split's `pso_pairs.tsv` (translated, not kept by the same
 inputs), an add-on's pixel shaders built after a build without them (they and the vertex shaders they pad are translated), the same inputs without a record (nothing kept unless the profile has its own `pso_pairs.tsv`), a change the rule does not see (caught by the check,
 then a full translation), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; the kept copy (a build keeps one and puts the environment back, a build
