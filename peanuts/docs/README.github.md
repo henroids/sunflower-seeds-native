@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="status" src="https://img.shields.io/badge/release-0.1.5-brightgreen">
+  <img alt="status" src="https://img.shields.io/badge/release-0.1.4-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
 </p>
@@ -26,9 +26,52 @@ too.
 
 ## Supported games
 
+<!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
+
 Peanuts Native 0.1.5 includes 39 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
 
-| Game | Title ID | Game update | Companion |
+| Game | Title ID | Game update | Companion | Runs at |
+|---|---|---|---|---|
+| The Legend of Zelda: Link's Awakening | `01006BB00C6F0000` | 1.1.0 | Yes | 60 fps |
+| The Legend of Zelda: Echoes of Wisdom | `01008CF01BAAC000` | 1.1.0 | Yes | 60 fps |
+| Fire Emblem: Three Houses | `010055D009F78000` | 1.2.0 | Yes | 60 fps |
+| Fire Emblem Engage | `0100A6301214E000` | 2.0.0 | Yes | 60 fps |
+| Metroid Dread | `010093801237C000` | 2.1.0 | Yes | 60 fps |
+| Super Mario Odyssey | `0100000000010000` | 1.4.1 | Yes | 60 fps |
+| Mario Kart 8 Deluxe | `0100152000022000` | 4.0.0, 4.0.1 | Yes | 60 fps |
+| Animal Crossing: New Horizons | `01006F8002326000` | 3.0.3 | Yes | 30 fps, as on Switch |
+| Persona 5 Royal | `01005CA01580E000` | 1.0.2 | Yes | 60 fps |
+| Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes | 60 fps |
+| OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes | 60 fps |
+| Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes | 60 fps |
+| Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Not checked | 60 fps; new, little tested |
+| Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes | 60 fps (30 on Switch) |
+| Pokémon Shield | `01008DB008C2C000` | 1.3.2 | Yes | 60 fps (30 on Switch); new, little tested |
+| The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.9.0 | Yes | 60 fps (30 on Switch); new, little tested |
+| The Legend of Zelda: Tears of the Kingdom | `0100F2C0115B6000` | 1.4.3 | Not checked | 30–60 fps in the opening cave on AYN Thor with Turnip |
+| FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No | 45 to 60 fps; new, little tested |
+| The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Not checked | 60 fps; new: right indoors, the fog outdoors is not checked and may draw wrong |
+| Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No | 30 fps, as on Switch; new, little tested |
+| Resident Evil 4 | `010099A00BC1E000` | v131072 | Not checked | 60 fps; new, a first profile: the first scenes only |
+| Kirby and the Forgotten Land | `01004D300C5AE000` | 1.1.0 | Not checked | 30 fps, as on Switch, with dips to 15 to 20; new, little tested: the start of the game, by its contributor |
+| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested: its first stage, by its contributor |
+| Super Mario 3D World + Bowser's Fury | `010028600EBDA000` | 1.2.2 | Not checked | 60 fps; new, little tested: the start of the game, by its contributor |
+| Super Mario Bros. Wonder | `010015100B514000` | 1.2.1 only | Yes | 1.2.1 on AYN Thor: title, menus and map reached; first course at 56 to 60 fps (average 58), occasional doubled frames; sound, saving and later courses untested |
+| DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Packs on Linux; device validation pending |
+| Chained Echoes | `0100C510166F0000` | 1.41 | Not checked | AYN Thor, Turnip: title and opening scenes at about 60 fps with a 2 GB application pool; battles, saving/loading, sound and extended play untested |
+| Yoru, Tomosu | `0100C2901153C000` | Base game | Log unreadable | Opening at 60 fps on AYN Thor; companion log text is unreadable |
+| Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes | 60 fps on AYN Thor in single races; with the 120 fps limit, 118 to 120 in the menus and 81 to 97 in a race; new, little tested |
+| Captain Tsubasa 2: World Fighters | `01009720213B0000` | 1.0.6 | No | 53–60 fps in a short offline match on AYN Thor with Turnip v26.2.0 R5 |
+| DAVE THE DIVER | `010097F018538000` | 1.0.6.1267 | No | 20–120 fps caps, cold-start shader prewarm on Turnip |
+| Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2 | `0100AD80208A8000` | 1.80 | No | About 30 fps in the opening combat tutorial on AYN Thor with Turnip |
+| Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 only | No | Experimental. On AYN Thor, Turnip: the title and the opening at 30 fps; 57 to 60 fps with the 60 fps limit in two sessions of 5 and 10 minutes; little tested beyond that |
+| My Time at Sandrock | `0100B63016916000` | 1.4.2.0 | Yes | 30 fps on AYN Thor: a 15-minute session through the opening, the town and the menus; new, little tested |
+| Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Not checked | Runs on AYN Thor; new, little tested |
+
+### 0.1.6 additions
+
+<!-- PEANUTS: Android game validation -->
+| Game | Title ID | Game update | Thor validation |
 |---|---|---|---|
 | The Legend of Zelda: Link's Awakening | `01006BB00C6F0000` | 1.1.0 | Yes |
 | The Legend of Zelda: Echoes of Wisdom | `01008CF01BAAC000` | 1.1.0 | Yes |
@@ -70,16 +113,9 @@ Peanuts Native 0.1.5 includes 39 games. The Companion column shows whether a gam
 | EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523 | No |
 | Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No |
 
+<!-- PEANUTS end: the Supported games table -->
+
 On the 0.1.5 verification build, an AYN Thor with Turnip v26.2.0 R5 reached the rooftop fight in Demon Slayer 2 and the opening cave in Tears of the Kingdom. Kirby and the Forgotten Land skipped no draws in the opening walk with either a fresh or a saved shader cache.
-
-### 0.1.6 additions
-
-<!-- PEANUTS: Android game validation -->
-| Game | Title ID | Game update | Thor validation |
-|---|---|---|---|
-| Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | Hotel lobby playable with Turnip v26.2.0 R5 and fixed docked resolution. Lamp-lit floors can flicker. |
-| Unicorn Overlord | `010069401ADB8000` | 1.05 | Opening and first battle map playable at about 60 FPS with Turnip v26.2.0 R5. |
-| Pokémon Scarlet | `0100A3D008C5C000` | 4.0.0 | Opening and indoor movement verified with Turnip v26.2.0 R5. Higher frame rates vary by scene. <!-- PEANUTS --> |
 
 ## What you need
 
@@ -169,7 +205,7 @@ The companion runtime and package format come from [Eden Duo](https://github.com
 
 Contributors: the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`) is by [intermission88](https://github.com/intermission88)
 (pull request #13), and so are the profile of Kirby's Return to Dream Land Deluxe and the guide for adding a game
-(`peanuts/docs/NEW-GAME.md`, pull request #34). The issue and discussion forms were set right by [ArchOwlen](https://github.com/ArchOwlen) (pull request #5).
+(`peanuts/docs/NEW-GAME.md`, pull request #34). The issue and discussion forms were first set right by [ArchOwlen](https://github.com/ArchOwlen) (pull request #5), and [davdxpx](https://github.com/davdxpx) rebuilt them from the ground up: seven forms with picks instead of free text, written from a game catalog that also keeps the Supported games table up to date (pull request #175).
 
 The project as a whole is licensed GPL-3.0-or-later. Frame generation (ported from Eden and lsfg-vk) and other
 components carry their own licenses; see `android/NOTICE.md` and `dm/third_party/README.md`.

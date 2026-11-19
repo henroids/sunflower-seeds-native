@@ -1,5 +1,5 @@
-"""The game catalog (peanuts/games.json, peanuts/scripts/games_catalog.py) and the GitHub issue forms (.github/ISSUE_TEMPLATE, written by
-peanuts/scripts/issue_forms.py).
+"""The game catalog (peanuts/games.json and the README's Supported games table, peanuts/scripts/games_catalog.py) and the GitHub issue forms
+(.github/ISSUE_TEMPLATE, written by peanuts/scripts/issue_forms.py).
 
 Fails on what is wrong in the scripts: a form GitHub would refuse, a catalog that misses a shipped game's versions, a problem form without its
 log, an app word the forms name that the app no longer shows. Never fails because a game was added, removed or a version released: the
@@ -67,12 +67,59 @@ class Catalog(unittest.TestCase):
         wonder = next(g for g in self.catalog['games'] if g['title_id'] == '010015100B514000')
         self.assertEqual([b['version'] for b in wonder['builds']], ['v327680'])
 
-    def test_the_written_catalog(self):
+    def test_the_written_catalog_and_tables(self):
         path = ROOT / 'peanuts/games.json'
         self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['about'], self.catalog['about'])
-        if path.read_text(encoding='utf-8') != catalog_mod.render(self.catalog):
-            self.skipTest('peanuts/games.json is out of date (a game or a version changed): catalog.yml writes it on main, or run '
-                          'python3 peanuts/scripts/games_catalog.py')
+        want = catalog_mod.outputs(warn=lambda m: None)
+        self.assertEqual(sorted(want), sorted(('peanuts/games.json',) + catalog_mod.READMES), 'a README lost its Supported games markers')
+        stale = [n for n, t in want.items() if (ROOT / n).read_text(encoding='utf-8') != t]
+        if stale:
+            self.skipTest(f'out of date: {", ".join(stale)} (a game, a version or a companion changed): catalog.yml writes them on main, or '
+                          'run python3 peanuts/scripts/games_catalog.py')
+
+    def test_the_table_is_every_shipped_game_in_its_order(self):
+        rows = list(catalog_mod.game_rows())
+        order = self.catalog['readme_order']
+        self.assertEqual(sorted(order), sorted(g['title_id'] for g in self.catalog['games']))
+        self.assertEqual(order[:len([t for t in rows if t in order])], [t for t in rows if t in order])
+        table = catalog_mod.table(self.catalog).splitlines()
+        self.assertEqual(len([ln for ln in table if ln.startswith('| ') and '`' in ln]), len(order))
+        self.assertIn(f'Peanuts Native {self.catalog["app_version"]} includes {len(order)} games.', table[0])
+        for g in self.catalog['games']:
+            self.assertTrue(g['readme_update'] and '?' not in g['readme_update'], g['name'])
+
+    def test_only_the_table_is_written(self):
+        b, e = catalog_mod.TABLE_BEGIN, catalog_mod.TABLE_END
+        text = f'# Title\n\nbefore\n{b}\n\nold table\n\n{e}\n\nafter\n'
+        out = catalog_mod.readme(text, self.catalog)
+        self.assertTrue(out.startswith('# Title\n\nbefore\n' + b + '\n\n'))
+        self.assertTrue(out.endswith('\n\n' + e + '\n\nafter\n'))
+        self.assertNotIn('old table', out)
+        self.assertEqual(catalog_mod.readme(out, self.catalog), out)
+        self.assertIsNone(catalog_mod.readme('no markers', self.catalog))
+        self.assertIsNone(catalog_mod.readme(f'{e}\n{b}\n', self.catalog))
+
+    def test_refresh(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / 'peanuts').mkdir()
+            (root / 'peanuts/release-titles.txt').write_text('0100000000000001\n0100000000000002\n', encoding='utf-8')
+            (root / 'peanuts/games.tsv').write_text('# comment\n0100000000000001\tFirst Game\t\tno\n', encoding='utf-8')
+            for t, n in (('0100000000000001', 'FIRST GAME'), ('0100000000000002', 'Second Game')):
+                (root / 'dm/games' / t).mkdir(parents=True)
+                (root / 'dm/games' / t / 'game.tsv').write_text(f'name\t{n}\nbuild\tv65536\t1.0.1\n', encoding='utf-8')
+            said = []
+            catalog_mod.refresh(root, said.append, fetch=lambda token: {'0100000000000001', '0100000000000002'})
+            self.assertEqual((root / 'peanuts/games.tsv').read_text(encoding='utf-8'),
+                             '# comment\n0100000000000001\tFirst Game\t\tyes\n0100000000000002\tSecond Game\t\tyes\n')
+            self.assertEqual(len(said), 1)
+
+            def offline(token):
+                raise OSError('no network')
+            catalog_mod.refresh(root, said.append, fetch=offline)   # the column stays, nothing is lost
+            self.assertIn('0100000000000002\tSecond Game\t\tyes', (root / 'peanuts/games.tsv').read_text(encoding='utf-8'))
+            self.assertIn('not read', said[-1])
 
 
 class IssueForms(unittest.TestCase):

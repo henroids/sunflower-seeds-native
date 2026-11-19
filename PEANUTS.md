@@ -170,16 +170,19 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   Storage tab, Settings › Share log, and ctl `share_build_log`. Tests: `dm/tools/tests/test_android_build_log.py` (`BuildLogJvmTest`).
 - 2026-11-19 (game catalog and issue forms): `peanuts/games.json` is the machine-readable list of the games this version ships, written by
   `peanuts/scripts/games_catalog.py` from `peanuts/release-titles.txt` (which games), each `dm/games/<title ID>/game.tsv` (the builds Android
-  plays, `android_builds` respected, and the package) and the README's Supported games table (the name players know, a display version a
-  profile lacks, the companion). Seven issue forms, written by `peanuts/scripts/issue_forms.py` from one source: **Game problem** (the log
+  plays, `android_builds` respected, and the package) and `peanuts/games.tsv` (the table's order, the name players know, a display
+  version a profile lacks, the companion). The same script writes the Supported games table of `README.md` and `peanuts/docs/README.github.md`
+  between its `PEANUTS begin` / `end` markers; `--refresh` adds a row for a game that ships without one and sets the companion column from
+  eden-duo-companions' releases. Seven issue forms, written by `peanuts/scripts/issue_forms.py` from one source: **Game problem** (the log
   of the run required), **Build problem** (the Share build log `.zip` required), **Setup or app problem** (keys, firmware, the library,
   storage, drivers, companions, mods, saves, the second screen, the app), **Desktop builder problem**, **Game request**, **Feature
   request**, and **Question, device report or development topic**; `config.yml` links companion content to eden-duo-companions. They ask
   mostly by picks: the game with its version (one option per catalog build, then another version or another game with a line to write it),
   the app version (peanuts/VERSION first), device, chip with its GPU, RAM, Android, the driver family, the settings changed, whether it
-  worked before, and a required check that the log is this game's; every form keeps optional text boxes. The fields come from what issues
-  #1-#170 had to ask for again and again. `.github/workflows/catalog.yml` (PEANUTS, own repository only) runs both scripts on a push to main
-  that touches their inputs and commits what changed. `peanuts/tests/test_issue_forms.py` checks the scripts and the forms' structure and
+  worked before, and a required check that the log is this game's; every form keeps optional text boxes, and Game problem and Setup or app problem take
+  an optional save zip (Back up saves, or the backup folder with its manifest). The fields come from what issues
+  #1-#170 had to ask for again and again. `.github/workflows/catalog.yml` (PEANUTS, own repository only) runs both scripts (the catalog with
+  `--refresh`) on a push to main that touches their inputs and once a day, and commits what changed. `peanuts/tests/test_issue_forms.py` checks the scripts and the forms' structure and
   only skips, never fails, while the written files are out of date.
 
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` — (2026-11-17, the launcher on a second display) one line in `buildHome`
