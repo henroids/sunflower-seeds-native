@@ -135,6 +135,10 @@ spin wait search 61 s). `patch_nso.py` computes those two phases in pieces with 
 - The rewriter file before this change is in `dm/tools/rewriter_equiv/` (`patch_nso.py.6bc30f06074b`): a pack made with it counts as up to date (its key is one
   of the current rewriter's), so the update rewrites no module.
 
+Measured on an AYN Thor (ACNH 3.0.3, `incremental-check.py full`, 2026-11-19, the Thor on a computer's 0.5 A port): the rewrite step 134 s in place of 195 s
+and 203 s (two runs with the file before), the build from nothing 5 min 34 s in place of 6 min 38 s; `main`, `subsdk0` and `sdk` byte for byte (SHA-256) the
+modules of those two runs.
+
 ## The split: game files that did not change
 
 The split scans every file of the profile's list (targeted) or of the RomFS (full) on every build; its `ScanCache` keeps results only to resume a stopped split,
