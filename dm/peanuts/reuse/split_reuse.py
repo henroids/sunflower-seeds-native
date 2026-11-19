@@ -15,7 +15,8 @@
 # and Python's version. Archive ranges (several files, ranges planned over the whole archive), a plaintext NSP or a folder dump (no hashes) and the Unity second
 # pass are scanned as before. A result with no shader goes into a list file, one with shaders into a file of its own (<PN_REUSE_DIR>/split/<common part>/).
 #
-# The check: whole batches that could be kept, one in SAMPLE_SHARE (at least SAMPLE_MIN, picked by a hash of their keys), are scanned anyway, and each of their
+# The check: whole batches that could be kept, one in SAMPLE_SHARE (at least SAMPLE_MIN, picked by a hash of their keys and a salt drawn at each split, so
+# that the split, which has no full check after it, meets every kept file over its builds), are scanned anyway, and each of their
 # results must equal the kept one (as values: sets and dicts in any order). One that differs raises Stale: the caller drops what was filled in and scans the
 # files again, and the kept results of this common part are deleted. The split's own checks after it (its tables against the profile, the absences) stay.
 # Anything else that goes wrong here (a file that cannot be read or written) turns the reuse off for the run with one line; it is never a reason to fail.
@@ -162,7 +163,8 @@ class Context:
         try:
             self.keys = [self.key(j) for j in jobs]
             can = [i for i, k in enumerate(self.keys) if k is not None and start + i not in cache.have and self._has(k)]
-            order = sorted(can, key=lambda i: digest('pn-sample', self.keys[i]))
+            salt = os.urandom(16)   # another sample at every split: there is no full check after it, so a kept result that went stale is met within builds, not never
+            order = sorted(can, key=lambda i: digest('pn-sample', salt, self.keys[i]))
             n = min(len(can), max(SAMPLE_MIN, -(-len(can) // SAMPLE_SHARE)))
             check = set(order[:n]) if len(can) >= CHECK_FROM else set()   # too few to spare one: all kept (the split's tables are still compared with the profile)
             for i in can:
@@ -210,7 +212,7 @@ class Context:
         except Exception as e: self._stop(e)
         cached = sum(1 for k in self.keys if k is not None)
         print(f'split reuse: {len(self.filled)} of {len(jobs)} files kept (unchanged since a split before), {len(self.expect)} of them scanned to check '
-              f'(the same), {len(jobs) - cached} not keyed (archives, files without a hash)', flush=True)
+              f'(the same: {", ".join(jobs[i][1] for i in sorted(self.expect)[:8])}), {len(jobs) - cached} not keyed (archives, files without a hash)', flush=True)
 
     def forget(self, cache):
         """What fill() put into the ScanCache taken out again: those files are scanned. cache None: the split keeps no ScanCache (no DM_SPLIT_RESUME), and the

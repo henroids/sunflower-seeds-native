@@ -179,9 +179,11 @@ keeps, across builds, the result of every plain file job (`<PN_REUSE_DIR>/split/
 
 Before the scan the kept results go into the `ScanCache` and each kept file is a batch of its own, so only the others are scanned, in runs as before; after it the
 new results are kept. A file whose result says it could not be read is never kept, nor one whose decoder failed for something other than its bytes (no
-memory, a missing module: `shader_split.py unsized` used to read such a container as the file as it is, a result that would have been kept). The check: one kept file in 50 (at least one, once three could be kept),
-picked by a hash of its key, is scanned anyway and its result must equal the kept one as values (sets and dicts in any order); one that differs scans every file
-again without the kept results and deletes them. The split's own check after it stays: its tables against the profile's.
+memory, a missing module: `shader_split.py unsized` used to read such a container as the file as it is, a result that would have been kept). The check: one
+kept file in 50 (at least one, once three could be kept), picked by a hash of its key and a salt drawn at each split, is scanned anyway and its result must
+equal the kept one as values (sets and dicts in any order); one that differs scans every file again without the kept results and deletes them. The split has no
+full check later, so the sample is another one at every split (the log names the files it scanned to check). The split's own check after it stays: its tables
+against the profile's.
 
 Archive ranges (several files, ranges planned over the whole archive), files without a hash (a plaintext NSP, a folder dump) and the Unity second pass are scanned
 as before. Tests: `peanuts/tests/test_split_reuse.py` (`shader_split.py` run on a `.nup` made by `dm/tools/nup_pack.py`: a second split keeps every file but the

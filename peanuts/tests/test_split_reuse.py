@@ -4,6 +4,7 @@ synthetic game packed with dm/tools/nup_pack.py (raw files, so no zstd): BNSH an
 without any. No game files."""
 import os
 import pickle
+import re
 import shutil
 import struct
 import subprocess
@@ -123,6 +124,20 @@ class SplitReuse(unittest.TestCase):
         self.assertIsNotNone(keys[0])
         self.assertEqual(keys[0], keys[1])   # b.bin is not a.data's
         self.assertNotEqual(keys[0], keys[2])   # a.dict is
+
+    def test_the_files_scanned_to_check_change_from_split_to_split(self):
+        # the split has no full check later: a sample that took the same files on every split would never meet a kept result that went stale elsewhere
+        nup = self.nup(self.files)
+        self.split(nup, 'first')
+        seen = set()
+        for i in range(6):
+            _, line, _ = self.split(nup, f'again{i}')
+            m = re.search(r'scanned to check \(the same: ([^)]*)\)', line)
+            self.assertIsNotNone(m, line)
+            names = [n for n in m.group(1).split(', ') if n]
+            self.assertEqual(len(names), 2)   # one in 50 of the 62 that could be kept, rounded up
+            seen |= set(names)
+        self.assertGreater(len(seen), 2)
 
     def test_a_decode_that_failed_once_is_not_kept(self):
         # a size-prefixed container (HAL's .cmp: shader_split.py unsized) whose LZ4 frame the decoder could not open this once (no memory): the file is
