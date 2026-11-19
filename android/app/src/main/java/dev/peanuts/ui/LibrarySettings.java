@@ -133,12 +133,12 @@ public final class LibrarySettings {
         Activity a = rowsOf;
         if (a == null || gameRow == null) return;
         String g = PeanutsPrefs.gameDir(a), u = PeanutsPrefs.updateDir(a), d = PeanutsPrefs.dlcDir(a);
-        gameRow.value(g != null ? g : "Not set. Every NSP, XCI, .nup and dump folder inside is shown on Home.");
+        gameRow.value(g != null ? g : "Not set. Every NSP, NSZ, XCI, XCZ, .nup and dump folder inside is shown on Home.");
         List<String> builds = PeanutsPrefs.buildDirs(a);
         buildRow.value(builds.isEmpty() ? "Add a folder on the phone or SD card"
                 : PUi.joined("Default: " + builds.get(0), builds.size() > 1 ? builds.size() + " folders" : null));
-        updateRow.value(u != null ? PUi.joined(u, "hold to forget") : "Optional. Another folder with update NSPs, matched to their games by title ID.");
-        dlcRow.value(d != null ? PUi.joined(d, "hold to forget") : "Optional. Another folder with DLC NSPs, matched to their games by title ID.");
+        updateRow.value(u != null ? PUi.joined(u, "hold to forget") : "Optional. Another folder with updates as NSP or NSZ files, matched to their games by title ID.");
+        dlcRow.value(d != null ? PUi.joined(d, "hold to forget") : "Optional. Another folder with DLC as NSP or NSZ files, matched to their games by title ID.");
         keysRow.value(keysValue(a));
         fontsRow.value(fontsValue(a, "Used by games and companions. Missing characters in Android's fonts can prevent a game from starting."));
         if (companionsRow != null) companionsRow.value(companionsValue(a));
@@ -482,7 +482,7 @@ public final class LibrarySettings {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(PUi.dp(a, 20), PUi.dp(a, 4), PUi.dp(a, 20), 0);
         AlertDialog[] d = new AlertDialog[1];
-        if (ready.isEmpty()) PUi.add(box, PUi.small(a, "Nothing to free: no built game still has its original NSP or XCI in your folders (or the library is still scanning)."), 0);
+        if (ready.isEmpty()) PUi.add(box, PUi.small(a, "Nothing to free: no built game still has its original game files in your folders (or the library is still scanning)."), 0);
         else PUi.add(box, PUi.small(a, "These games are built, so they play and rebuild without their original dump. Keep the original if you will add a later game update: an update can only be applied to the original."), 8);
         for (LibraryScanner.Title t : ready) {
             for (LibraryScanner.Source s : t.originals) {

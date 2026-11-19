@@ -853,7 +853,7 @@ public final class Library {
             int n = PeanutsPrefs.roots(a).size();
             note = PUi.add(box, PUi.small(a, "Looking in " + n + (n == 1 ? " folder…" : " folders…")), 8);
         } else if (rows.isEmpty() && pc == null && !setup) {
-            note = PUi.add(box, PUi.small(a, "No games found in " + PeanutsPrefs.gameDir(a) + ". Put NSP, XCI, .nup files or dump folders there, then Rescan (Settings › Library)."), 8);
+            note = PUi.add(box, PUi.small(a, "No games found in " + PeanutsPrefs.gameDir(a) + ". Put NSP, NSZ, XCI, XCZ, .nup files or dump folders there, then Rescan (Settings › Library)."), 8);
         }
         if (note != null && !hadNote) Motion.fadeIn(note);
         hadNote = note != null;
@@ -1446,6 +1446,7 @@ public final class Library {
                     break;
                 }
                 case BuildListener.FILE_MISSING:
+                case BuildListener.FILE_DAMAGED:
                 case BuildListener.WRONG_VERSION:
                 case BuildListener.INVALID_DUMP:
                     left = PUi.button(a, "Open the game's sheet", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> openSheet.run()));
@@ -1497,6 +1498,7 @@ public final class Library {
             String action = b.reimport && b.step.equals("import") && !BuildListener.OUT_OF_SPACE.equals(b.code) ? " Open the game's sheet to import again."
                     : BuildListener.ADDON_MISSING.equals(b.code) ? (btNup && PeanutsPrefs.dlcDir(a) == null && !GameSheet.dlcFound(bt) ? " No DLC folder is set: set it below, then import again."
                             : btNup && GameSheet.dlcFound(bt) ? " DLC for this game was found: Import again with DLC takes it." : " Add the DLC in the game's sheet (its DLC row).")
+                    : BuildListener.FILE_DAMAGED.equals(b.code) ? ""   // its message says what to do (Compressed.failure)
                     : BuildListener.FILE_MISSING.equals(b.code) ? " Open the game's sheet to pick the file again."
                     : BuildListener.WRONG_VERSION.equals(b.code) ? " Open the game's sheet: tap “Build anyway” there if you want to try it, or pick the recommended update."
                     : BuildListener.INVALID_DUMP.equals(b.code) ? " The dump looks incomplete or wrong. Open the game's sheet to check the files, or dump the game again."
@@ -1623,9 +1625,9 @@ public final class Library {
         // Build itself is gated on both (GameSheet, Library.startBuild). Browsing this screen (Show my games, below) still needs only the game folder.
         PUi.add(c, PUi.body(a, LibrarySettings.KEYS_FIRMWARE_GUIDANCE), 12);
         PUi.add(c, new PUi.Setting(a, "🔑", "Keys", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickKeys(a)))
-                .value(keys ? "Added: prod.keys is in the app." : "Needed before building. Importing an NSP or XCI needs it; browsing your folders here does not.").chevron(a).view, 16);
+                .value(keys ? "Added: prod.keys is in the app." : "Needed before building. Importing an NSP, NSZ, XCI or XCZ needs it; browsing your folders here does not.").chevron(a).view, 16);
         PUi.add(c, new PUi.Setting(a, "📁", "Game folder", Haptics.on(Haptics.Word.TICK, v -> LibrarySettings.pickFolder(a, LibrarySettings.REQ_GAME, "Pick your game folder")))
-                .value(game != null ? game : "Required. Every NSP, XCI, .nup and dump folder inside is shown on this screen.").chevron(a).view, 0);
+                .value(game != null ? game : "Required. Every NSP, NSZ, XCI, XCZ, .nup and dump folder inside is shown on this screen.").chevron(a).view, 0);
         // P5: folded in as its own numbered step, same Setting-row shape as the other three, instead of a quiet text button below the action row
         String updateDir = PeanutsPrefs.updateDir(a), dlcDir = PeanutsPrefs.dlcDir(a);
         CharSequence updDlcValue = updateDir == null && dlcDir == null ? "Point at your update and DLC files if they're not inside the game folder already. Skip if everything's together."

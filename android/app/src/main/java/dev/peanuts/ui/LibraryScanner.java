@@ -30,7 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The library: every game in the roots (the game folder, then the update and DLC folders; each walked two levels deep) as *.nsp, *.xci, *.nup or a dump folder
+ * The library: every game in the roots (the game folder, then the update and DLC folders; each walked two levels deep) as *.nsp, *.xci, *.nsz, *.xcz, *.nup or a dump folder
  * (base/exefs or exefs present), grouped by the base game's title ID, with a status per title.
  * <p>
  * An NSP/XCI's titles come from the importer's probe (ImporterPort.probe: title id, application id, kind, version, name), kept in files/library-cache.json by
@@ -60,7 +60,7 @@ final class LibraryScanner {
      *  UNKNOWN: no profile, or the reflective read of its builds failed (never blocks Build; the sheet just has nothing extra to say) */
     enum VersionState { NOT_IN_APP, FILE_GONE, UNSUPPORTED, SUPPORTED_OTHER, RECOMMENDED, UNKNOWN }
     private static final Pattern HEX16 = Pattern.compile("(?<![0-9A-Fa-f])([0-9A-Fa-f]{16})(?![0-9A-Fa-f])");
-    private static final Set<String> EXT = new HashSet<>(Arrays.asList(".nsp", ".xci", ".nup"));
+    private static final Set<String> EXT = new HashSet<>(Arrays.asList(".nsp", ".xci", ".nsz", ".xcz", ".nup"));   // .nsz / .xcz: compressed with nsz (issue #149)
 
     /** One title inside a file or folder: a base, an update or a DLC */
     static final class Source {
@@ -68,10 +68,17 @@ final class LibraryScanner {
         Source(File file, int kind, String titleId, String appId, long version, String name, String publisher) {
             this.file = file; this.kind = kind; this.titleId = titleId; this.appId = appId; this.version = version; this.name = name == null ? "" : name; this.publisher = publisher == null ? "" : publisher;
         }
+        /** From the probe (issue #149): the title's content as the .nup will hold it (the CNMT's sizes; -1 unknown: an older cache entry, no keys, a .nup or
+         *  a dump), and of a compressed file what unpacking (solid) and checking (block) it takes */
+        long size = -1, unpack, check;
         boolean isNup() { return file.getName().toLowerCase(Locale.ROOT).endsWith(".nup"); }
         boolean isDump() { return file.isDirectory(); }
-        /** An NSP or XCI: the importer makes the .nup from it */
+        /** An NSP, XCI, NSZ or XCZ: the importer makes the .nup from it */
         boolean needsImport() { return !isNup() && !isDump(); }
+        /** An .nsz or .xcz */
+        boolean isCompressed() { return dev.peanuts.build.Compressed.is(file); }
+        /** What the .nup gets from it: the probe's size, else the file's own length */
+        long importBytes() { return size >= 0 ? size : file.length(); }
     }
 
     /** A game of the library: its base and what belongs to it, where its files live, its status */
@@ -164,13 +171,14 @@ final class LibraryScanner {
     /** Only the base titles, before the user's picks are added (to know which titles have picks) */
     private List<Title> groupPreview(List<Source> sources) { return new ArrayList<>(group(sources).values()); }
 
-    /** Sources → titles by application ID; a base that is a dump or .nup wins over an NSP/XCI of the same title (it needs no import) */
+    /** Sources → titles by application ID; a base that is a dump or .nup wins over an NSP/XCI of the same title (it needs no import), and an uncompressed one
+     *  over a compressed one (nothing to unpack); an update or DLC found both ways is listed once, uncompressed */
     private Map<String, Title> group(List<Source> sources) {
         Map<String, Title> titles = new LinkedHashMap<>();
         for (Source s : sources) {
             if (s.kind != BASE) continue;
             Title t = titles.computeIfAbsent(s.appId, Title::new);
-            if (t.base == null || (s.isNup() || s.isDump()) && t.base.needsImport()) t.base = s;
+            if (t.base == null || (s.isNup() || s.isDump()) && t.base.needsImport() || t.base.isCompressed() && s.needsImport() && !s.isCompressed()) t.base = s;
         }
         for (Source s : sources) {   // a .nup base: the NSPs/XCIs of the same title it was made from (see Title.originals)
             if (s.kind != BASE || !s.needsImport() || !s.file.isFile()) continue;
@@ -182,9 +190,15 @@ final class LibraryScanner {
             Title t = titles.get(s.appId);
             if (t == null) continue;   // an update or DLC without its base: nothing to build
             List<Source> into = s.kind == UPDATE ? t.updates : t.dlcs;
-            boolean dup = false;
-            for (Source x : into) if (x.file.equals(s.file) && x.titleId.equals(s.titleId) && x.version == s.version) dup = true;
-            if (!dup) into.add(s);   // a .nup's own updates/DLC are listed too: the sheet shows what is inside it
+            boolean dup = false; int twin = -1;
+            for (int i = 0; i < into.size(); i++) {
+                Source x = into.get(i);
+                if (x.file.equals(s.file) && x.titleId.equals(s.titleId) && x.version == s.version) dup = true;
+                else if (x.needsImport() && s.needsImport() && x.isCompressed() != s.isCompressed() && x.titleId.equals(s.titleId) && x.version == s.version) twin = i;
+            }
+            if (dup) continue;
+            if (twin < 0) into.add(s);   // a .nup's own updates/DLC are listed too: the sheet shows what is inside it
+            else if (into.get(twin).isCompressed()) into.set(twin, s);   // the same title as .nsp and .nsz: the uncompressed one
         }
         return titles;
     }
@@ -339,7 +353,9 @@ final class LibraryScanner {
                 int kind = o.optInt("kind", BASE);
                 String app = o.optString("app_id", "").toUpperCase(Locale.ROOT);
                 if (!app.matches("[0-9A-F]{16}")) app = baseOf(id, kind);
-                out.add(new Source(f, kind, id, app, o.optLong("version", 0), o.optString("name"), o.optString("publisher")));
+                Source s = new Source(f, kind, id, app, o.optLong("version", 0), o.optString("name"), o.optString("publisher"));
+                s.size = o.optLong("size", -1); s.unpack = o.optLong("unpack", 0); s.check = o.optLong("check", 0);
+                out.add(s);
             }
         }
         if (out.isEmpty()) {   // no importer (or a file it could not read): the name's [title ID], its kind by the low bits
