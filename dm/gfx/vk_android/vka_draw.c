@@ -614,7 +614,7 @@ static int rp_begin(const p_set_rt *rt, int has_rt, const p_scissor *sc, int has
         R.cnl[i] = nl; R.cext[i] = (VkExtent2D){lw, lh};
         if (lw < w) w = lw; if (lh < h) h = lh; if (nl < layers) layers = nl;
         if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed) && !im->is_video) vka_rb_color = (uint8_t)(1 + (f.srgb != 0));   // PEANUTS: texture readback: the write noted on the next line is a colour target's, through a view of this format (once a companion has asked: vka_readback.inc)
-        vka_img_written(im);
+        vka_img_color_written(im, lv);
     }
     R.ncolor = (uint32_t)n;
     VkRenderingAttachmentInfo *dp = NULL, *sp = NULL;
