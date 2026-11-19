@@ -60,6 +60,13 @@ else()
     target_link_libraries(font_test PRIVATE Threads::Threads ZLIB::ZLIB)
     target_compile_options(font_test PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation)
     add_test(NAME font_test COMMAND font_test)
+    # the meta blocks the .nup writer puts in (issue #158): dumps with control data written by the test (tests/nsp_fixture.h), no game data; also run by
+    # peanuts/tests/test_nup_icon.py, which reads its .nups with dm/tools/nup.py and the launcher's Nup
+    add_executable(nup_meta_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/nup_meta_test.c ${NXIMPORT_SOURCES})
+    target_include_directories(nup_meta_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(nup_meta_test PRIVATE Threads::Threads ZLIB::ZLIB)
+    target_compile_options(nup_meta_test PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-misleading-indentation)
+    add_test(NAME nup_meta_test COMMAND nup_meta_test)
   endif()
   # The RomFS read straight from dumps at run time (dm/peanuts/peanuts_nsp.c; peanuts/docs/NSP-DIRECT.md), on x86-64 Linux:
   #   nsp_test     no game data: dumps written by the test with made-up keys (tests/nsp_fixture.h), read through the importer, through the host's file system

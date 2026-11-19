@@ -1,6 +1,8 @@
 package dev.peanuts.ui;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import dev.peanuts.PeanutsPrefs;
@@ -9,6 +11,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -368,52 +371,74 @@ final class LibraryScanner {
 
     // ---- Icons ----
 
-    private static final int NUP_ICON_MAX = 4 << 20;   // a title's icon is a 256x256 picture, some hundred KiB as a PNG; anything larger is not one
-    private static final byte[] PNG_SIGNATURE = { (byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+    /** The app's copy of a title's icon: files/icons/&lt;title ID&gt;.png (app storage: Clear data and an uninstall empty it, an update keeps it) */
+    private static File iconFile(Context c, Title t) { return new File(PeanutsPrefs.iconsDir(c), t.titleId + ".png"); }
 
     /**
-     * The icon the PC builder wrote beside a .nup ("<the .nup's name without .nup>.png", peanuts/scripts/peanuts_build.py) copied to out; false without one.
-     * The file comes from shared storage, so it is taken only when it is a PNG by its signature and at most NUP_ICON_MAX bytes, and it reaches out by a rename:
-     * a file kept in files/icons is never read again, so half a copy or a file the decoder refuses would hide the game's cover for good.
+     * The title's icon as files/icons/&lt;ID&gt;.png, null without one (off the main thread). In order: the one already there; the PNG beside a .nup of the title
+     * (the PC builder's, or one {@link #keep} put there); the icon inside a .nup of the title (its meta block: the importer's since #158, the nup packer's); the
+     * importer's from an NSP/XCI of the title, the originals of a .nup base among them (before #158 they were not asked, so an original put back did not bring
+     * the icon back). A file kept in files/icons is never read again, so every way in writes a whole PNG the decoder reads, or nothing.
+     * A title whose base is a .nup without an icon of its own gets the one found here beside it ({@link #keep}).
      */
-    private static boolean nupIcon(File nup, File out) {
-        String n = nup.getName();
-        File dir = nup.getParentFile(), to = out.getParentFile();
-        if (dir == null || to == null || n.length() <= 4) return false;
-        File png = new File(dir, n.substring(0, n.length() - 4) + ".png");
-        long len = png.isFile() ? png.length() : 0;
-        if (len < PNG_SIGNATURE.length || len > NUP_ICON_MAX) return false;
-        File tmp = new File(to, out.getName() + ".tmp");
-        try {
-            byte[] b = Files.readAllBytes(png.toPath());
-            if (b.length < PNG_SIGNATURE.length || b.length > NUP_ICON_MAX) return false;   // the file may have grown since length()
-            for (int i = 0; i < PNG_SIGNATURE.length; i++) if (b[i] != PNG_SIGNATURE[i]) return false;
-            to.mkdirs();
-            Files.write(tmp.toPath(), b);
-            if (tmp.renameTo(out)) return true;
-        } catch (Exception e) { Log.w("peanuts", "icon beside " + n + ": " + e); }
-        tmp.delete();
-        return false;
-    }
-
-    /** The title's icon as files/icons/<ID>.png: the one already there, else the PNG beside a .nup of the title (the PC builder's), else the importer's from an
-     *  NSP/XCI of the title (off the main thread); null without one */
     static File icon(Context c, Title t) {
-        File out = new File(PeanutsPrefs.iconsDir(c), t.titleId + ".png");
-        if (out.isFile() && out.length() > 0) return out;
-        List<Source> all = new ArrayList<>();
-        if (t.base != null) all.add(t.base);
-        all.addAll(t.updates);
-        for (Source s : all) if (s.isNup() && nupIcon(s.file, out)) return out;   // a .nup holds no icon
+        File out = iconFile(c, t);
+        if (out.isFile() && out.length() > 0) { keep(c, t); return out; }
+        Set<File> nups = new java.util.LinkedHashSet<>();   // a .nup that holds the base and its update is one file
+        if (t.base != null && t.base.isNup()) nups.add(t.base.file);
+        for (Source s : t.updates) if (s.isNup()) nups.add(s.file);
+        for (File f : nups) {
+            try { if (NupIcon.copyPng(NupIcon.beside(f), out)) return out; } catch (IOException | RuntimeException e) { Log.w("peanuts", "icon beside " + f.getName() + ": " + e); }
+        }
+        for (File f : nups) if (fromInside(f, out)) return out;
         ImporterPort imp = ImporterPort.get();
         if (!imp.available() || !ImporterPort.ensureKeys(c)) return null;
+        List<Source> all = new ArrayList<>();   // the base, else the NSPs/XCIs a .nup base was made from (Title.originals), then the updates
+        if (t.base != null) all.add(t.base);
+        all.addAll(t.originals);
+        all.addAll(t.updates);
         for (Source s : all) {
             if (!s.needsImport()) continue;
             out.getParentFile().mkdirs();
-            if (imp.icon(s.file.getPath(), s.titleId, out.getPath()) == 0 && out.isFile() && out.length() > 0) return out;
+            if (imp.icon(s.file.getPath(), s.titleId, out.getPath()) == 0 && out.isFile() && out.length() > 0) { keep(c, t); return out; }
             out.delete();
         }
         return null;
+    }
+
+    /** The icon inside a .nup (NupIcon.inside: a JPEG or a PNG) as a PNG at out; false when it carries none, or one the decoder does not read */
+    private static boolean fromInside(File nup, File out) {
+        byte[] b;
+        try { b = NupIcon.inside(nup); } catch (IOException | RuntimeException e) { Log.w("peanuts", "icon inside " + nup.getName() + ": " + e); return false; }
+        if (b == null) return false;
+        Bitmap bm = BitmapFactory.decodeByteArray(b, 0, b.length);
+        if (bm == null) { Log.w("peanuts", "icon inside " + nup.getName() + ": " + b.length + " bytes the decoder does not read"); return false; }
+        File tmp = null;
+        try {
+            File dir = out.getParentFile();
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create " + dir);
+            tmp = File.createTempFile(out.getName() + ".", ".tmp", dir);
+            try (FileOutputStream o = new FileOutputStream(tmp)) { if (!bm.compress(Bitmap.CompressFormat.PNG, 100, o)) throw new IOException("the PNG encoder refused it"); }
+            if (!tmp.renameTo(out)) throw new IOException("cannot rename " + tmp.getName());
+            tmp = null;
+            return true;
+        } catch (IOException | RuntimeException e) {
+            Log.w("peanuts", "icon inside " + nup.getName() + ": " + e);
+            return false;
+        } finally {
+            if (tmp != null) tmp.delete();
+            bm.recycle();
+        }
+    }
+
+    /**
+     * A title whose base is a .nup without an icon of its own gets the app's copy of its icon beside it (NupIcon.keep), once that copy is there: its cover then
+     * outlives files/icons and the NSP or XCI it came from (issue #158). Library calls it for the icons it already had from files/icons; off the main thread
+     */
+    static void keep(Context c, Title t) {
+        if (t.base == null || !t.base.isNup()) return;
+        try { if (NupIcon.keep(t.base.file, iconFile(c, t))) Log.i("peanuts", "icon: kept beside " + t.base.file.getName() + " (it carries none)"); }
+        catch (IOException | RuntimeException e) { Log.w("peanuts", "icon beside " + t.base.file.getName() + ": " + e); }
     }
 
     // ---- The probe cache ----

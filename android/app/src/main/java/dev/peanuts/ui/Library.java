@@ -397,7 +397,7 @@ public final class Library {
                 if (box != null && box.isAttachedToWindow()) refresh.run(); else render();   // upstream's list again too (Prepare and the add above put games into it)
             });
             for (LibraryScanner.Title x : t) {   // the icons not kept yet (preloadIcons has the others), before anything slow: the catalog and the build ids below
-                if (icons.containsKey(x.titleId)) continue;
+                if (icons.containsKey(x.titleId)) { LibraryScanner.keep(a, x); continue; }   // a .nup without an icon of its own gets this one beside it (issue #158)
                 File f = LibraryScanner.icon(a, x);
                 Bitmap b = f == null ? null : BitmapFactory.decodeFile(f.getPath());
                 if (b == null) continue;

@@ -356,9 +356,15 @@ The build stops there and lets you choose. Its card has two buttons:
 
 Older versions of the app went on without asking here, so a game built by one of them can lack these shaders with no message. **Import again** is the thing to try there too.
 
+### A built game has no cover, only a letter. How do I get it back?
+
+The app puts a game's cover into the `.nup` it makes, so the cover stays when the original NSP or XCI is gone and the app's data is cleared. A `.nup` made by an older version of the app has no cover in it: the app then keeps the cover as a `.png` beside the `.nup`, as soon as it has one.
+
+A game built by an older version whose original was deleted before that, and whose app data was cleared since, has no cover left anywhere. To get it back, put the original NSP or XCI, or one of the game's updates, into your game folder once and tap Settings › Library › **Rescan**. The cover is then kept beside the `.nup`, and you can delete the original again. **Import again** also makes a new `.nup` with the cover in it. The game plays the same either way.
+
 ### How do I free up storage?
 
-- Settings › Library › **Free up space** deletes the original dump of a game that is already built. The game keeps playing from its built copy. Keep the original if you will add a later game update.
+- Settings › Library › **Free up space** deletes the original dump of a game that is already built. The game keeps playing from its built copy, and keeps its cover. Keep the original if you will add a later game update.
 - Settings › **Storage** removes leftovers and old files. It never removes saves.
 
 ## Playing

@@ -469,7 +469,8 @@ public final class LibrarySettings {
     /**
      * Settings › Library › Free up space: the original NSP/XCI of every game already built into a .nup (LibraryScanner.Title.originals), which the game no
      * longer needs to play or to rebuild. Deleted one by one after a confirmation that says what is lost: a later game update needs the original again (its
-     * patch reads the base NCA's raw bytes, which the .nup does not keep). Only a READY title whose .nup is there and not empty, and only plain files.
+     * patch reads the base NCA's raw bytes, which the .nup does not keep). Only a READY title whose .nup is there and not empty, and only plain files. Before an
+     * original goes, the game's icon is made sure of with the .nup (LibraryScanner.icon: inside it, else the PNG beside it), as the original may be its last source.
      */
     static void freeUpSpace(Activity a) {
         java.util.List<LibraryScanner.Title> ready = new java.util.ArrayList<>();
@@ -491,6 +492,7 @@ public final class LibrarySettings {
                 box.addView(new PUi.Setting(a, "🗑️", t.name.isEmpty() ? t.titleId : t.name, v -> PUi.confirmDanger(a, "Delete the original dump?",
                         f.getName() + " (" + size + ") is deleted. " + (t.name.isEmpty() ? "The game" : t.name) + " keeps playing from its built copy, with its saves. "
                                 + "To add a later game update you will need this file again.", "Delete", () -> new Thread(() -> {
+                            LibraryScanner.icon(a, t);   // the icon with the .nup first, while its source is still there (a .nup made before issue #158 carries none)
                             boolean ok = f.isFile() && t.base.file.isFile() && t.base.file.length() > 0 && f.delete();   // the built copy checked again just before
                             UI.post(() -> {
                                 if (a.isFinishing() || a.isDestroyed()) return;

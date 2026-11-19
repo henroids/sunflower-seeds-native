@@ -26,6 +26,8 @@ NXIMPORT_API int nximport_probe(const char *nsp_or_xci, NxImportInfo *out, int m
 // The control NACP's icon (English, else the first) of that title → a PNG file. title_id may be NULL for the first title that has one.
 NXIMPORT_API int nximport_icon(const char *file, const char *title_id, const char *out_png);
 // The base of base_title_id and its updates and add-ons found in the inputs → one .nup (packages base, update/<version>, addon/<title id>).
+// A base or update package gets a meta block (SPEC §5): its main.npdm, its control.nacp and display version, and in the base (else the first package) the
+// icon, title and publisher, so the .nup shows its icon without the dumps it was made from (issue #158). Missing control data only leaves those records out.
 // progress(step, done, total): step is "probe", "base/exefs", "base/romfs", "update/<v>/exefs", "update/<v>/romfs", "addon/<tid>/romfs", "toc"; done/total are bytes of the
 // whole job (files are written in node-id order, so the steps of two packages interleave). A failed write removes the partial file.
 NXIMPORT_API int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, const char *base_title_id,

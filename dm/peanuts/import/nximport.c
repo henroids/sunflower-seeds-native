@@ -1,6 +1,7 @@
 // libnximport: the public API (nximport.h) — probe, icon, the .nup writer, the firmware fonts, .nup verify/extract.
 // The .nup is written as dm/tools/nup_pack.py and the host's reader (dm/host/nup_image.h) define it: superblock 0x80, TOC (packages 0x40, dirs 0x18,
-// files 0x50, children u32, string pool), blob of 16-byte-aligned raw extents (codec 0), equal files sharing one extent.
+// files 0x50, children u32, string pool), blob of 16-byte-aligned raw extents (codec 0), equal files sharing one extent, then each package's meta block
+// (SPEC §5: main.npdm, the control data, the icon) as the nup packer places them.
 #define _FILE_OFFSET_BITS 64
 #define _GNU_SOURCE
 #include "nximport.h"
@@ -75,7 +76,11 @@ fail:
 }
 
 // ---------------------------------------------------------------- .nup writer
-typedef struct Pkg { int kind; uint64_t tid; uint32_t ver; int flags; NxNode *root; char sel[40]; } Pkg;
+typedef struct Pkg {
+    int kind; uint64_t tid; uint32_t ver; int flags; NxNode *root; char sel[40];
+    const NxTitle *t;                              // the title it was made from (its control data: pkg_meta)
+    uint8_t *meta; size_t meta_n, meta_cap; uint64_t meta_off;   // its meta block (pkg_meta) and where write_nup put it
+} Pkg;
 typedef struct Src { NxContainer c; NxTitle *ts; int n; } Src;
 typedef struct Job {
     Pkg pk[64]; int npk;
@@ -98,14 +103,77 @@ static NxNca *job_nca(Job *j, const NxContainer *c, const char *id) {
     j->nncas++; return n;
 }
 
-static int add_pkg(Job *j, int kind, uint64_t tid, uint32_t ver, NxNode *exefs, NxNode *romfs) {
+static int add_pkg(Job *j, const NxTitle *t, int kind, uint64_t tid, uint32_t ver, NxNode *exefs, NxNode *romfs) {
     if (j->npk >= 64) { nx_err("too many packages"); return -1; }
-    Pkg *p = &j->pk[j->npk]; memset(p, 0, sizeof *p); p->kind = kind; p->tid = tid; p->ver = ver;
+    Pkg *p = &j->pk[j->npk]; memset(p, 0, sizeof *p); p->t = t; p->kind = kind; p->tid = tid; p->ver = ver;
     if (!(p->root = nx_node_new("", 0, 1))) { nx_err("out of memory"); return -1; }
     if (exefs) { free(exefs->name); exefs->name = strdup("exefs"); if (!nx_node_add(p->root, exefs)) return -1; }
     if (romfs) { free(romfs->name); romfs->name = strdup("romfs"); if (!nx_node_add(p->root, romfs)) return -1; }
     if (kind == 0) strcpy(p->sel, "base"); else if (kind == 1) snprintf(p->sel, sizeof p->sel, "update/%u", ver); else snprintf(p->sel, sizeof p->sel, "addon/%016llx", (unsigned long long)tid);
     j->npk++; return 0;
+}
+
+// ---- a package's meta block (SPEC §5): records of a type (u16), a zero (u16), a size (u32) and the bytes, no padding, sorted by type. The spec's own type
+// numbers: the nup packer from a55uka/nup 1d904e10 on writes them one lower and so has a type 0 record, which tells the readers (Nup.Meta.shifted, android/NUP.md);
+// this writer never writes a type 0. A base or update package gets its main.npdm (1, which the spec asks of every producer), its control.nacp as it is (2) and
+// that NACP's display version (4); the application's records go into the base package, else the first one: the icon (3, the JPEG of icon_AmericanEnglish.dat,
+// else of the first icon there, as nximport_icon takes it), the title (5) and the publisher (6), English else the first language that has them (as the probe
+// reads them). An add-on has no ExeFS and no control data. Control data that is missing or cannot be read only leaves its records out: the game imports and
+// plays the same, its card has no icon. Before these blocks a .nup made here had no icon of its own, so its game lost the icon once its NSP was gone
+// (issue #158); dev.peanuts.ui.NupIcon reads it back.
+enum { TLV_NPDM = 1, TLV_NACP = 2, TLV_ICON = 3, TLV_VERSION = 4, TLV_TITLE = 5, TLV_PUBLISHER = 6 };
+#define META_NPDM_MAX (1u << 20)
+#define META_ICON_MAX (4u << 20)   // the readers' bounds: Nup.META_MAX (8 MiB for a whole block), LibraryScanner's 4 MiB for an icon file
+
+static int tlv_add(Pkg *p, uint16_t type, const void *data, size_t n) {
+    if (!n) return 0;
+    size_t need = p->meta_n + 8 + n;
+    if (need > p->meta_cap) {
+        size_t nc = p->meta_cap ? p->meta_cap : 4096; while (nc < need) nc *= 2;
+        uint8_t *nb = realloc(p->meta, nc); if (!nb) { nx_err("out of memory"); return -1; }
+        p->meta = nb; p->meta_cap = nc;
+    }
+    uint8_t *r = p->meta + p->meta_n; put16(r, type); put16(r + 2, 0); put32(r + 4, (uint32_t)n); memcpy(r + 8, data, n);
+    p->meta_n = need; return 0;
+}
+
+// A title's control data: control.nacp, its display version, the icon. Nothing when the title has no control NCA or it cannot be read
+typedef struct Ctl { uint8_t *nacp, *icon; size_t nacp_n, icon_n; char version[17]; } Ctl;
+static void ctl_read(const NxTitle *t, Ctl *c) {
+    NxNca n; NxNode *root = NULL; int s;
+    memset(c, 0, sizeof *c);
+    if (nx_title_control(t, &n)) return;
+    if (!n.key_ok || (s = nx_nca_find_section(&n, NX_FS_ROMFS)) < 0 || !(root = nx_romfs_tree(&n, s))) { nx_nca_close(&n); return; }
+    NxNode *f = nx_node_find(root, "control.nacp");
+    if (f && !f->is_dir && f->size >= 0x3000 && f->size <= 0x4000 && !nx_node_read_whole(f, &c->nacp, 0x4000)) {
+        c->nacp_n = (size_t)f->size;
+        size_t k = 0;   // the display version: text at 0x3060, at most 16 bytes; taken only when it is printable ASCII
+        while (c->nacp_n >= 0x3070 && k < 16 && c->nacp[0x3060 + k] >= 0x20 && c->nacp[0x3060 + k] < 0x7F) k++;
+        if (k && (k == 16 || !c->nacp[0x3060 + k])) { memcpy(c->version, c->nacp + 0x3060, k); c->version[k] = 0; }
+    }
+    NxNode *ic = nx_node_find(root, "icon_AmericanEnglish.dat");
+    if (!ic) for (int i = 0; i < root->nkids; i++) if (!strncmp(root->kids[i]->name, "icon_", 5) && !root->kids[i]->is_dir) { ic = root->kids[i]; break; }
+    if (ic && !ic->is_dir && ic->size >= 8 && ic->size <= META_ICON_MAX && !nx_node_read_whole(ic, &c->icon, META_ICON_MAX)) {
+        // an image by its first bytes (the spec asks readers to check them): a JPEG, as the console's are, or a PNG
+        if ((c->icon[0] == 0xFF && c->icon[1] == 0xD8) || !memcmp(c->icon, "\x89PNG\r\n\x1a\n", 8)) c->icon_n = (size_t)ic->size;
+        else { free(c->icon); c->icon = NULL; }
+    }
+    nx_node_free(root); nx_nca_close(&n);
+}
+
+// p's meta block (app: the package that carries the application's records). Only running out of memory fails
+static int pkg_meta(Pkg *p, int app) {
+    if (p->kind == 2 || !p->t) return 0;
+    Ctl c; uint8_t *npdm = NULL; size_t npdm_n = 0; int rc = -1;
+    ctl_read(p->t, &c);
+    NxNode *np = nx_node_find(p->root, "exefs/main.npdm");
+    if (np && !np->is_dir && np->size && !nx_node_read_whole(np, &npdm, META_NPDM_MAX)) npdm_n = (size_t)np->size;
+    if (tlv_add(p, TLV_NPDM, npdm, npdm_n) || tlv_add(p, TLV_NACP, c.nacp, c.nacp_n) || (app && tlv_add(p, TLV_ICON, c.icon, c.icon_n)) ||
+        tlv_add(p, TLV_VERSION, c.version, strlen(c.version)) || (app && tlv_add(p, TLV_TITLE, p->t->name, strlen(p->t->name))) ||
+        (app && tlv_add(p, TLV_PUBLISHER, p->t->publisher, strlen(p->t->publisher)))) goto out;
+    rc = 0;
+out:
+    free(npdm); free(c.nacp); free(c.icon); return rc;
 }
 
 static int push(NxNode ***a, uint32_t *n, uint32_t *cap, NxNode *x) {
@@ -357,6 +425,11 @@ static int write_nup(Job *j, const char *out) {
     if (write_blob(j, fd, &pos, steps)) goto out;
     uint64_t end = blob; for (uint32_t i = 0; i < j->nf; i++) if (j->files[i]->size && j->files[i]->ext_off + j->files[i]->ext_stored > end) end = j->files[i]->ext_off + j->files[i]->ext_stored;
     if (ftruncate(fd, (off_t)end)) NX_FAIL("truncate failed: %s", strerror(errno));
+    for (int p = 0; p < j->npk; p++) {   // the meta blocks, one after the other behind the last extent (where the nup packer puts them); the file ends with them
+        Pkg *k = &j->pk[p]; if (!k->meta_n) continue;
+        if (write_all(fd, k->meta, k->meta_n, end)) goto out;
+        k->meta_off = end; end += k->meta_n;
+    }
     report(j, "toc");
     // the TOC
     if (!(toc = calloc(1, (size_t)toc_size))) NX_FAIL("out of memory");
@@ -364,6 +437,7 @@ static int write_nup(Job *j, const char *out) {
     for (int p = 0; p < j->npk; p++) {
         uint8_t *r = toc + o_pk + 0x40 * p; const Pkg *k = &j->pk[p]; NxNode *ex = nx_node_find(k->root, "exefs"), *ro = nx_node_find(k->root, "romfs");
         put64(r, k->tid); put32(r + 8, k->root->id); put32(r + 0xC, ex ? ex->id : 0xFFFFFFFFu); put32(r + 0x10, ro ? ro->id : 0xFFFFFFFFu); put32(r + 0x14, k->ver); r[0x18] = (uint8_t)k->kind; r[0x19] = (uint8_t)k->flags;
+        if (k->meta_n) { put64(r + 0x20, k->meta_off); put32(r + 0x28, (uint32_t)k->meta_n); }
     }
     uint64_t kid = 0;
     for (uint32_t i = 0; i < j->nd; i++) {
@@ -412,7 +486,7 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
         // update's base (nx_nca_set_base below), not a tree of its own
         int rom_tree = base_rom >= 0 && !base_prog->sec[base_rom].sparse;
         NxNode *romfs = rom_tree ? nx_romfs_tree(base_prog, base_rom) : NULL; if (rom_tree && !romfs) { nx_node_free(exefs); goto out; }
-        if (add_pkg(j, 0, base->title_id, base->version, exefs, romfs)) goto out;
+        if (add_pkg(j, base, 0, base->title_id, base->version, exefs, romfs)) goto out;
         j->base_rom = base_prog; j->base_rom_sec = base_rom;
     }
 
@@ -430,7 +504,7 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
             }
             NxNode *exefs = ex >= 0 ? nx_pfs0_tree(pn, ex) : NULL; if (ex >= 0 && !exefs) goto out;
             NxNode *romfs = ro >= 0 ? nx_romfs_tree(pn, ro) : NULL; if (ro >= 0 && !romfs) { nx_node_free(exefs); goto out; }
-            if (add_pkg(j, 1, t->title_id, t->version, exefs, romfs)) goto out;
+            if (add_pkg(j, t, 1, t->title_id, t->version, exefs, romfs)) goto out;
             j->pk[j->npk - 1].flags = base ? 0 : 1;
         } else {
             int dup = 0; for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 2 && j->pk[p].tid == t->title_id) dup = 1; if (dup) continue;
@@ -438,15 +512,17 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
             NxNca *dn = job_nca(j, t->c, t->data); if (!dn) goto out;
             int ro = nx_nca_find_section(dn, NX_FS_ROMFS); if (ro < 0) NX_FAIL("add-on %016llx has no RomFS", (unsigned long long)t->title_id);
             NxNode *romfs = nx_romfs_tree(dn, ro); if (!romfs) goto out;
-            if (add_pkg(j, 2, t->title_id, t->version, NULL, romfs)) goto out;
+            if (add_pkg(j, t, 2, t->title_id, t->version, NULL, romfs)) goto out;
         }
     }
     if (!j->npk) NX_FAIL("nothing for %s in the inputs (no base, update or add-on with that application id)", base_title_id);
+    { int app = 0; for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 0) { app = p; break; }   // the base carries the application's records, else the first package
+      for (int p = 0; p < j->npk; p++) if (pkg_meta(&j->pk[p], p == app)) goto out; }
     for (int p = 0; p < j->npk; p++) sum_sizes(j, j->pk[p].root);
     rc = write_nup(j, out_nup);
 out:
 fail:
-    if (j) { for (int p = 0; p < j->npk; p++) nx_node_free(j->pk[p].root); for (int i = 0; i < j->nncas; i++) nx_nca_close(&j->ncas[i]); free(j->dirs); free(j->files); free(j->pool); free(j->idx); free(j->shamap); free(j->basefiles); free(j); }
+    if (j) { for (int p = 0; p < j->npk; p++) { nx_node_free(j->pk[p].root); free(j->pk[p].meta); } for (int i = 0; i < j->nncas; i++) nx_nca_close(&j->ncas[i]); free(j->dirs); free(j->files); free(j->pool); free(j->idx); free(j->shamap); free(j->basefiles); free(j); }
     if (src) { for (int i = 0; i < n_inputs; i++) { free(src[i].ts); nx_container_close(&src[i].c); } free(src); }
     return rc;
 }
