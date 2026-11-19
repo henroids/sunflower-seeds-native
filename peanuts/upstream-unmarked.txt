@@ -154,3 +154,4 @@ dm/games/010051C0134F8000/shader_files.tsv	Generated game-profile table. The spl
 dm/games/010051C0134F8000/shader_map.tsv.conflicts.tsv	Generated game-profile table. The splitter and library reader use its data rows in order.
 dm/games/010051C0134F8000/pso_manifest.tsv	Generated game-profile table. The splitter and library reader use its data rows in order.
 dm/games/010051C0134F8000/bf_want.tsv	Generated game-profile table. The splitter and library reader use its data rows in order.
+dm/games/0100A3D008C5C000/vk_prewarm.bin	Pipeline keys recorded on Thor with Turnip v26.2.0-R5 and verified before guest entry.

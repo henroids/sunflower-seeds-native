@@ -1,4 +1,5 @@
 # Pokémon Scarlet 1.0.0, Game Freak's Trinity engine, SDK 13.3.5.
+# PEANUTS: Android uses 4.0.0. Select the Mac base build with -p v0.
 
 # ---- Identity ----
 title_id	0100A3D008C5C000
