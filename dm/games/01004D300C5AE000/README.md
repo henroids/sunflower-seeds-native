@@ -100,3 +100,4 @@ Open: **120 on a 120 Hz panel.** The window asked for 120 (`window frame rate 12
 - [A host lock held across a same-core handoff](../../../docs/reference/threads.md#a-host-lock-held-across-a-same-core-handoff).
 - [Write faults made writable page by page split GPU memory past vm.max_map_count](../../../docs/reference/memory.md#write-faults-made-writable-page-by-page-split-gpu-memory-past-vmmax_map_count-android).
 - [Joining contiguous placed segments holds frames at the same spots](../../../docs/reference/memory.md#joining-contiguous-placed-segments-holds-frames-at-the-same-spots-android).
+- [Joins for textures grow one segment until a join is refused](../../../docs/reference/memory.md#joins-for-textures-grow-one-segment-until-a-join-is-refused-android). <!-- PEANUTS(upstream-candidate) -->

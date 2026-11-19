@@ -1286,3 +1286,15 @@ file offsets in Diablo III's CPK sources. Single-build validation checks shader 
 The generated `shader_files.tsv` tables for Wonder, both Kirby games, Pokémon Sword and Pokémon Shield include files
 that contribute pairs without introducing new shader keys. The targeted packages for those games and Diablo III
 matched their full-scan references by SHA-256. The Python hunks and profile tables carry `PEANUTS` markers.
+### Round 20, textures placed without a join (2026-11-18)
+
+A texture in a shader-code pool placed its parts and queued a join like a buffer, so one segment of a large pool placed by parts was joined whole again by every texture across its end (Kirby and the Forgotten Land: 32 to 352 MiB, 17 to 84 ms a join, then refused past `DM_VK_PLACE_JOIN_MB`). Nothing reads a texture's storage in one piece; the uses that do ask for themselves. Not a shader-cache input. Reference: [Joins for textures grow one segment until a join is refused](../docs/reference/memory.md#joins-for-textures-grow-one-segment-until-a-join-is-refused-android).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_mem.c` | 5 | `mtl_pool_place`: `mtl_pool_need`'s placement with no join queued and none reported (`pool_need(…, join)`). The per-thread record of asks with nothing left to do (`negent`) notes whether its ask joined, so a placing ask's record does not answer a joining ask of the same range (found in review of the pull request: a linear or buffer texture, a texture's address or a command naming it, asked on the same thread after the texture's placing ask, returned from the record and its two parts were never joined) | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/vk_android/vka_place.h` | 1 | `vkp_neg_hit`: when a record answers an ask | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/nvn/hle_nvn.c` | 1 | a texture in a shader-code pool asks with `mtl_pool_place` | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/nvn/nvn_mtl.h`, `dm/gfx/nvn/nvn_mtl.m` | 1 each | the declaration; Metal's no-op | `PEANUTS(upstream-candidate)` |
+| `dm/host/tests/t_android_place.c` | 2 | the model of Kirby's pool: joined for textures a segment grows past 256 MiB, placed only it stays one part; the record's cases | `PEANUTS(upstream-candidate)` |
+| `docs/reference/memory.md`, `dm/games/01004D300C5AE000/README.md` | 1 each | the entry and the game's line | `PEANUTS(upstream-candidate)` |
