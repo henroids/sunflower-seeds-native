@@ -82,11 +82,16 @@ translation (`ondevice/logs/check.log`).
   job), its progress goes under a step of its own, and a timeout or a pause leaves it done. The game plays as usual: the library is only read. The job's
   `split/` stays until the check is done.
 - It stops when a game starts (checked every 3 s, and once more before the tool runs), when the packer's policy pauses (battery, heat), or when a job starts
-  (the job goes first: the packer starts it once the check has stopped). It goes on another time from the results it kept.
+  (the job goes first: the packer starts it once the check has stopped). The stop is sent again every 3 s while the tool runs (one sent before its run began
+  is lost), and a game that still runs beside it 20 s later ends the packer's process. It goes on another time from the results it kept.
+- A check is asked only with a done job (one not done yet starts it at its end). One that this job can never make is dropped: its split gone, a split of
+  another selection, an app update since the build. One that fails (the tool ended with an error, storage full) is tried again, at most three times
+  (`check.tries`), then dropped. Before, such a check was asked again every two minutes for good and held every other game's check. A build with code mods
+  is never the check's job.
 - All the same: `checked.tsv` says so, and the check's files and the split go. One that differs (or a shader only one of them has): the full translation is what
   the game should have. The records and the kept copy go first, then it takes the library's place in the pack (a `.partial`, flushed to storage, then a
   rename) and becomes the record and the kept copy; `check.failed` says how many differed and whether the pack's library was replaced, `check.log` has a
-  `[RED] reuse full check` line, and a notification says the game has the full translation now. Storage too full for the copy leaves the pack's library and
+  `[RED] reuse full check` line, and a notification says how many shaders came out different (only when the pack's library was replaced). Storage too full for the copy leaves the pack's library and
   the check due (`[RED]` line, no notification).
 - `check.todo` names what the library was made from besides its version: the profile inputs and the translator's sources. After an app update that changed
   either, a translation now is not what that build should have made, so the check is dropped (the next build of the game makes a library of this app).

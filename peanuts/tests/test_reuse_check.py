@@ -2,6 +2,9 @@
 android/app/src/ondevice/java/dev/nxnative/android/PackService.java checkKept and android/app/src/main/java/dev/peanuts/build/ReuseCheck.java. They need
 Android to run, so these tests read how they are wired, each for a fault a review found. No game files."""
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -28,6 +31,61 @@ class Stop(unittest.TestCase):
         self.assertIn('requestStop("game")', watch)
         self.assertRegex(watch, r'afterCheck != null')
         self.assertRegex(watch, r'engine\.interrupt\(\)')
+
+
+class Due(unittest.TestCase):
+    """A due check the packer could never run was started again every two minutes for good, and held the checks of every other game (ReuseCheck.startAny
+    takes one game at a time), and its job's split stayed"""
+    def test_a_job_that_is_not_done_starts_no_check(self):
+        s = CHECK.read_text(encoding='utf-8')
+        start = s[s.index('    public static String start(Context c, File jobFile, String titleId) {'):]
+        start = start[:start.index('\n    }\n')]
+        self.assertIn('jobState(jobFile)', start)
+        self.assertLess(start.index('jobState(jobFile)'), start.index('startForegroundService'))
+
+    def test_the_packer_drops_a_check_an_app_update_made_impossible(self):
+        s = PACK.read_text(encoding='utf-8')
+        self.assertRegex(s, r'checkAsked && !check && j != null && "done"\.equals\(j\.state\(\)\) && j\.apkChanged\(\)[^\n]*\n[^\n]*CheckDue\.drop\(')
+
+    def test_a_check_that_cannot_be_made_or_fails_is_counted_at_its_end(self):
+        body = check_kept()
+        end = body[body.index('} finally {'):]
+        self.assertIn('dev.peanuts.build.CheckDue.ended(', end)
+        self.assertLess(end.index('dev.peanuts.build.CheckDue.ended('), end.index('ReuseCheck.due(nb, j.titleId())'))   # before the split goes or stays
+
+    def test_a_library_that_differed_is_the_checks_end_not_a_failure(self):
+        s = PACK.read_text(encoding='utf-8')
+        self.assertRegex(s, r'if \(checking && code == 3\)')   # shader_reuse.py full_check's DIFFER: it replaced the library itself
+
+    def test_a_modded_build_does_not_take_the_check(self):
+        # a build with code mods (Prepare.runModded) runs no shaders step and has no split: as the check's job it left the check unable to run
+        s = PACK.read_text(encoding='utf-8')
+        self.assertRegex(s, r'else if \(j\.modArgs\(\)\.isEmpty\(\)\) dev\.peanuts\.build\.ReuseCheck\.remember\(')
+
+    def test_check_job_is_written_whole(self):
+        s = CHECK.read_text(encoding='utf-8')
+        remember = s[s.index('    public static void remember('):]
+        remember = remember[:remember.index('\n    }\n')]
+        self.assertIn('CheckDue.write(', remember)
+        self.assertNotIn('Files.write(', remember)
+
+    def test_the_notification_reads_whether_the_library_was_replaced(self):
+        s = CHECK.read_text(encoding='utf-8')
+        self.assertIn('return CheckDue.replacedText(reuseDir(noBackup, titleId), name, since);', s)
+
+
+@unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
+class Jvm(unittest.TestCase):
+    def test_jvm(self):
+        src = REPO / 'android/app/src/main/java/dev/peanuts/build/CheckDue.java'
+        test = REPO / 'android/app/src/jvmtest/java/dev/peanuts/build/CheckDueJvmTest.java'
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            r = subprocess.run(['javac', '-Xlint:all', '-Werror', '-encoding', 'UTF-8', '-d', str(d / 'classes'), str(src), str(test)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            r = subprocess.run(['java', '-cp', str(d / 'classes'), 'dev.peanuts.build.CheckDueJvmTest'], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn('ok', r.stdout)
 
 
 if __name__ == '__main__':

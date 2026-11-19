@@ -161,6 +161,11 @@ public final class PackService extends Service {
         final boolean check = checkAsked && j != null && "done".equals(j.state())
                 && !j.apkChanged() && !engine.simulated() && dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId()) && (worker == null || !worker.isAlive());
         if (check) checking = true;   // the notification says so from the start (note)
+        if (checkAsked && !check && j != null && "done".equals(j.state()) && j.apkChanged() && dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId())) {
+            dev.peanuts.build.CheckDue.drop(new File(getNoBackupFilesDir(), "reuse/" + j.titleId()));   // an app update since the build: this app can never check it, and it was asked again every two minutes (found in review)
+            try { Outputs.delete(new File(j.dir(), "split")); } catch (IOException e) { Log.w(TAG, "split: " + e.getMessage()); }   // kept for the check only
+            Log.i(TAG, "check: " + j.titleId() + ": the app was updated since the build: its full check is dropped (the next build makes a library of this app)");
+        }
         // PEANUTS end
         // A sticky restart (no intent: the process was killed) resumes only a job that was running; a start resumes one that is not done
         boolean go = check || !checkAsked && j != null && (intent == null ? "running".equals(j.state()) : !"done".equals(j.state()) || j.apkChanged());   // PEANUTS: check ||, !checkAsked: a check's start never runs a job (an app update's job waits for the user)
@@ -451,7 +456,7 @@ public final class PackService extends Service {
                 // the split and the translation results are not needed once the library is in the pack
                 try {
                     if (!dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId())) Outputs.delete(new File(j.dir(), "split"));   // PEANUTS: kept for the full check of the shaders this build kept (checkKept), which deletes it
-                    else dev.peanuts.build.ReuseCheck.remember(getNoBackupFilesDir(), j.titleId(), j.file);   // PEANUTS: the job it checks with, for every way a job ends (ReuseCheck.startAny)
+                    else if (j.modArgs().isEmpty()) dev.peanuts.build.ReuseCheck.remember(getNoBackupFilesDir(), j.titleId(), j.file);   // PEANUTS: the job it checks with, for every way a job ends (ReuseCheck.startAny); not a build with code mods, which runs no shaders step and keeps no split (found in review)
                 } catch (IOException e) {
                     Log.w(TAG, "split: " + e.getMessage());   // the job is done all the same; a later split begins by deleting it again
                 }
@@ -526,6 +531,10 @@ public final class PackService extends Service {
             if (wake.isHeld()) wake.release();
             try {
                 File nb = getNoBackupFilesDir();
+                // a check this job can never make is dropped, and one that failed counts a try (the third drops it): either was started again every two
+                // minutes for good, and held every other game's check (found in review)
+                String ended = dev.peanuts.build.CheckDue.ended(new File(nb, "reuse/" + j.titleId()), what);
+                if (ended != null) what += "; " + ended;
                 boolean due = dev.peanuts.build.ReuseCheck.due(nb, j.titleId());
                 if (!due) Outputs.delete(new File(j.dir(), "split"));
                 fixed = dev.peanuts.build.ReuseCheck.replacedText(nb, j.titleId(), j.name(), since);
@@ -860,6 +869,7 @@ public final class PackService extends Service {
         long sec = (SystemClock.elapsedRealtime() - began) / 1000;
         stepLog(j, s + ": the tool ended with code " + code + " after " + sec / 60 + " min " + sec % 60 + " s");   // PEANUTS: the logs had a time only where a step began
         if (code == PackEngine.INTERRUPTED) return "interrupted";
+        if (checking && code == 3) return null;   // PEANUTS: shader_reuse.py full_check's DIFFER: the check is done (it replaced the library where the pack held it), no tool failure
         if (code != 0) {
             String why = tail.reason();   // the last [RED] line, or a traceback's last line after it (PrepareText.StopReason)
             failure = PrepareText.toolStopped(Job.STEP_TEXT[i], code, why, log.getPath());

@@ -36,7 +36,7 @@ public final class ReuseCheck {
     public static final String EXTRA_CHECK = "pn_check";
     /** The packer's notification while it checks */
     public static final String NOTE = "Translating every shader again, to compare with the ones kept from earlier builds. A game that starts stops it; it goes on another time.";
-    static final String TODO = "check.todo", FAILED = "check.failed";
+    static final String TODO = CheckDue.TODO;
 
     static File reuseDir(File noBackup, String titleId) { return new File(noBackup, "reuse/" + titleId); }
 
@@ -77,6 +77,10 @@ public final class ReuseCheck {
     public static String start(Context c, File jobFile, String titleId) {
         if (!due(c.getNoBackupFilesDir(), titleId)) return "nothing due";
         if (jobFile == null || !jobFile.isFile()) return "no job";
+        // the packer checks only with a done job: one not done yet (it starts the check at its end), failed or paused started the service every two minutes
+        // for nothing, and held every other game's check (startAny takes one at a time; found in review)
+        String state = jobState(jobFile);
+        if (!"done".equals(state)) return "its job is " + (state == null ? "unreadable" : state);
         if (!charging(c)) return NOT_PLUGGED;
         if (gameRunning(c)) return "a game runs";
         try {
@@ -88,15 +92,20 @@ public final class ReuseCheck {
         }
     }
 
-    static final String JOB = "check.job";   // the job file the check runs with, written by the build that left check.todo (remember)
+    static final String JOB = CheckDue.JOB;   // the job file the check runs with, written by the build that left check.todo (remember)
+
+    /** The job file's state ("done", "failed", ...), null when it does not read */
+    static String jobState(File jobFile) {
+        try { return new JSONObject(new String(Files.readAllBytes(jobFile.toPath()), StandardCharsets.UTF_8)).optString("state", null); }
+        catch (IOException | JSONException e) { return null; }
+    }
     private static final long EVERY_MS = 120_000L;
     private static long lastTry;
 
     /** The job a due check runs with, beside its check.todo, so that a later start (startAny) finds it without the game list */
     public static void remember(File noBackup, String titleId, File jobFile) {
         if (!due(noBackup, titleId) || jobFile == null) return;
-        try { Files.write(new File(reuseDir(noBackup, titleId), JOB).toPath(), jobFile.getPath().getBytes(StandardCharsets.UTF_8)); }
-        catch (IOException e) { Log.w(TAG, "reuse check: " + e); }
+        CheckDue.write(new File(reuseDir(noBackup, titleId), JOB), jobFile.getPath());   // whole or not at all
     }
 
     /**
@@ -128,22 +137,10 @@ public final class ReuseCheck {
         }, "pn-reuse-check").start();
     }
 
-    /** The notification's text when the check replaced the library (check.failed written since), else null */
+    /** The notification's text when the check replaced the pack's library since `since`, else null (CheckDue: check.failed says whether it did, and how
+     *  many shaders differed; the count of its first 50 names and "nothing replaced" read wrong before, found in review) */
     public static String replacedText(File noBackup, String titleId, String name, long since) {
-        File f = new File(reuseDir(noBackup, titleId), FAILED);
-        if (!f.isFile() || f.lastModified() < since) return null;
-        try {
-            JSONObject o = new JSONObject(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
-            int n = o.optJSONArray("differ") == null ? 0 : o.getJSONArray("differ").length(), of = o.optInt("of");
-            return text(name, n, of);
-        } catch (IOException | JSONException e) {
-            return text(name, 0, 0);
-        }
-    }
-
-    static String text(String name, int differ, int of) {
-        String what = differ > 0 && of > 0 ? String.format(Locale.ROOT, "%,d of its %,d shaders", differ, of) : "Some of its shaders";
-        return what + " kept from earlier builds differed from a full translation. " + name + " has the full translation now; nothing to do.";
+        return CheckDue.replacedText(reuseDir(noBackup, titleId), name, since);
     }
 
     /** One line, with the time, in the job's ondevice/logs/check.log */
