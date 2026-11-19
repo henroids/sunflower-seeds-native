@@ -1209,6 +1209,9 @@ with their dates, notes (`GitHubText`), files, sizes and the Adreno each file na
 |---|---|---|---|
 | `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | the GPU driver row's click, and `onActivityResult`'s `ReadinessActivity.FIX_DRIVER`: `dev.peanuts.ui.DriverActivity.open(this)` instead of `GpuDriver.dialog(this, PICK_DRIVER)` | trailing `// PEANUTS: ...` |
 | `android/app/src/main/AndroidManifest.xml` | 1 | the `DriverActivity` entry, not exported | trailing `<!-- PEANUTS: ... -->` |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 1 | the per-game GPU driver row opens `DriverActivity.openForGame` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/DriverFetch.java` | 1 | Balemuni Turnip and JimVulkan PanVK release sources in the shared driver list | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | refresh game settings on return and open the same per-game page from the system-driver launch warning | `// PEANUTS: ...` and existing `PEANUTS` block |
 
 Upstream's classes keep doing the work, read through reflection (`DriverPort`): `GpuDriver.installed`, `selected`, `select`, `install` (so
 `DriverZip`'s checks stay the only way a zip gets in), `DriverZip.deleteTree`, `DriverFetch.REPOS` (the one list of sources), `GpuGl.name` and

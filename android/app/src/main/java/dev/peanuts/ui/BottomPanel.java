@@ -347,7 +347,7 @@ final class BottomPanel extends Presentation {
         setKey(buildOpen, pad ? "A" : null);
         Context c = getContext();
         int ink = settingsBtn.getCurrentTextColor();
-        Drawable d = pad ? BottomScreen.settingsGlyph(c) : c.getDrawable(R.drawable.ic_settings).mutate();
+        Drawable d = pad ? BottomScreen.settingsGlyph(c, 22) : c.getDrawable(R.drawable.ic_settings).mutate();
         if (!pad) d.setTint(ink);
         int s = PUi.dp(c, 22);
         d.setBounds(0, 0, s, s);
@@ -643,7 +643,7 @@ final class BottomPanel extends Presentation {
 
     private static int clamp(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
 
-    /** Face button: letter cut out of a 22 dp disc */
+    /** Face button: a letter cut out of a disc. */
     static final class KeyGlyph extends Drawable {
         private final Paint disc = new Paint(Paint.ANTI_ALIAS_FLAG), letter = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final String key;
@@ -651,12 +651,16 @@ final class BottomPanel extends Presentation {
         private final Rect bounds = new Rect();
 
         KeyGlyph(Context c, String key, int ink, int cut) {
+            this(c, key, ink, cut, 22);
+        }
+
+        KeyGlyph(Context c, String key, int ink, int cut, int diameterDp) {
             this.key = key;
-            size = PUi.dp(c, 22);
+            size = PUi.dp(c, diameterDp);
             disc.setColor(ink);
             letter.setColor(cut);
             letter.setTypeface(Typeface.create(Typeface.SANS_SERIF, 800, false));
-            letter.setTextSize(PUi.dp(c, 12));
+            letter.setTextSize(PUi.dp(c, 12f * diameterDp / 22));
             letter.setTextAlign(Paint.Align.CENTER);
         }
 

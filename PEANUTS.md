@@ -56,7 +56,8 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `android/app/src/main/cpp/nxlaunch.c` — (2026-11-17, overlay graph in realtime) in `Java_dev_nxnative_android_Native_overlaySet`, one line before `nxhost_overlay_set`: `if (peanuts_ovl_block) peanuts_ovl_block(...)` (JNI entry points forwarded to `dm/peanuts`), with `#pragma weak peanuts_ovl_block` and its prototype beside the other weak host symbols. `android/host/CMakeLists.txt`: one line compiling `dm/peanuts/peanuts_graph.c`; `android/host/libnxhost.map`: one line exporting `peanuts_ovl_block` (the host exports only `nxhost_*` and `Java_*`). `dm/peanuts/peanuts.c`: `pn_graph_frame();` in `peanuts_tick`.
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` — (2026-11-17, the GPU driver page) Settings' GPU driver row and the
      Readiness check's "Pick a GPU driver" open `dev.peanuts.ui.DriverActivity` instead of `GpuDriver.dialog`, two lines; the page itself and its
-     manifest entry are Peanuts-owned. Installs still go through `GpuDriver.install`. `peanuts/UPSTREAM-EDITS.md` Round 22.
+     manifest entry are Peanuts-owned. The Game settings row and the system-driver launch warning also open the page with a title ID.
+     The activity result refreshes the game settings. Installs still go through `GpuDriver.install`. `peanuts/UPSTREAM-EDITS.md` Round 22.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).

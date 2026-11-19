@@ -88,8 +88,8 @@ public final class BottomScreen {
 
     private BottomScreen() {}
 
-    public static Drawable settingsGlyph(Context c) {
-        return new BottomPanel.KeyGlyph(c, "X", PUi.col(c, R.color.bn_accent), PUi.col(c, R.color.bn_bg));
+    public static Drawable settingsGlyph(Context c, int diameterDp) {
+        return new BottomPanel.KeyGlyph(c, "X", PUi.col(c, R.color.bn_accent), PUi.col(c, R.color.bn_bg), diameterDp);
     }
 
     // ---- Hooks ----

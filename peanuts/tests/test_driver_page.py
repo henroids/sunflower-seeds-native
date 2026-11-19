@@ -43,6 +43,13 @@ class Wiring(unittest.TestCase):
         port = (UI / 'DriverPort.java').read_text(encoding='utf-8')
         self.assertIn('method("GpuDriver", "install"', port)
 
+    def test_game_uses_shared_page_and_scopes_both_install_paths(self):
+        settings = MAIN.with_name('GameSettings.java').read_text(encoding='utf-8')
+        self.assertIn('DriverActivity.openForGame(a, g.titleId, g.name)', settings)
+        page = (UI / 'DriverActivity.java').read_text(encoding='utf-8')
+        for wiring in ('DriverPort.gameChoice(c, gameTitleId, value)', 'select(this, d, false)', 'select(app, d, false)'):
+            self.assertIn(wiring, page)
+
     def test_network_only_from_a_source(self):
         page = (UI / 'DriverActivity.java').read_text(encoding='utf-8')
         # releases(...) is read in load(), which only a source's page calls; a download only from a file's Install

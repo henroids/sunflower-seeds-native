@@ -263,7 +263,7 @@ public final class MainActivity extends Activity {
         row.addView(dev.peanuts.ui.Library.headerAction(this, R.drawable.ic_wiki, "FAQ",
                 "Questions and answers", null, v -> openLink(WIKI_URL)));
         View settings = dev.peanuts.ui.Library.headerAction(this, R.drawable.ic_settings, "Settings",
-                "Settings (X)", dev.peanuts.ui.BottomScreen.settingsGlyph(this), v -> page(true));
+                "Settings (X)", dev.peanuts.ui.BottomScreen.settingsGlyph(this, 14), v -> page(true));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMarginStart(Ui.dp(this, 10));
         row.addView(settings, lp);
@@ -1099,6 +1099,10 @@ public final class MainActivity extends Activity {
         if (dev.peanuts.ui.LibrarySettings.result(this, request, result, data)) return;   // PEANUTS: the library's pickers (keys, folders, the sheet's files)
         if (Ondevice.activityResult(this, request, result, data)) return;
         if (request == ReadinessActivity.REQUEST) { if (result == ReadinessActivity.FIX_DRIVER) dev.peanuts.ui.DriverActivity.open(this); return; }   // its "Pick a GPU driver"; PEANUTS: the GPU driver page
+        if (request == dev.peanuts.ui.DriverActivity.REQUEST_GAME) {   // PEANUTS: refresh the driver label after returning from the game's driver page
+            if (settingsGame != null) gameSettingsAgain();
+            return;
+        }
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         if (request == PICK_DRIVER) { GpuDriver.picked(this, data.getData()); return; }
         if (GameCopy.activityResult(this, request, data)) return;
@@ -1508,7 +1512,7 @@ public final class MainActivity extends Activity {
                             + (GpuDriver.selected(this, g.titleId) != null ? "\n\nAn extra driver setting is forcing the system driver. Change that setting to use your selected driver." : ""))
                     .setPositiveButton("Choose driver", (d, w) -> {
                         gameSettings(g);
-                        GameSettings.driver(this, g, () -> gameSettings(g));
+                        dev.peanuts.ui.DriverActivity.openForGame(this, g.titleId, g.name);
                     })
                     .setNeutralButton("Play anyway", (d, w) -> startWithDriver(g))
                     .setNegativeButton("Cancel", null).show();

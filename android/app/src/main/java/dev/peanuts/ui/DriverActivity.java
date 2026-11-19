@@ -55,6 +55,7 @@ import javax.net.ssl.HttpsURLConnection;
  * then the page; Settings' row shows the pick when it is in front again.
  */
 public final class DriverActivity extends Activity {
+    public static final int REQUEST_GAME = 8;
     private static final int REQ_ZIP = 1;
     private static final long MAX_ZIP = 512L << 20;   // as upstream's DriverFetch: no driver package is larger
     private static final long CACHE_MS = 10 * 60_000;
@@ -70,6 +71,8 @@ public final class DriverActivity extends Activity {
         ABOUT.put("Weab-chan/freedreno_turnip-CI", "Turnip built from Mesa every two weeks, with builds for some phones' quirks.");
         ABOUT.put("crueter/GameHub-8Elite-Drivers", "Qualcomm's drivers from GameHub, for Adreno 8xx (Snapdragon 8 Elite).");
         ABOUT.put("StevenMXZ/Adreno-Tools-Drivers", "Turnip builds and Qualcomm's own drivers, most of them for Adreno 8xx.");
+        ABOUT.put("Balemuni/Balemunis-Aurora", "Turnip builds for Adreno, including an edition tuned for Snapdragon 8 Gen 2.");
+        ABOUT.put("JimVulkan/mali-panvk", "Mesa PanVK builds for supported Mali and Immortalis GPUs with Arm's kbase kernel driver.");
     }
 
     static final class Asset {
@@ -94,6 +97,7 @@ public final class DriverActivity extends Activity {
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private LinearLayout content;
+    private String gameTitleId, gameName;   // null title ID means the app-wide driver
     private String[] source;   // { owner/name, label } while a source's page shows
     private int shown = SHOWN;
     private Job job;   // one install at a time
@@ -106,8 +110,15 @@ public final class DriverActivity extends Activity {
 
     public static void open(Activity a) { a.startActivity(new Intent(a, DriverActivity.class)); }
 
+    public static void openForGame(Activity a, String titleId, String gameName) {
+        Intent intent = new Intent(a, DriverActivity.class).putExtra("title_id", titleId).putExtra("game_name", gameName);
+        a.startActivityForResult(intent, REQUEST_GAME);
+    }
+
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        gameTitleId = getIntent().getStringExtra("title_id");
+        gameName = getIntent().getStringExtra("game_name");
         FrameLayout frame = new FrameLayout(this);
         frame.setBackgroundColor(PUi.col(this, R.color.bn_bg));
         frame.addView(new BananaBackgroundView(this), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -156,25 +167,44 @@ public final class DriverActivity extends Activity {
     // ---- The main page ----
 
     private void main() {
-        content.addView(PUi.header(this, PUi.back(this, v -> finish()), "GPU driver", null));
+        content.addView(PUi.header(this, PUi.back(this, v -> finish()), "GPU driver", gameName, null));
         PUi.add(content, PUi.body(this, "System is the phone's own driver. A custom one can make a game run faster or look right, and another game worse. "
-                + "Your choice applies from the next game start. A game can also have its own, in its Game settings."), 4);
+                + (gameTitleId != null ? "Your choice applies to this game on its next start." : "Your choice applies to games using the app default.")), 4);
 
         List<DriverPort.Driver> drivers = new ArrayList<>();
-        File picked = null;
-        try { drivers = DriverPort.installed(this); picked = DriverPort.selected(this); }
+        String chosen = null;
+        String defaultTitle = "Default (System)";
+        try {
+            drivers = DriverPort.installed(this);
+            File appDriver = DriverPort.selected(this);
+            String appChoice = appDriver == null ? null : appDriver.getName();
+            if (gameTitleId == null) {
+                chosen = appChoice;
+            } else {
+                chosen = DriverPort.gameChoice(this, gameTitleId);
+                String recommended = DriverPort.gameRecommendation(this, gameTitleId);
+                defaultTitle = recommended == null ? "Default (" + driverName(drivers, appChoice) + ")"
+                        : "Recommended (" + driverName(drivers, recommended) + ")";
+            }
+        }
         catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "gpu drivers: " + e); }
         String gpu = DriverPort.gpu();
 
         PUi.add(content, PUi.section(this, "On this phone"), PUi.SECTION_GAP);
         LinearLayout list = PUi.add(content, PUi.listCard(this), 8);
-        list.addView(choice("System", gpu != null ? "The phone's own driver for its " + gpu + "." : "The phone's own driver.", picked == null, null));
-        for (DriverPort.Driver d : drivers) list.addView(choice(d.name, about(d), d.dir.equals(picked), d));
+        boolean useDefault = gameTitleId != null && chosen == null;
+        if (gameTitleId != null)
+            list.addView(choice(defaultTitle, "Follow the recommendation for this game or the app default.", useDefault, null, true));
+        boolean useSystem = !useDefault && pickedDriver(drivers, chosen) == null;
+        list.addView(choice("System", gpu != null ? "The phone's own driver for its " + gpu + "." : "The phone's own driver.", useSystem, null, false));
+        for (DriverPort.Driver d : drivers) list.addView(choice(d.name, about(d), d.dir.getName().equals(chosen), d, false));
 
         PUi.add(content, PUi.section(this, "Add a driver"), PUi.SECTION_GAP);
         String family = DriverMatch.family(gpu);
-        if (gpu != null) PUi.add(content, PUi.small(this, family != null ? "This phone has an " + gpu + ". A driver made for Adreno " + family + " fits it."
-                : "These drivers are for Adreno GPUs. This phone has a " + gpu + ", so they will not run on it."), 8);
+        if (gpu != null) PUi.add(content, PUi.small(this, "This phone's GPU is " + gpu + ". "
+                + (family == null ? "Check each release's supported GPUs."
+                : family.equals(DriverMatch.MALI) ? "Check PanVK release notes for your GPU model."
+                : "Look for drivers made for Adreno " + family + ".")), 8);
         LinearLayout sources = PUi.add(content, PUi.listCard(this), 8);
         String[][] all = new String[0][];
         try { all = DriverPort.sources(); } catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "driver sources: " + e); }
@@ -211,6 +241,16 @@ public final class DriverActivity extends Activity {
         if (focus != null) { View f = focus; f.post(f::requestFocus); focusSource = null; }
     }
 
+    private static DriverPort.Driver pickedDriver(List<DriverPort.Driver> drivers, String folder) {
+        for (DriverPort.Driver d : drivers) if (d.dir.getName().equals(folder)) return d;
+        return null;
+    }
+
+    private static String driverName(List<DriverPort.Driver> drivers, String folder) {
+        DriverPort.Driver d = pickedDriver(drivers, folder);
+        return d == null ? "System" : d.name;
+    }
+
     /** A driver's line under its name: version and author, and the app's recommendation */
     private static String about(DriverPort.Driver d) {
         StringBuilder s = new StringBuilder();
@@ -222,8 +262,8 @@ public final class DriverActivity extends Activity {
     }
 
     /** A driver to pick: a radio, its name over its line, Remove beside a custom one */
-    private LinearLayout choice(String title, String line, boolean on, DriverPort.Driver d) {
-        LinearLayout r = row(title, line, v -> pick(d));
+    private LinearLayout choice(String title, String line, boolean on, DriverPort.Driver d, boolean useDefault) {
+        LinearLayout r = row(title, line, v -> pick(d, useDefault));
         RadioButton radio = new RadioButton(this);
         radio.setChecked(on);
         radio.setClickable(false);
@@ -235,9 +275,18 @@ public final class DriverActivity extends Activity {
         return r;
     }
 
-    private void pick(DriverPort.Driver d) {
+    private void select(Context c, DriverPort.Driver d, boolean useDefault) throws ReflectiveOperationException {
+        if (gameTitleId == null) {
+            DriverPort.select(c, d);
+        } else {
+            String value = useDefault ? null : d == null ? DriverPort.systemChoice() : d.dir.getName();
+            DriverPort.gameChoice(c, gameTitleId, value);
+        }
+    }
+
+    private void pick(DriverPort.Driver d, boolean useDefault) {
         if (installing) return;
-        try { DriverPort.select(this, d); } catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "pick driver: " + e); }
+        try { select(this, d, useDefault); } catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "pick driver: " + e); }
         Haptics.quiet(150);
         render();
     }
@@ -245,7 +294,7 @@ public final class DriverActivity extends Activity {
     private void remove(DriverPort.Driver d) {
         if (installing) return;
         PUi.confirmDanger(this, "Remove " + d.name + "?", "Deleted: the app's copy of this driver.\n\nKept: the zip you installed it from, your games, packs and saves. "
-                + "A game that used it starts with the phone's own driver until you pick another.", "Remove driver", () -> {
+                + "This removes the driver for every game in the app. Games that picked it will use System.", "Remove driver", () -> {
             if (installing) return;
             try { DriverPort.remove(this, d); } catch (ReflectiveOperationException | RuntimeException e) { Log.w(TAG, "remove driver: " + e); }
             render();
@@ -276,7 +325,7 @@ public final class DriverActivity extends Activity {
         render();
         new Thread(() -> {
             String msg; boolean failed = false;
-            try { DriverPort.Driver d = install.run(); DriverPort.select(this, d); msg = "Installed and picked " + d.name + ". It applies from the next game start."; }
+            try { DriverPort.Driver d = install.run(); select(this, d, false); msg = installedMessage(d); }
             catch (Throwable e) { failed = true; msg = "Not installed: " + reason(e) + ". The drivers and your choice are as they were."; Log.w(TAG, "driver " + name + ": " + e); }
             String m = msg; boolean f = failed;
             ui.post(() -> { fileResult = m; fileFailed = f; installFinished(); });
@@ -377,7 +426,7 @@ public final class DriverActivity extends Activity {
         top.addView(col, PUi.weight());
         Button b = PUi.button(this, installed ? "Install again" : "Install", other || installed ? PUi.Kind.TONAL : PUi.Kind.PRIMARY, v -> {
             if (!other) { download(a); return; }
-            new AlertDialog.Builder(this).setTitle("Install " + a.name + "?").setMessage("It is made for " + gpus + ". This phone has an " + DriverPort.gpu()
+            new AlertDialog.Builder(this).setTitle("Install " + a.name + "?").setMessage("It is made for " + gpus + ". This phone's GPU is " + DriverPort.gpu()
                     + ", so games may not start with it. You can pick System again at any time.").setPositiveButton("Install", (d, w) -> download(a)).setNegativeButton("Cancel", null).show();
         });
         b.setEnabled(!installing);
@@ -435,9 +484,9 @@ public final class DriverActivity extends Activity {
                 ui.post(this::progress);
                 DriverPort.Driver d;
                 try (InputStream in = new FileInputStream(tmp)) { d = DriverPort.install(app, in, a.name.replaceAll("(?i)(\\.adpkg)?\\.zip$", "")); }
-                DriverPort.select(app, d);
+                select(app, d, false);
                 prefs().edit().putString(a.url, d.dir.getName()).apply();
-                msg = "Installed and picked " + d.name + ". It applies from the next game start.";
+                msg = installedMessage(d);
             } catch (Throwable e) {
                 failed = true;
                 msg = "Not installed: " + reason(e) + ". The drivers and your choice are as they were.";
@@ -446,6 +495,11 @@ public final class DriverActivity extends Activity {
             String m = msg; boolean f = failed;
             ui.post(() -> { j.finished = true; j.result = m; j.failed = f; installFinished(); });
         }, "peanuts-driver-download").start();
+    }
+
+    private String installedMessage(DriverPort.Driver d) {
+        return "Installed and picked " + d.name + (gameTitleId == null ? "." : " for this game.")
+                + " It applies from the next game start.";
     }
 
     private void load(String repo) {

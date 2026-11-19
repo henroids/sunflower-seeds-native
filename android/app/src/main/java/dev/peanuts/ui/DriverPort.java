@@ -57,6 +57,24 @@ final class DriverPort {
         method("GpuDriver", "select", Context.class, Class.forName(P + "GpuDriver$Info")).invoke(null, c, d == null ? null : d.info);
     }
 
+    static String gameChoice(Context c, String titleId) throws ReflectiveOperationException {
+        return (String) method("GpuDriver", "choice", Context.class, String.class).invoke(null, c, titleId);
+    }
+
+    static void gameChoice(Context c, String titleId, String choice) throws ReflectiveOperationException {
+        method("GpuDriver", "choice", Context.class, String.class, String.class).invoke(null, c, titleId, choice);
+    }
+
+    static String gameRecommendation(Context c, String titleId) throws ReflectiveOperationException {
+        return (String) method("Prefs", "recommendedDriver", Context.class, String.class).invoke(null, c, titleId);
+    }
+
+    static String systemChoice() throws ReflectiveOperationException {
+        Field system = Class.forName(P + "GpuDriver").getDeclaredField("SYSTEM");
+        system.setAccessible(true);
+        return (String) system.get(null);
+    }
+
     /** Unpacks a driver zip (GpuDriver.install: meta.json read, every entry checked, an earlier one of its name replaced only once this one is in) */
     static Driver install(Context c, InputStream zip, String fallbackName) throws IOException {
         return installed(() -> method("GpuDriver", "install", Context.class, InputStream.class, String.class).invoke(null, c, zip, fallbackName));

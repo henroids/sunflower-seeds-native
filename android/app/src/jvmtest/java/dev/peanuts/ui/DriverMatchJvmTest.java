@@ -21,6 +21,7 @@ public final class DriverMatchJvmTest {
         eq("[8xx]", DriverMatch.families("Turnip_Gen8_V39_Patched"));
         eq("[7xx]", DriverMatch.families("turnip_Oct-12-2025_bbdd688_8g2_ui_glitch"));
         eq("[7xx]", DriverMatch.families("turnip_Sep-09-2025_dcfa4fa_oneui7_8gen2"));
+        eq("[7xx]", DriverMatch.families("Balemuni_Apex_v2_ULTIMATE_SD8Gen2"));
         eq("[8xx]", DriverMatch.families("a8xx_0x5_handle with an a830v2 descriptor"));
         eq("[7xx]", DriverMatch.families("Adreno (TM) 740"));
         // driver versions, dates and commits are no GPU
@@ -52,7 +53,8 @@ public final class DriverMatchJvmTest {
         // this phone, and what is said about a file
         eq("7xx", DriverMatch.family("Adreno 740"));
         eq("8xx", DriverMatch.family("Adreno (TM) 830"));
-        eq(null, DriverMatch.family("Mali-G715"));
+        eq("mali", DriverMatch.family("Mali-G715"));
+        eq("mali", DriverMatch.family("Immortalis-G925"));
         eq(null, DriverMatch.family(null));
         eq("Adreno 7xx", DriverMatch.words(set("7xx")));
         eq("Adreno 6xx, 7xx and 8xx", DriverMatch.words(set("6xx", "7xx", "8xx")));
@@ -61,6 +63,14 @@ public final class DriverMatchJvmTest {
         eq(false, DriverMatch.otherGpu(set("7xx", "8xx"), "7xx"));
         eq(false, DriverMatch.otherGpu(set(), "7xx"));
         eq(false, DriverMatch.otherGpu(set("8xx"), null));
+        String panvk = "mali-panvk-27.0.0-devel-r10.zip";
+        TreeSet<String> panvkFamilies = DriverMatch.forFile(panvk, List.of(panvk), "PanVK 1.6.0", "", "JimVulkan/mali-panvk");
+        eq("Mali and Immortalis", DriverMatch.words(panvkFamilies));
+        eq(true, DriverMatch.otherGpu(panvkFamilies, DriverMatch.family("Adreno 740")));
+        eq(false, DriverMatch.otherGpu(panvkFamilies, DriverMatch.family("Mali-G715")));
+        String universal = "Balemuni_Apex_v2_UNIVERSAL.zip";
+        eq("[6xx, 7xx, 8xx]", DriverMatch.forFile(universal, List.of(universal, "Balemuni_Apex_v2_ULTIMATE_SD8Gen2.zip"),
+                "Balemuni Apex V2", "", "Balemuni/Balemunis-Aurora"));
         System.out.println("ok " + n);
     }
 }

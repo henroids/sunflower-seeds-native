@@ -455,35 +455,33 @@ The app does not mark any driver as recommended in its list. Whichever you use, 
 
 You need an internet connection. The app downloads nothing until you tap a file.
 
-1. Open Settings › **GPU driver**. The dialog **GPU driver (takes effect at the next game start)** opens.
-2. Tap **Install…**, then **Download…**.
-3. **Download a driver (GitHub releases)** lists the sources, for example **Mr. Purple Turnip** and **KIMCHI Turnip**. Tap one.
-4. The app reads that source's releases and lists the driver zips, each with its release name and size. Tap the one you want. For the recommended driver, pick the T30 release under **Mr. Purple Turnip**.
-5. Wait for **Downloading …**.
+1. Open **GPU driver** from Settings or from a game's **Performance** tab.
+2. Under **Add a driver**, open a source such as **Balemuni Turnip** for Adreno or **PanVK for Mali** for supported Mali and Immortalis devices.
+3. Browse the release names, supported GPUs and file sizes. Tap **Install** on the file you want.
 
-What you should see: the message **Installed and picked** with the driver's name, and the driver dialog again with that driver selected. The Settings row **GPU driver** now shows its name. It is used from the next game start.
+When you see **Installed and picked**, the driver is ready for the next game start. An install from a game's page picks the driver for that game only.
 
 If you see **No network (cannot reach GitHub)** or **GitHub rate limit, try again later**, check the connection or wait and try again.
 
 ### How do I install a driver from a zip I already have?
 
-1. Open Settings › **GPU driver** › **Install…** › **Pick a zip…**.
+1. Open **GPU driver**, then **From a file** › **Pick a zip file**.
 2. Pick the driver zip. It must be a driver package with a `meta.json` inside, the format other Android emulators use.
 
-What you should see: **GPU driver installed and picked:** with the driver's name. If the zip is not a driver package you see **GPU driver not installed:** and the reason, for example **no meta.json in the zip**. Nothing changes in that case.
+The page shows **Installed and picked** with the driver's name, or **Not installed** with a reason.
 
 ### How do I pick a driver for all games, or for one game?
 
 For all games:
 
 1. Open Settings › **GPU driver**.
-2. Tap **System (the phone's own driver)** or an installed driver. The dialog closes.
+2. Pick **System** or an installed driver, then go back.
 
 For one game:
 
 1. Hold the game's cover and open the **Performance** tab.
 2. Tap **GPU driver**.
-3. Pick **Default (the main screen's: …)** to follow Settings, **System (the phone's own driver)**, or an installed driver.
+3. Pick **Default** to follow Settings, **Recommended** if a device-specific recommendation is available, **System**, or an installed driver.
 
 What you should see: the row shows the name you picked. A game's own choice wins over the one in Settings. The change applies the next time the game starts, not to a running game.
 
@@ -493,11 +491,8 @@ Go back: Settings › **GPU driver** › **System (the phone's own driver)**. Fo
 
 Remove:
 
-1. Open Settings › **GPU driver** and pick the driver you want to remove. The dialog closes.
-2. Open Settings › **GPU driver** again and tap **Remove picked…**.
-3. Confirm with **Remove driver**.
-
-What you should see: **Removed …; the system driver is used**. Only the app's copy of the driver is deleted. Your zip, games, builds and saves are kept.
+1. Open **GPU driver** and tap **Remove** beside the driver.
+2. Confirm with **Remove driver**. This removes the driver's installed copy from the entire app.
 
 ### How do I check which driver a game really used?
 
@@ -509,7 +504,7 @@ What you should see: **Removed …; the system driver is used**. Only the app's 
 ### A driver made things worse. What can I try?
 
 1. Go back to **System (the phone's own driver)** and start the game again, to confirm the driver is the cause.
-2. Try another release of the same driver, older or newer, from **Download…**.
+2. Open a source under **Add a driver** to try a different release.
 3. Try a driver from another source in the list.
 4. If only one game is affected, give that game its own driver (hold the cover › **Performance** › **GPU driver**) and leave the others alone.
 5. Run Settings › **Readiness check** and **Graphics self-test** on the new driver.

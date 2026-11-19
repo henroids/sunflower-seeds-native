@@ -265,15 +265,13 @@ public final class Library {
         LinearLayout column = new LinearLayout(a);
         column.setOrientation(LinearLayout.VERTICAL);
         column.setGravity(Gravity.CENTER_HORIZONTAL);
-        ImageView icon = PUi.iconButton(a, iconRes, description, PUi.Kind.TONAL, action);
-        icon.setImageDrawable(PUi.icon(a, iconRes, R.color.bn_accent));
-        column.addView(icon);
+        column.addView(PUi.iconButton(a, iconRes, description, PUi.Kind.TONAL, action));
 
         TextView caption = PUi.text(a, label, 10, R.color.bn_accent, 700);
         caption.setSingleLine(true);
         caption.setGravity(Gravity.CENTER);
         caption.setPadding(0, PUi.dp(a, 2), 0, 0);
-        caption.setMinHeight(PUi.dp(a, 24));
+        caption.setMinHeight(PUi.dp(a, 16));
         caption.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         if (key != null) {
             caption.setCompoundDrawablesRelativeWithIntrinsicBounds(key, null, null, null);
