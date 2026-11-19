@@ -53,6 +53,25 @@ Other cases that lead to a translation: an older entry that cannot be read, fewe
 (the kept results are deleted at the next start: `.pn-reuse-unchecked` in the results folder), a failed step. The checks that were there stay: the library's
 own check, the split against the profile, every module through spirv-val.
 
+## The full check, later
+
+The sample checks a build's kept shaders at once; the full check checks every one of them later, while the phone charges. A build that kept shaders leaves
+`no_backup/reuse/<title ID>/check.todo` (the library's id) and, beside it, the job's path (`check.job`). The packer (`PackService`) then runs the done job's
+shaders step again with `--check` first (`shader_reuse.py full_check`): every shader translated again as a build from nothing, into
+`no_backup/reuse/<title ID>/check/` (results of its own: the build's results hold the kept entries), then each entry of the library compared with that
+translation (`ondevice/logs/check.log`).
+
+- When: at the end of a build (`dev.peanuts.build.BuildService`, after graphics setup and the companion), and from the launcher's 30 s timer while the app
+  runs (`dev.peanuts.ui.Library`, at most every two minutes), each only while the phone charges and no game runs (`dev.peanuts.build.ReuseCheck`). The
+  notification says "Checking <game>'s shaders".
+- It changes nothing of the job (its own log, its progress under a step of its own; the done shaders step stays as it was) and the game plays as usual: the
+  library is only read. The job's `split/` stays until the check is done.
+- It stops when a game starts (checked every 3 s), when the packer's policy pauses (battery, heat), or when a job starts (the job goes first: the packer starts
+  it once the check has stopped). It goes on another time from the results it kept.
+- All the same: `checked.tsv` says so, and the check's files and the split go. One that differs (or a shader only one of them has): the full translation is what
+  the game should have, so it takes the library's place in the pack, as the pack step copies one (a `.partial`, then a rename), and becomes the record and the
+  kept copy; `check.failed` lists the shaders, `check.log` has a `[RED] reuse full check` line, and a notification says the game has the full translation now.
+
 ## Switches and the log
 
 - `PN_REUSE=0` in the job's `ondevice/env.txt`: off, the shaders step is `vk_android_build.py` as before and the rewrite keeps no module whose key moved.
@@ -120,6 +139,7 @@ of 58 s.
 
 - The split's own work on every build (reading main, planning the jobs): a few seconds since the walk by nodes.
 - Archive jobs in the split's cache: their key must cover every file they read.
+- The full check while the phone is idle with the app closed: Android gives the app no start then (no JobScheduler in it); it runs from a build's end and while the app is open.
 - The import: Import again writes the whole `.nup` again (on an AYN Thor 11.9 GB in about 20 s: not worth it there).
 
 ## Measured (AYN Thor, ACNH 3.0.3 with its DLC, 2026-11-18 and 19)
@@ -188,7 +208,7 @@ python3 peanuts/scripts/incremental-check.py --package dev.nxnative.android.<suf
 
 ## Tests
 
-`peanuts/tests/test_build_reuse.py` (the ready message: the last run of each step's log, only the steps this build ran, a failed check, the words the tools print). `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
+`peanuts/tests/test_shader_reuse.py` `FullCheck` (due only after a build that kept shaders, a library that is a full translation, a wrong kept shader the sample missed is found and replaced in the pack, the pack replaced since, a stopped check goes on, a library another build replaced). `peanuts/tests/test_build_reuse.py` (the ready message: the last run of each step's log, only the steps this build ran, a failed check, the words the tools print). `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
 and a new pair (exactly those and the vertex shaders they pad are translated), pairs that change in the split's `pso_pairs.tsv` (translated, not kept by the same
 inputs), an add-on's pixel shaders built after a build without them (they and the vertex shaders they pad are translated), the same inputs without a record (nothing kept unless the profile has its own `pso_pairs.tsv`), a change the rule does not see (caught by the check,
 then a full translation), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; the kept copy (a build keeps one and puts the environment back, a build

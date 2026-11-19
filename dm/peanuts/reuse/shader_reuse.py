@@ -44,6 +44,7 @@ import re
 import runpy
 import shutil
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -415,9 +416,116 @@ def drop_unchecked(res):
     say(f'reuse: {len(keys or [])} shaders kept by a run that stopped before its check: deleted (kept again or translated now)')
 
 
+TODO = 'check.todo'   # <PN_REUSE_DIR>/check.todo: the library a build wrote with kept shaders, for the full check (full_check)
+CHECKED = 'checked.tsv'   # the libraries the full check found a full translation's byte for byte
+FAILED = 'check.failed'   # what the last full check found different
+CHECK_DIR = 'check'   # the full check's own results (a stopped check resumes from them) and library
+DIFFER = 3   # full_check's exit code when the library is not a full translation's byte for byte (PackService then has the game's shaders made again)
+
+
+def note_check(reuse_dir, lib_id, version, game_id, kept):
+    """After a library is written: with kept shaders (checked by the sample alone), the full check is due for it; without, a full translation needs none"""
+    p = Path(reuse_dir) / TODO
+    if not kept:
+        p.unlink(missing_ok=True); shutil.rmtree(Path(reuse_dir) / CHECK_DIR, ignore_errors=True)
+        return
+    tmp = p.with_suffix('.tmp')
+    tmp.write_text(json.dumps({'library': lib_id, 'version': version, 'game': game_id, 'kept': kept}))
+    os.replace(tmp, p)
+    shutil.rmtree(Path(reuse_dir) / CHECK_DIR, ignore_errors=True)   # an earlier library's check: this one replaces it
+
+
+def read_todo(reuse_dir):
+    try: t = json.loads((Path(reuse_dir) / TODO).read_text())
+    except (OSError, ValueError): return None
+    return t if isinstance(t, dict) and all(isinstance(t.get(k), str) for k in ('library', 'version', 'game')) else None
+
+
+def pack_library(roots, version, lib_id):
+    """The pack's library file of this id among the app's DMSH_VK_DELTA_FROM folders (the kept copy is not one of them), None when the pack holds another"""
+    delta = load_modules()[2]
+    for r in [p for p in roots.split(os.pathsep) if p]:
+        for f in (Path(r) / f'v-{version}' / 'dmsh_vk.lib', Path(r) / 'dmsh_vk.lib', Path(r)):
+            if not f.is_file(): continue
+            try: L = delta.Library(str(f))
+            except Exception: continue
+            try:
+                if library_id(L) == lib_id: return f
+            finally: L.close()
+    return None
+
+
+def full_check(argv):
+    """The full check of a library a build wrote with kept shaders (check.todo): every shader translated again, as a build from nothing, into <PN_REUSE_DIR>/check/
+    (its own results: a check stopped by a game that starts, the battery or heat resumes from them; DMSH_VK_DELTA_FROM pointed at nothing, so no entry is kept),
+    then each entry of the library compared with that translation. All the same: checked.tsv says so and the check's files go. One that differs, or a shader one
+    of them lacks: the full translation is what the game should have, so it takes the checked library's place in the pack (as the pack step copies one: a
+    .partial, then a rename), and becomes the record and the kept copy; check.failed says which shaders differed, and the exit code is DIFFER.
+    argv: the shaders step's (--target vulkan <pkg> <lib> [keys]); the caller runs it only while no game runs"""
+    reuse_dir = os.environ.get('PN_REUSE_DIR', '')
+    if not reuse_dir or len(argv) < 4 or argv[:2] != ['--target', 'vulkan']:
+        say('reuse full check: no PN_REUSE_DIR or not a shaders step\'s arguments: nothing checked'); return 0
+    todo = read_todo(reuse_dir)
+    if todo is None: say('reuse full check: nothing to check'); return 0
+    game, dmsh_chain, delta = load_modules()
+    g, version, zstd = game.load(), vk_version(), zstd_module()
+    if (todo['version'], todo['game']) != (version, g.id):
+        say(f'reuse full check: the library to check is of version {todo["version"]}, game {todo["game"]}: not this build\'s, dropped')
+        (Path(reuse_dir) / TODO).unlink(missing_ok=True); return 0
+    roots = os.environ.get('DMSH_VK_DELTA_FROM', '')
+    os.environ['DMSH_VK_DELTA_FROM'] = os.pathsep.join(p for p in (roots, str(Path(reuse_dir) / KEEP_DIR)) if p)
+    root = Path(reuse_dir) / CHECK_DIR
+    new_dir = root / 'lib' / ('v-' + version)
+    libs = older_libraries(delta, str(new_dir), g.id)
+    target = next((L for L in libs if library_id(L) == todo['library']), None)
+    for L in libs:
+        if L is not target: L.close()
+    if target is None:
+        say('reuse full check: the library to check is gone (a build since wrote another): nothing checked'); (Path(reuse_dir) / TODO).unlink(missing_ok=True); return 0
+    try:
+        say(f'reuse full check: {target.path}: every shader translated again ({todo.get("kept", "?")} of them were kept from earlier builds)')
+        code = run_build(argv[:3] + [str(root / 'lib')] + argv[4:], {'DMSH_VK_RESULTS': str(root / 'results'), 'DMSH_VK_DELTA_FROM': str(root / 'none')})
+        if code != 0: return code   # stopped or failed: check.todo and the results stay, the next check goes on from them
+        N = delta.Library(str(new_dir / 'dmsh_vk.lib'))
+        try:
+            differ, missing = [], []
+            for k, i in sorted(target.index.items()):
+                j = N.index.get(k)
+                if j is None: missing.append(k); continue
+                try: same = target.hash_of(i, zstd)[1] == N.hash_of(j, zstd)[1]
+                except Exception: same = False
+                if not same: differ.append(k)
+            extra = sorted(k for k in N.index if k not in target.index)
+            n, new_id, new_keys = len(target.index), library_id(N), list(N.index)
+        finally: N.close()
+    finally: target.close()
+    if not (differ or missing or extra):
+        with open(Path(reuse_dir) / CHECKED, 'a', encoding='utf-8', newline='\n') as f:
+            f.write(f'{todo["library"]}\t{n}\t{todo.get("kept", "")}\t{time.strftime("%Y-%m-%d %H:%M:%S")}\n')
+        (Path(reuse_dir) / TODO).unlink(missing_ok=True); shutil.rmtree(root, ignore_errors=True)
+        say(f'reuse full check: all {n} shaders of the library are a full translation\'s byte for byte ({todo.get("kept", "?")} of them kept from earlier builds)')
+        return 0
+    say(f'[RED] reuse full check: {len(differ)} of {n} shaders differ from a full translation ({", ".join(differ[:3])}), {len(missing)} are not in it, {len(extra)} only in it')
+    (Path(reuse_dir) / FAILED).write_text(json.dumps({'library': todo['library'], 'differ': differ[:50], 'missing': missing[:50], 'extra': extra[:50], 'of': n,
+                                                     'at': time.strftime('%Y-%m-%d %H:%M:%S')}))
+    shutil.rmtree(Path(reuse_dir) / 'shaders', ignore_errors=True)   # the records that kept them are not trusted again
+    dst = pack_library(roots, version, todo['library'])
+    if dst is not None:
+        tmp = dst.with_name(dst.name + '.partial')
+        shutil.copyfile(new_dir / 'dmsh_vk.lib', tmp); os.replace(tmp, dst)
+        say(f'reuse full check: the full translation is the game\'s library now ({dst})')
+    else: say('reuse full check: the pack holds another library now: it stays as it is')
+    deps = Deps(g, argv[2], version, dmsh_chain.profile_rows(g))
+    write_record(reuse_dir, new_id, version, g.id, dmsh_chain.inputs(g), {k: deps.digest(k) for k in new_keys if k in deps.stage})
+    try: say(keep_library(reuse_dir, str(new_dir), version))
+    except OSError as e: say(f'reuse: this library not kept for the next build ({e})')
+    (Path(reuse_dir) / TODO).unlink(missing_ok=True); shutil.rmtree(root, ignore_errors=True)
+    return DIFFER
+
+
 def main(argv):
     saved = os.environ.get('DMSH_VK_DELTA_FROM')
-    try: return reuse(argv)
+    try: return full_check(argv[1:]) if argv[:1] == ['--check'] else reuse(argv)
     finally:   # the app runs the tools in its own process: the next step finds the environment as the app set it
         if saved is None: os.environ.pop('DMSH_VK_DELTA_FROM', None)
         else: os.environ['DMSH_VK_DELTA_FROM'] = saved
@@ -486,7 +594,9 @@ def reuse(argv):
     if code == 0 and reuse_dir:
         try:
             L = delta.Library(os.path.join(out_dir, 'dmsh_vk.lib'))
-            try: write_record(reuse_dir, library_id(L), version, g.id, inputs, {k: deps.digest(k) for k in L.index if k in deps.stage})
+            try:
+                write_record(reuse_dir, library_id(L), version, g.id, inputs, {k: deps.digest(k) for k in L.index if k in deps.stage})
+                note_check(reuse_dir, library_id(L), version, g.id, len(kept))
             finally: L.close()
         except Exception as e: say(f'reuse: no record of this library\'s shaders ({e}): the next build keeps only what the same inputs allow')
         try: say(keep_library(reuse_dir, out_dir, version))

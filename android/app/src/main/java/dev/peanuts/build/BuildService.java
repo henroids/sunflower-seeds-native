@@ -237,6 +237,19 @@ public final class BuildService extends Service {
         }
     }
 
+    /** The full check of the shaders this build kept, when it is due, the phone charges and no game runs (ReuseCheck): in the packer, after the build; else later */
+    private void startCheck(BuildRequest r, File dump) {
+        try {
+            File jobFile = Upstream.jobFileOf(Upstream.workOf(dump, r.titleId));
+            ReuseCheck.remember(getNoBackupFilesDir(), r.titleId, jobFile);   // for a start later, from the launcher (ReuseCheck.startAny)
+            String why = ReuseCheck.start(this, jobFile, r.titleId);
+            if (why == null) log("reuse check: the full check of the kept shaders starts in the background (a game that starts stops it)");
+            else if (!why.equals("nothing due")) log("reuse check: later (" + why + ")");
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            log("reuse check: " + e);
+        }
+    }
+
     private void run(BuildRequest r) {
         final long startedAt = System.currentTimeMillis();
         boolean ok = false;
@@ -277,6 +290,7 @@ public final class BuildService extends Service {
             cracked(r, dump, startedAt);
             message = name + " is ready to play." + reused(r, dump) + shadersLeftOut(r, dump);
             progress("done", 100, message);
+            startCheck(r, dump);
         } catch (IOException e) {
             message = e.getMessage() == null ? e.toString() : e.getMessage();
             code = category(e);

@@ -405,6 +405,105 @@ class Kept(Base):
         self.assertEqual(os.environ['DMSH_VK_DELTA_FROM'], str(self.pack))
 
 
+class FullCheck(Base):
+    """shader_reuse.py --check: a library a build wrote with kept shaders (check.todo) is translated again in full and compared entry by entry"""
+    def check(self):
+        if self.log.exists(): self.log.unlink()
+        code = sr.main(['--check', '--target', 'vulkan', str(self.pkg), str(self.out)])
+        runs = [json.loads(l) for l in self.log.read_text().splitlines()] if self.log.exists() else []
+        return code, runs
+
+    def todo(self): return sr.read_todo(str(self.reuse))
+
+    def test_due_only_after_a_build_that_kept_shaders(self):
+        self.profile(); self.build()
+        self.assertIsNone(self.todo())   # every shader translated: nothing to check
+        self.into_pack(); self.build()
+        t = self.todo()
+        L = delta.Library(str(self.out / f'v-{VERSION}' / 'dmsh_vk.lib'))
+        try: self.assertEqual((t['library'], t['kept']), (sr.library_id(L), 400 - len(self.sample(self.vs + self.ps))))
+        finally: L.close()
+
+    def test_a_library_that_is_a_full_translation(self):
+        self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
+        code, runs = self.check()
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted(runs[0]), sorted(self.vs + self.ps))   # every shader translated again, none kept
+        self.assertIsNone(self.todo())
+        self.assertFalse((self.reuse / sr.CHECK_DIR).exists())
+        self.assertEqual(len((self.reuse / sr.CHECKED).read_text().splitlines()), 1)
+        self.assertEqual(os.environ['DMSH_VK_DELTA_FROM'], str(self.pack))
+        self.assertEqual(self.check(), (0, []))   # then nothing is due
+
+    def test_a_wrong_kept_shader_the_sample_missed(self):
+        self.profile()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i]}\n' for i in range(50)))   # the profile's own pairs: "same inputs" keeps every entry
+        self.build(); self.into_pack()
+        lib_path = self.pack / f'v-{VERSION}' / 'dmsh_vk.lib'
+        L = delta.Library(str(lib_path)); inputs = L.inputs; L.close()
+        wrong = next(k for k in self.vs[60:] if k not in self.sample(self.vs + self.ps))
+        lib = self.library(lib_path); lib[wrong] = spirv_of('a translation that went wrong')
+        write_lib(lib_path, list(lib.items()), inputs)
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)   # only the pack's library, with the wrong entry
+        code, runs, kept_lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(kept_lib[wrong], lib[wrong])   # kept: the sample did not take it
+        self.into_pack()
+        code, runs = self.check()
+        self.assertEqual(code, sr.DIFFER)
+        failed = json.loads((self.reuse / sr.FAILED).read_text())
+        self.assertEqual(failed['differ'], [wrong])
+        self.assertEqual(self.library(lib_path), self.full())   # the full translation took the wrong library's place in the pack
+        self.assertEqual(self.library(self.copy()), self.full())   # and is the kept copy
+        L = delta.Library(str(lib_path))
+        try: self.assertIsNotNone(sr.read_record(str(self.reuse), sr.library_id(L)))   # with its record: the next build keeps from it again
+        finally: L.close()
+        self.assertIsNone(self.todo())
+        self.assertFalse((self.reuse / sr.CHECK_DIR).exists())
+        self.assertFalse(lib_path.with_name('dmsh_vk.lib.partial').exists())
+
+    def copy(self): return self.reuse / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'
+
+    def test_a_wrong_kept_copy_with_the_pack_changed_since(self):
+        # the same start as above, then the pack's library replaced by another one before the check
+        self.profile()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i]}\n' for i in range(50)))
+        self.build(); self.into_pack()
+        lib_path = self.pack / f'v-{VERSION}' / 'dmsh_vk.lib'
+        L = delta.Library(str(lib_path)); inputs = L.inputs; L.close()
+        wrong = next(k for k in self.vs[60:] if k not in self.sample(self.vs + self.ps))
+        lib = self.library(lib_path); lib[wrong] = spirv_of('a translation that went wrong')
+        write_lib(lib_path, list(lib.items()), inputs)
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)
+        self.build()   # its library kept the wrong entry, and is the kept copy (not put into the pack)
+        other = dict(lib); other[self.vs[0]] = spirv_of('another build of the pack') + bytes(16)   # another size: another library (library_id), as a real one would be
+        write_lib(lib_path, list(other.items()), inputs)
+        self.assertEqual(self.check()[0], sr.DIFFER)
+        self.assertEqual(self.library(lib_path), other)   # the pack holds another library: it stays
+        self.assertEqual(self.library(self.copy()), self.full())
+
+    def test_a_stopped_check_goes_on(self):
+        self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
+        saved = sr.run_build
+
+        def stopped(argv, env):   # a game started: the tool is stopped after some shaders
+            os.makedirs(env['DMSH_VK_RESULTS'], exist_ok=True)
+            return 130
+        sr.run_build = stopped
+        try: self.assertEqual(self.check()[0], 130)
+        finally: sr.run_build = saved
+        self.assertIsNotNone(self.todo())
+        self.assertTrue((self.reuse / sr.CHECK_DIR / 'results').is_dir())
+        self.assertEqual(self.check()[0], 0)
+        self.assertIsNone(self.todo())
+
+    def test_a_library_another_build_replaced(self):
+        self.profile(); self.build(); self.into_pack(); self.build()
+        (self.reuse / sr.TODO).write_text(json.dumps({'library': 'ab' * 16, 'version': VERSION, 'game': GAME, 'kept': 3}))
+        self.assertEqual(self.check(), (0, []))
+        self.assertIsNone(self.todo())
+
+
 class Parts(Base):
     def test_vertex_shader_digest_follows_its_pixel_shaders(self):
         self.profile()

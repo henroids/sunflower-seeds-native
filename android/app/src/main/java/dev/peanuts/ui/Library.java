@@ -115,6 +115,7 @@ public final class Library {
         @Override public void run() {
             Library l = current;
             if (l != null && l.box != null && !l.scanning && PeanutsPrefs.gameDir(l.a) != null) l.staleCheck();
+            if (l != null) dev.peanuts.build.ReuseCheck.startAny(l.a);   // a build's kept shaders checked in full while the phone charges (issue #120); it waits while a game runs
             UI.postDelayed(this, STALE_TICK_MS);
         }
     };
