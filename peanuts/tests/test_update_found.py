@@ -23,6 +23,14 @@ class Wiring(unittest.TestCase):
         sheet = (APP / 'main/java/dev/peanuts/ui/GameSheet.java').read_text(encoding='utf-8')
         self.assertIn('static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started, boolean ask)', sheet)
 
+    def test_the_cover_knows_the_profiles_updates(self):
+        # the cover asks for a READY title, whose supportedBuilds the scanner never fills (a BUILD title's only): an update was never counted (found in review)
+        lib = (APP / 'main/java/dev/peanuts/ui/Library.java').read_text(encoding='utf-8')
+        self.assertIn('UpdateFound.of(parts, t.profileBuilds.keySet())', lib)
+        self.assertNotIn('UpdateFound.of(parts, t.supportedBuilds', lib)
+        scanner = (APP / 'main/java/dev/peanuts/ui/LibraryScanner.java').read_text(encoding='utf-8')
+        self.assertRegex(scanner, r'else \{\s*VersionInfo vi = versionInfo\(t\.titleId\);\s*t\.profileBuilds = vi\.builds;[^\n]*\n\s*if \(t\.status == Status\.BUILD\)')
+
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
 class Jvm(unittest.TestCase):

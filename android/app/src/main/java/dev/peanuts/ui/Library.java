@@ -1232,12 +1232,12 @@ public final class Library {
         List<UpdateFound.Part> parts = new ArrayList<>();
         for (LibraryScanner.Source s : t.updates) parts.add(new UpdateFound.Part(UpdateFound.UPDATE, s.titleId, s.version, !s.needsImport()));
         for (LibraryScanner.Source s : t.dlcs) parts.add(new UpdateFound.Part(UpdateFound.DLC, s.titleId, s.version, !s.needsImport()));
-        return UpdateFound.of(parts, t.supportedBuilds.keySet());
+        return UpdateFound.of(parts, t.profileBuilds.keySet());   // (not supportedBuilds: a BUILD title's only, empty for this READY one)
     }
 
     /** The update's name as the game's page shows it (the profile's), else its number */
     private static String updateName(Row r, UpdateFound.Found f) {
-        String n = r.title == null ? null : r.title.supportedBuilds.get(f.update);
+        String n = r.title == null ? null : r.title.profileBuilds.get(f.update);
         return n != null && !n.isEmpty() ? n : String.valueOf(f.update);
     }
 
