@@ -1231,8 +1231,9 @@ it also goes to the built-in one when the app itself was started on the external
 | `android/app/src/main/AndroidManifest.xml` | 1 | `dev.peanuts.CompanionScreen`, process `:game`, its own task affinity, single instance | trailing `<!-- PEANUTS: ... -->` |
 
 `Screens.startGame` checks whether Android allows the external display and retries on the current display if the external launch fails. Android refuses a `Presentation` on the default display, so the companion page (now `CompanionPage`, shared with
-`CompanionPresentation`) gets an activity there, `CompanionScreen`, whose window never takes the input focus. Its start still makes the built-in display the
-focused one, which leaves the controller with no window, so `Companion.refocusGame` starts the game's activity again on its display (singleTask: brought to
+`CompanionPresentation`) gets an activity there, `CompanionScreen`. Its own window takes that display's focus but no touch, hides the system bars and takes Back
+as the game's Back; the page is a panel above it that never takes the focus, so a tap leaves the controller with the game (#183, all in Peanuts' own files).
+Its start still makes the built-in display the top one, which would hand it the controller, so `Companion.refocusGame` starts the game's activity again on its display (singleTask: brought to
 the front; an intent with no title ID is a no-op in `GameActivity.onNewIntent`). No upstream-candidate general fix: the lines call Peanuts-owned code.
 
 ### Round 24, Share build log (2026-11-18)
