@@ -500,8 +500,16 @@ public final class PackService extends Service {
             else if (dev.peanuts.build.ReuseCheck.gameRunning(this)) what = "waits (a game runs)";
             else {
                 Thread watch = new Thread(() -> {   // a game that starts stops the tool; before the tool runs, step() looks itself
+                    // PEANUTS: sent again every 3 s while the tool runs, for a game and for a job that waits (onStartCommand): an interrupt before the tool's
+                    // run began is lost (dm_pack_interrupt does nothing without one), which left the check translating beside the game (found in review).
+                    // A game asks requestStop once: if the tool has not stopped 20 s later, the process ends (the job stays done; the check goes on another time)
+                    boolean asked = false;
                     while (checking) {
-                        if (inTool && dev.peanuts.build.ReuseCheck.gameRunning(this)) { Log.i(TAG, "check: a game started: stopping the check"); engine.interrupt(); return; }
+                        if (inTool) {
+                            boolean game = dev.peanuts.build.ReuseCheck.gameRunning(this);
+                            if (game && !asked) { Log.i(TAG, "check: a game started: stopping the check"); requestStop("game"); asked = true; }
+                            else if (game || afterCheck != null) engine.interrupt();
+                        }
                         SystemClock.sleep(3000);
                     }
                 }, "nxpack-check-game");
