@@ -350,10 +350,10 @@ android {
         }
     }
     buildFeatures { buildConfig true }
-    // The icon's variant badge: a "T" dot on the test app, none on the play app (res/drawable/ic_launcher_badge*.xml)
+    // The icon's variant badge: a "T" dot on the test app, none on the play app (res/drawable/ic_launcher_badge*.xml; PEANUTS: none on a release either)
     sourceSets {
         main {
-            res.srcDirs += nxPlay || nxLive ? 'src/variant-play/res' : 'src/variant-test/res'
+            res.srcDirs += nxPlay || nxLive || nxRelease ? 'src/variant-play/res' : 'src/variant-test/res'
             java.srcDirs += 'src/ondevice/java'
         }
         if (nxApp == 'peanuts') { release { res.srcDirs += 'src/peanuts/res' }; debug { res.srcDirs += 'src/peanuts/res' } }   // PEANUTS: peanut icon/background overlay (a build type's res overrides main's by name)

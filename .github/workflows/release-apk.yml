@@ -1,0 +1,81 @@
+# PEANUTS: builds the Sunflower Seeds app (dev.nxnative.android.sunflower, "Sunflower Seeds": a release build, -PnxRelease=true: no test badge, not debuggable) from
+# main and publishes it as a release its updater offers (Updater.sources: an app ID ending in .sunflower takes this repository's releases tagged sunflower-vX.Y.Z
+# whose APK is sunflower-seeds-X.Y.Z.apk; the test app's releases, test-apk.yml, are left to the test app). It installs beside the test app, with data of its own.
+# Signed with the SIGN_KEYSTORE_B64 key as the test app is, checked against SIGNER. Version 1.0.<run number>, which only grows.
+name: release-apk
+
+on:
+  workflow_dispatch:
+    inputs:
+      games:
+        description: 'Title IDs, comma-separated (dm/games/<title ID>)'
+        required: true
+        default: '0100AA7024094000'
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release-apk.yml', 'dm/games/0100AA7024094000/**', 'android/**', 'dm/host/**', 'dm/gfx/**']
+
+permissions:
+  contents: write   # the release
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: release-apk
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    name: Release APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VERSION: 1.0.${{ github.run_number }}
+      SIGNER: a18da09242e9bebbbec26e1b4a43e762d51522391b5a22cbc87299c8e1515a82   # the SHA-256 of the key's certificate, as apksigner prints it
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+      - name: The packages the build's Python tools import
+        run: python -m pip install lz4==4.4.5 capstone==5.0.9 fonttools==4.67.0
+      - name: Android SDK packages (platform 36, build-tools 36.0.0, NDK 28.2, CMake 3.22.1)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1" > /dev/null
+      - name: The signing key
+        env:
+          KEY: ${{ secrets.SIGN_KEYSTORE_B64 }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the SIGN_KEYSTORE_B64 secret is missing: without it each build has a new key and cannot install over the last"; exit 1; }
+          printf '%s' "$KEY" | base64 -d > "$RUNNER_TEMP/sign.keystore"
+      - name: Build
+        env:
+          GAMES: ${{ inputs.games || '0100AA7024094000' }}
+          NX_SIGN_STORE: ${{ runner.temp }}/sign.keystore
+          NX_SIGN_ALIAS: androiddebugkey
+          NX_SIGN_PASS: android
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          echo "sdk.dir=$ANDROID_HOME" > android/app/local.properties
+          cd android/app
+          ./gradlew --no-daemon apk -PnxApp=peanuts -PnxAppId=sunflower "-PnxLabel=Sunflower Seeds" -PnxRelease=true "-PnxGames=$GAMES" -PnxPackEngine=fake \
+            "-PnxVersion=$VERSION" "-PnxVersionCode=$((100 + ${{ github.run_number }}))"
+          mv "out/peanuts-native-$VERSION.apk" "out/sunflower-seeds-$VERSION.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "out/sunflower-seeds-$VERSION.apk" | tee certs.txt
+          grep -q "SHA-256 digest: $SIGNER" certs.txt || { echo "::error::the APK is not signed with the SIGN_KEYSTORE_B64 key"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sunflower-seeds-apk
+          path: android/app/out/sunflower-seeds-*.apk
+          if-no-files-found: error
+      - name: Release (what the app's updater offers)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "sunflower-v$VERSION" "android/app/out/sunflower-seeds-$VERSION.apk" -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "Sunflower Seeds $VERSION" --latest --notes ""
