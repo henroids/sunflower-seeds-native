@@ -3508,6 +3508,10 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
     c0_at c0 = {0};
     walk_all(d, sh);
     if (vka_rs_on()) rs_fetch_fix(sh, d);   // PEANUTS: DM_RES_SCALE: a shader that fetches by pixel sees its 2D textures at one scale
+    // PEANUTS: a compute shader's sampled textures take a GPU write through another texture over their storage as a draw's do (make_images; no pass is open here). MLB The
+    // Show 26's HAIRCOMPUTE colours each strand from the BC1 albedo its encoder stored as RG32UI blocks, through a texture object no draw samples: it read black, the hair with it
+    for (int i = 0; i < g_wk.n[5]; i++) { const vka_res *x = &g_wk.r[5][i];
+        if (x->what == VKA_R_TEX && x->tid && x->desc != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && vka_tex_id_take_pending(x->tid)) vka_tex_id_take(x->tid, g_cb); }
     if (g_do_nk || g_do_all) dobj_note(sh[5]->key, g_wk.r[5], g_wk.n[5]);   // DM_VK_DISP_OBJ (g_do_nk -1: not read yet)
     p = img_retype(sh[5], &lay, p);
     {   // DM_VK_BIND_LOG=<hex key>[,…]: the binding records of those compute shaders' dispatches (the first 12 in all) (what each binding is bound to), to follow a pass's inputs and outputs
