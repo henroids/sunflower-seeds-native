@@ -1,5 +1,7 @@
 package dev.nxnative.android;
 
+import android.app.ActivityManager;   // PEANUTS: the previous pack process exit
+import android.app.ApplicationExitInfo;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -66,6 +68,8 @@ public final class PackService extends Service {
     /** Starts of one step the process may not live through before the job fails (Job.start) */
     private static final int MAX_STARTS = 3;   // PEANUTS: was 2; the later starts run with fewer workers (Job.memLevel, BuildMemory)
     private static final Pattern PROGRESS = Pattern.compile("^progress:? (\\d+)(?: |/)(\\d+)(?: (\\S+))?");
+    /** PEANUTS: vk_android_build.py's summary, "shaders <all>: ok <built>, <failure> <n>, ..." (Job.shadersFailed) */
+    private static final Pattern BUILT = Pattern.compile("^shaders (\\d+): ok (\\d+)\\b");
     /** A tool's "stage: <what it is doing now>" line (Job.stepNote) */
     private static final Pattern STAGE = Pattern.compile("^stage: (.+)$");
 
@@ -166,15 +170,24 @@ public final class PackService extends Service {
             stopSelf(startId);
             return START_NOT_STICKY;
         }
-        if ("running".equals(j.state())) {   // PEANUTS: still "running" at a start: the process before this one was ended (Android's low-memory killer, most likely): fewer workers from now on
+        if ("running".equals(j.state())) {   // PEANUTS: still "running" at a start: look up why the previous pack process ended
             // PEANUTS: ...unless the app was installed again after the job's last note: an update ends every process of the app, and that is no sign of low memory.
             // Three installs during one build left Mario Kart 8 Deluxe's on one worker with 10 GB free
             long installed = 0;
             try { installed = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime; } catch (android.content.pm.PackageManager.NameNotFoundException e) { /* 0: counted as a kill */ }
             if (installed > j.updated()) stepLog(j, "the build's process ended when the app was updated; resuming with the same workers (level " + j.memLevel() + "; " + memLine() + ")");
             else {
-                j.memLevelUp();
-                stepLog(j, "the build's process ended before its step finished (most often Android freeing memory); resuming with fewer workers (level " + j.memLevel() + "; " + memLine() + ")");
+                // PEANUTS: Android's own record of that process's end (ApplicationExitInfo), not a guess: only an end for memory halves the workers. Mario Kart 8 Deluxe's
+                // split went 4 → 2 → 1 workers over three ends with 11 GB free, each run slower than the one before, and nothing in the log said what ended it
+                ApplicationExitInfo exit = lastPackExit(j.updated());
+                int reason = exit == null ? ExitNotice.NONE : exit.getReason();
+                int status = exit == null ? 0 : exit.getStatus();
+                boolean reduce = ExitNotice.reducePackWorkers(reason, status, ActivityManager.isLowMemoryKillReportSupported());
+                if (reduce) j.memLevelUp();
+                String detail = exit == null ? "Android has no matching exit record"
+                        : dev.peanuts.build.BuildLogBundle.reason(reason) + ", status " + status + ", " + exit.getRss() / 1024 + " MB resident";
+                stepLog(j, "the build process ended (" + detail + "); resuming with " + (reduce ? "fewer" : "the same")
+                        + " workers (level " + j.memLevel() + "; " + memLine() + ")");
             }
         }
         stopReason = null;
@@ -215,6 +228,22 @@ public final class PackService extends Service {
             }
             return false;
         }
+    }
+
+    /** PEANUTS: select the latest exit of this process after the job last recorded progress. */
+    private ApplicationExitInfo lastPackExit(long updated) {
+        if (updated <= 0) return null;
+        try {
+            ActivityManager am = getSystemService(ActivityManager.class);
+            String me = android.app.Application.getProcessName();
+            for (ApplicationExitInfo exit : am.getHistoricalProcessExitReasons(getPackageName(), 0, 16)) {
+                if (exit.getTimestamp() < updated) break;
+                if (me.equals(exit.getProcessName())) return exit;
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Could not read the pack process exit record", e);
+        }
+        return null;
     }
 
     /** A pause the user asked for, in logcat (nxpack) and in the current step's log (ondevice/logs/<step>.log): who asked and when */
@@ -364,7 +393,7 @@ public final class PackService extends Service {
                 int starts = j.start(s);
                 save(j, true);
                 if (starts > MAX_STARTS) {   // twice ended by Android inside this step (START_STICKY brought it back): stop instead of looping
-                    stepLog(j, "stopping: the step was ended by Android " + (starts - 1) + " times before it finished (most likely for memory); " + readings());
+                    stepLog(j, "stopping: the step was ended by Android " + (starts - 1) + " times before it finished; " + readings());
                     j.ended(s);
                     j.stepState(s, "pending");
                     j.fail(PrepareText.killed(Job.STEP_TEXT[i], starts - 1, s.equals("rewrite") ? "2.7" : "1.5"));
@@ -706,11 +735,12 @@ public final class PackService extends Service {
             int eq = l.indexOf('=');
             if (eq > 0 && !l.startsWith("#")) { PackEngine.setenv(l.substring(0, eq).trim(), capped(l.substring(0, eq).trim(), l.substring(eq + 1).trim(), mem));  /* PEANUTS: an env.txt count never goes over the memory plan */ Files.write(log.toPath(), ("[env.txt] " + l.trim() + "\n").getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND); }
         }
-        if (s.equals("shaders")) j.shadersMissing(0, 0);   // the step's own count (Tail), not an earlier run's
+        if (s.equals("shaders")) { j.shadersMissing(0, 0); j.shadersFailed(0, 0); }   // the step's own count (Tail), not an earlier run's // PEANUTS: shadersFailed
         Tail tail = new Tail(j, s, log);
         tail.start();
         int code;
         inTool = true;
+        long began = SystemClock.elapsedRealtime();   // PEANUTS
         try {
             if (autoReason != null || stopReason != null) return "interrupted";
             code = engine.run(tool, argv, log.getPath());
@@ -719,6 +749,8 @@ public final class PackService extends Service {
             tail.finish();
         }
         Log.i(TAG, s + ": exit " + code);
+        long sec = (SystemClock.elapsedRealtime() - began) / 1000;
+        stepLog(j, s + ": the tool ended with code " + code + " after " + sec / 60 + " min " + sec % 60 + " s");   // PEANUTS: the logs had a time only where a step began
         if (code == PackEngine.INTERRUPTED) return "interrupted";
         if (code != 0) {
             String why = tail.reason();   // the last [RED] line, or a traceback's last line after it (PrepareText.StopReason)
@@ -1016,6 +1048,10 @@ public final class PackService extends Service {
                     changed = true;
                 } else if (st.find()) {
                     j.stepNote(step, st.group(1).trim());
+                    changed = true;
+                } else if (step.equals("shaders") && (m = BUILT.matcher(line)).find()) {   // PEANUTS: the library's summary line: shaders that did not translate or validate (Try anyway writes the library without them)
+                    long of = Long.parseLong(m.group(1));
+                    j.shadersFailed(of - Long.parseLong(m.group(2)), of);
                     changed = true;
                 } else if (stop.line(line)) {
                     long[] miss = PrepareText.missingShaders(line);   // Try anyway: shaders this game version lacks, said once the game is ready (Ondevice.addGame)

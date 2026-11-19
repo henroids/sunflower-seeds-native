@@ -310,6 +310,15 @@ final class Job {
         }
     }
 
+    /** PEANUTS: keep the failed and total shader counts for the final build message. */
+    synchronized void shadersFailed(long n, long of) {
+        try {
+            o.put("shaders_failed", new JSONArray().put(n).put(of));
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** What the service read when it paused by itself (PackPolicy.readings), and whether Go on anyway lifts this pause; cleared by the next state */
     synchronized void reasonDetail(String readings, boolean goOn) {
         try {

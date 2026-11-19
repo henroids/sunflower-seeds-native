@@ -182,6 +182,24 @@ public final class BuildService extends Service {
                 + " (after " + s / 60 + " min " + s % 60 + " s)");
     }
 
+    /**
+     * What the ready message adds when the shader library was written without some shaders (they did not translate or validate, and the build went on with Try
+     * anyway): the count, so a build that ends as ready does not hide them. Final Fantasy Resonance was "ready" with 115 of 73,496 left out, Octopath Traveler 0
+     * with 2,142 of 10,324, and only ondevice/logs/shaders.log said so. Empty when all were built
+     */
+    private String shadersLeftOut(BuildRequest r, File dump) {
+        try {
+            File work = Upstream.workOf(dump, r.titleId);
+            long[] f = RuntimeShaders.failed(Upstream.jobFileOf(work));
+            if (f[0] <= 0) return "";
+            Log.w(TAG, "shaders: " + f[0] + " of " + f[1] + " of " + name + "'s shaders are not in its library");
+            return String.format(java.util.Locale.ROOT, " %,d of its %,d shaders could not be built, so some effects may not show. The log that says which is %s.", f[0], f[1],
+                    new File(work, "ondevice/logs/shaders.log"));
+        } catch (ReflectiveOperationException e) {
+            return "";
+        }
+    }
+
     private void run(BuildRequest r) {
         boolean ok = false;
         String message;
@@ -218,7 +236,7 @@ public final class BuildService extends Service {
             }
             if (prepareFailed != null) throw prepareFailed;
             ok = true;
-            message = name + " is ready to play.";
+            message = name + " is ready to play." + shadersLeftOut(r, dump);
             progress("done", 100, message);
         } catch (IOException e) {
             message = e.getMessage() == null ? e.toString() : e.getMessage();

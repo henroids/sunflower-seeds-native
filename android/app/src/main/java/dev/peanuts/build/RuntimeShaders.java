@@ -54,6 +54,20 @@ final class RuntimeShaders {
     }
 
     /**
+     * {shaders that did not translate or validate, total shaders} from the job file ("shaders_failed", written by the shaders step), {0, 0} when the job lacks the
+     * line or every shader was built. With Try anyway (pressed for the player, AutoRelax) the library is written without them and the build still ends as ready
+     */
+    static long[] failed(File jobFile) {
+        try {
+            JSONObject o = new JSONObject(new String(Files.readAllBytes(jobFile.toPath()), StandardCharsets.UTF_8));
+            JSONArray a = o.optJSONArray("shaders_failed");
+            return a == null || a.length() < 2 ? new long[] {0, 0} : new long[] {a.optLong(0), a.optLong(1)};
+        } catch (IOException | JSONException e) {
+            return new long[] {0, 0};
+        }
+    }
+
+    /**
      * Whether the title compiles shaders at run time at all: its profile's shader_map.tsv (in the APK's tools.zip) names GLSLC run-time
      * sources (/glslc_capture/ paths, dm/games/README.md). A pack can miss shaders for other reasons (a game version the map was not made from: Mario Kart 8 Deluxe's 135),
      * and those no game run can capture
@@ -140,6 +154,7 @@ final class RuntimeShaders {
             }
             o.put("state", "pending").put("step", "split").put("reason", "").put("error", "");
             o.remove("shaders_missing");
+            o.remove("shaders_failed");
             o.remove("shader_cache");
             Files.write(jobFile.toPath(), o.toString(1).getBytes(StandardCharsets.UTF_8));
         } catch (JSONException e) {
