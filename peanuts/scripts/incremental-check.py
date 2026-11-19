@@ -12,6 +12,9 @@ Scenarios (--scenarios, run in this order; `again`, `new-folder` and `dlc-later`
              the .nup made again, the shaders kept from the caches' copy of the library; the library and the modules must be the full build's byte for byte
   dlc-later  copies of the base and the update without the DLC, in the check's folder: a build from them (its addon_missing answered with Try anyway),
              then the DLC added and Import again; the library must be the full build's byte for byte
+After each build that kept shaders, the app's full check of them (dev.peanuts.build.ReuseCheck: the packer translates every shader again while the phone
+charges) is followed to its end before the next step: its time, and its word that every shader is a full translation's byte for byte. The ready message must
+say what came from earlier builds.
 Each step's time comes from the app's status file, read every two seconds (the times are good to about that).
 
 Usage: incremental-check.py --package <development build's id> --title <title ID> [--serial <adb serial>] [--scenarios full,again,new-folder,dlc-later]
@@ -185,6 +188,7 @@ class Check:
     # a build ---------------------------------------------------------------------------------------------------------------------------------------
     def build(self, label, cmd, folder, **args):
         """One build through the control interface, followed to its end → its record (times, what was kept, the outputs' hashes)"""
+        checks_before = self.check_ends(folder)
         ans = self.p.ctl(cmd, title_id=self.title, **args)
         if not ans.get('ok'): raise RuntimeError(f'{label}: {cmd} refused: {ans.get("error")}: {ans.get("message")}')
         t0, timeline, seen, end, paused, unread = time.monotonic(), [], False, None, None, 0
@@ -206,11 +210,56 @@ class Check:
                 end = b; break
             if time.monotonic() - t0 > 4 * 3600: raise RuntimeError(f'{label}: still building after 4 h')
         total = round(time.monotonic() - t0)
-        rec = {'seconds': total, 'steps': durations(timeline), 'failed': bool(end.get('failed')), 'code': end.get('code'), 'error': end.get('error')}
-        rec.update(self.outputs(folder))
+        rec = {'seconds': total, 'steps': durations(timeline), 'failed': bool(end.get('failed')), 'code': end.get('code'), 'error': end.get('error'),
+               'message': end.get('detail')}
         print(f'{label}: {total} s, steps {rec["steps"]}' + (f', stopped: {rec["code"]} {rec["error"]}' if rec['failed'] else ''), flush=True)
+        if rec['message']: print(f'  the ready message: {rec["message"]}', flush=True)
+        rec['check'] = None if rec['failed'] else self.wait_check(label, folder, checks_before)
+        rec.update(self.outputs(folder))   # after the check: a library it replaced is the one the pack has
         for l in rec['reuse']: print(f'  {l}', flush=True)
         return rec
+
+    def check_log(self, folder): return f'{folder}/{self.title}/{self.title}-work/ondevice/logs/check.log'
+
+    def check_ends(self, folder):
+        """How many full checks of this folder's job have ended (ReuseCheck.log's "check: …" lines in its check.log)"""
+        out = self.p.sh(f"grep -c '\\] check: ' {shlex.quote(self.check_log(folder))} 2>/dev/null || true").strip()
+        return int(out) if out.isdigit() else 0
+
+    def wait_check(self, label, folder, before):
+        """The full check a build that kept shaders leaves due (check.todo), which the app starts at the build's end while the phone charges: followed to its end
+        (up to 40 minutes) → {'seconds', 'lines', 'ok', 'replaced'}; None when none was due; {'started': False} when none started within 90 s"""
+        due = self.p.run_as(f'test -f no_backup/reuse/{self.title}/check.todo && echo due || echo none', check=False).strip() == 'due'
+        if not due and self.check_ends(folder) == before: return None
+        t0 = time.monotonic()
+        while self.check_ends(folder) == before:
+            time.sleep(5)
+            if time.monotonic() - t0 > 90 and 'reuse full check' not in self.p.sh(f'tail -c 4000 {shlex.quote(self.check_log(folder))} 2>/dev/null || true'):
+                print(f'{label}: the full check did not start within 90 s (the phone not charging? the build log says why)', flush=True)
+                return {'started': False}
+            if time.monotonic() - t0 > 2400: raise RuntimeError(f'{label}: the full check still runs after 40 minutes')
+        text = self.p.sh(f'cat {shlex.quote(self.check_log(folder))} 2>/dev/null || true')
+        last = text[text.rfind('\n== ') + 1:] if '\n== ' in text else text
+        lines = [l.strip() for l in last.splitlines() if 'reuse full check' in l or '] check: ' in l]
+        rec = {'seconds': round(time.monotonic() - t0), 'lines': lines, 'ok': any("are a full translation's byte for byte" in l for l in lines),
+               'replaced': any('[RED] reuse full check' in l for l in lines)}
+        print(f'{label}: the full check: {rec["seconds"]} s after the build', flush=True)
+        for l in lines: print(f'  {l}', flush=True)
+        return rec
+
+    def checked(self, what, rec):
+        """The full check after a build that kept shaders ran and found every shader a full translation's"""
+        c = rec.get('check') or {}
+        ok = bool(c.get('ok'))
+        self.report['checks'].append({'check': what, 'ok': ok})
+        print(f'{"OK  " if ok else "FAIL"} {what}', flush=True)
+        return ok
+
+    def said(self, what, rec, words):
+        ok = words in (rec.get('message') or '')
+        self.report['checks'].append({'check': what, 'ok': ok})
+        print(f'{"OK  " if ok else "FAIL"} {what}', flush=True)
+        return ok
 
     def outputs(self, folder):
         """The pack's library and rewritten modules (SHA-256) and the log's reuse lines; adb failing here is an error, not an empty pack"""
@@ -262,6 +311,8 @@ class Check:
             runs['again'] = self.build('Import again', 'reimport', self.full_folder, confirm=True)
             self.same('Import again: the shader library is the full build\'s byte for byte', runs['again'], runs['full'], 'library')
             self.same('Import again: the modules are the full build\'s byte for byte', runs['again'], runs['full'], 'modules')
+            self.checked('Import again: the full check found every shader a full translation\'s', runs['again'])
+            self.said('Import again: the ready message says what came from earlier builds', runs['again'], 'came from earlier builds')
         if 'new-folder' in scenarios:
             folder = self.fresh('new-folder', keep_caches=True)
             runs['new-folder'] = self.build('another Build folder, the caches kept: Build', 'build', folder)
@@ -270,6 +321,8 @@ class Check:
             self.used('Another Build folder: shaders kept from the app\'s copy of the library', runs['new-folder'], r'/library/v-[0-9a-f]+/dmsh_vk\.lib: [1-9]\d* shaders kept')
             self.used('Another Build folder: modules put back from the app\'s copies', runs['new-folder'], r'kept from the app\'s copy of its last rewrite')
             self.used('Another Build folder: game files kept by the split', runs['new-folder'], r'split reuse: [1-9]\d* of \d+ files kept')
+            self.checked('Another Build folder: the full check found every shader a full translation\'s', runs['new-folder'])
+            self.said('Another Build folder: the ready message says what came from earlier builds', runs['new-folder'], 'came from earlier builds')
         if 'dlc-later' in scenarios:
             files = (self.p.ctl('reimport', title_id=self.title).get('data') or {})   # without confirm: what an Import again would read, nothing changed
             base, update, dlc = files.get('base'), files.get('update'), files.get('dlc') or []
@@ -290,6 +343,7 @@ class Check:
             runs['dlc-after'] = self.build('the DLC added: Import again', 'reimport', folder, confirm=True)
             self.same('DLC added later: the shader library is the full build\'s byte for byte', runs['dlc-after'], runs['full'], 'library')
             self.same('DLC added later: the modules are the full build\'s byte for byte', runs['dlc-after'], runs['full'], 'modules')
+            self.checked('DLC added later: the full check found every shader a full translation\'s', runs['dlc-after'])
         return all(c['ok'] for c in self.report['checks']) and not any(r['failed'] for r in runs.values() if r is not runs.get('dlc-before'))
 
 
