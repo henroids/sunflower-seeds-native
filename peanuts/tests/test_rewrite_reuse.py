@@ -120,5 +120,91 @@ class Rewrite(unittest.TestCase):
         self.assertFalse(self.keeps('sdk', sdk, g))
 
 
+class Restore(Rewrite):
+    """The copy of a module's files its record keeps (<PN_REUSE_DIR>/rewrite/<module>.files): a pack without the module (another Build folder, a build deleted)
+    gets them back instead of a rewrite, when the module's part and every file are the recorded ones"""
+    FILES = {'main.patched.bin': b'patched main', 'main.fixups.tsv': b'layout\n', 'main.changed.tsv': b'0x10\t1\n', 'build_src.sha256': b'tools\n'}
+
+    def made(self, g, main):
+        for f, b in self.FILES.items(): (self.out / f).write_bytes(b)
+        (self.out / 'main.android.key').write_text('key-1\n')
+        (self.out / 'sdk.patched.bin').write_bytes(b'not main\'s')   # another module's file beside it: not in main's copy
+        rr.record('main', main, self.out, g, REWRITER)
+
+    def new_pack(self):
+        p = self.d / 'pack2'; p.mkdir(exist_ok=True); return p
+
+    def test_a_pack_without_the_module_gets_the_copy(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        p = self.new_pack()
+        self.assertTrue(rr.restore('main', main, p, g, 'key-2', REWRITER))
+        self.assertEqual({f.name: f.read_bytes() for f in p.iterdir() if f.name != 'main.android.key'}, self.FILES)
+        self.assertEqual((p / 'main.android.key').read_text(), 'key-2\n')   # the current key, written last
+        self.assertFalse((p / 'sdk.patched.bin').exists())
+
+    def test_another_part_is_rewritten(self):
+        main = self.src('main', module(MAIN_A))
+        self.made(self.profile([('v1', '1.0.0', MAIN_A, SDK)]), main)
+        g = self.profile([('v1', '1.0.0', MAIN_A, SDK)], patches=f'CUTS = {{{MAIN_A[:32]!r}: [(0, "00", "00", "x")]}}\n')   # cuts for this build now
+        p = self.new_pack()
+        self.assertFalse(rr.restore('main', main, p, g, 'key-2', REWRITER))
+        self.assertEqual(list(p.iterdir()), [])
+        self.assertFalse(rr.restore('main', self.src('main2', module(MAIN_A, b'other code')), p, self.profile([('v1', '1.0.0', MAIN_A, SDK)]), 'key-2', REWRITER))
+
+    def test_a_copy_that_changed_is_not_taken(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        (self.d / 'reuse' / 'rewrite' / 'main.files' / 'main.fixups.tsv').write_bytes(b'damaged\n')
+        p = self.new_pack()
+        self.assertFalse(rr.restore('main', main, p, g, 'key-2', REWRITER))
+        self.assertFalse((p / 'main.android.key').exists())
+
+    def test_only_into_a_pack_without_the_module(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        self.assertFalse(rr.restore('main', main, self.out, g, 'key-2', REWRITER))   # the pack has it: keep() decides there
+        p = self.new_pack(); (p / 'main.patched.bin').write_bytes(b'a cut rewrite')   # a rewrite stopped part way: no key, rewritten
+        self.assertFalse(rr.restore('main', main, p, g, 'key-2', REWRITER))
+
+    def test_the_shared_file_of_the_pack_stays(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        p = self.new_pack(); (p / 'build_src.sha256').write_bytes(b'written by another module\'s rewrite\n')
+        self.assertTrue(rr.restore('main', main, p, g, 'key-2', REWRITER))
+        self.assertEqual((p / 'build_src.sha256').read_bytes(), b'written by another module\'s rewrite\n')
+
+    def test_off_and_no_folder(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        os.environ['PN_REUSE'] = '0'
+        self.assertFalse(rr.restore('main', main, self.new_pack(), g, 'key-2', REWRITER))
+        del os.environ['PN_REUSE']; del os.environ['PN_REUSE_DIR']
+        self.assertFalse(rr.restore('main', main, self.new_pack(), g, 'key-2', REWRITER))
+
+    def test_the_same_files_are_copied_once(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        saved, n = rr.shutil.copyfile, []
+        rr.shutil.copyfile = lambda a, b: (n.append(b), saved(a, b))[1]
+        try:
+            rr.record('main', main, self.out, g, REWRITER)   # a later build that kept the module: its files as they were
+            self.assertEqual(n, [])
+            (self.out / 'main.patched.bin').write_bytes(b'rewritten again')
+            rr.record('main', main, self.out, g, REWRITER)
+            self.assertEqual(len(n), len(self.FILES))
+        finally: rr.shutil.copyfile = saved
+        self.assertEqual((self.d / 'reuse' / 'rewrite' / 'main.files' / 'main.patched.bin').read_bytes(), b'rewritten again')
+
+    def test_no_copy_when_storage_is_low(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        saved = rr.KEEP_FREE_MB; rr.KEEP_FREE_MB = 1 << 40
+        try: self.made(g, main)
+        finally: rr.KEEP_FREE_MB = saved
+        self.assertFalse((self.d / 'reuse' / 'rewrite' / 'main.files').exists())
+        self.assertFalse(rr.restore('main', main, self.new_pack(), g, 'key-2', REWRITER))
+        self.assertTrue(self.keeps('main', main, g))   # the record still keeps it in place
+
+
 if __name__ == '__main__':
     unittest.main()

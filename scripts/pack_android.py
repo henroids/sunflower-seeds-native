@@ -626,7 +626,7 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
             if ok:
                 if have != key: tmp = out / f'{m}.android.key.tmp'; write_lf(tmp, key + '\n'); os.replace(tmp, kf)   # the same rewrite: its key as rewrite_key's (upgrade_keys)
                 print(f'  {m}: unchanged, kept'); continue
-        if m not in xmod and pn_reuse().keep(m, src, out, g, key, REWRITER): continue   # PEANUTS: the key moved, the module's part of it did not (issue #120, dm/peanuts/reuse/rewrite_reuse.py)
+        if m not in xmod and (pn_reuse().keep(m, src, out, g, key, REWRITER) or pn_reuse().restore(m, src, out, g, key, REWRITER)): continue   # PEANUTS: the key moved, the module's part of it did not; or the pack has none and the app's copy of its last rewrite is it (issue #120, dm/peanuts/reuse/rewrite_reuse.py)
         todo[m] = (src, key)
     for m in todo: (out / f'{m}.android.key').unlink(missing_ok=True)   # every module to rewrite is unfinished from here on: no mix of old and new modules passes
     if in_process:

@@ -2121,12 +2121,21 @@ nothing makes with that profile. These ran on 0.1.4, before a review's changes (
 code as it is: a full build 7 min 31 s, Import again 2 min 13 s (9,564 kept by the record, 202 translated to check them, all the older library's byte for
 byte), and the library after Import again is the full build's byte for byte.
 
+The shaders step keeps a copy of the last library it wrote in `no_backup/reuse/<title ID>/library/v-<V>/` (`shader_reuse.py keep_library`) and adds it to
+`DMSH_VK_DELTA_FROM` for itself and `vk_android_build.py`'s delta path: a game whose pack's library is gone (the build deleted, another Build folder) keeps its
+shaders all the same. Only this version's copy; at most 4 GB for every game together (`PN_REUSE_KEEP_MB`), the games built longest ago going first; none that
+would leave less than 2 GB free. The same library listed twice (the pack's and the copy) counts once. The rewrite's record keeps a copy of each module's files
+too (`rewrite_reuse.py record`, `no_backup/reuse/<title ID>/rewrite/<module>.files/`), and a pack without the module gets it back when its part and every file
+are the recorded ones (`restore`), in place of a rewrite.
+
 | File | Hunks | Change | Marker |
 |---|---|---|---|
 | `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | 2 | The shaders step's tool is `dm/peanuts/reuse/shader_reuse.py` (the simulated engine keeps `vk_android_build.py`, which `FakeEngine` knows); `PN_REUSE_DIR` = `no_backup/reuse/<title ID>` beside `DMSH_VK_DELTA_FROM` | `PEANUTS` |
 | `android/app/build.gradle` | 1 | `tools.zip` carries `dm/peanuts/reuse/*.py` | `PEANUTS` |
-| `scripts/pack_android.py` | 3 | `pn_reuse()`; in `rewrite`, a module whose key moved is kept when `rewrite_reuse.keep` finds its part of the profile, its bytes and its `patched.bin` the recorded ones; after `rewrite`, `rewrite_reuse.record` for each module (not for a mod's cross-module layout). Without `PN_REUSE_DIR` (a computer) nothing changes | `PEANUTS` |
+| `scripts/pack_android.py` | 3 | `pn_reuse()`; in `rewrite`, a module whose key moved is kept when `rewrite_reuse.keep` finds its part of the profile, its bytes and its `patched.bin` the recorded ones, and a module the pack has none of is put back from the app's copy of its last rewrite when `rewrite_reuse.restore` finds it the same; after `rewrite`, `rewrite_reuse.record` for each module (not for a mod's cross-module layout). Without `PN_REUSE_DIR` (a computer) nothing changes | `PEANUTS` |
 | `dm/gfx/tools/shader_split.py` | 5 | `pn_split()`; `pooled` takes `pn` (a `split_reuse.Context`): before the scan it puts the kept results of unchanged plain files into the ScanCache and cuts the batches so that each kept file is one of its own, after it gives the new results to be kept; `split_tables` makes the context for the file jobs and, when a file scanned to check differs from its kept result (`split_reuse.Stale`), scans the files again without it. Without `PN_REUSE_DIR` (a computer) or with `PN_REUSE=0` nothing changes | `PEANUTS` |
 | `dm/tools/romfs.py` | 1 | `walk` of a `.nup` or a RomFS image goes by the image's nodes; each entry's `is_dir` was a stat of its whole path, which a `.nup` resolved from its root (a walk of ACNH's 103,400 files took about 10 s on the Thor, and the split walks three times). The same names in the same order, `topdown` and a caller's pruning as before (`peanuts/tests/test_romfs_walk.py`); 20,000 files: 2.7 s → 0.02 s on a PC. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `android/app/src/main/java/dev/nxnative/android/StorageScan.java` | 2 | Settings › Storage lists each game's build cache, `no_backup/reuse/<title ID>` (the kept shader library copy and the records of `dm/peanuts/reuse`), as its own kind, not ticked: a cache of up to 4 GB together should not be invisible, and without it the game's next build takes as long as its first. Refused while Prepare runs, as every item | `PEANUTS` |
+| `android/app/src/jvmtest/java/dev/nxnative/android/StorageScanJvmTest.java` | 3 | a game's cache is listed as a build cache, a folder under `reuse/` that is not a title ID is not | `PEANUTS` |
 
-Tests: `peanuts/tests/test_shader_reuse.py`, `peanuts/tests/test_rewrite_reuse.py`. Upstream candidate: the mechanism, yes (moceure's delta needs a Mac manifest; this needs none).
+Tests: `peanuts/tests/test_shader_reuse.py`, `peanuts/tests/test_rewrite_reuse.py`, `peanuts/tests/test_split_reuse.py`, `peanuts/tests/test_romfs_walk.py`, `dm/tools/tests/test_android_storage.py`. Upstream candidate: the mechanism, yes (moceure's delta needs a Mac manifest; this needs none).

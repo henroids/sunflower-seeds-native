@@ -14,9 +14,15 @@
 # recorded one and patched.bin is the recorded file: it writes the current key (as upgrade_keys does for an equivalent rewriter, EQUIV) and rewrites nothing. Any
 # doubt (no record, another part, another patched.bin, a mod's cross-module layout, no PN_REUSE_DIR) rewrites the module as before; PN_REUSE=0 (the job's env.txt)
 # turns it off.
+#
+# The record also keeps a copy of the module's files (<module>.* and build_src.sha256, each by its SHA-256, in <PN_REUSE_DIR>/rewrite/<module>.files/): a pack that
+# has no rewrite of the module (another Build folder, a build deleted) gets them back when its part is the recorded one and every file is the recorded one (restore),
+# instead of a rewrite (ACNH's main: 2 to 3 minutes on an AYN Thor, Octopath Traveler 0's: 25). No copy that would leave less than KEEP_FREE_MB free; the copies
+# count in the cap of the kept copies of every game (dm/peanuts/reuse/shader_reuse.py keep_library).
 import hashlib
 import importlib.util
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -24,6 +30,8 @@ REPO = Path(__file__).resolve().parents[3]
 TABLES = ('CUTS', 'OBS', 'FRAME_STEP', 'CAPABILITIES')
 FORMAT = 'pn-rewrite-part 1'
 _LOADED = {}
+SHARED = 'build_src.sha256'   # written by every module's rewrite, the same for each (patch_nso.py): copied with each, put back when the pack has none
+KEEP_FREE_MB = 2048   # as shader_reuse.py's
 
 
 def patch_files():
@@ -93,8 +101,45 @@ def _sha(p):
     return h.hexdigest()
 
 
+def _read(rp):
+    """A record → ({field: value}, {file: SHA-256} of its copy); ({}, {}) when it cannot be read"""
+    try: lines = rp.read_text().splitlines()
+    except OSError: return {}, {}
+    rec, files = {}, {}
+    for l in lines:
+        c = l.split('\t')
+        if c[0] == 'file' and len(c) == 3: files[c[1]] = c[2]
+        elif len(c) == 2: rec[c[0]] = c[1]
+    return rec, files
+
+
+def _files(name, out):
+    """The module's own files in the pack (<module>.*, as patch_nso.py names them, less its key, which is written last) and the shared one"""
+    own = [f for f in Path(out).iterdir() if f.is_file() and f.name.startswith(name + '.') and f.name != f'{name}.android.key' and not f.name.endswith('.tmp')]
+    return sorted(own + ([Path(out) / SHARED] if (Path(out) / SHARED).is_file() else []))
+
+
+def _copy(rp, name, out, before):
+    """The module's files into <record>.files/ (by a .tmp folder, then a rename) → {file: SHA-256}; the copy there when it holds these files already; {} for none"""
+    keep = rp.with_suffix('.files')
+    files = {f.name: _sha(f) for f in _files(name, out)}
+    if f'{name}.patched.bin' not in files: return {}
+    if files == before and keep.is_dir() and all((keep / f).is_file() and (keep / f).stat().st_size == (Path(out) / f).stat().st_size for f in files): return files
+    shutil.rmtree(keep, ignore_errors=True)
+    size = sum((Path(out) / f).stat().st_size for f in files)
+    if shutil.disk_usage(rp.parent).free - size < KEEP_FREE_MB << 20:
+        print(f'  {name}: no copy of its rewrite kept ({size >> 20} MB): less than {KEEP_FREE_MB} MB would be free', flush=True); return {}
+    tmp = rp.with_suffix('.files.tmp'); shutil.rmtree(tmp, ignore_errors=True); tmp.mkdir()
+    try:
+        for f in files: shutil.copyfile(Path(out) / f, tmp / f)
+        os.replace(tmp, keep)
+    except OSError as e:
+        shutil.rmtree(tmp, ignore_errors=True); print(f'  {name}: no copy of its rewrite kept ({e})', flush=True); return {}
+    return files
+
+
 def record(name, src, out, g, rewriter_files):
-    """After a rewrite, or a module kept with its current key: what it was made from, for the next build"""
+    """After a rewrite, or a module kept with its current key: what it was made from, for the next build, and a copy of its files (restore)"""
     rp = _record_path(name)
     kf, pb = Path(out) / f'{name}.android.key', Path(out) / f'{name}.patched.bin'
     if rp is None or not kf.is_file() or not pb.is_file(): return
@@ -102,10 +147,36 @@ def record(name, src, out, g, rewriter_files):
         pt = part(name, src.read_bytes(), g, rewriter_files)
         if pt is None: return
         rp.parent.mkdir(parents=True, exist_ok=True)
+        files = _copy(rp, name, out, _read(rp)[1])
         tmp = rp.with_suffix('.tmp')
-        tmp.write_text(f'format\t{FORMAT}\nkey\t{kf.read_text().strip()}\npart\t{pt}\nbin\t{_sha(pb)}\n')
+        tmp.write_text(f'format\t{FORMAT}\nkey\t{kf.read_text().strip()}\npart\t{pt}\nbin\t{_sha(pb)}\n' + ''.join(f'file\t{f}\t{h}\n' for f, h in sorted(files.items())))
         os.replace(tmp, rp)
     except Exception as e: print(f'  {name}: no record of its rewrite ({e}): the next build rewrites it when its key moves', flush=True)
+
+
+def restore(name, src, out, g, key, rewriter_files):
+    """True when the pack has no rewrite of the module and the copy its record keeps is the rewrite the current inputs make (its part the recorded one, every
+    file the recorded one): the files go into the pack, the shared one only where there is none, and the current key last. Else False, and the module is rewritten
+    (a copy cut short leaves files without a key, which the rewrite replaces)"""
+    if os.environ.get('PN_REUSE') == '0': return False
+    rp = _record_path(name)
+    if rp is None or (Path(out) / f'{name}.patched.bin').exists() or (Path(out) / f'{name}.android.key').exists(): return False
+    keep = rp.with_suffix('.files')
+    try:
+        rec, files = _read(rp)
+        if rec.get('format') != FORMAT or f'{name}.patched.bin' not in files or files[f'{name}.patched.bin'] != rec.get('bin'): return False
+        pt = part(name, src.read_bytes(), g, rewriter_files)
+        if pt is None or pt != rec.get('part'): return False
+        if any(_sha(keep / f) != h for f, h in files.items()): return False
+        for f in files:
+            if f == SHARED and (Path(out) / f).is_file(): continue
+            tmp = Path(out) / (f + '.tmp'); shutil.copyfile(keep / f, tmp); os.replace(tmp, Path(out) / f)
+    except Exception: return False
+    tmp = Path(out) / f'{name}.android.key.tmp'
+    with open(tmp, 'w', newline='\n') as f: f.write(key + '\n')
+    os.replace(tmp, Path(out) / f'{name}.android.key')
+    print(f'  {name}: kept from the app\'s copy of its last rewrite (the pack had none; its build and its part of the profile are unchanged)', flush=True)
+    return True
 
 
 def keep(name, src, out, g, key, rewriter_files):
@@ -115,7 +186,7 @@ def keep(name, src, out, g, key, rewriter_files):
     kf, pb = Path(out) / f'{name}.android.key', Path(out) / f'{name}.patched.bin'
     if rp is None or not rp.is_file() or not kf.is_file() or not pb.is_file(): return False
     try:
-        rec = dict(l.split('\t', 1) for l in rp.read_text().splitlines() if '\t' in l)
+        rec = _read(rp)[0]
         if rec.get('format') != FORMAT or rec.get('key') != kf.read_text().strip(): return False
         pt = part(name, src.read_bytes(), g, rewriter_files)
         if pt is None or pt != rec.get('part') or _sha(pb) != rec.get('bin'): return False

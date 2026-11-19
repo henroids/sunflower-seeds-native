@@ -35,6 +35,12 @@ How it is kept: the kept shaders and their entries' hashes go into a manifest of
 (`no_backup/reuse/<title ID>/profile/`, `DM_GAME` pointed at it), and `vk_android_build.py`'s own delta path keeps them byte for byte. No file of the Vulkan
 chain changes, so the library version does not move.
 
+Where the older library comes from: the pack's `shaders/`, and a copy of the last library this game's shaders step wrote, kept in the app's own storage
+(`no_backup/reuse/<title ID>/library/v-<V>/`, `keep_library`), which `shader_reuse.py` adds to `DMSH_VK_DELTA_FROM` for itself and for `vk_android_build.py`.
+So a game whose pack's library is gone keeps its shaders all the same: the build deleted (Settings › Storage, Remove game data), another Build folder, a pack
+that was moved. Only this version's copy is kept, at most 4 GB for every game's copies together, the modules' too (the games built longest ago go first), and
+none that would leave less than 2 GB free; that is decided before any other copy goes. The pack's library and the copy count once (the same library). Settings › Storage lists each game's cache under Build caches (not ticked).
+
 ## The check, and what happens when it fails
 
 A sample of the shaders that could be kept is translated anyway: one in 50, at least 16, at most 1,000, picked by a hash of the key, and at least 4 of each
@@ -51,8 +57,10 @@ own check, the split against the profile, every module through spirv-val.
 
 - `PN_REUSE=0` in the job's `ondevice/env.txt`: off, the shaders step is `vk_android_build.py` as before and the rewrite keeps no module whose key moved.
 - A profile whose own manifest is of the build: upstream's delta update runs as it was.
+- `PN_REUSE_KEEP_MB=<n>` in `env.txt`: the kept copies of every game together (libraries and modules), at most n MB (4096 by default; 0 keeps no library).
 - `shaders.log` lines: `reuse: <library>: N shaders kept (...), M translated to check them`, then `reuse check: M of M shaders translated to check are the
-  older library's byte for byte; N shaders kept`. The card shows "Translating M new shaders (the other N are reused)" from the tool's own count.
+  older library's byte for byte; N shaders kept`, and `reuse: this library kept for the next build of this game (S MB)` (or why not). The card shows
+  "Translating M new shaders (the other N are reused)" from the tool's own count.
 
 ## The rewrite: a module whose own part did not change
 
@@ -69,6 +77,13 @@ Tests: `peanuts/tests/test_rewrite_reuse.py`. On an AYN Thor (ACNH 3.0.3, 2026-1
 `build` row (another main, the same sdk and subsdk0) kept `subsdk0` and `sdk` (10.5 s and 20.5 s of the full build) and rewrote `main`, whose
 own builds' rows changed; Prepare took 3 min 37 s. The kept `sdk.patched.bin` is byte for byte (SHA-256) the one a build from nothing makes with that
 profile.
+
+The record also keeps a copy of the module's files (`<module>.*` as the rewriter names them, and `build_src.sha256`, each by its SHA-256:
+`no_backup/reuse/<title ID>/rewrite/<module>.files/`), made again only when they changed. A pack that has no rewrite of the module (another Build folder, a build
+deleted) gets the copy back when the module's part is the recorded one and every file is the recorded one: the files are copied in, the shared
+`build_src.sha256` only where the pack has none, and the current key last (`<module>: kept from the app's copy of its last rewrite ...`). Otherwise, or with a copy
+that changed, the module is rewritten; a copy cut short leaves files without a key, which the rewrite replaces. No copy that would leave less than 2 GB free; the
+copies count in the 4 GB of every game's kept copies (`shader_reuse.py keep_library`).
 
 ## The split: game files that did not change
 
@@ -141,7 +156,8 @@ translated to check the kept ones. A build from nothing is a minute faster too (
 ## Checking it on a phone
 
 `peanuts/scripts/incremental-check.py` runs the scenarios above on a phone through adb and the control interface (`peanuts/docs/CONTROL.md`) and compares the
-outputs byte for byte: `full` (the reference), `again` (Import again), `dlc-later` (copies of the base and the update in the check's folder, a build from
+outputs byte for byte: `full` (the reference), `again` (Import again), `new-folder` (a Build in another, empty Build folder with the app's build caches
+kept: the kept library copy), `dlc-later` (copies of the base and the update in the check's folder, a build from
 them, then the DLC added and Import again). It drives only a development build installed beside the player's app (`-PnxAppId`, debuggable, the real packer:
 `-PnxPackStage`), builds in `Tests/<title ID>/` of the app's Build folder (four folders below what the library lists, so the player's app never shows those builds), keeps the app's settings on the computer while it runs and puts them back at the end (also after
 an error), and deletes its folder unless `--keep`. It picks the phone once at the start (`--serial` when there are several). Exit status 0 when every
@@ -156,7 +172,8 @@ python3 peanuts/scripts/incremental-check.py --package dev.nxnative.android.<suf
 `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
 and a new pair (exactly those and the vertex shaders they pad are translated), pairs that change in the split's `pso_pairs.tsv` (translated, not kept by the same
 inputs), an add-on's pixel shaders built after a build without them (they and the vertex shaders they pad are translated), the same inputs without a record (nothing kept unless the profile has its own `pso_pairs.tsv`), a change the rule does not see (caught by the check,
-then a full translation), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; each build's
-library equals a full build's. `peanuts/tests/test_rewrite_reuse.py`: a new version row keeps an unchanged `sdk`, a new main build rewrites `main`, patches for
+then a full translation), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; the kept copy (a build keeps one and puts the environment back, a build
+whose pack's library is gone keeps from it, it and the pack's count once, a damaged one is skipped, only this version's, every game's under the cap with the
+oldest going first, none above the cap or when storage is low); each build's library equals a full build's. `peanuts/tests/test_rewrite_reuse.py`: a new version row keeps an unchanged `sdk`, a new main build rewrites `main`, patches for
 the build (in the profile or in another profile's `patches.py`) and `MATCH_CUTS` of the module rewrite it, its bytes, its `patched.bin` and the `fps_decouple`
 rows count, no record, another key, `PN_REUSE=0`.

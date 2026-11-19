@@ -29,8 +29,13 @@
 # entry that cannot be read, a record that is not this library's: that part is translated. Nothing here can make the step pass with a shader the tool did not
 # make or keep by its own rules.
 #
-# Environment: PN_REUSE_DIR (the app's no_backup/reuse/<title ID>; unset: no record is kept and only "same inputs" applies), PN_REUSE=0 (env.txt: off, the tool
-# runs as before). The profile's own manifest, when it is of this build, wins: the step is then upstream's delta update as it was.
+# The older libraries: the pack's (DMSH_VK_DELTA_FROM), and a copy of the last library this title's shaders step wrote, kept in the app's own storage
+# (<PN_REUSE_DIR>/library/v-<V>/, keep_library): it is there when the pack's is not (the build deleted, another Build folder, a build that stopped after the
+# pack's library went), at most KEEP_TOTAL_MB for every title together, the titles built longest ago going first.
+#
+# Environment: PN_REUSE_DIR (the app's no_backup/reuse/<title ID>; unset: no record or copy is kept and only "same inputs" applies), PN_REUSE=0 (env.txt: off, the
+# tool runs as before), PN_REUSE_KEEP_MB (the copies' size for every title together). The profile's own manifest, when it is of this build, wins: the step is
+# then upstream's delta update as it was.
 import collections
 import hashlib
 import json
@@ -48,6 +53,9 @@ FORMAT = 'pn-shader-deps 1'
 SAMPLE_SHARE, SAMPLE_MIN, SAMPLE_MAX = 50, 16, 1000   # one key in SAMPLE_SHARE, within these bounds
 SAMPLE_CLASS_MIN = 4   # and at least this many of each class of shader (sample_class), so a rule that misses one class is checked on it too
 KEY = re.compile(r'[0-9a-f]{16}')
+KEEP_DIR = 'library'   # <PN_REUSE_DIR>/library/v-<V>/dmsh_vk.lib: the copy of the last library of this title (keep_library)
+KEEP_TOTAL_MB = 4096   # every title's copy together, at most (PN_REUSE_KEEP_MB)
+KEEP_FREE_MB = 2048    # and no copy that would leave less than this free
 
 
 def say(text): print(text, flush=True)
@@ -291,14 +299,67 @@ def older_libraries(delta, out_lib_dir, game_id):
         try: subs = os.listdir(r)
         except OSError: continue
         files += [os.path.join(r, n, 'dmsh_vk.lib') for n in subs if n.startswith('v-') and os.path.isfile(os.path.join(r, n, 'dmsh_vk.lib'))]
-    libs = []
-    for f in sorted(set(os.path.realpath(f) for f in files)):
+    libs, ids = [], set()
+    for f in sorted(set(os.path.realpath(f) for f in files), key=lambda f: -os.stat(f).st_mtime):
         if os.path.dirname(f) == os.path.realpath(out_lib_dir): continue
         try: L = delta.Library(f)
         except Exception as e: say(f'reuse: {f} skipped: {e}'); continue
         if L.game != game_id: L.close(); continue
-        libs.append(L)
-    return sorted(libs, key=lambda L: -os.stat(L.path).st_mtime)
+        i = library_id(L)
+        if i in ids: L.close(); continue   # the kept copy of the pack's library (keep_library): the same entries
+        ids.add(i); libs.append(L)
+    return libs
+
+
+def copies(t):
+    """A title's kept copies → (the time of its newest file, their size, their folders): its library's (KEEP_DIR) and its modules' (rewrite_reuse.py,
+    rewrite/<module>.files)"""
+    dirs = [d for d in [t / KEEP_DIR, *sorted((t / 'rewrite').glob('*.files'))] if d.is_dir()]
+    newest, size = 0.0, 0
+    for d in dirs:
+        for r, _, names in os.walk(d):
+            for n in names:
+                try: st = os.stat(os.path.join(r, n))
+                except OSError: continue
+                newest, size = max(newest, st.st_mtime), size + st.st_size
+    return newest, size, dirs
+
+
+def keep_library(reuse_dir, out_dir, version):
+    """A copy of the library this step wrote in <PN_REUSE_DIR>/library/v-<V>/ (the pack may be on shared storage or a card, so no link): the next build of this title
+    keeps from it when the pack's library is gone. Only this version's (no build of this app keeps from another's). At most KEEP_TOTAL_MB for every title's copies
+    together, its modules' too (PN_REUSE_KEEP_MB): the copies of the titles built longest ago go first; none that would leave less than KEEP_FREE_MB free. Decided
+    before anything is deleted: a copy that is not made takes no other's place. → a line for the log"""
+    src = os.path.join(out_dir, 'dmsh_vk.lib')
+    me, root = Path(reuse_dir), Path(reuse_dir) / KEEP_DIR
+    dst = root / ('v-' + version) / 'dmsh_vk.lib'
+    try: cap = int(os.environ.get('PN_REUSE_KEEP_MB') or KEEP_TOTAL_MB) << 20
+    except ValueError: cap = KEEP_TOTAL_MB << 20
+    size = os.path.getsize(src)
+    if size > cap:
+        shutil.rmtree(root, ignore_errors=True)
+        return f'reuse: this library ({size >> 20} MB) is larger than the kept copies may be ({cap >> 20} MB, PN_REUSE_KEEP_MB): not kept'
+    _, mine, _ = copies(me)
+    have = sum(os.path.getsize(os.path.join(r, n)) for r, _, names in os.walk(root) for n in names) if root.is_dir() else 0   # this title's libraries: replaced
+    others = sorted((copies(t) + (t.name,) for t in me.parent.iterdir() if t.is_dir() and t.name != me.name), key=lambda o: o[0])
+    others = [o for o in others if o[1]]
+    total, evict = size + mine - have + sum(o[1] for o in others), []
+    while total > cap and others:
+        o = others.pop(0); evict.append(o); total -= o[1]
+    if total > cap: return f'reuse: this library ({size >> 20} MB) not kept: with this game\'s modules\' copies it is more than {cap >> 20} MB (PN_REUSE_KEEP_MB)'
+    if shutil.disk_usage(me.parent).free + have + sum(o[1] for o in evict) - size < KEEP_FREE_MB << 20:
+        return f'reuse: this library ({size >> 20} MB) not kept: less than {KEEP_FREE_MB} MB would be free'
+    for o in evict:
+        for d in o[2]: shutil.rmtree(d, ignore_errors=True)
+    shutil.rmtree(root, ignore_errors=True)   # the copies before (another version's, or the last library: this one takes its place)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix('.tmp')
+    try: shutil.copyfile(src, tmp); os.replace(tmp, dst)
+    except OSError:
+        shutil.rmtree(dst.parent, ignore_errors=True)   # never a cut copy (storage full after all): the next build keeps from the pack's library
+        raise
+    return (f'reuse: this library kept for the next build of this game ({size >> 20} MB)'
+            + (f'; the kept copies of {", ".join(o[3] for o in evict)} deleted (at most {cap >> 20} MB together)' if evict else ''))
 
 
 def wanted_keys(argv, deps, delta):
@@ -355,6 +416,14 @@ def drop_unchecked(res):
 
 
 def main(argv):
+    saved = os.environ.get('DMSH_VK_DELTA_FROM')
+    try: return reuse(argv)
+    finally:   # the app runs the tools in its own process: the next step finds the environment as the app set it
+        if saved is None: os.environ.pop('DMSH_VK_DELTA_FROM', None)
+        else: os.environ['DMSH_VK_DELTA_FROM'] = saved
+
+
+def reuse(argv):
     if os.environ.get('PN_REUSE') == '0' or len(argv) < 4 or argv[:2] != ['--target', 'vulkan']:
         if os.environ.get('PN_REUSE') == '0':
             say('reuse: off (PN_REUSE=0)')
@@ -375,6 +444,9 @@ def main(argv):
         say('reuse: the profile\'s own manifest is of this build: upstream\'s delta update')
         code = run_build(argv, {})
     else:
+        if reuse_dir:   # the kept copy beside the pack's libraries, for this tool and for vk_android_build.py's delta path, which takes the kept entries from it;
+            # without DMSH_VK_DELTA_FROM that tool takes the other v-<V> folders beside its output (argv[3]): those stay
+            os.environ['DMSH_VK_DELTA_FROM'] = os.pathsep.join([os.environ.get('DMSH_VK_DELTA_FROM') or argv[3], str(Path(reuse_dir) / KEEP_DIR)])
         libs = older_libraries(delta, out_dir, g.id)
         wanted = wanted_keys(argv, deps, delta)
         try:
@@ -417,6 +489,8 @@ def main(argv):
             try: write_record(reuse_dir, library_id(L), version, g.id, inputs, {k: deps.digest(k) for k in L.index if k in deps.stage})
             finally: L.close()
         except Exception as e: say(f'reuse: no record of this library\'s shaders ({e}): the next build keeps only what the same inputs allow')
+        try: say(keep_library(reuse_dir, out_dir, version))
+        except OSError as e: say(f'reuse: this library not kept for the next build ({e}): it keeps from the pack\'s')
     return code
 
 

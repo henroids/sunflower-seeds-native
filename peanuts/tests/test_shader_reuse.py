@@ -65,7 +65,9 @@ FAKE = textwrap.dedent('''
     for r in os.environ.get('DMSH_VK_DELTA_FROM', '').split(os.pathsep):
         for n in sorted(os.listdir(r)) if r and os.path.isdir(r) else []:
             p = os.path.join(r, n, 'dmsh_vk.lib')
-            if os.path.isfile(p): libs.append(delta.Library(p))
+            if not os.path.isfile(p) or os.path.realpath(os.path.dirname(p)) == os.path.realpath(os.path.join(a[3], 'v-' + t.VERSION)): continue   # as the real tool: not its own output
+            try: libs.append(delta.Library(p))
+            except (OSError, ValueError): pass   # as the real tool: a library it cannot read is skipped
     res = os.environ['DMSH_VK_RESULTS']; os.makedirs(res, exist_ok=True)
     out, made = [], []
     for k in keys:
@@ -108,7 +110,7 @@ class Base(unittest.TestCase):
         self.prof = self.d / 'games' / GAME; self.prof.mkdir(parents=True)
         (self.prof / 'game.tsv').write_text(f'title_id\t{GAME}\nname\tTest\n')
         self.pkg = self.d / 'split' / 'pkg'; self.pkg.mkdir(parents=True)
-        self.pack = self.d / 'pack' / 'shaders'; self.out = self.d / 'lib'; self.res = self.d / 'xlate'; self.reuse = self.d / 'reuse'
+        self.pack = self.d / 'pack' / 'shaders'; self.out = self.d / 'lib'; self.res = self.d / 'xlate'; self.reuse = self.d / 'reuse' / GAME   # as no_backup/reuse/<title ID>
         self.log = self.d / 'fake.log'
         fake = self.d / 'fake_build.py'
         fake.write_text(FAKE.format(tools=str(REPO / 'dm/gfx/tools'), games=str(REPO / 'dm/games'), reuse=str(REPO / 'dm/peanuts/reuse'), tests=str(Path(__file__).parent)))
@@ -289,6 +291,118 @@ class Reuse(Base):
         write_lib(self.pack / 'v-aaaaaaaaaaaa' / 'dmsh_vk.lib', list(self.full().items()), '000000000000', version='aaaaaaaaaaaa')
         code, runs, lib = self.build()
         self.assertEqual(len(runs[0]), 400)
+
+
+class Kept(Base):
+    """The copy of the last library in <PN_REUSE_DIR>/library (keep_library): the next build keeps from it when the pack's library is gone"""
+    def copy(self): return self.reuse / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'
+
+    def other_title(self, title, mb, age):
+        """Another title's kept copy of mb MB, age seconds old (only its size and time count)"""
+        f = self.reuse.parent / title / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'
+        f.parent.mkdir(parents=True); f.write_bytes(b'\0' * int(mb * (1 << 20)))
+        t = os.stat(f).st_mtime - age; os.utime(f, (t, t))
+        return f
+
+    def test_a_build_keeps_a_copy_of_its_library(self):
+        self.profile()
+        code, _, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.library(self.copy()), lib)
+        self.assertEqual(os.environ['DMSH_VK_DELTA_FROM'], str(self.pack))   # the environment as the app set it, for the next step
+
+    def test_the_copy_when_the_packs_library_is_gone(self):
+        self.profile(); self.build(); self.into_pack()
+        shutil.rmtree(self.pack.parent)   # the build deleted, or another Build folder
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted(runs[0]), sorted(self.sample(self.vs + self.ps)))   # only the sample translated
+        self.assertEqual(lib, self.full())
+
+    def test_the_copy_and_the_packs_library_count_once(self):
+        self.profile(); self.build(); self.into_pack()
+        game, _, d = sr.load_modules()
+        os.environ['DMSH_VK_DELTA_FROM'] = os.pathsep.join([str(self.pack), str(self.reuse / sr.KEEP_DIR)])
+        libs = sr.older_libraries(d, str(self.out / f'v-{VERSION}'), GAME)
+        try: self.assertEqual(len(libs), 1)
+        finally:
+            for L in libs: L.close()
+
+    def test_a_damaged_copy_is_skipped(self):
+        self.profile(); self.build(); self.into_pack()
+        self.copy().write_bytes(b'not a library')
+        code, runs, lib = self.build()   # kept from the pack's library
+        self.assertEqual((code, sorted(runs[0])), (0, sorted(self.sample(self.vs + self.ps))))
+        self.assertEqual(self.library(self.copy()), lib)   # and the copy is a good one again
+        self.into_pack(); self.copy().write_bytes(b'not a library'); shutil.rmtree(self.pack.parent)
+        code, runs, lib = self.build()   # neither: every shader translated
+        self.assertEqual((code, len(runs[0])), (0, 400))
+        self.assertEqual(lib, self.full())
+
+    def test_only_this_versions_copy_stays(self):
+        old = self.reuse / sr.KEEP_DIR / 'v-aaaaaaaaaaaa' / 'dmsh_vk.lib'
+        old.parent.mkdir(parents=True); old.write_bytes(b'x')
+        self.profile(); self.build()
+        self.assertFalse(old.parent.exists())
+        self.assertTrue(self.copy().is_file())
+
+    def test_the_copies_of_every_title_together_stay_under_the_cap(self):
+        oldest, newer = self.other_title('0100000000BB0000', 1.5, 3600), self.other_title('0100000000CC0000', 1.5, 60)
+        os.environ['PN_REUSE_KEEP_MB'] = '2'
+        self.profile(); self.build()
+        self.assertTrue(self.copy().is_file())
+        self.assertFalse(oldest.parent.parent.exists())   # the title built longest ago went
+        self.assertTrue(newer.is_file())
+
+    def test_a_library_larger_than_the_cap_is_not_kept(self):
+        self.profile(); self.build()
+        os.environ['PN_REUSE_KEEP_MB'] = '0'
+        self.build()
+        self.assertFalse((self.reuse / sr.KEEP_DIR).exists())   # nor an older copy that would no longer be this build's
+
+    def test_a_copy_cut_short_leaves_nothing(self):
+        self.profile(); self.build()
+        saved = sr.shutil.copyfile
+
+        def full_storage(src, dst):   # the library's copy only (the profile copy goes through copyfile too)
+            if Path(dst).name != 'dmsh_vk.tmp': return saved(src, dst)
+            Path(dst).write_bytes(b'part of it')
+            raise OSError(28, 'No space left on device')
+        sr.shutil.copyfile = full_storage
+        try: code, _, _ = self.build()
+        finally: sr.shutil.copyfile = saved
+        self.assertEqual(code, 0)   # the step stands: the copy is only for the next build
+        self.assertEqual(list((self.reuse / sr.KEEP_DIR).rglob('*')), [])
+
+    def test_no_copy_when_storage_is_low(self):
+        other = self.other_title('0100000000BB0000', 1.5, 3600)
+        os.environ['PN_REUSE_KEEP_MB'] = '1'   # this copy would take the other title's place: not when it is not made after all
+        saved = sr.KEEP_FREE_MB
+        sr.KEEP_FREE_MB = 1 << 40
+        try: self.profile(); code, _, _ = self.build()
+        finally: sr.KEEP_FREE_MB = saved
+        self.assertEqual(code, 0)
+        self.assertFalse(self.copy().exists())
+        self.assertTrue(other.is_file())
+
+    def test_without_delta_from_the_tools_own_folder_stays(self):
+        del os.environ['DMSH_VK_DELTA_FROM']   # a run on a computer: vk_android_build.py takes the other v-<V> folders beside its output
+        self.profile(); self.build()
+        shutil.rmtree(self.res)
+        code, runs, lib = self.build()
+        self.assertEqual((code, sorted(runs[0])), (0, sorted(self.sample(self.vs + self.ps))))   # from the copy (the output's own library is not an older one)
+        self.assertNotIn('DMSH_VK_DELTA_FROM', os.environ)
+
+    def test_the_environment_is_put_back_after_an_error(self):
+        self.profile()
+        saved = sr.run_build
+
+        def stops(argv, env): raise RuntimeError('the tool stopped')
+        sr.run_build = stops
+        try:
+            with self.assertRaises(RuntimeError): self.build()
+        finally: sr.run_build = saved
+        self.assertEqual(os.environ['DMSH_VK_DELTA_FROM'], str(self.pack))
 
 
 class Parts(Base):
