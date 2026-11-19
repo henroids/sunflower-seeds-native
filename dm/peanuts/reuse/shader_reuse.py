@@ -16,6 +16,8 @@
 #                that name it, the facts of the mesh programs drawn with it, the profile's nvn_* / shader_* rows, and for a vertex shader the same of each of its
 #                pixel shaders (dmsh_build.py shader_key and pair_keyed take the same parts for the Mac's per-shader cache). The digest of each shader is
 #                recorded when a library is made (<PN_REUSE_DIR>/shaders/<library id>.tsv), so the next build compares the old digest with the new one.
+# Both need the library's record: it names the translator's source tree (xlate_tree.py: not in DMSH_CHAIN, so an app update can bring another translator
+# library with the same version) and each entry's hash (library_id covers the library up to its blob). A library without one, or of another tree, keeps nothing.
 # Either way only a shader this build makes (wanted_keys: vk_android_build.py's own selection, less the absences validated against the split), and a vertex
 # shader only when its paired pixel shaders that this build makes are those the older library holds: its outputs are padded with theirs (PS_INPUTS), so an
 # add-on installed since (its pixel shaders absent before) changes it while its part of the profile stays the same (same_pixel_shaders).
@@ -50,7 +52,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 TOOLS = REPO / 'dm/gfx/tools'
 BUILD = TOOLS / 'vk_android_build.py'
-FORMAT = 'pn-shader-deps 1'
+FORMAT = 'pn-shader-deps 2'   # 2: the translator's source tree (translator_tree) and each entry's hash
 SAMPLE_SHARE, SAMPLE_MIN, SAMPLE_MAX = 50, 16, 1000   # one key in SAMPLE_SHARE, within these bounds
 SAMPLE_CLASS_MIN = 4   # and at least this many of each class of shader (sample_class), so a rule that misses one class is checked on it too
 KEY = re.compile(r'[0-9a-f]{16}')
@@ -66,6 +68,24 @@ def vk_version():
     """DMSH_VK_CHAIN of this tree (dm/gfx/nvn/dmsh_chain_vk.h, which vk_android_build.py refuses to run without)"""
     m = re.search(r'#define DMSH_VK_CHAIN "([0-9a-f]+)"', (REPO / 'dm/gfx/nvn/dmsh_chain_vk.h').read_text())
     return m.group(1) if m else ''
+
+
+_TREE = []
+
+
+def translator_tree():
+    """The translator library's source tree digest (dm/gfx/tools/xlate_tree.py), None when it cannot be told. Not in DMSH_CHAIN (the lock fingerprints the Mac's
+    dlls): an app update can bring a translator library built from other sources with the same version, so a record keeps only for the tree it names. It is
+    the one vk_android_build.py checks the library against (check_translator), so a shaders step that ran had a library of this tree"""
+    if not _TREE:
+        try:
+            sys.path.insert(0, str(TOOLS))
+            import xlate_tree
+            _TREE.append(xlate_tree.sha())
+        except Exception as e:   # (the tools without the translator's sources)
+            say(f'reuse: the translator\'s source tree cannot be told ({e}): nothing kept')
+            _TREE.append(None)
+    return _TREE[0]
 
 
 def load_modules():
@@ -174,25 +194,45 @@ def record_path(d, lib_id): return Path(d) / 'shaders' / f'{lib_id}.tsv'
 
 
 def read_record(d, lib_id):
-    """{'version', 'game', 'inputs', 'deps': {key: digest}} of a library's record, None when it has none or it does not read as one"""
+    """{'version', 'game', 'inputs', 'tree', 'deps': {key: (digest, entry hash)}} of a library's record, None when it has none or it does not read as one"""
     if not d: return None
     try: text = record_path(d, lib_id).read_text()
     except OSError: return None
     out = {'deps': {}}
     for l in text.split('\n'):
         c = l.split('\t')
-        if len(c) != 2 or l.startswith('#'): continue
-        if c[0] in ('format', 'version', 'game', 'inputs'): out[c[0]] = c[1]
-        elif KEY.fullmatch(c[0]) and re.fullmatch(r'[0-9a-f]{32}', c[1]): out['deps'][c[0]] = c[1]
-    return out if out.get('format') == FORMAT and all(x in out for x in ('version', 'game', 'inputs')) else None
+        if l.startswith('#'): continue
+        if len(c) == 2 and c[0] in ('format', 'version', 'game', 'inputs', 'tree'): out[c[0]] = c[1]
+        elif len(c) == 3 and KEY.fullmatch(c[0]) and re.fullmatch(r'[0-9a-f]{32}', c[1]) and re.fullmatch(r'[0-9a-f]{16}', c[2]): out['deps'][c[0]] = (c[1], c[2])
+    return out if out.get('format') == FORMAT and all(x in out for x in ('version', 'game', 'inputs', 'tree')) else None
 
 
-def write_record(d, lib_id, version, game, inputs, deps):
+def write_record(d, lib_id, version, game, inputs, tree, deps):
+    """deps: {key: (its digest, its entry's hash)}"""
     p = record_path(d, lib_id); p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix('.tmp')
     tmp.write_text(f'# what each shader of a library was built from (dm/peanuts/reuse/shader_reuse.py): the next build keeps the shaders whose part is the same\n'
-                   f'format\t{FORMAT}\nversion\t{version}\ngame\t{game}\ninputs\t{inputs}\n' + ''.join(f'{k}\t{deps[k]}\n' for k in sorted(deps)))
+                   f'format\t{FORMAT}\nversion\t{version}\ngame\t{game}\ninputs\t{inputs}\ntree\t{tree}\n'
+                   + ''.join(f'{k}\t{deps[k][0]}\t{deps[k][1]}\n' for k in sorted(deps)))
     os.replace(tmp, p)
+
+
+def entry_hashes(lib_dir, L, zstd):
+    """{key: entry hash} of every entry of the library L in lib_dir: from the manifest vk_android_build.py wrote beside it when it is of this library (its
+    version, game and inputs, and every key of L with a hash), else each entry hashed here"""
+    delta = load_modules()[2]
+    try:
+        m = delta.parse_manifest(Path(lib_dir, delta.MANIFEST).read_text(encoding='utf-8'))
+        hs = {k: h for k, h in m['hashes'].items() if h != '-'}
+        if (m['version'], m['game'], m['inputs']) == (L.version, L.game, L.inputs) and set(hs) == set(L.index): return hs
+    except (OSError, ValueError, KeyError, TypeError): pass
+    return {k: L.hash_of(i, zstd)[1] for k, i in L.index.items()}
+
+
+def record_of(L, lib_dir, deps, zstd):
+    """The record's rows of a library just written: each shader the profile maps, its digest and its entry's hash"""
+    hs = entry_hashes(lib_dir, L, zstd)
+    return {k: (deps.digest(k), hs[k]) for k in L.index if k in deps.stage and k in hs}
 
 
 def sample_class(deps):
@@ -231,22 +271,25 @@ def plan(libs, version, game_id, inputs, deps, reuse_dir, zstd, wanted=None, pai
     newest first; deps: Deps of this build; wanted: the keys this build makes, None for all the profile maps; pairs_in_inputs: the profile has its own
     pso_pairs.tsv (else load_pairs takes the split's, which the inputs digest does not cover, and "same inputs" does not hold)"""
     kept, sample, lines, taken = {}, {}, [], set()
+    tree = translator_tree()
     for L in libs:
         if L.version != version or L.game != game_id:
             lines.append(f'reuse: {L.path} is of version {L.version}, game {L.game}: not this build\'s'); continue
+        if tree is None: continue
         same = L.inputs == inputs and pairs_in_inputs
-        rec = None if same else read_record(reuse_dir, library_id(L))
-        if not same and (rec is None or (rec['version'], rec['game']) != (version, game_id)):
-            lines.append(f'reuse: {L.path} was built from the same profile inputs, but the profile has no pso_pairs.tsv of its own (the split\'s pairs pad the vertex '
-                         f'shaders, and the inputs digest does not cover them), and there is no record of its shaders\' parts: none kept from it' if L.inputs == inputs else
-                         f'reuse: {L.path} was built from other profile inputs ({L.inputs}, this build {inputs}) and has no record of its shaders\' parts: none kept from it')
+        rec = read_record(reuse_dir, library_id(L))
+        # a record of this app's: without one the translator a library was made with cannot be told (the translator's sources are not in its version)
+        if rec is None or (rec['version'], rec['game'], rec['tree']) != (version, game_id, tree):
+            lines.append(f'reuse: {L.path} has no record of the translator and the parts of the profile its shaders were made with'
+                         + (f' (its record names the translator {rec["tree"]}, this build\'s is {tree})' if rec and rec['tree'] != tree else '') + ': none kept from it')
             continue
-        cand = [k for k in L.index if k not in taken and k in deps.stage and (wanted is None or k in wanted) and (same or rec['deps'].get(k) == deps.digest(k))
-                and same_pixel_shaders(L, k, deps, wanted)]
+        cand = [k for k in L.index if k not in taken and k in deps.stage and (wanted is None or k in wanted) and k in rec['deps']
+                and (same or rec['deps'][k][0] == deps.digest(k)) and same_pixel_shaders(L, k, deps, wanted)]
         hashes, bad = {}, 0
         for k in cand:
             try: _, h, _ = L.hash_of(L.index[k], zstd)
             except Exception: bad += 1; continue   # an entry that cannot be read (damaged, no zstd here) is translated
+            if h != rec['deps'][k][1]: continue   # not the entry the record names (another library with the same tables: library_id)
             hashes[k] = h
         if len(hashes) < SAMPLE_MIN * 2:
             lines.append(f'reuse: {L.path}: {len(hashes)} shaders could be kept, too few to check: none kept'); continue
@@ -530,7 +573,8 @@ def full_check(argv):
                 except Exception: same = False
                 if not same: differ.append(k)
             extra = sorted(k for k in N.index if k not in target.index)
-            n, new_id, new_keys = len(target.index), library_id(N), list(N.index)
+            n, new_id = len(target.index), library_id(N)
+            new_record = record_of(N, str(new_dir), Deps(g, argv[2], version, dmsh_chain.profile_rows(g)), zstd) if differ or missing or extra else None
         finally: N.close()
     finally: target.close()
     if not (differ or missing or extra):
@@ -549,8 +593,8 @@ def full_check(argv):
         shutil.copyfile(new_dir / 'dmsh_vk.lib', tmp); os.replace(tmp, dst)
         say(f'reuse full check: the full translation is the game\'s library now ({dst})')
     else: say('reuse full check: the pack holds another library now: it stays as it is')
-    deps = Deps(g, argv[2], version, dmsh_chain.profile_rows(g))
-    write_record(reuse_dir, new_id, version, g.id, dmsh_chain.inputs(g), {k: deps.digest(k) for k in new_keys if k in deps.stage})
+    tree = translator_tree()
+    if tree is not None: write_record(reuse_dir, new_id, version, g.id, dmsh_chain.inputs(g), tree, new_record)
     try: say(keep_library(reuse_dir, str(new_dir), version))
     except OSError as e: say(f'reuse: this library not kept for the next build ({e})')
     (Path(reuse_dir) / TODO).unlink(missing_ok=True); shutil.rmtree(root, ignore_errors=True)
@@ -637,10 +681,12 @@ def reuse(argv):
         try:
             L = delta.Library(os.path.join(out_dir, 'dmsh_vk.lib'))
             try:
-                write_record(reuse_dir, library_id(L), version, g.id, inputs, {k: deps.digest(k) for k in L.index if k in deps.stage})
-                note_check(reuse_dir, library_id(L), version, g.id, len(kept))
+                note_check(reuse_dir, library_id(L), version, g.id, len(kept))   # first: a library with kept shaders has its full check due whatever comes next
+                tree = translator_tree()
+                if tree is None: raise ValueError('the translator\'s source tree cannot be told')
+                write_record(reuse_dir, library_id(L), version, g.id, inputs, tree, record_of(L, out_dir, deps, zstd))
             finally: L.close()
-        except Exception as e: say(f'reuse: no record of this library\'s shaders ({e}): the next build keeps only what the same inputs allow')
+        except Exception as e: say(f'reuse: no record of this library\'s shaders ({e}): the next build keeps nothing from it')
         try: say(keep_library(reuse_dir, out_dir, version))
         except OSError as e: say(f'reuse: this library not kept for the next build ({e}): it keeps from the pack\'s')
     return code

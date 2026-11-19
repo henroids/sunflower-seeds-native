@@ -306,7 +306,7 @@ class Reuse(Base):
         self.assertTrue({self.ps[3], self.ps[4], self.vs[3], self.vs[4]} <= set(runs[0]))   # and the vertex shaders they pad
         self.assertEqual(len(runs), 1)
 
-    def test_same_inputs_without_a_record_needs_the_profiles_own_pairs(self):
+    def test_same_inputs_without_a_record_keeps_nothing(self):
         self.profile(); self.build(); self.into_pack()
         shutil.rmtree(self.reuse / 'shaders')   # a pack made before this app: no record
         code, runs, lib = self.build()
@@ -314,10 +314,12 @@ class Reuse(Base):
         self.into_pack()
         (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i + 2]}\n' for i in range(50)))
         self.build(); self.into_pack()
+        code, runs, lib = self.build()
+        self.assertEqual(sorted(runs[0]), sorted(self.sample(self.vs + self.ps)))   # the profile's own pairs are in the inputs digest: all but the sample kept
+        self.into_pack()
         shutil.rmtree(self.reuse / 'shaders')
         code, runs, lib = self.build()
-        self.assertEqual(code, 0)
-        self.assertEqual(sorted(runs[0]), sorted(self.sample(self.vs + self.ps)))   # the profile's own pairs are in the inputs digest: all but the sample kept
+        self.assertEqual((code, len(runs[0])), (0, 400))   # without a record not even then: the translator it was made with cannot be told (Records)
         self.assertEqual(lib, self.full())
 
     def test_off(self):
@@ -574,7 +576,7 @@ class FullCheck(Base):
         L = delta.Library(str(lib_path)); inputs = L.inputs; L.close()
         wrong = next(k for k in self.vs[60:] if k not in self.sample(self.vs + self.ps))
         lib = self.library(lib_path); lib[wrong] = spirv_of('a translation that went wrong')
-        write_lib(lib_path, list(lib.items()), inputs)
+        self.went_wrong(lib_path, lib, inputs)
         shutil.rmtree(self.reuse / sr.KEEP_DIR)   # only the pack's library, with the wrong entry
         code, runs, kept_lib = self.build()
         self.assertEqual(code, 0)
@@ -595,6 +597,18 @@ class FullCheck(Base):
 
     def copy(self): return self.reuse / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'
 
+    def went_wrong(self, lib_path, lib, inputs):
+        """The pack's library lib with an entry a translation got wrong, as its build made it: the library and its record name the same entry (a rule
+        miss, or a translator fault the version did not show), so only the full check can find it"""
+        write_lib(lib_path, list(lib.items()), inputs)
+        L = delta.Library(str(lib_path))
+        try:
+            lib_id = sr.library_id(L)
+            hs = {k: L.hash_of(i, None)[1] for k, i in L.index.items()}
+        finally: L.close()
+        rec = sr.read_record(str(self.reuse), lib_id)   # (the same id: the same sizes)
+        sr.write_record(str(self.reuse), lib_id, rec['version'], rec['game'], rec['inputs'], rec['tree'], {k: (d, hs[k]) for k, (d, _) in rec['deps'].items()})
+
     def test_a_wrong_kept_copy_with_the_pack_changed_since(self):
         # the same start as above, then the pack's library replaced by another one before the check
         self.profile()
@@ -604,7 +618,7 @@ class FullCheck(Base):
         L = delta.Library(str(lib_path)); inputs = L.inputs; L.close()
         wrong = next(k for k in self.vs[60:] if k not in self.sample(self.vs + self.ps))
         lib = self.library(lib_path); lib[wrong] = spirv_of('a translation that went wrong')
-        write_lib(lib_path, list(lib.items()), inputs)
+        self.went_wrong(lib_path, lib, inputs)
         shutil.rmtree(self.reuse / sr.KEEP_DIR)
         self.build()   # its library kept the wrong entry, and is the kept copy (not put into the pack)
         other = dict(lib); other[self.vs[0]] = spirv_of('another build of the pack') + bytes(16)   # another size: another library (library_id), as a real one would be
@@ -658,10 +672,58 @@ class Parts(Base):
         self.assertTrue(sr.sample_of(ks) <= s)
 
     def test_record_round_trip(self):
-        sr.write_record(self.reuse, 'ab' * 16, VERSION, GAME, '123456789abc', {'00000000000000aa': 'cd' * 16})
+        sr.write_record(self.reuse, 'ab' * 16, VERSION, GAME, '123456789abc', '0123456789abcdef', {'00000000000000aa': ('cd' * 16, 'ef' * 8)})
         r = sr.read_record(self.reuse, 'ab' * 16)
-        self.assertEqual((r['version'], r['game'], r['inputs'], r['deps']), (VERSION, GAME, '123456789abc', {'00000000000000aa': 'cd' * 16}))
+        self.assertEqual((r['version'], r['game'], r['inputs'], r['tree'], r['deps']),
+                         (VERSION, GAME, '123456789abc', '0123456789abcdef', {'00000000000000aa': ('cd' * 16, 'ef' * 8)}))
         self.assertIsNone(sr.read_record(self.reuse, 'ef' * 16))
+        p = sr.record_path(self.reuse, 'ab' * 16)
+        p.write_text(p.read_text().replace(sr.FORMAT, 'pn-shader-deps 1'))
+        self.assertIsNone(sr.read_record(self.reuse, 'ab' * 16))   # a record of the format before: none
+
+
+class Records(Base):
+    """What a record must match besides each shader's part: the translator's sources (xlate_tree.py: not in DMSH_CHAIN, so an app update can change the
+    translator library and keep the version) and each entry (library_id hashes the library up to its blob)"""
+    def test_another_translator_keeps_nothing(self):
+        self.profile()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i]}\n' for i in range(50)))   # "same inputs" too
+        self.build(); self.into_pack()
+        saved = sr.translator_tree
+        sr.translator_tree = lambda: 'f' * 16   # an app update: the translator library built from other sources, the version the same
+        try: code, runs, lib = self.build()
+        finally: sr.translator_tree = saved
+        self.assertEqual((code, len(runs[0])), (0, 400))
+        self.assertEqual(lib, self.full())
+
+    def test_no_translator_sources_keep_nothing(self):
+        self.profile(); self.build(); self.into_pack()
+        saved = sr.translator_tree
+        sr.translator_tree = lambda: None
+        try: code, runs, lib = self.build()
+        finally: sr.translator_tree = saved
+        self.assertEqual((code, len(runs[0])), (0, 400))
+
+    def test_a_record_of_another_library_with_the_same_tables(self):
+        # libraries equal up to their blob (the same keys and sizes) share a library_id: folder A with the split's pairs P1, folder B with P2, which adds a pair
+        # of vs[150]; B's record (the same id) says vs[150] was made under P2. Then folder A gets P2 too, its kept copy gone: A's vs[150] was made under P1
+        self.profile()
+        p1 = [(self.vs[i], self.ps[i + 1]) for i in range(100)]
+        self.split_pairs(p1); self.build(); self.into_pack()
+        pack_a = self.pack
+        self.pack = self.d / 'pack-b' / 'shaders'; os.environ['DMSH_VK_DELTA_FROM'] = str(self.pack)
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)
+        self.split_pairs(p1 + [(self.vs[150], self.ps[60])]); self.build(); self.into_pack()
+        ids = []
+        for p in (pack_a, self.pack):
+            L = delta.Library(str(p / f'v-{VERSION}' / 'dmsh_vk.lib')); ids.append(sr.library_id(L)); L.close()
+        self.assertEqual(ids[0], ids[1])
+        self.pack = pack_a; os.environ['DMSH_VK_DELTA_FROM'] = str(self.pack)
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(lib, self.full())
+        self.assertIn(self.vs[150], runs[0])
 
 
 if __name__ == '__main__':

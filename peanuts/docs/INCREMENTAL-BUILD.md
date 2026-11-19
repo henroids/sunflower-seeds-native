@@ -17,10 +17,13 @@ library in the pack's `shaders/` of this app's `DMSH_VK_CHAIN` and this game:
 |---|---|
 | built from the same profile inputs (`dmsh_chain.inputs`: the shader tables and the `nvn_*` / `shader_*` rows), the profile having its own `pso_pairs.tsv` | every shader it has: a result is a function of the tools, those inputs and the shader's key (`vk_android_build.py` keys its own result cache on exactly that) |
 | built from other inputs (the app's profile gained a game version), or from the same ones by a profile without its own `pso_pairs.tsv`, with a record of each shader's part of them | each shader whose part is the same: its stage, its `shader_facts.tsv` row, its pairs (with the split's `pso_pairs.tsv` where the profile has none), its `dual_want` / `bf_want` membership, the `geo_mesh` and conflict rows that name it, the facts of the mesh programs drawn with it, the profile's `nvn_*` / `shader_*` rows; a vertex shader also its pixel shaders' parts (the parts the Mac's per-shader cache key takes, `dmsh_build.py shader_key`) |
-| of another chain version, another game, or other inputs with no record | nothing |
+| of another chain version, another game, with no record, or with a record of another translator | nothing |
 
-The record is written when a library is made: `no_backup/reuse/<title ID>/shaders/<library id>.tsv`, one digest a shader. A pack made before this app has none,
-so its first update keeps only what the same inputs allow; the next one has it.
+The record is written when a library is made: `no_backup/reuse/<title ID>/shaders/<library id>.tsv`, one digest and the entry's hash a shader, and the
+translator's source tree (`dm/gfx/tools/xlate_tree.py`). Every keep needs it, the same inputs too: the translator's sources are not in `DMSH_CHAIN` (its lock
+fingerprints the Mac's dlls), so an app update can bring a translator library built from other sources with the same version, and only the record says which
+one made the library. A library's entries must be the ones its record names (the library's id covers it only up to its blob). A pack made before this app has
+no record, so its first build with this app keeps nothing; the next one has it.
 
 Why the profile's own `pso_pairs.tsv`: a profile without one (most of them) pads its vertex shaders with the split's copy (`dmsh_build.py load_pairs`), which
 the inputs digest does not cover; an added DLC can add pairs there while the profile stays the same. Such a profile keeps by the record, whose digests take the
