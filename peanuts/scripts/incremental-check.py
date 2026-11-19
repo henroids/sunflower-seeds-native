@@ -3,7 +3,7 @@
 
 Runs on a computer with adb against a development build of the app installed beside the player's (`-PnxAppId=<suffix>`, debuggable: the script reads and
 writes its settings with run-as) whose packer is the real one (`-PnxPackStage`). It changes only that app's settings, builds in a folder of its own on the
-phone, and puts the settings back at the end, also after an error or Ctrl-C. It never sends anything to the player's app.
+phone (Tests/<title ID>/ in the app's Build folder), and puts the settings back at the end, also after an error or Ctrl-C. It never sends anything to the player's app.
 
 Scenarios (--scenarios, run in this order; `again` and `dlc-later` need `full` before them):
   full       a build from nothing: the reference (each step's time, the SHA-256 of the shader library and of each rewritten module)
@@ -34,7 +34,8 @@ import xml.etree.ElementTree as ET
 
 CTL = 'dev.peanuts.ctl.Command'
 NOT_THESE = {'dev.nxnative.android.peanuts', 'dev.nxnative.android.play', 'dev.bananative.android'}   # the player's apps: never driven by this check
-ROOT = '/sdcard/PeanutsCheck'
+TESTS = 'Tests'   # the check's folder in the app's Build folder: <build folder>/Tests/<title ID>/<scenario>/... (the library walks two folders deep, so a check's
+                  # .nup files, four deeper, are never listed as a game; nor is it a <title ID>/pack the launcher looks for)
 POLL = 2.0
 STEPS = ('import', 'identify', 'rewrite', 'split', 'shaders', 'pack')
 
@@ -125,7 +126,7 @@ def durations(timeline):
 class Check:
     def __init__(self, phone, title, keep, backup):
         self.p, self.title, self.keep, self.backup = phone, title, keep, backup
-        self.saved = None
+        self.saved, self.root = None, None
         self.report = {'title': title, 'package': phone.pkg, 'runs': {}, 'checks': []}
 
     # settings --------------------------------------------------------------------------------------------------------------------------------------
@@ -134,6 +135,11 @@ class Check:
         self.p.sh(f'am force-stop {self.p.pkg}')
         self.saved = {f: self.p.run_as(f'cat shared_prefs/{f}', binary=True) for f in ('peanuts.xml', 'games.xml')}
         if not self.saved['peanuts.xml'].strip(): raise SetupError('the app has no settings yet: set it up once by hand (game folder, keys, firmware)')
+        build = re.search(rb'<string name="build_dir">([^<]+)</string>', self.saved['peanuts.xml'])
+        if not build: raise SetupError('the app has no Build folder set (Settings › Library › Build folder)')
+        self.root = posixpath.join(build.group(1).decode(), TESTS, self.title)
+        if not re.fullmatch(r'/[\w./+-]+', self.root): raise SetupError(f'the Build folder must be a path of letters, digits and ._+-/ for this check: {self.root}')   # its globs
+        print(f'the check builds in {self.root}', flush=True)
         os.makedirs(self.backup, exist_ok=True)
         for name, data in self.saved.items():
             with open(os.path.join(self.backup, name), 'wb') as f: f.write(data)
@@ -164,7 +170,7 @@ class Check:
         ok = True
         steps = [('the app\'s settings', lambda: self.put_settings(self.saved)),
                  ('the app\'s build caches', lambda: self.p.run_as('rm -rf no_backup/reuse no_backup/xlate no_backup/split.scan'))]
-        if not self.keep: steps.append((f'{ROOT}/{self.title}', lambda: self.p.sh(f'rm -rf {ROOT}/{self.title}')))
+        if not self.keep and self.root: steps.append((self.root, lambda: self.p.sh(f'rm -rf {shlex.quote(self.root)}')))
         for what, step in steps:
             for attempt in range(3):
                 try: step(); break
@@ -224,9 +230,10 @@ class Check:
 
     # scenarios -------------------------------------------------------------------------------------------------------------------------------------
     def fresh(self, name, **dirs):
-        folder = f'{ROOT}/{self.title}/{name}'
+        folder = f'{self.root}/{name}'
         self.p.run_as('rm -rf no_backup/reuse no_backup/xlate no_backup/split.scan', check=False)
-        self.p.sh(f'rm -rf {folder}; mkdir -p {folder}')
+        q = shlex.quote(folder)
+        self.p.sh(f'rm -rf {q}; mkdir -p {q}')
         self.use(folder, **dirs)
         self.p.ctl('scan'); self.wait_scan()
         return folder
@@ -250,11 +257,12 @@ class Check:
             files = (self.p.ctl('reimport', title_id=self.title).get('data') or {})   # without confirm: what an Import again would read, nothing changed
             base, update, dlc = files.get('base'), files.get('update'), files.get('dlc') or []
             if not base or not dlc: raise RuntimeError(f'dlc-later needs a game with DLC: base {base}, DLC {dlc}')
-            games = f'{ROOT}/{self.title}/games'
-            self.p.sh(f'rm -rf {games}; mkdir -p {games}')
+            games = f'{self.root}/games'
+            q = shlex.quote(games)
+            self.p.sh(f'rm -rf {q}; mkdir -p {q}')
             for f in [base] + ([update] if update else []):
                 print(f'copying {posixpath.basename(f)}', flush=True)
-                self.p.sh(f'cp {shlex.quote(f)} {games}/', timeout=3600)
+                self.p.sh(f'cp {shlex.quote(f)} {shlex.quote(games + "/")}', timeout=3600)
             folder = self.fresh('dlc-later', keep_dirs=False, game_dir=games, update_dir=games, dlc_dir=None)
             first = self.build('build without the DLC', 'build', folder)
             if first['failed'] and first['code'] == 'addon_missing':

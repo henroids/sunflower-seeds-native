@@ -130,7 +130,7 @@ same 9,766. What is left of an Import again or an added DLC is the import and th
 `peanuts/scripts/incremental-check.py` runs the scenarios above on a phone through adb and the control interface (`peanuts/docs/CONTROL.md`) and compares the
 outputs byte for byte: `full` (the reference), `again` (Import again), `dlc-later` (copies of the base and the update in the check's folder, a build from
 them, then the DLC added and Import again). It drives only a development build installed beside the player's app (`-PnxAppId`, debuggable, the real packer:
-`-PnxPackStage`), builds in `/sdcard/PeanutsCheck/<title ID>/`, keeps the app's settings on the computer while it runs and puts them back at the end (also after
+`-PnxPackStage`), builds in `Tests/<title ID>/` of the app's Build folder (four folders below what the library lists, so the player's app never shows those builds), keeps the app's settings on the computer while it runs and puts them back at the end (also after
 an error), and deletes its folder unless `--keep`. It picks the phone once at the start (`--serial` when there are several). Exit status 0 when every
 comparison held.
 
