@@ -1248,6 +1248,19 @@ All logic is in Peanuts' own files; the upstream lines only call it.
 
 Tests: `dm/tools/tests/test_android_build_log.py`. Upstream candidate: no (it serves Peanuts' build pipeline).
 
+### Shader extraction and build failure cards (2026-11-19)
+
+The marked changes in `dm/gfx/tools/uepak.py` stream decoded LZ4 shader records to disk and reuse the completed
+archive during finalization. The Android extractor stopped during a Dragon Quest III 1.1.0 run with an allocator
+failure. With the change, all 47,298 shader rows matched the profile. Resonance 1.0.1 matched all 73,496 rows.
+`dm/tools/tests/test_uepak_archive.py` covers incremental output and distinguishes an allocation failure from a
+codec mismatch.
+
+The marked changes in `PrepareText.java`, `Job.java`, `Ondevice.java` and `PrepareTextJvmTest.java` expose the
+failed step and the last recorded tool error beside the existing log-sharing action. The Crash Team Racing
+profile's `capture_keys` row advances Language Select during a private capture boot. A fresh Android Build
+captured both run-time shaders and reached Ready.
+
 ### Round 20, the launcher on the second display (2026-11-17, rebased onto Banana Native 0.1.4 on 2026-11-18)
 
 While the launcher is in front, the second display shows the cover the D-pad is on and what can be done with it (`dev.peanuts.ui.BottomScreen`,
