@@ -1698,6 +1698,26 @@ void vka_tex_soft_copy(vka_img *im, int dst_level, VkCommandBuffer cb) {
 }
 
 // The content a new image of t starts with (storage_mode), decided before the image is made (vka_tex_get: a zero-shared image is made only for ST_ZERO)
+
+static vka_img *g_bc_sync[64];
+static int g_nbc_sync;
+static int bc_alias_match(const vka_img *src, const vka_img *dst) {
+    if (!src || !dst || src == dst || !src->mem || src->mem != dst->mem) return 0;
+    if (compressed(&src->f) || !compressed(&dst->f) || src->f.bpb != dst->f.bpb) return 0;
+    if (src->levels != dst->levels || src->layers != dst->layers) return 0;
+    uint32_t bw = (dst->w + dst->f.bw - 1) / dst->f.bw, bh = (dst->h + dst->f.bh - 1) / dst->f.bh;
+    return src->w == bw && src->h == bh;
+}
+static void bc_sync_queue_locked(vka_img *src) {
+    if (!src || compressed(&src->f) || !src->mem || g_nbc_sync >= 64) return;
+    int has_dst = 0, lk;
+    for (vka_img *o = live_first(src->mem, &lk); o; o = live_next(o, src->mem, &lk))
+        if (bc_alias_match(src, o)) { has_dst = 1; break; }
+    if (!has_dst) return;
+    for (int i = 0; i < g_nbc_sync; i++) if (g_bc_sync[i] == src) return;
+    src->refs++;
+    g_bc_sync[g_nbc_sync++] = src;
+}
 static int first_mode(const tex_t *t, const vka_fmt *f, int cpu) {
     int samples = t->d.samples > 1 ? t->d.samples : 1, vpool = t->pool && pool_sparse(t->pool);
     uint64_t seen; uint8_t *c = samples == 1 && t->mem && !vpool ? gw_content(t->mem, t->L.size, &seen) : NULL;   // the content the mode's "holds data" checks look at
@@ -2077,6 +2097,10 @@ vka_img *vka_tex_get(const tex_t *t, VkCommandBuffer cb) {
             im->vmin = vmin;
             live_add(im);
             if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_created_locked(im);   // PEANUTS: texture readback: nothing of it is copied out before this batch is on the queue (vka_readback.inc)
+            if (compressed(&im->f) && im->mem) {
+                int lk_bc; for (vka_img *o = live_first(im->mem, &lk_bc); o; o = live_next(o, im->mem, &lk_bc))
+                    if (o->gpu_owned && bc_alias_match(o, im)) bc_sync_queue_locked(o);
+            }
             big_note(im, t);
             // Its first content through the upload batch when cb is the replay's (vka_dev.c "Upload batches"): staging that retires on the batch's own completion
             VkCommandBuffer ucb = !ds_here(im, cb) && cb && cb == vka_rp_cb() && vka_up_on() ? vka_up_begin() : VK_NULL_HANDLE;
@@ -2543,6 +2567,7 @@ void vka_img_written_at(vka_img *im, int color_level, const char *file, int line
              im->w, im->h, im->layers, im->d.format, im->m.size / 1048576.0, (unsigned long long)vka_frame(), file, line, im->nsamp, im->novl); }
     im->gpu_owned = 1;
     im->last_fence = vka_fence_last();
+    bc_sync_queue_locked(im);
     if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_written_locked(im);   // PEANUTS: texture readback: the write, its batch and (from the site's vka_rb_color) a colour target's use are noted, once a companion has asked for a texture
     if (img_wb_kind(im)) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 32)   // which GPU writes a copied-back linear texture takes (the copy-back covers the whole image)
         VLOG("linear texture serial %llu %ux%u format %#x: GPU write at frame %llu (%s:%d)%s", (unsigned long long)im->serial, im->w, im->h, im->d.format,
@@ -3678,6 +3703,32 @@ void vka_tex_prepare(VkCommandBuffer cb) {
     pthread_mutex_lock(&g_tmu);
     pfb_consume_locked();   // the texture IDs read through the pool in submissions done: their images stamped used, null slots written again with their images ("Texture pool reads")
     vka_tex_prune_locked();   // (the limit measured again every 60 frames; nothing to do under it)
+    if (g_nbc_sync) {
+        int any_bc = 0, out = 0;
+        for (int i = 0; i < g_nbc_sync; i++) {
+            vka_img *src = g_bc_sync[i];
+            int keep = 0;
+            if (src->inited && !img_pool_dead(src) && src->mem) {
+                int lk_bc; for (vka_img *dst = live_first(src->mem, &lk_bc); dst; dst = live_next(dst, src->mem, &lk_bc)) {
+                    if (!dst->inited || img_pool_dead(dst) || !bc_alias_match(src, dst)) continue;
+                    keep = 1;
+                    if (!any_bc) { vka_barrier(cb); any_bc = 1; }
+                    VkImageCopy reg = { {src->aspect, 0, 0, src->layers}, {0, 0, 0}, {dst->aspect, 0, 0, dst->layers}, {0, 0, 0}, {src->w, src->h, 1} };
+                    vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, 1, &reg);
+                    dst->gpu_owned = 1;
+                    static _Atomic int n_bc;
+                    if (atomic_fetch_add(&n_bc, 1) < 8)
+                        VLOG("bc alias sync: src serial=%llu (%ux%u fmt=%d) -> dst serial=%llu (%ux%u fmt=%d) mem=%p",
+                             (unsigned long long)src->serial, src->w, src->h, src->f.vk,
+                             (unsigned long long)dst->serial, dst->w, dst->h, dst->f.vk, (const void *)src->mem);
+                }
+            }
+            if (keep) g_bc_sync[out++] = src;
+            else unref_locked(src);
+        }
+        if (any_bc) vka_barrier(cb);
+        g_nbc_sync = out;
+    }
     int n_up = 0;
     for (int i = 0; i < g_nredo; i++) {   // CPU writes to textures that already have an image (WriteTexels): from now on they follow their storage
         smap_ent *e = map_get(g_redo[i]); vka_img *im = e ? e->im : NULL;
