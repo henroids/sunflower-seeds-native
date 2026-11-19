@@ -48,7 +48,7 @@ def dirty = gitOut(['status', '--porcelain', '--untracked-files=no']) ? '+dirty'
 // The commit stays in each log's "nxnative <version> (<commit>)" line. Empty for any other app
 def peanutsVersionFile = file('../../peanuts/VERSION')
 def peanutsVersion = providers.gradleProperty('nxVersion').getOrElse(peanutsVersionFile.isFile() ? peanutsVersionFile.text.trim() : '0.0.0')
-def nxPeanutsId = nxApp == 'peanuts' ? "peanuts-native-${peanutsVersion}" + (nxRelease ? '' : '-dev') : ''
+def nxPeanutsId = nxApp == 'peanuts' ? (nxAppId.startsWith('sunflower') ? 'sunflower-seeds-native' : 'peanuts-native') + "-${peanutsVersion}" + (nxRelease ? '' : '-dev') : ''   // PEANUTS: the Sunflower Seeds apps (-PnxAppId=sunflower…) name themselves
 // Lossless Scaling frame generation (GPL-3.0-or-later, dm/gfx/vk_android/lsfg): in by default, which makes the APK GPL-3.0-or-later; -PnxLsfg=false builds without it (the packer's libdmsh_xlate.so is GPL-3.0-or-later too: android/NOTICE.md)
 def nxLsfg = providers.gradleProperty('nxLsfg').getOrElse('true') != 'false'
 // Preparing the game on the phone (android/ONDEVICE.md): "+ Add game" on a dump without a usable pack offers Prepare, which runs PackService (a foreground service
