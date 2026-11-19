@@ -2097,3 +2097,34 @@ Tears of the Kingdom's Depths caves drew chunks with another chunk's vertices fo
 | `docs/reference/rendering.md`, `docs/agents/symptoms.md` | 1 each | the entry and its symptom line | `<!-- PEANUTS -->` |
 
 Tests: the `t_android_*` suite; on the AYN Thor (Turnip v26.2.0-R5), the owner's Depths cave save: per-frame cave draw count changes 906 → 11 in about 1,300 frames. Upstream candidate: yes (the replay code is upstream's).
+
+### Round 26, a Build after an update keeps the shaders and modules that come out the same (2026-11-18)
+
+Issue #120: a Build after a game update, an added DLC or an Import again translated every shader again, because upstream's delta update keeps an older library's
+entry only with a profile manifest (`vk_delta.tsv`) of the build, and no Switch 1 profile has one. The shaders step now runs `dm/peanuts/reuse/shader_reuse.py`,
+which runs `vk_android_build.py` in its process with a manifest of its own (the older library's entries that come out the same, in a copy of the profile folder),
+then checks a translated sample (spread over the shaders' classes) against the older library; see [INCREMENTAL-BUILD.md](docs/INCREMENTAL-BUILD.md). The same
+profile inputs alone are trusted only with the profile's own `pso_pairs.tsv`: without it the split's copy pads the vertex shaders, outside the inputs digest, and
+the per-shader record decides. A vertex shader is kept only when the pixel shaders paired with it that the build makes (the absences validated against
+the split left out) are those of the older library: their inputs pad its outputs. No file of the Vulkan chain changes (`vk_android_build.py --digest` is the same), so `DMSH_VK_CHAIN` does not move.
+
+The rewrite step: a module's key covers the profile's whole `patches.py` and every `build` / `fps_decouple` row, so a profile that gained a game version rewrote
+`sdk` and `subsdk*` again although their build IDs had not changed. `dm/peanuts/reuse/rewrite_reuse.py` records, after each rewrite, the part of what
+`patch_nso.py` reads for the module's build ID (every patch file with a table at that build ID, as `patch_nso.py` merges them from all; the build rows and
+`fps_decouple` rows it reads; the rewriter's files; the module's bytes) and the SHA-256 of its `patched.bin`. A later rewrite whose key moved keeps the module when
+both are the recorded ones and writes the current key. `PN_REUSE=0` in the job's `env.txt` turns both off.
+
+Measured on an AYN Thor (ACNH 3.0.3 with its DLC, test app, 2026-11-18/19): Import again 7 min 29 s → 2 min 15 s (shaders 2 min 34 s → 20 s, 9,570 of 9,766
+kept, 196 translated to check them); a profile that gained shader pairs: 9,555 kept, 211 translated, the library byte for byte the one of a build with
+`PN_REUSE=0`; a profile that gained a `build` row: `sdk` and `subsdk0` kept, `main` rewritten, the kept `sdk.patched.bin` byte for byte the one a build from
+nothing makes with that profile. These ran on 0.1.4, before a review's changes (the `pso_pairs.tsv` rule, the sample by class, the paired pixel shaders a build makes). On 0.1.5 with the
+code as it is: a full build 7 min 31 s, Import again 2 min 13 s (9,564 kept by the record, 202 translated to check them, all the older library's byte for
+byte), and the library after Import again is the full build's byte for byte.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` | 2 | The shaders step's tool is `dm/peanuts/reuse/shader_reuse.py` (the simulated engine keeps `vk_android_build.py`, which `FakeEngine` knows); `PN_REUSE_DIR` = `no_backup/reuse/<title ID>` beside `DMSH_VK_DELTA_FROM` | `PEANUTS` |
+| `android/app/build.gradle` | 1 | `tools.zip` carries `dm/peanuts/reuse/*.py` | `PEANUTS` |
+| `scripts/pack_android.py` | 3 | `pn_reuse()`; in `rewrite`, a module whose key moved is kept when `rewrite_reuse.keep` finds its part of the profile, its bytes and its `patched.bin` the recorded ones; after `rewrite`, `rewrite_reuse.record` for each module (not for a mod's cross-module layout). Without `PN_REUSE_DIR` (a computer) nothing changes | `PEANUTS` |
+
+Tests: `peanuts/tests/test_shader_reuse.py`, `peanuts/tests/test_rewrite_reuse.py`. Upstream candidate: the mechanism, yes (moceure's delta needs a Mac manifest; this needs none).

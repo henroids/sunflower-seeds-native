@@ -598,6 +598,12 @@ def write_orig(src, out, m):   # PEANUTS
     return len(buf)
 
 
+def pn_reuse():   # PEANUTS: dm/peanuts/reuse/rewrite_reuse.py (issue #120)
+    sys.path.insert(0, str(REPO / 'dm/peanuts/reuse'))
+    import rewrite_reuse
+    return rewrite_reuse
+
+
 def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
     """patch_nso.py --target android on each module into out (each its own <module>.* files); a module whose key file matches is kept. Each module is
     rewritten into a staging folder and swapped in when it is complete (swap_in), so a run stopped part way never leaves new code with old tables.
@@ -620,6 +626,7 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
             if ok:
                 if have != key: tmp = out / f'{m}.android.key.tmp'; write_lf(tmp, key + '\n'); os.replace(tmp, kf)   # the same rewrite: its key as rewrite_key's (upgrade_keys)
                 print(f'  {m}: unchanged, kept'); continue
+        if m not in xmod and pn_reuse().keep(m, src, out, g, key, REWRITER): continue   # PEANUTS: the key moved, the module's part of it did not (issue #120, dm/peanuts/reuse/rewrite_reuse.py)
         todo[m] = (src, key)
     for m in todo: (out / f'{m}.android.key').unlink(missing_ok=True)   # every module to rewrite is unfinished from here on: no mix of old and new modules passes
     if in_process:
@@ -1163,6 +1170,8 @@ def main():
             nros = collect_nros(exe, romfs, work, a.in_process)
             try:
                 rewrite(sys.executable, srcs | nros, out, max(1, a.j), g, a.in_process, xmod_files)   # PEANUTS: xmod_files
+                for _m, _src in (srcs | nros).items():   # PEANUTS: what each module was made from, for the next build's rewrite_reuse.keep (issue #120)
+                    if _m not in (xmod_files or {}): pn_reuse().record(_m, _src, out, g, REWRITER)
                 rewrite_variants(sys.executable, srcs, out, g, a.in_process)   # game.tsv variant rows (a native 4:3 mod) into <pack>/<variant>/
             finally: shutil.rmtree(out / '.nup-src', ignore_errors=True)   # the module copies a NUP game's rewrite read (rewriter_src)
             place_nros(work / 'android-nro' if nros else None, out)

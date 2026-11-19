@@ -1,0 +1,324 @@
+"""dm/peanuts/reuse/shader_reuse.py (issue #120): the shaders step keeps the shaders of the pack's older library whose translation comes out the same and translates the
+others, with a sample translated to check. The libraries here are small ones in the layout of dmsh_abi_vk.h (raw modules, no zstd needed); vk_android_build.py is
+stood in for by a script that does what its delta path does with a manifest (keep an older entry whose hash is the manifest's, translate the rest) and "translates" a
+shader as a function of its key, its facts, its pixel shaders' facts and one input the reuse rule does not know (unseen.tsv), so a change there is caught by the
+check alone. No game files."""
+import hashlib
+import json
+import os
+import shutil
+import struct
+import sys
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(REPO / 'dm/peanuts/reuse'), str(REPO / 'dm/gfx/tools'), str(REPO / 'dm/games')]
+import shader_reuse as sr   # noqa: E402
+import vk_android_delta as delta   # noqa: E402
+
+VK = delta.VK
+GAME = '0100000000AA0000'
+VERSION = sr.vk_version()
+
+
+def spirv_of(seed):
+    """A SPIR-V-looking module whose words follow from seed"""
+    b = hashlib.sha256(seed.encode()).digest() * 4
+    return struct.pack('<5I', 0x07230203, 0x00010300, 0, 8, 0) + b
+
+
+def write_lib(path, shaders, inputs, version=VERSION, game=GAME):
+    """A library of shaders [(key, SPIR-V)] (raw modules), as write_library lays it out"""
+    entries, binds, mods, blob = bytearray(), bytearray(), bytearray(), bytearray()
+    for n, (key, s) in enumerate(sorted(shaders)):
+        blob += b'\0' * (-len(blob) % 16); o = len(blob); blob += s
+        mods += delta.MOD.pack(o, len(s), len(s), 0, VK['CODEC_RAW'], 0)
+        binds += struct.pack('<BBHBBHhHBBhHHI', 1, 6, 4 * 64, 0, 0, 1, 0, 0, 0, 0, -1, 0xFFFF, 0, 0)
+        entries += delta.ENTRY.pack(int(key, 16), 0, 4, 1, 0x40, n, n, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0)
+    eo = 128; bo = eo + len(entries); mo = bo + len(binds); blo = (mo + len(mods) + 15) // 16 * 16
+    pad = lambda s: s.encode().ljust(16, b'\0')
+    head = delta.HEAD.pack(VK['LIB_MAGIC'], VK['LIB_VERSION'], pad('a139922bad5c'), pad(version), pad(game), pad(inputs), len(shaders), eo, len(shaders), bo,
+                           len(shaders), mo, blo, len(blob), 64, 64, b'cb5a89b39291')
+    data = head + entries + binds + mods
+    data += b'\0' * (blo - len(data)) + blob
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_bytes(data)
+
+
+FAKE = textwrap.dedent('''
+    # vk_android_build.py's delta path, small: an older library's entry whose hash is the manifest's is kept, every other shader translated
+    import hashlib, json, os, sys
+    sys.path[:0] = [{tools!r}, {games!r}, {reuse!r}, {tests!r}]
+    import game, dmsh_chain, vk_android_delta as delta, test_shader_reuse as t
+    a = sys.argv[1:]
+    g = game.load(); inputs = dmsh_chain.inputs(g)
+    keys = [l.split('\\t')[3] for l in open(g.table('shader_map.tsv')) if l.split('\\t')[0].endswith('.bin')]
+    absent = set(open(os.environ['DMSH_VK_ABSENT_FILE']).read().split()) if os.environ.get('DMSH_VK_ABSENT_FILE') else set()   # validated absences: not built
+    keys = [k for k in keys if k not in absent]
+    try: m = delta.parse_manifest(open(g.table('vk_delta.tsv')).read())
+    except (OSError, ValueError): m = None
+    if m and (m['version'], m['game'], m['inputs']) != (t.VERSION, g.id, inputs): m = None
+    libs = []
+    for r in os.environ.get('DMSH_VK_DELTA_FROM', '').split(os.pathsep):
+        for n in sorted(os.listdir(r)) if r and os.path.isdir(r) else []:
+            p = os.path.join(r, n, 'dmsh_vk.lib')
+            if os.path.isfile(p): libs.append(delta.Library(p))
+    res = os.environ['DMSH_VK_RESULTS']; os.makedirs(res, exist_ok=True)
+    out, made = [], []
+    for k in keys:
+        s, rp = None, os.path.join(res, k + '.r')
+        if os.path.isfile(rp):   # a result of an earlier run (the real tool's result cache)
+            with open(rp) as f: s = bytes.fromhex(f.read().split()[1])
+        if s is None and m and k in m['hashes']:
+            for L in libs:
+                if k in L.index:
+                    _, h, ent = L.hash_of(L.index[k], None)
+                    if h == m['hashes'][k]:
+                        s = bytes(ent[4][0][2])
+                        with open(rp, 'w') as f: f.write('kept ' + s.hex())
+        if s is None:
+            s = t.translate(g, a[2], k, set(keys)); made.append(k)
+            with open(rp, 'w') as f: f.write('made ' + s.hex())
+        out.append((k, s))
+    t.write_lib(os.path.join(a[3], 'v-' + t.VERSION, 'dmsh_vk.lib'), out, inputs, game=g.id)
+    with open(os.environ['FAKE_LOG'], 'a') as f: f.write(json.dumps(made) + '\\n')
+''')
+
+
+_VIEW = {}
+
+
+def translate(g, pkg, k, present=None):
+    """The stand-in translator: the shader's key, its facts, its pixel shaders' facts (for a vertex shader: the pairs as load_pairs takes them, the split's
+    pso_pairs.tsv when the profile has none; of them only those this build makes, present, as vk_android_build.py pads with PS_INPUTS) and unseen.tsv"""
+    tag = tuple(p.read_bytes() if p.exists() else b'' for p in (g.table('shader_facts.tsv'), g.table('shader_pairs.tsv'), g.table('unseen.tsv'), g.table('shader_map.tsv'),
+                                                               g.table('pso_pairs.tsv'), Path(pkg).parent / 'pso_pairs.tsv'))
+    if tag not in _VIEW: _VIEW.clear(); _VIEW[tag] = sr.Deps(g, pkg, VERSION, b'')
+    d = _VIEW[tag]
+    unseen = tag[2].decode()
+    return spirv_of('\0'.join([k, d.fact_row(k)] + [d.fact_row(p) for p in d.pairs.get(k, ()) if present is None or p in present] + [unseen]))
+
+
+class Base(unittest.TestCase):
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp(prefix='pnreuse_'))
+        self.prof = self.d / 'games' / GAME; self.prof.mkdir(parents=True)
+        (self.prof / 'game.tsv').write_text(f'title_id\t{GAME}\nname\tTest\n')
+        self.pkg = self.d / 'split' / 'pkg'; self.pkg.mkdir(parents=True)
+        self.pack = self.d / 'pack' / 'shaders'; self.out = self.d / 'lib'; self.res = self.d / 'xlate'; self.reuse = self.d / 'reuse'
+        self.log = self.d / 'fake.log'
+        fake = self.d / 'fake_build.py'
+        fake.write_text(FAKE.format(tools=str(REPO / 'dm/gfx/tools'), games=str(REPO / 'dm/games'), reuse=str(REPO / 'dm/peanuts/reuse'), tests=str(Path(__file__).parent)))
+        self.saved_build, self.saved_env = sr.BUILD, dict(os.environ)
+        sr.BUILD = fake
+        os.environ.update({'DM_GAME': str(self.prof), 'DMSH_VK_DELTA_FROM': str(self.pack), 'DMSH_VK_RESULTS': str(self.res), 'PN_REUSE_DIR': str(self.reuse),
+                           'FAKE_LOG': str(self.log)})
+        os.environ.pop('PN_REUSE', None)
+
+    def tearDown(self):
+        sr.BUILD = self.saved_build
+        os.environ.clear(); os.environ.update(self.saved_env)
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def profile(self, vs=200, ps=200, facts=None, pairs=None, unseen=None):
+        """A profile of vs vertex and ps pixel shaders: shader_map.tsv, shader_facts.tsv (facts {key: dict}), shader_pairs.tsv (pairs [(vs, ps)])"""
+        self.vs = [f'{0x1000 + i:016x}' for i in range(vs)]; self.ps = [f'{0x9000 + i:016x}' for i in range(ps)]
+        rows = ['package\tindex\tstage\tdm_ctl_sha16\tsource'] + [f'vs_main.bin\t{i}\tvertex\t{k}\t/a#{i}' for i, k in enumerate(self.vs)] \
+            + [f'ps_main.bin\t{i}\tpixel\t{k}\t/b#{i}' for i, k in enumerate(self.ps)]
+        (self.prof / 'shader_map.tsv').write_text('\n'.join(rows) + '\n')
+        f = {k: {'tex': [1]} for k in self.vs + self.ps}
+        f.update(facts or {})
+        (self.prof / 'shader_facts.tsv').write_text(''.join(f'{k}\t{json.dumps(v, sort_keys=True, separators=(",", ":"))}\n' for k, v in sorted(f.items())))
+        pr = pairs if pairs is not None else [(self.vs[i], self.ps[i]) for i in range(min(vs, ps))]
+        (self.prof / 'shader_pairs.tsv').write_text(''.join(f'{v}\t{p}\n' for v, p in pr))
+        if unseen is not None: (self.prof / 'unseen.tsv').write_text(unseen)
+        elif (self.prof / 'unseen.tsv').exists(): (self.prof / 'unseen.tsv').unlink()
+
+    def build(self, *extra):
+        """One shaders step through shader_reuse.main → (exit code, the keys translated per tool run, the library {key: SPIR-V})"""
+        if self.log.exists(): self.log.unlink()
+        code = sr.main(['--target', 'vulkan', str(self.pkg), str(self.out), *extra])
+        runs = [json.loads(l) for l in self.log.read_text().splitlines()] if self.log.exists() else []
+        return code, runs, self.library(self.out / f'v-{VERSION}' / 'dmsh_vk.lib')
+
+    def library(self, p):
+        L = delta.Library(str(p))
+        try: return {k: bytes(L.entry(i)[4][0][2]) for k, i in L.index.items()}
+        finally: L.close()
+
+    def full(self):
+        """The library a build without any older library makes (what every reuse must equal)"""
+        game = sr.load_modules()[0]
+        g = game.load()
+        return {k: translate(g, str(self.pkg), k) for k in self.vs + self.ps}
+
+    def sample(self, keys):
+        """The sample a build checks among keys (spread over the classes of this profile's shaders)"""
+        game = sr.load_modules()[0]
+        return sr.sample_of(keys, sr.sample_class(sr.Deps(game.load(), str(self.pkg), VERSION, b'')))
+
+    def split_pairs(self, pairs):
+        """The split's own pso_pairs.tsv (load_pairs takes it when the profile has none)"""
+        (self.pkg.parent / 'pso_pairs.tsv').write_text(''.join(f'{v}\t{p}\n' for v, p in pairs))
+
+    def into_pack(self):
+        """The finished build's library goes into the pack (the pack step), as the older library of the next build"""
+        dst = self.pack / f'v-{VERSION}'; dst.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.out / f'v-{VERSION}' / 'dmsh_vk.lib', dst / 'dmsh_vk.lib')
+        shutil.rmtree(self.out, ignore_errors=True)
+        shutil.rmtree(self.res, ignore_errors=True)   # a finished job deletes its results (PackService)
+
+
+class Reuse(Base):
+    def test_first_build_translates_all_and_keeps_a_record(self):
+        self.profile()
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(runs), 1); self.assertEqual(len(runs[0]), 400)
+        self.assertEqual(lib, self.full())
+        self.assertEqual(len(list((self.reuse / 'shaders').glob('*.tsv'))), 1)
+
+    def test_same_inputs_keeps_all_but_the_sample(self):
+        self.profile(); self.build(); self.into_pack()
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(sorted(runs[0]), sorted(self.sample(self.vs + self.ps)))   # only the sample was translated
+        self.assertEqual(lib, self.full())
+        self.assertFalse((self.res / sr.MARK).exists())
+        self.assertFalse((self.reuse / 'profile').exists())
+
+    def test_new_version_rows_translate_only_what_changed(self):
+        self.profile(); self.build(); self.into_pack()
+        # the APK's profile gains a game version: 20 new pixel shaders, one changed fact, one new pair of an old vertex shader with a new pixel shader
+        old_vs, old_ps = list(self.vs), list(self.ps)
+        self.profile(ps=220, facts={old_ps[5]: {'tex': [2]}}, pairs=[(old_vs[i], old_ps[i]) for i in range(200)] + [(old_vs[7], f'{0x9000 + 210:016x}')])
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(lib, self.full())
+        made = set(runs[0])
+        must = set(self.ps[200:]) | {old_ps[5], old_vs[5], old_vs[7]}   # the new ones, the changed one, the vertex shaders whose pixel shaders changed
+        self.assertTrue(must <= made, must - made)
+        self.assertLessEqual(len(made - must), len(self.sample(old_vs + old_ps)))   # the rest is the sample
+        self.assertEqual(len(runs), 1)
+
+    def test_a_change_the_rule_does_not_see_is_caught(self):
+        self.profile(); self.build(); self.into_pack()
+        self.profile(ps=210, unseen='another translation for every shader\n')
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(runs), 2)   # the checked run, then the full one
+        self.assertEqual(lib, self.full())
+        self.assertEqual(set(runs[1]) | set(runs[0]), set(self.vs + self.ps))   # the second run translated what the first had kept
+        self.assertFalse(set(runs[0]) & set(runs[1]))   # and nothing twice: the first run's translations stay as results
+
+    def test_inputs_changed_without_a_record_keeps_nothing(self):
+        self.profile(); self.build(); self.into_pack()
+        shutil.rmtree(self.reuse / 'shaders')
+        self.profile(ps=210)
+        code, runs, lib = self.build()
+        self.assertEqual((code, len(runs), len(runs[0])), (0, 1, 410))
+        self.assertEqual(lib, self.full())
+
+    def test_split_pairs_are_not_taken_for_the_same_inputs(self):
+        # a profile without its own pso_pairs.tsv: the split's pads the vertex shaders, and an added DLC can add pairs there while the inputs digest stays
+        self.profile(); self.split_pairs([(self.vs[i], self.ps[i + 1]) for i in range(100)]); self.build(); self.into_pack()
+        self.split_pairs([(self.vs[i], self.ps[i + 1]) for i in range(100)] + [(self.vs[150], self.ps[60]), (self.vs[151], self.ps[61])])
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(lib, self.full())
+        self.assertTrue({self.vs[150], self.vs[151]} <= set(runs[0]))   # their pairs changed: translated, not kept by "same inputs"
+        self.assertEqual(len(runs), 1)
+
+    def test_a_pixel_shader_that_comes_with_an_addon(self):
+        # the first build without an add-on: two pixel shaders absent (validated against the split), their vertex shaders padded without them
+        self.profile()
+        absent = self.d / 'absent.txt'; absent.write_text(f'{self.ps[3]}\n{self.ps[4]}\n')
+        os.environ['DMSH_VK_ABSENT_FILE'] = str(absent)
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertNotIn(self.ps[3], lib)
+        self.into_pack()
+        del os.environ['DMSH_VK_ABSENT_FILE']   # the add-on installed: the profile is the same, its pixel shaders are built now
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(lib, self.full())
+        self.assertTrue({self.ps[3], self.ps[4], self.vs[3], self.vs[4]} <= set(runs[0]))   # and the vertex shaders they pad
+        self.assertEqual(len(runs), 1)
+
+    def test_same_inputs_without_a_record_needs_the_profiles_own_pairs(self):
+        self.profile(); self.build(); self.into_pack()
+        shutil.rmtree(self.reuse / 'shaders')   # a pack made before this app: no record
+        code, runs, lib = self.build()
+        self.assertEqual((code, len(runs[0])), (0, 400))   # the split's pairs could have changed: nothing kept
+        self.into_pack()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i + 2]}\n' for i in range(50)))
+        self.build(); self.into_pack()
+        shutil.rmtree(self.reuse / 'shaders')
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted(runs[0]), sorted(self.sample(self.vs + self.ps)))   # the profile's own pairs are in the inputs digest: all but the sample kept
+        self.assertEqual(lib, self.full())
+
+    def test_off(self):
+        self.profile(); self.build(); self.into_pack()
+        os.environ['PN_REUSE'] = '0'
+        code, runs, lib = self.build()
+        self.assertEqual((code, len(runs[0])), (0, 400))
+
+    def test_a_stop_before_the_check_leaves_nothing_unchecked(self):
+        self.profile(); self.build(); self.into_pack()
+        self.res.mkdir(exist_ok=True)
+        (self.res / (self.vs[3] + '.r')).write_text('kept by a stopped run')
+        (self.res / sr.MARK).write_text(json.dumps([self.vs[3]]))
+        os.environ['PN_REUSE'] = '0'
+        self.build()
+        self.assertTrue((self.res / (self.vs[3] + '.r')).read_text().startswith('made '))   # the stopped run's kept result went; this run translated it
+        self.assertFalse((self.res / sr.MARK).exists())
+
+    def test_too_few_to_check_keeps_nothing(self):
+        self.profile(vs=10, ps=10); self.build(); self.into_pack()
+        code, runs, lib = self.build()
+        self.assertEqual(len(runs[0]), 20)
+
+    def test_other_version_library_is_not_used(self):
+        self.profile()
+        write_lib(self.pack / 'v-aaaaaaaaaaaa' / 'dmsh_vk.lib', list(self.full().items()), '000000000000', version='aaaaaaaaaaaa')
+        code, runs, lib = self.build()
+        self.assertEqual(len(runs[0]), 400)
+
+
+class Parts(Base):
+    def test_vertex_shader_digest_follows_its_pixel_shaders(self):
+        self.profile()
+        game = sr.load_modules()[0]
+        a = sr.Deps(game.load(), str(self.pkg), VERSION, b'')
+        self.profile(facts={self.ps[3]: {'tex': [9]}})
+        b = sr.Deps(game.load(), str(self.pkg), VERSION, b'')
+        self.assertNotEqual(a.digest(self.vs[3]), b.digest(self.vs[3]))
+        self.assertNotEqual(a.digest(self.ps[3]), b.digest(self.ps[3]))
+        self.assertEqual(a.digest(self.vs[4]), b.digest(self.vs[4]))
+        self.assertNotEqual(a.digest(self.vs[4]), sr.Deps(game.load(), str(self.pkg), VERSION, b'nvn_x\t1\n').digest(self.vs[4]))   # a profile row: every shader
+
+    def test_sample_bounds(self):
+        ks = [f'{i:016x}' for i in range(5000)]
+        self.assertEqual(len(sr.sample_of(ks)), 100)
+        self.assertEqual(len(sr.sample_of(ks[:100])), 16)
+        self.assertEqual(sr.sample_of(ks), sr.sample_of(list(reversed(ks))))
+        few = ks[:30]   # a class of 30 among 5,000: one in 50 would likely take none of it
+        s = sr.sample_of(ks, lambda k: 'few' if k in few else 'many')
+        self.assertEqual(len(set(few) & s), sr.SAMPLE_CLASS_MIN)
+        self.assertTrue(sr.sample_of(ks) <= s)
+
+    def test_record_round_trip(self):
+        sr.write_record(self.reuse, 'ab' * 16, VERSION, GAME, '123456789abc', {'00000000000000aa': 'cd' * 16})
+        r = sr.read_record(self.reuse, 'ab' * 16)
+        self.assertEqual((r['version'], r['game'], r['inputs'], r['deps']), (VERSION, GAME, '123456789abc', {'00000000000000aa': 'cd' * 16}))
+        self.assertIsNone(sr.read_record(self.reuse, 'ef' * 16))
+
+
+if __name__ == '__main__':
+    unittest.main()

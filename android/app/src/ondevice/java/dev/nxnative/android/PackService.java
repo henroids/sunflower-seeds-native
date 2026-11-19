@@ -556,7 +556,7 @@ public final class PackService extends Service {
                 // PEANUTS end
                 String bad = j.tryAnyway() ? null : splitMatchesProfile(j, split);
                 if (bad != null) return bad;
-                tool = "dm/gfx/tools/vk_android_build.py";
+                tool = engine.simulated() ? "dm/gfx/tools/vk_android_build.py" : "dm/peanuts/reuse/shader_reuse.py";   // PEANUTS: vk_android_build.py run by a wrapper that keeps the older library's shaders whose translation is the same (issue #120)
                 argv = new String[] {"--target", "vulkan", new File(split, "pkg").getPath(), lib.getPath()};
                 // a profile with a selected set (shader_seen.tsv): only its keys, with their paired pixel shaders, as the Mac's selected build (android/SHADERS.md "Selected shaders")
                 selected = selection(j);
@@ -708,6 +708,7 @@ public final class PackService extends Service {
         PackEngine.setenv("DMSH_VK_RESULTS", xlate.getPath());
         // the delta update: entries of the pack's older libraries that the profile's manifest has unchanged are kept, only the rest translated (android/SHADERS.md#delta-updates)
         PackEngine.setenv("DMSH_VK_DELTA_FROM", new File(pack, "shaders").getPath());
+        PackEngine.setenv("PN_REUSE_DIR", new File(getNoBackupFilesDir(), "reuse/" + j.titleId()).getPath());   // PEANUTS: the records of shader_reuse.py and rewrite_reuse.py (and the profile copy), kept across jobs (issue #120)
         PackEngine.setenv("XLATE", "libdmsh_xlate.so");
         PackEngine.setenv("SPIRV_VAL", "libSPIRV-Tools-shared.so");
         // a library without every shader is a failed step, never a finished one; with Try anyway (the player's choice, warned that parts may not show) it is written
