@@ -87,6 +87,9 @@ first: **Build** takes them in with Import again (its checks for missing files a
 **Play** plays the game as it is, **Not now** asks no more for these finds (`t.<title ID>.found_seen`; a newer find asks again, and the mark stays as
 "Update · later"). Nothing is built without the tap.
 
+On the Thor (2026-11-19): ACNH built with its update but without its DLC, then the DLC folder set. The cover showed the "Update" mark, a tap asked "An add-on
+found", and its Build made a pack byte for byte the full build's in about a minute.
+
 ## Switches and the log
 
 - `PN_REUSE=0` in the job's `ondevice/env.txt`: off, the shaders step is `vk_android_build.py` as before and the rewrite keeps no module whose key moved.

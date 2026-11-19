@@ -53,8 +53,8 @@ public final class UpdateFound {
 
     /** The dialog's text below the title */
     public static String ask(Found f, String name) {
-        return (f.update > 0 && !f.dlcs.isEmpty() ? "They are" : f.update > 0 || f.dlcs.size() == 1 ? "It is" : "They are") + " beside " + name
-                + "'s game file, which does not hold " + (f.update > 0 && !f.dlcs.isEmpty() || f.dlcs.size() > 1 ? "them" : "it") + " yet. Build takes "
+        return (f.update > 0 && !f.dlcs.isEmpty() ? "They are" : f.update > 0 || f.dlcs.size() == 1 ? "It is" : "They are") + " beside the game file of " + name
+                + ", which does not hold " + (f.update > 0 && !f.dlcs.isEmpty() || f.dlcs.size() > 1 ? "them" : "it") + " yet. Build takes "
                 + (f.update > 0 && !f.dlcs.isEmpty() || f.dlcs.size() > 1 ? "them" : "it") + " in (Import again): what did not change since the last build is "
                 + "kept, so it takes a fraction of a build from nothing. Your saves stay.";
     }

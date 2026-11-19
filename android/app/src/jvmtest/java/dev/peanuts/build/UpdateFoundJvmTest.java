@@ -39,7 +39,7 @@ public final class UpdateFoundJvmTest {
                 && UpdateFound.what(UpdateFound.of(Arrays.asList(file(D, dlc1, 0), file(D, dlc2, 0)), supported), "").equals("2 add-ons found"), "two add-ons");
         // "Not now" remembers these finds; a newer one is another key
         check(!UpdateFound.of(Arrays.asList(file(D, dlc1, 0)), supported).key().equals(UpdateFound.of(Arrays.asList(file(D, dlc1, 0), file(D, dlc2, 0)), supported).key()), "keys");
-        check(UpdateFound.ask(f, "Animal Crossing").startsWith("They are beside Animal Crossing's game file"), UpdateFound.ask(f, "Animal Crossing"));
+        check(UpdateFound.ask(f, "Animal Crossing").startsWith("They are beside the game file of Animal Crossing, which"), UpdateFound.ask(f, "Animal Crossing"));
         System.out.println("ok");
     }
 }
