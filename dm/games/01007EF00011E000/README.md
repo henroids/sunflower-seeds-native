@@ -127,6 +127,7 @@ On the Mac, frame times stayed at 60 fps; crop comparisons showed sharper edges 
 
 - RomFS is almost all Yaz0 (`.s*` extensions) and SARC (`Pack/*.pack`); `romfs_marker` `Pack/Bootup_Graphics.pack`.
 - 19,592 shaders: `Shader/*.sbfsha` (BNSH), the gsys / ksys resource packs in `Pack/Bootup_Graphics.pack` and the terrain pack in `Pack/TitleBG.pack`, particle effects in `Effect/*.sesetlist` (11,373 shaders, 101 compute), layouts (`.sblarc`) and 37 in `main`. All bind with Mario's texture handle layout; the full build had no failure and no unresolved binding.
+- <!-- PEANUTS --> Android's [targeted shader split](../../../android/SHADERS.md#targeted-split) uses the same [978 RomFS paths](shader_files.tsv) on 1.6.0 and 1.9.0. The targeted runs matched the archived full-scan tables for both versions. On 1.6.0, all 19,420 shader records also matched the archived packages by SHA-256. Two [supplemental pairs](pso_pairs_optional.tsv) from 1.6.0 can be absent on 1.9.0, whose split contains 19,592 shader records.
 - **Resolved: duplicate pipeline keys from disabled blend state.** A recording held 4,829 keys for 1,982 distinct pipelines from 1,818 Metal 4 bases; 2,845 keys differed only in blend factors of targets whose blending was disabled. [Pipeline keys omit unused colour state](../../../docs/reference/shaders.md#pipeline-keys-omit-unused-colour-state) describes the shared normalization.
 - `pack_ipa.py` packs its 16 GB IPA in 57 s (Info-ZIP took 2 min 50 s).
 
