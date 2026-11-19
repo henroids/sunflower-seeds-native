@@ -44,6 +44,16 @@ public final class UpdateFound {
         return new Found(best, new ArrayList<>(dlcs));
     }
 
+    /**
+     * Whether an Import again takes in the update the question named: f's update, or with only add-ons found the update the .nup holds (had; -1: none), and
+     * no other. planned: the update version its plan takes (-1: none). The cover's Build skips Import again's confirmation only then: its plan takes the newest
+     * update file beside the .nup (one the profile does not know too) or the one picked on the game's page, which the question did not name (found in review)
+     */
+    public static boolean takesWhatItNamed(Found f, long had, long planned) {
+        if (f == null || planned == 0) return false;   // (0: an update file whose version the scan could not read)
+        return planned == (f.update > 0 ? f.update : had);
+    }
+
     /** The cover's question: "Update 3.0.4 and 2 add-ons found" (updateName: the update's name as the game's page shows it) */
     public static String what(Found f, String updateName) {
         String d = f.dlcs.isEmpty() ? "" : f.dlcs.size() == 1 ? "1 add-on" : f.dlcs.size() + " add-ons";

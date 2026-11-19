@@ -1244,7 +1244,7 @@ public final class Library {
     /** "Fragen, dann bauen": Build takes the finds in (Import again, whose build keeps what did not change), Play plays as it is, Not now asks no more for these */
     private void askFound(Row r, UpdateFound.Found f) {
         AlertDialog.Builder d = new AlertDialog.Builder(a).setTitle(UpdateFound.what(f, updateName(r, f))).setMessage(UpdateFound.ask(f, r.name()))
-                .setPositiveButton("Build", (x, w) -> GameSheet.importAgain(a, this, r.title, CompanionPort.forTitle(catalog, r.id()), null, false))
+                .setPositiveButton("Build", (x, w) -> GameSheet.importAgain(a, this, r.title, CompanionPort.forTitle(catalog, r.id()), null, f))
                 .setNegativeButton("Not now", (x, w) -> { PeanutsPrefs.foundSeen(a, r.id(), f.key()); render(); });
         if (r.game != null) d.setNeutralButton("Play", (x, w) -> play(r));
         d.show();

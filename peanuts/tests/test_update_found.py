@@ -21,7 +21,9 @@ class Wiring(unittest.TestCase):
         panel = (APP / 'main/java/dev/peanuts/ui/BottomPanel.java').read_text(encoding='utf-8')
         self.assertIn('k.update != null ? k.update', panel)
         sheet = (APP / 'main/java/dev/peanuts/ui/GameSheet.java').read_text(encoding='utf-8')
-        self.assertIn('static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started, boolean ask)', sheet)
+        self.assertIn('static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started, UpdateFound.Found named)', sheet)
+        self.assertIn('if (UpdateFound.takesWhatItNamed(named, had, p.update != null ? p.updateVersion : -1))', sheet)   # else Import again's confirmation
+        self.assertIn('GameSheet.importAgain(a, this, r.title, CompanionPort.forTitle(catalog, r.id()), null, f))', lib)
 
     def test_the_cover_knows_the_profiles_updates(self):
         # the cover asks for a READY title, whose supportedBuilds the scanner never fills (a BUILD title's only): an update was never counted (found in review)

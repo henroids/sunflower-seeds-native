@@ -40,6 +40,21 @@ public final class UpdateFoundJvmTest {
         // "Not now" remembers these finds; a newer one is another key
         check(!UpdateFound.of(Arrays.asList(file(D, dlc1, 0)), supported).key().equals(UpdateFound.of(Arrays.asList(file(D, dlc1, 0), file(D, dlc2, 0)), supported).key()), "keys");
         check(UpdateFound.ask(f, "Animal Crossing").startsWith("They are beside the game file of Animal Crossing, which"), UpdateFound.ask(f, "Animal Crossing"));
+
+        // the cover's Build skips Import again's confirmation only when the plan takes what the question named (found in review: Reimport.plan takes the
+        // newest update file beside the .nup, one the profile does not know too, or the one the player picked on the game's page)
+        UpdateFound.Found update = UpdateFound.of(Arrays.asList(in(U, "x", 196608), file(U, "x", 262144)), supported);
+        check(UpdateFound.takesWhatItNamed(update, 196608, 262144), "the named update");
+        check(!UpdateFound.takesWhatItNamed(update, 196608, 327680), "a newer update the profile does not know");
+        check(!UpdateFound.takesWhatItNamed(update, 196608, 196608), "the old one, picked on the game's page");
+        check(!UpdateFound.takesWhatItNamed(update, 196608, -1), "no update");
+        UpdateFound.Found addon = UpdateFound.of(Arrays.asList(in(U, "x", 196608), file(U, "x", 196608), file(D, dlc1, 0)), supported);
+        check(addon.update == 0 && UpdateFound.takesWhatItNamed(addon, 196608, 196608), "an add-on: the update the .nup holds");
+        check(!UpdateFound.takesWhatItNamed(addon, 196608, 327680), "an add-on, and an update the question did not name");
+        UpdateFound.Found addonOnBase = UpdateFound.of(Collections.singletonList(file(D, dlc1, 0)), supported);
+        check(UpdateFound.takesWhatItNamed(addonOnBase, -1, -1), "an add-on for a base-only .nup");
+        check(!UpdateFound.takesWhatItNamed(addonOnBase, -1, 327680), "an add-on for a base-only .nup, and an update file beside it");
+        check(!UpdateFound.takesWhatItNamed(update, 196608, 0) && !UpdateFound.takesWhatItNamed(null, 196608, 262144), "an update of no version; no question");
         System.out.println("ok");
     }
 }
