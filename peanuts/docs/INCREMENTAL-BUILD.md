@@ -142,7 +142,7 @@ spin wait search 61 s). `patch_nso.py` computes those two phases in pieces with 
 - The rewriter file before this change is in `dm/tools/rewriter_equiv/` (`patch_nso.py.6bc30f06074b`): a pack made with it counts as up to date (its key is one
   of the current rewriter's), so the update rewrites no module.
 
-Measured on an AYN Thor (ACNH 3.0.3, `incremental-check.py full`, 2026-11-19, the Thor on a computer's 0.5 A port): the rewrite step 134 s in place of 195 s
+Measured on an AYN Thor (ACNH 3.0.3, `incremental-check.py full`, 2026-11-19): the rewrite step 134 s in place of 195 s
 and 203 s (two runs with the file before), the build from nothing 5 min 34 s in place of 6 min 38 s; `main`, `subsdk0` and `sdk` byte for byte (SHA-256) the
 modules of those two runs.
 
@@ -228,7 +228,7 @@ With the caches apart from the pack (the last library and each module's rewrite 
 A Build in another, empty Build folder (or after the build was deleted) took a full build's time before, 7 to 8 minutes; with the caches it is 1 min 16 s:
 the `.nup` made again from the game's files, the split's files, the shaders and the three modules from the app's storage. Its log showed each cache used. The
 shader library copy is 96 MB. The full build's shaders step took 70 s longer than the other build from nothing of the same run, for the same 9,766 shaders (the
-phone warm from builds just before it, on a 0.5 A port); the copies add no time that shows (the rewrite of the build without the DLC 3 min 16 s, its shaders
+phone warm from builds just before it); the copies add no time that shows (the rewrite of the build without the DLC 3 min 16 s, its shaders
 2 min 32 s, as before them).
 
 ## Checking it on a phone
