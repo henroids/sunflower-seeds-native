@@ -1511,7 +1511,7 @@ public final class Library {
                     : BuildListener.INVALID_DUMP.equals(b.code) ? " The dump looks incomplete or wrong. Open the game's sheet to check the files, or dump the game again."
                     : BuildListener.OUT_OF_SPACE.equals(b.code) ? " Free up some space, then Retry."
                     : BuildListener.STALLED.equals(b.code) || BuildListener.CANCELLED.equals(b.code) ? " Tap Resume: it picks up where it stopped."
-                    : " Tap Retry to open the sheet and build again.";
+                    : BuildListener.TOOL_STOPPED.equals(b.code) ? "" : " Tap Retry to open the sheet and build again.";
             buildBody.setText((first.isEmpty() ? "The build stopped." : first) + action);
             buildBar.setVisibility(View.GONE);
             buildPct.setVisibility(View.GONE);

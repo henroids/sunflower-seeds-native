@@ -270,6 +270,11 @@ final class Job {
     /** What a failed job's card offers (PrepareText.FIX_*): an older job, which had no "fix", gets Retry */
     synchronized String fix() { return o.optString("fix", PrepareText.FIX_RETRY); }
 
+    // PEANUTS: a concise diagnostic for the foreground card. Notifications still use statusText.
+    synchronized String failureSummary() {
+        return PrepareText.failureSummary(STEP_TEXT[current()], error(), o.optString("error_detail"));
+    }
+
     /** Details of a failed job: the technical part of why (an older job's whole message), and the game, version and folders */
     synchronized String errorDetail() {
         String d = "failed".equals(state()) ? PrepareText.failedDetail(error(), o.optString("error_detail"), o.has("fix")) : "";

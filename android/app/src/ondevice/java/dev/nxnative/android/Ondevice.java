@@ -389,7 +389,7 @@ final class Ondevice {
             String unsupported = a.getString(R.string.not_supported_yet);   // PEANUTS: match the Home filter
             title.setText((metaLine != null ? metaLine + " \u00b7 " : "") + (notIncluded != null ? unsupported : "done".equals(st) ? "Prepared" : "pending".equals(st) ? "Ready to prepare" : failed ? "Could not prepare"
                     : "paused".equals(st) ? "Paused" : "Preparing") + (job.tryAnyway() ? " · tried anyway" : "") + sim);
-            status.setText(notIncluded != null ? notIncluded : job.statusText(alive));
+            status.setText(notIncluded != null ? notIncluded : failed ? job.failureSummary() : job.statusText(alive));   // PEANUTS: show the tool error beside Share build log
             int pct = (int) Math.round(job.overall() * 1000);
             bar.setProgress(pct);
             bar.setStateDescription((pct / 10) + " percent");

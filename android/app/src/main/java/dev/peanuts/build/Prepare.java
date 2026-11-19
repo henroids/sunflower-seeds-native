@@ -45,7 +45,7 @@ final class Prepare {
 
     static final String TAG = "peanuts.build";
     private static final String[] STEPS = {"identify", "rewrite", "split", "shaders", "pack"};
-    private static final String[] STEP_TEXT = {"Checking the dump", "Rewriting the game code", "Finding the shaders", "Translating shaders", "Finishing the pack"};
+    private static final String[] STEP_TEXT = {"Checking the dump", "Rewriting the game's code", "Finding the shaders", "Translating shaders", "Finishing the pack"};
     /** How long a job may sit "running" with no job.json change and no service message before we call it stalled (the service writes at least every few seconds while it runs) */
     private static final long STALL_MS = 10 * 60 * 1000;
 
@@ -270,7 +270,7 @@ final class Prepare {
                     try { c.startForegroundService(Upstream.packStart(c, file)); } catch (RuntimeException e) { throw new BuildListener.Failure("Android did not let the packer restart: open " + appName() + " and tap Try anyway on the game's card.", BuildListener.CANCELLED); }
                     continue;
                 }
-                throw new BuildListener.Failure("Preparing failed at " + STEP_TEXT[si].toLowerCase(Locale.ROOT) + (err.isEmpty() ? "." : ": " + err) + "\nRetry from the game's card on the Home screen.", BuildListener.TOOL_STOPPED);
+                throw new BuildListener.Failure(dev.nxnative.android.PrepareText.failureSummary(STEP_TEXT[si], err, o.optString("error_detail")), BuildListener.TOOL_STOPPED);
             }
             int pct = pct(si, done, total);
             if (state.equals("paused")) {
@@ -427,7 +427,7 @@ final class Prepare {
                 return (File) Upstream.call(job.getClass(), job, "pack", new Class<?>[0]);
             }
             if (state.equals("failed")) {
-                throw new BuildListener.Failure("Building with mods failed at " + STEP_TEXT[si].toLowerCase(Locale.ROOT) + (o.optString("error").isEmpty() ? "." : ": " + o.optString("error"))
+                throw new BuildListener.Failure(dev.nxnative.android.PrepareText.failureSummary(STEP_TEXT[si], o.optString("error"), o.optString("error_detail"))
                         + "\nRetry from the game's Mods section (hold the cover, Game tab).", BuildListener.TOOL_STOPPED);
             }
             int pct = pct(si, done, total);

@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * version does not include the game, and an update when this app build itself is broken (its files do not match each other). No Android classes: LauncherJvmTest
  * runs it on the Mac.
  */
-final class PrepareText {
+public final class PrepareText {   // PEANUTS: Home and Prepare use the same failure summary
     private PrepareText() {}
 
     /**
@@ -171,6 +171,27 @@ final class PrepareText {
         if (structured && !error.isEmpty()) return error;
         return "Preparing stopped while " + lower(step) + ". Tap Retry. Details says why.";
     }
+
+    // PEANUTS begin: show the recorded tool error beside the failed step on both build cards.
+    public static String failureSummary(String step, String error, String detail) {
+        String summary = error.split("\n", 2)[0].trim();
+        String generic = " Tap Retry. If it stops again, Details has the log.";
+        if (summary.endsWith(generic)) summary = summary.substring(0, summary.length() - generic.length());
+        if (summary.isEmpty()) summary = step + " stopped.";
+        else if (!summary.startsWith(step)) summary = step + " · " + summary;
+        String[] lines = detail.trim().split("\n");
+        String reason = lines[0].trim();
+        int exit = reason.indexOf(": exit code ");
+        if (exit > 0) {
+            // toolStopped stores the exit status, the last tool error (if any), then the log location.
+            reason = capital(reason.substring(exit + 2));
+            if (lines.length > 1 && !lines[1].startsWith("Log: ")) reason = lines[1].trim();
+        }
+        if (reason.isEmpty() || reason.startsWith("Log: ") || summary.contains(reason)) return summary;
+        if (reason.length() > 300) reason = reason.substring(0, 299) + "…";
+        return summary.endsWith(".") ? summary + " " + reason : summary + " · " + reason;
+    }
+    // PEANUTS end
 
     static String failedDetail(String error, String detail, boolean structured) { return structured ? detail : error; }
 
