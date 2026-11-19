@@ -74,6 +74,15 @@ translation (`ondevice/logs/check.log`).
   the game should have, so it takes the library's place in the pack, as the pack step copies one (a `.partial`, then a rename), and becomes the record and the
   kept copy; `check.failed` lists the shaders, `check.log` has a `[RED] reuse full check` line, and a notification says the game has the full translation now.
 
+## A new update or DLC: the cover asks
+
+A built game whose base is a `.nup`, with a newer update or add-on content found beside it that the `.nup` does not hold yet, says so on its cover in Home:
+the "Update" mark beside the check, and "Update 3.0.4 and 1 add-on found" in its state (`dev.peanuts.build.UpdateFound`, from the library's last scan: the
+packages inside the `.nup` against the files beside it). Only an update the game's profile knows counts, and only one newer than the `.nup`'s. A tap asks
+first: **Build** takes them in with Import again (its checks for missing files and free space as on the game's page; its build keeps what did not change),
+**Play** plays the game as it is, **Not now** asks no more for these finds (`t.<title ID>.found_seen`; a newer find asks again, and the mark stays as
+"Update · later"). Nothing is built without the tap.
+
 ## Switches and the log
 
 - `PN_REUSE=0` in the job's `ondevice/env.txt`: off, the shaders step is `vk_android_build.py` as before and the rewrite keeps no module whose key moved.
@@ -227,7 +236,7 @@ python3 peanuts/scripts/incremental-check.py --package dev.nxnative.android.<suf
 
 ## Tests
 
-`peanuts/tests/test_shader_reuse.py` `FullCheck` (due only after a build that kept shaders, a library that is a full translation, a wrong kept shader the sample missed is found and replaced in the pack, the pack replaced since, a stopped check goes on, a library another build replaced). `peanuts/tests/test_build_reuse.py` (the ready message: the last run of each step's log, only the steps this build ran, a failed check, the words the tools print). `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
+`peanuts/tests/test_shader_reuse.py` `FullCheck` (due only after a build that kept shaders, a library that is a full translation, a wrong kept shader the sample missed is found and replaced in the pack, the pack replaced since, a stopped check goes on, a library another build replaced). `peanuts/tests/test_update_found.py` (UpdateFound on the JVM: nothing new, a newer update the profile knows, one it does not, an older one, a first update, new add-ons, both, what "Not now" remembers; the cover's wiring). `peanuts/tests/test_build_reuse.py` (the ready message: the last run of each step's log, only the steps this build ran, a failed check, the words the tools print). `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
 and a new pair (exactly those and the vertex shaders they pad are translated), pairs that change in the split's `pso_pairs.tsv` (translated, not kept by the same
 inputs), an add-on's pixel shaders built after a build without them (they and the vertex shaders they pad are translated), the same inputs without a record (nothing kept unless the profile has its own `pso_pairs.tsv`), a change the rule does not see (caught by the check,
 then a full translation), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; the kept copy (a build keeps one and puts the environment back, a build

@@ -278,7 +278,10 @@ public final class GameSheet {
      * found), or, when the new file does not fit beside the old one, says how much is needed and offers deleting the old one first as a second question with
      * its risk. started runs when the build was accepted
      */
-    static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started) {
+    static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started) { importAgain(a, lib, t, companion, started, true); }
+
+    /** ask: false when the player said Build already (the cover's "Update found" question, Library.askFound): the checks stay, the confirmation does not come twice */
+    static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started, boolean ask) {
         View anchor = a.getWindow().getDecorView();
         if (t == null || t.base == null || !t.base.isNup()) return;
         if (lib.building(t.titleId)) { Haptics.play(anchor, Haptics.Word.REJECT); Toast.makeText(a, "Building now: the progress is on the game's card.", Toast.LENGTH_LONG).show(); return; }
@@ -292,6 +295,7 @@ public final class GameSheet {
             b.show();
             return;
         }
+        if (!ask) { startImport(a, lib, t, companion, p, false, started); return; }
         PUi.confirmDanger(a, "Import again?", Reimport.confirm(p, t.name), "Import again", () -> startImport(a, lib, t, companion, p, false, started));
     }
 
