@@ -14,6 +14,7 @@ import prepare_pc_translator
 
 class XlateBinLock(unittest.TestCase):
     def test_desktop_dlls_are_the_locked_ones(self):
+        # PEANUTS: verify the same tool directory the desktop packer selected.
         directory = prepare_pc_translator.resolve().parent
         lock = ROOT / 'dm/gfx/tools/dmsh_chain.lock'
         want = dict(line.split('\t', 1) for line in lock.read_text().splitlines() if line and not line.startswith('#'))
