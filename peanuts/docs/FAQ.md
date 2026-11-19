@@ -64,7 +64,7 @@ You dump your own games, keys and firmware from your own console. The app ships 
 ### Where do my files go?
 
 - Your dumps stay where you put them, in the game folder you picked.
-- A build goes beside the game by default. Settings › Library › **Build folder** moves all builds to one folder, with one folder per game.
+- Settings › Library › **Build folders** lets you add folders on internal storage and the SD card. The game sheet's **Build destination** chooses where that game's new build goes.
 - Keys and extracted fonts are kept inside the app.
 - Saves are in the app's own storage. The game's **Saves** tab shows the exact path.
 
@@ -277,7 +277,9 @@ Probably not. Large games can stay on one step for many minutes. Open the **Buil
 
 ### Can I build on a microSD card?
 
-Yes. By default a build is written beside the game, so a game on the card is built on the card. To choose, pick a folder in Settings › Library › **Build folder**, on the device or on the microSD card. Every new build then goes there, one folder per game, named by title ID. Hold that row to forget the folder. Builds made before you set the folder stay where they are and keep working.
+Yes. Add folders on internal storage and the microSD card in Settings › Library › **Build folders**. Tap a folder there to make it the default or forget it. Peanuts searches every configured folder for existing builds.
+
+In the game's Build or Rebuild pop-up, tap **Build destination** above the space estimate. Choose **Default** or pick a folder for that game. You can also add a folder there. A newly imported `.nup` and its `pack/` go into the title-ID folder at the selected destination. If you start from an existing `.nup`, only the pack goes to the selected destination.
 
 ### What happens when I remove the microSD card?
 

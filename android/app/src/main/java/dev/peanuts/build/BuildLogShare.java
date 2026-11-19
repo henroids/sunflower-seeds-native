@@ -160,8 +160,10 @@ public final class BuildLogShare {
                 where.add("the launcher's list: " + g[1]);
             }
         } catch (ReflectiveOperationException | RuntimeException e) { where.add("the launcher's list could not be read: " + e); }
-        File b = dev.peanuts.PeanutsPrefs.buildGameDir(c, t);
-        if (b != null) { w.add(new File(b, t + "-work")); where.add("the build folder: " + b); }
+        for (File b : dev.peanuts.PeanutsPrefs.buildGameDirs(c, t)) {
+            w.add(new File(b, t + "-work"));
+            where.add("a build folder: " + b);
+        }
         // a .nup the build imported beside the game (<game folder>/<name>/<name>.nup) before any of the above knew it: one level of the game folder
         String gd = dev.peanuts.PeanutsPrefs.gameDir(c);
         if (gd != null) {

@@ -19,6 +19,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 
 /**
  * Settings › Library (SPEC.md), the first section of Banana's Settings: the game, update and DLC folders, the keys (prod.keys, copied into files/keys and checked by
@@ -49,9 +50,8 @@ public final class LibrarySettings {
         // a row that opens a picker or another screen ticks; Rescan, which acts at once, clicks (Haptics)
         gameRow = new PUi.Setting(a, "📁", "Game folder", Haptics.on(Haptics.Word.TICK, v -> pickFolder(a, REQ_GAME, "Pick your game folder"))).chevron(a);
         card.addView(gameRow.view);
-        buildRow = new PUi.Setting(a, "🗂️", "Build folder", Haptics.on(Haptics.Word.TICK, v -> pickFolder(a, REQ_BUILD_DIR, "Pick your build folder"))).chevron(a);
+        buildRow = new PUi.Setting(a, "🗂️", "Build folders", Haptics.on(Haptics.Word.TICK, v -> buildFolders(a))).chevron(a);
         card.addView(buildRow.view);
-        buildRow.view.setOnLongClickListener(v -> { PeanutsPrefs.buildDir(a, null); refreshRows(); Library.rescan(a); return true; });
         updateRow = new PUi.Setting(a, "⬆️", "Update folder", Haptics.on(Haptics.Word.TICK, v -> pickFolder(a, REQ_UPDATE_DIR, "Pick your update folder"))).chevron(a);
         card.addView(updateRow.view);
         updateRow.view.setOnLongClickListener(v -> { PeanutsPrefs.updateDir(a, null); refreshRows(); Library.rescan(a); return true; });
@@ -134,9 +134,9 @@ public final class LibrarySettings {
         if (a == null || gameRow == null) return;
         String g = PeanutsPrefs.gameDir(a), u = PeanutsPrefs.updateDir(a), d = PeanutsPrefs.dlcDir(a);
         gameRow.value(g != null ? g : "Not set. Every NSP, XCI, .nup and dump folder inside is shown on Home.");
-        String bd = PeanutsPrefs.buildDir(a);
-        buildRow.value(bd != null ? bd + " · hold to forget"
-                : "Beside the game (default). Pick a folder, on the phone or the microSD card, to keep every build there, one folder per game.");
+        List<String> builds = PeanutsPrefs.buildDirs(a);
+        buildRow.value(builds.isEmpty() ? "Add a folder on the phone or SD card"
+                : "Default: " + builds.get(0) + (builds.size() > 1 ? " · " + builds.size() + " folders" : ""));
         updateRow.value(u != null ? u + " · hold to forget" : "Optional. Another folder with update NSPs, matched to their games by title ID.");
         dlcRow.value(d != null ? d + " · hold to forget" : "Optional. Another folder with DLC NSPs, matched to their games by title ID.");
         keysRow.value(keysValue(a));
@@ -251,6 +251,36 @@ public final class LibrarySettings {
         a.startActivityForResult(i, request);
     }
 
+    static void addBuildFolder(Activity a) { pickFolder(a, REQ_BUILD_DIR, "Pick a build folder"); }
+
+    private static void buildFolders(Activity a) {
+        List<String> dirs = PeanutsPrefs.buildDirs(a);
+        if (dirs.isEmpty()) { addBuildFolder(a); return; }
+        String[] labels = dirs.toArray(new String[0]);
+        labels[0] += " (default)";
+        new AlertDialog.Builder(a).setTitle("Build folders")
+                .setItems(labels, (dialog, which) -> {
+                    String dir = dirs.get(which);
+                    AlertDialog.Builder actions = new AlertDialog.Builder(a).setTitle(dir)
+                            .setNeutralButton("Forget folder", (d, w) -> {
+                                dirs.remove(dir);
+                                updateBuildFolders(a, dirs);
+                            }).setNegativeButton("Cancel", null);
+                    if (which != 0) actions.setPositiveButton("Make default", (d, w) -> {
+                        dirs.remove(dir);
+                        dirs.add(0, dir);
+                        updateBuildFolders(a, dirs);
+                    });
+                    actions.show();
+                }).setPositiveButton("Add folder…", (d, w) -> addBuildFolder(a)).setNegativeButton("Close", null).show();
+    }
+
+    private static void updateBuildFolders(Activity a, List<String> dirs) {
+        PeanutsPrefs.buildDirs(a, dirs);
+        refreshRows();
+        Library.rescan(a);
+    }
+
     /** MainActivity.onActivityResult's first line: true when the request was one of this package's (handled, whatever the result) */
     public static boolean result(Activity a, int request, int result, Intent data) {
         if (BuildLogUi.result(a, request, result, data)) return true;   // Share build log's Save to a folder (REQ_SAVE 71)
@@ -278,7 +308,15 @@ public final class LibrarySettings {
                 else { firmwareTried = null; fontsState = "Waiting for file access: allow All files access for the app, and the firmware is read."; }
                 break;
             case REQ_GAME: PeanutsPrefs.gameDir(a, p); break;
-            case REQ_BUILD_DIR: PeanutsPrefs.buildDir(a, p); break;
+            case REQ_BUILD_DIR: {
+                List<String> dirs = PeanutsPrefs.buildDirs(a);
+                if (!dirs.contains(p)) {
+                    dirs.add(p);
+                    PeanutsPrefs.buildDirs(a, dirs);
+                }
+                if (GameSheet.current != null) GameSheet.current.chooseBuildFolder(p);
+                break;
+            }
             case REQ_UPDATE_DIR: PeanutsPrefs.updateDir(a, p); break;
             case REQ_DLC_DIR: PeanutsPrefs.dlcDir(a, p); break;
             default: return true;

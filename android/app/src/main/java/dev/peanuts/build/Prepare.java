@@ -72,10 +72,10 @@ final class Prepare {
      * "Build anyway" on the sheet's Version row for THIS build (P1) — without it, a dump whose version is not one of the profile's
      * builds stops and asks instead of being retried untested on its own (the old behaviour: see the otherBuild branch in run0)
      */
-    File run(File dump, String titleId, boolean consent, Progress p) throws IOException {
+    File run(File dump, String titleId, File destination, boolean consent, Progress p) throws IOException {
         logId = titleId;
         try {
-            return run0(dump, titleId, consent, p);
+            return run0(dump, titleId, destination, consent, p);
         } catch (ReflectiveOperationException e) {
             Log.w(TAG, "prepare: upstream reflection", e);
             BuildLogShare.line(c, logId, "prepare: upstream reflection: " + e);
@@ -85,7 +85,7 @@ final class Prepare {
         }
     }
 
-    private File run0(File dump, String titleId, boolean consent, Progress p) throws IOException, ReflectiveOperationException {
+    private File run0(File dump, String titleId, File destination, boolean consent, Progress p) throws IOException, ReflectiveOperationException {
         p.on(0, "Checking " + dump.getName());
         // 1. a job already there for this dump?
         String id = titleId;
@@ -144,6 +144,12 @@ final class Prepare {
         if (existing != null) {
             String s = Upstream.jobState(existing);
             boolean same = Upstream.jobDump(existing).getPath().equals(dumpR.getPath()) && Upstream.jobVersion(existing) == version;
+            if (destination != null && !destination.equals(Upstream.jobPack(existing))) {
+                if (same && !s.equals("done") && !s.isEmpty())
+                    throw new BuildListener.Failure("This game has an unfinished build in " + Upstream.jobPack(existing)
+                            + ". Select its Build destination to resume.", BuildListener.OTHER);
+                same = false;
+            }
             if (same && (s.equals("running") || s.equals("paused") || s.equals("failed") || s.equals("pending"))) job = existing;   // resumed where it stopped
             else if (same && s.equals("done") && Upstream.jobPack(existing).isDirectory() && Upstream.packRead(Upstream.jobPack(existing)) != null
                     && current(Upstream.jobPack(existing), dumpR, id) && !noOrig(Upstream.jobPack(existing))) {   // (a pack an app update left behind is redone below: step 3; so is one without main.orig.bin)
@@ -156,8 +162,10 @@ final class Prepare {
         }
         // 3. a pack beside the dump that fits (PackCheck): adopted, or only the rest redone
         if (job == null) {
-            File packDir = null;
-            try { packDir = Upstream.packFor(c, dumpR, id); } catch (ReflectiveOperationException | RuntimeException e) { /* no pack: the whole job */ }
+            File packDir = destination;
+            if (packDir == null) {
+                try { packDir = Upstream.packFor(c, dumpR, id); } catch (ReflectiveOperationException | RuntimeException e) { /* no pack: the whole job */ }
+            }
             Object pack = packDir == null ? null : Upstream.packRead(packDir);
             if (pack != null && !Boolean.TRUE.equals(Upstream.get(pack, "simulated")) && id.equals(Upstream.str(Upstream.get(pack, "titleId")))) {
                 String blocking = Upstream.packBlocking(c, pack, dumpR);
@@ -184,7 +192,7 @@ final class Prepare {
             }
         }
         if (job == null) {
-            job = Upstream.jobCreate(r, Upstream.appPack(c, id));
+            job = Upstream.jobCreate(r, destination != null ? destination : Upstream.appPack(c, id));
             Upstream.jobSave(job);
             Upstream.jobRemember(c, Upstream.jobFile(job));
         }

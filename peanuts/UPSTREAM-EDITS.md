@@ -199,12 +199,9 @@ updated in the same change to name the new site):
 | `android/app/src/main/java/dev/nxnative/android/AppStorage.java` | `pack()`: when app storage has no pack for the title yet, reads a build folder's `<title ID>/pack` (`dev.peanuts.PeanutsPrefs.buildPackDir`) instead of always returning `packs/<title ID>` | trailing/line-above `// PEANUTS: ...` on the new `if` block |
 
 No upstream-candidate general fix: the behaviour only exists because of the Peanuts-owned build-folder
-setting (Settings › Library › Build folder, `PeanutsPrefs.buildDir`); upstream has no such setting to
-route to. Every other site that needed to find a pack in either location (`Folders.packFor`,
-`PackFind.candidates`/`best`, `Prepare`'s job creation, `MainActivity`'s Manage sheet, the companion
-root beside the pack) already takes `AppStorage.pack(...)`'s return value as its one source of truth, so
-none of them needed their own edit — verified by reading each call site, not by a second hook. Details
-and the device-verification checklist: `PEANUTS.md`'s 2026-11-13 "build folder" status entry.
+setting (Settings › Library › Build folders). `AppStorage.pack(...)` supplies the default destination.
+`android/app/src/main/java/dev/nxnative/android/Folders.java` adds the configured folders' existing packs to
+`PackFind` in a marked hunk. The game sheet can choose a destination for a single title.
 
 ## Round 5 (2026-11-13) — code mods wired into the on-device build
 
