@@ -1278,3 +1278,13 @@ The same drift goes into `popAt`, so a tap pops the banana where it is drawn. Si
 the drift is passed unwrapped, as upstream does.
 
 The secondary panel’s lifecycle, focus and build controls live in `dev.peanuts.ui`.
+
+### Targeted shader splits for released games (2026-11-19)
+
+`dm/gfx/tools/shader_split.py` resolves a single registered build's paths in multi-version profiles and recognizes
+file offsets in Diablo III's CPK sources. Single-build validation checks shader keys, package groups, facts and pairs.
+The generated `shader_files.tsv` tables for Wonder, both Kirby games, Pokémon Sword and Pokémon Shield include files
+that contribute pairs without introducing new shader keys. The targeted packages for Wonder, both Kirby games, Shield
+and Diablo III matched their full-scan references by SHA-256. A targeted scan with an expanded archive list confirmed
+the same for Sword, and its saved list comes from the full scan. The Python hunks and profile tables carry `PEANUTS`
+markers.

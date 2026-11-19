@@ -3997,7 +3997,8 @@ def main():
     targeted = os.environ.get('DM_SPLIT_TARGETED') == '1'
     out = None
     if targeted:
-        want, why = profile_files(files, main_v)
+        version = single_shader_version(main_v)   # PEANUTS: a profile can combine several builds while Prepare splits just one
+        want, why = profile_files(files, main_v, version)   # PEANUTS: use the active version's unprefixed RomFS paths
         if rd:   # PEANUTS: on-device split support (see file header) — the direct, the targeted and the full scan keep their results apart, so a scan the one before fell back to resumes as that scan
             os.makedirs(rd, exist_ok=True)
             for f in os.listdir(rd):
@@ -4020,9 +4021,11 @@ def main():
                 try:
                     out = split_tables(list(results), big, todo, dumps, J, common, zdicts, ScanCache(os.path.join(rd, mode), mdg) if rd else None, targeted=True, direct=direct)
                     stage('comparing the shaders found with the app\'s list')
-                    why = profile_differs(out, pairsout, psopairsout)
+                    why = profile_differs(out, pairsout, psopairsout, version)   # PEANUTS: compare with the profile's active version
                 except Fallback as e: why = str(e)
-                if not why: print(f'{mode} split: its tables are the profile\'s, byte for byte', flush=True); break   # PEANUTS: the direct, then the targeted mode (DM_SPLIT_DIRECT)
+                if not why:   # PEANUTS: a single version can reorder the union profile's records and relocate their sources
+                    agreement = f'its tables match the profile for {version}' if version else "its tables are the profile's, byte for byte"   # PEANUTS
+                    print(f'{mode} split: {agreement}', flush=True); break   # PEANUTS
                 out = None; why = f'the {mode} scan ' + why
                 if failed:
                     with open(failed, 'w') as f: f.write(mdg + '\n')
@@ -4052,7 +4055,52 @@ def build_id(path):
 
 NOT_ROMFS = ('/glslc_capture/', '/ue_shaders/', '/nvn_shdump')   # map sources that are no RomFS file (main's have no leading '/'): main() reads them on every run
 
-def profile_files(files, main_v):
+# PEANUTS begin: the source prefixes of a multi-version profile name versions of the dump, not its folders.
+def single_shader_version(mains):
+    versions = GAME.words('shader_versions', '')
+    if len(mains) != 1 or len(versions) < 2:
+        return None
+    build = build_id(mains[0])
+    match = [v for v, modules in GAME.builds().items() if modules.get('main') == build and v in versions]
+    return match[0] if len(match) == 1 else None
+
+
+def profile_source_version(source):
+    m = re.match(r'(?:/|main@)(v[0-9]+)(?:/|#|$)', source)
+    return m[1] if m else None
+
+
+def source_for_version(source, version):
+    if version and source.startswith(f'/{version}/'):
+        return source[len(version) + 1:]
+    return source
+
+
+def version_map_rows(text):
+    # The key already hashes the shader record. Its package index and source location can differ between the union scan and a single build.
+    rows = []
+    for line in tables_data(text):
+        c = line.split('\t')
+        rows.append('\t'.join(c[:1] + c[2:4] + c[5:]) if len(c) > 4 and c[0].endswith('.bin') else line)
+    return sorted(rows)
+
+
+def optional_in_other_versions(others):
+    path = GAME.table('shader_optional.tsv')
+    if not others or not os.path.isfile(path):
+        return set()
+    keys = set()
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            key, _, note = line.strip().partition('\t')
+            m = re.search(r'\((v[0-9]+)\) only$', note)
+            if m and m[1] in others:
+                keys.add(key)
+    return keys
+# PEANUTS end
+
+
+def profile_files(files, main_v, version=None):
     """DM_SPLIT_TARGETED=1 (the phone's split, pack_android.py's): the RomFS files that hold the shaders of the profile's shader_map.tsv, when each main's build is one
     of the profile's build rows. A map row's source names where its key first appears: a RomFS file, or a member inside one ('/Lib/agl/agl_resource.sarc.zs/agl_technique_pfx.sharcb#BAHS@...'
     is in the RomFS file Lib/agl/agl_resource.sarc.zs), with the scan's version tags (v327680/..., aoc/...). Its file is the prefix of the source, ending at a '/' or '#'
@@ -4064,25 +4112,36 @@ def profile_files(files, main_v):
     for p in main_v:
         b = build_id(p)
         if b not in builds: return None, f'main\'s build {b} is not one the profile was made from ({", ".join(sorted(builds)) or "it has no build rows"})'
-    srcs = set()
+    # PEANUTS begin: resolve the active version's paths without treating a missing required shader as optional.
+    other_versions = set(GAME.words('shader_versions')) - {version} if version else set()
+    optional = optional_in_other_versions(other_versions)
+    required_sources = {}
     with open(m, encoding='utf-8') as f:
         for ln in f:
             c = ln.rstrip('\n').split('\t')
-            if len(c) > 4 and c[0].endswith('.bin') and c[4].startswith('/') and not c[4].startswith(NOT_ROMFS): srcs.add(c[4][1:])
+            if len(c) > 4 and c[0].endswith('.bin') and c[4].startswith('/') and not c[4].startswith(NOT_ROMFS):
+                required_sources[c[4]] = required_sources.get(c[4], False) or c[3] not in optional
     rels, want = {r for _, r in files}, set()
-    for s in srcs:
-        r = next((s[:i] for i in [i for i, ch in enumerate(s) if ch in '/#:'] + [len(s)] if s[:i] in rels), None)   # PEANUTS: ':' too, a Unity bundle's member (/Data/data.unity3d:Resources/...: Engage, Castlevania, Brilliant Diamond fell back to the full scan)
-        if r is None: return None, f'the profile\'s shader_map.tsv names /{s}, and the dump has no such file'
+    for source, required in required_sources.items():
+        s = source_for_version(source, version)[1:]
+        # Unity names a member after ':' and Diablo III records a CPK entry's offset as '@0x...'.
+        boundaries = [m.start() for m in re.finditer(r'[/#:]|@0x[0-9a-f]+', s)] + [len(s)]
+        r = next((s[:i] for i in reversed(boundaries) if s[:i] in rels), None)
+        if r is None:
+            if profile_source_version(source) in other_versions or not required:
+                continue
+            return None, f'the profile\'s shader_map.tsv names {source}, and the dump has no such file'
         want.add(r)
+    # PEANUTS end
     # the files that hold only copies of shaders found earlier name no row's source, but their variations can pair them anew (Donkey Kong Bananza: 42 of its 15,576
     # pairs): the profile's shader_files.tsv (a full split's, DM_SPLIT_FILES) lists every file a shader was found in. One it names that the dump lacks is passed over:
     # the comparison with the profile's tables decides
     fl = GAME.table('shader_files.tsv')
     if os.path.isfile(fl):
-        with open(fl, encoding='utf-8') as f: want |= {r for ln in f if not ln.startswith('#') and (r := ln.rstrip('\n')) in rels}
+        with open(fl, encoding='utf-8') as f: want |= {r for ln in f if not ln.startswith('#') and (r := source_for_version('/' + ln.rstrip('\n'), version)[1:]) in rels}   # PEANUTS: the full split's file list uses the map's version prefixes
     return want, None
 
-def profile_differs(t, pairsout, psopairsout):
+def profile_differs(t, pairsout, psopairsout, version=None):
     """None when each table the targeted scan made is the profile's byte for byte (the profile's tables are a full scan's of the same build), else which is not.
     A file that holds only shaders found earlier is named in no row's source, but its variations can still pair them (var_pairs, mesh_facts): unless the profile's
     shader_files.tsv lists it, the targeted scan leaves it out, and this comparison sends such a dump to the full scan. A table the profile does not have is not compared.
@@ -4090,19 +4149,29 @@ def profile_differs(t, pairsout, psopairsout):
     file each such key's row names, so a key it did not find is not in the dump: the profile's tables less those keys (absent_tables) are what a full scan of it makes"""
     have = {r[3] for r in t['rows']}
     absent = optional_keys() & (map_keys(GAME.table('shader_map.tsv')) - have)
+    if version:   # PEANUTS: a shader tagged for another listed version may be absent from this dump
+        other_versions = set(GAME.words('shader_versions')) - {version}
+        with open(GAME.table('shader_map.tsv'), encoding='utf-8') as f:
+            for line in f:
+                c = line.split('\t')
+                if len(c) > 4 and c[0].endswith('.bin') and c[3] not in have and profile_source_version(c[4]) in other_versions:
+                    absent.add(c[3])
     for name, text in (('shader_map.tsv', t['map']), ('shader_facts.tsv', t['facts']), ('shader_pairs.tsv', t['pairs'] if pairsout else None), ('pso_pairs.tsv', t['pso'] if psopairsout else None)):
         p = GAME.table(name)
         if text is None or not os.path.isfile(p): continue
         with open(p, encoding='utf-8', newline='') as f: want = absent_tables(name, f.read(), absent)
+        compare = version_map_rows if version and name == 'shader_map.tsv' else tables_data   # PEANUTS: compare records by key even if this version's source order differs
         # the comment lines are left out: they name the game and the split's wording at the time, which a newer split or a renamed profile changes
         # (Orbitals Deluxe Edition: its map's first line named the title ID, the split now writes the game's name, and every file was scanned in full)
-        if tables_data(want) != tables_data(text):
+        if compare(want) != compare(text):   # PEANUTS: exact table comparison except a union map's record locations
             if d := os.environ.get('DM_SPLIT_DIFF_DIR'):   # PEANUTS: the targeted table and the profile's as compared, to see why a title falls back to the full scan
                 os.makedirs(d, exist_ok=True)
                 with open(os.path.join(d, 'targeted.' + name), 'w', encoding='utf-8', newline='') as f: f.write(text)   # PEANUTS
                 with open(os.path.join(d, 'profile.' + name), 'w', encoding='utf-8', newline='') as f: f.write(want)   # PEANUTS
             return f'made a {name} that differs from the profile\'s'
-    if absent: print(f'targeted split: compared with the profile\'s tables less the {len(absent)} shader(s) of shader_optional.tsv this dump does not have ({", ".join(sorted(absent)[:3])})', flush=True)
+    if absent:
+        kinds = 'the other listed builds' if version else 'shader_optional.tsv'   # PEANUTS: a multi-version profile also records version tags in its map
+        print(f'targeted split: compared with the profile\'s tables less the {len(absent)} shader(s) of {kinds} this dump does not have ({", ".join(sorted(absent)[:3])})', flush=True)
     return None
 
 def tables_data(text):   # a table's lines less its comment lines ('#')

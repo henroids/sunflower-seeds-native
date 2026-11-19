@@ -156,6 +156,39 @@ class Targeted(unittest.TestCase):
         self.assertIn(f"targeted split: not taken, main's build {BUILD.hex()} is not one the profile was made from", said)
         self.same(full, t)
 
+    def test_single_update_matches_version_tagged_profile(self):   # PEANUTS: the union profile has v327680 paths, the Android update-only split does not
+        present, _ = self.split('present', False)
+        self.profile_from(present)
+        mapping = self.prof / 'shader_map.tsv'
+        mapping.write_text(mapping.read_text().replace('\t/Shader/', '\t/v327680/Shader/').replace('#BNSH@0x0', '#BNSH@0x100'))
+        self.write('Old/old.bnsh', bnsh(vs(19), ps(19)))
+        full_union, _ = self.split('union', False)
+        old_rows = [ln for ln in (full_union / 'shader_map.tsv').read_text().splitlines() if '\t/Old/' in ln]
+        self.assertEqual(len(old_rows), 2)
+        with mapping.open('a') as f:
+            for row in old_rows: f.write(row.replace('\t/Old/', '\t/v65536/Old/') + '\n')
+        for table in TABLES[1:]:
+            shutil.copyfile(full_union / table, self.prof / table)
+        (self.rom / 'Old/old.bnsh').unlink()
+        (self.prof / 'game.tsv').write_text((self.prof / 'game.tsv').read_text().replace('build\tv0', 'build\tv327680')
+            + 'build\tv65536\t1.0.0\tmain=' + '12' * 16 + '\nshader_versions\tv65536 v327680\n')
+        actual, log = self.split('update-targeted', True)
+        self.assertIn("2 shader(s) of the other listed builds", log)
+        self.assertIn('targeted split: its tables match the profile for v327680', log)
+        self.same(present, actual)
+
+        mapping.write_text(mapping.read_text().replace('/v65536/Old/', '/Old/'))
+        optional = self.prof / 'shader_optional.tsv'
+        optional.write_text(''.join(row.split('\t')[3] + '\t1.0.0 (v65536) only\n' for row in old_rows))
+        actual, log = self.split('update-with-optional-base', True)
+        self.assertIn('targeted split: its tables match the profile for v327680', log)
+        self.same(present, actual)
+
+        optional.write_text(optional.read_text().replace('(v65536)', '(v327680)', 1))
+        actual, log = self.split('update-with-missing-source', True)
+        self.assertIn('and the dump has no such file: every file is scanned', log)
+        self.same(present, actual)
+
     def test_a_named_file_missing_takes_the_full_scan(self):
         full, _ = self.split('full', False); self.profile_from(full)
         (self.rom / 'Shader/a.bnsh').unlink()
@@ -190,6 +223,12 @@ class Targeted(unittest.TestCase):
         big, todo = ss.scan_jobs(files, {'Shader/a.bnsh'})   # the missing files would raise if they were opened
         self.assertEqual((big, [f[1] for f in todo]), ([], ['Shader/a.bnsh']))
         with self.assertRaises(FileNotFoundError): ss.scan_jobs(files)
+
+    def test_a_cpk_source_can_end_with_an_entry_offset(self):   # PEANUTS: Diablo III names a CPK offset before the shader record
+        m = self.prof / 'shader_map.tsv'
+        m.write_text('ps_main.bin\t0\tps\t0000000000001234\t/CPKs/ClientCommon.cpk@0x1478f23#D3@0x4f54\n')
+        with mock.patch.object(ss, 'GAME', ss._game.Game(self.prof)):
+            self.assertEqual(ss.profile_files([('archive', 'CPKs/ClientCommon.cpk')], [str(self.main)]), ({'CPKs/ClientCommon.cpk'}, None))
 
     def test_the_full_zip_probe_prints_progress(self):   # the full scan's probe of every file counts them for the phone's card ('progress: <done>/<total>')
         files = [(str(self.rom / 'Shader/a.bnsh'), f'f{i}') for i in range(1000)]
