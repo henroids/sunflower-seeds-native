@@ -770,6 +770,7 @@ public final class PackService extends Service {
         PackEngine.setenv("J", s.equals("split") ? String.valueOf(pyLib == null ? 1 : shaderWorkers) : String.valueOf(workers));   // PEANUTS
         if (s.equals("split")) Log.i(TAG, "split workers: libpython " + pyLib + ", J " + (pyLib == null ? 1 : shaderWorkers));   // PEANUTS
         PackEngine.setenv("DM_SPLIT_WORKER", pyLib == null ? "" : "/system/bin/linker64 " + new File(PackNative.repo().getParentFile(), "python/bin/nxpack_worker").getPath());   // PEANUTS
+        PackEngine.setenv("PN_REWRITE_J", String.valueOf(pyLib == null ? 1 : mem.workers));   // PEANUTS: the rewrite's module in that worker, its x18 and spin phases on this many fast cores (pack_android.py pn_rewrite_worker, issue #120)
         PackEngine.setenv("LD_LIBRARY_PATH", pyLib == null ? "" : new File(pyLib).getParent());   // PEANUTS: read by the workers' linker only (this process's read it at its start)
         PackEngine.setenv("DM_SPLIT_RESUME", splitScan.getPath());   // the split's kept scan results (only shader_split.py reads it)
         // a profile with a selected set: the split keeps the code of only those shaders (and their pixel shaders), as the shaders step builds only them; a full

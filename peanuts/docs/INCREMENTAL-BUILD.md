@@ -109,6 +109,23 @@ deleted) gets the copy back when the module's part is the recorded one and every
 that changed, the module is rewritten; a copy cut short leaves files without a key, which the rewrite replaces. No copy that would leave less than 2 GB free; the
 copies count in the 4 GB of every game's kept copies (`shader_reuse.py keep_library`).
 
+## The rewrite on the fast cores
+
+A build from nothing rewrites every module; on the phone that ran on one core (ACNH 3.0.3's `main` on an AYN Thor: 153 s, of which the x18 scan 33 s and the
+spin wait search 61 s). `patch_nso.py` computes those two phases in pieces with `multiprocessing`, which the phone's embedded CPython cannot start (it has no
+`_multiprocessing`), and the app's own process must not fork (the JVM's threads). Now:
+
+- `scripts/pack_android.py pn_rewrite_worker` runs each module's `patch_nso.py` in a worker process of its own: `DM_SPLIT_WORKER`, the `nxpack_worker` the
+  split's workers are (a Python without the app's threads), with `DM_REWRITE_J` = `PN_REWRITE_J`, which `PackService` sets to the memory plan's workers
+  (`BuildMemory`: one per fast core, fewer on a phone with less memory or after a kill). Its output goes to the module's log and its progress lines to the step's
+  bar as before; a stop ends the worker and its forks (their own process group). Without the worker command, or with one worker, the rewrite runs in the app's
+  process as before.
+- `patch_nso.py in_parallel`, where `_multiprocessing` is missing, forks its workers itself (`in_forks`, an upstream candidate): child i computes pieces i, i + n,
+  …, its results go back pickled through a pipe and are put back in order, so the output is the same; a child that fails fails the rewrite, and an error in the
+  parent kills the children first.
+- The rewriter file before this change is in `dm/tools/rewriter_equiv/` (`patch_nso.py.6bc30f06074b`): a pack made with it counts as up to date (its key is one
+  of the current rewriter's), so the update rewrites no module.
+
 ## The split: game files that did not change
 
 The split scans every file of the profile's list (targeted) or of the RomFS (full) on every build; its `ScanCache` keeps results only to resume a stopped split,

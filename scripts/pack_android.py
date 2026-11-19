@@ -555,6 +555,36 @@ def _run_in_process_once(script, args, env, log, progress, mode):   # PEANUTS: r
     return code, rerun   # PEANUTS
 
 
+# PEANUTS begin: the phone's rewrite on its fast cores (issue #120, peanuts/docs/INCREMENTAL-BUILD.md "The rewrite on the fast cores")
+REWRITE_BOOT = 'import runpy, sys; sys.argv = sys.argv[1:]; sys.path.insert(0, sys.argv[0].rsplit("/", 1)[0]); runpy.run_path(sys.argv[0], run_name="__main__")'
+
+
+def pn_rewrite_worker(script, args, env, log, progress=None):
+    """script (patch_nso.py) as `python3 script args`, in a worker process of its own (DM_SPLIT_WORKER: nxpack_worker, a Python without the app's threads, as the
+    split's workers), with DM_REWRITE_J = PN_REWRITE_J: its x18 and spin phases fork that many workers there (patch_nso.py in_forks; the phone's Python has no
+    _multiprocessing, and the app's own process must not fork). The same output as run_in_process: the file log, its progress lines passed on (ProgressTee).
+    → its exit code; None with no worker command or PN_REWRITE_J below 2 (run_in_process then, one core). A stop (this process interrupted) ends the worker
+    and its forks (their own process group)"""
+    cmd = os.environ.get('DM_SPLIT_WORKER', '').split()
+    try: j = int(os.environ.get('PN_REWRITE_J') or 1)
+    except ValueError: j = 1
+    if not cmd or j < 2: return None
+    with open(log, 'w', buffering=1, encoding='utf-8', errors='backslashreplace') as f:
+        tee = ProgressTee(f, sys.stdout, *progress) if progress else f
+        p = subprocess.Popen(cmd + ['-c', REWRITE_BOOT, str(script)] + [str(a) for a in args], env={**os.environ, **env, 'DM_REWRITE_J': str(j)},
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='backslashreplace',
+                             start_new_session=True)
+        try:
+            for line in p.stdout: tee.write(line)
+            return p.wait()
+        except BaseException:
+            try: os.killpg(p.pid, signal.SIGKILL)
+            except OSError: pass
+            p.wait()
+            raise
+# PEANUTS end
+
+
 def staging(out, m):   # where a module is rewritten before it goes into the pack (inside it: same file system, so the swap is renames)
     return out / f'.rewrite-{m}'
 
@@ -646,7 +676,8 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
             print(f'  {m}: rewriting {src} (in process)', flush=True)
             t0 = time.monotonic()
             width = 1000 * size[m] // total
-            rc = run_in_process(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id, 'DM_REWRITE_J': '1'}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: xargs
+            rc = pn_rewrite_worker(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: on the fast cores (issue #120)
+            if rc is None: rc = run_in_process(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id, 'DM_REWRITE_J': '1'}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: xargs; pn_rewrite_worker
             if rc:
                 tail = (out / f'rewrite_{m}.log').read_text(errors='replace').splitlines()[-20:]
                 raise Error(f'patch_nso.py exit code {rc} on {m}:\n' + '\n'.join(tail))
