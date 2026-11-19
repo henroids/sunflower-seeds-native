@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sunflower Seeds: the launcher icon's seed at 95 % (an inset of 2.7 dp a side of the 108 dp layer), the badge where src/main's has it. Only the icon: the header
+     badge and the main screen's background draw ic_banana at its own size -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_banana_happy" android:left="2.7dp" android:top="2.7dp" android:right="2.7dp" android:bottom="2.7dp" />
+    <item android:drawable="@drawable/ic_launcher_badge" />
+</layer-list>
