@@ -372,7 +372,7 @@ def main(argv):
     except (OSError, ValueError): m = None
     kept, sample = {}, {}
     if m and (m['version'], m['game'], m['inputs']) == (version, g.id, inputs):
-        say(f'reuse: the profile\'s own manifest is of this build: upstream\'s delta update')
+        say('reuse: the profile\'s own manifest is of this build: upstream\'s delta update')
         code = run_build(argv, {})
     else:
         libs = older_libraries(delta, out_dir, g.id)
