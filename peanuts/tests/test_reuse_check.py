@@ -74,6 +74,16 @@ class Due(unittest.TestCase):
         self.assertIn('return CheckDue.replacedText(reuseDir(noBackup, titleId), name, since);', s)
 
 
+class Notice(unittest.TestCase):
+    def test_a_timeout_during_the_check_leaves_no_notification(self):
+        # onTimeout (Android's daily dataSync limit) detached the notification and posted note(j) again: during the check that is "Checking <game>'s shaders",
+        # ongoing, which the check's end (STOP_FOREGROUND_REMOVE) no longer removes, so it stayed for good
+        s = PACK.read_text(encoding='utf-8')
+        t = s[s.index('    @Override public void onTimeout(int startId, int fgsType) {'):]
+        t = t[:t.index('\n    }\n')]
+        self.assertRegex(t, r'if \(j != null && j == checkJob\) \{[^\n]*\n[^\n]*requestStop\("timeout"\);\s*stopForeground\(STOP_FOREGROUND_REMOVE\);\s*stopSelf\(\);\s*return;')
+
+
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
 class Jvm(unittest.TestCase):
     def test_jvm(self):

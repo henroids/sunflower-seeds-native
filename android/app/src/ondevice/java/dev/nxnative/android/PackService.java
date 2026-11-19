@@ -244,6 +244,12 @@ public final class PackService extends Service {
     @Override public void onTimeout(int startId, int fgsType) {
         Job j = job;
         stepLog(j, "pausing: timeout: Android's daily limit for background work (6 h of dataSync) is reached; " + readings());
+        if (j != null && j == checkJob) {   // PEANUTS: the full check stops and goes on another time; no notification stays (note() says "Checking ..." and is ongoing: found in review)
+            requestStop("timeout");
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
+            return;
+        }
         if (j != null && j != checkJob) {   // PEANUTS: the full check's job stays done
             j.state("paused", "timeout", null);
             save(j, true);
