@@ -234,6 +234,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
    - `android/app/src/main/java/dev/nxnative/android/NxApp.java` — (2026-11-17, the same) one line in `onCreate`: `dev.peanuts.ui.AppScreens.install(this)`
      lets the app's pages in other processes (Readiness check, Graphics self-test) tell the launcher they are in front, so the second display keeps
      its page. `peanuts/UPSTREAM-EDITS.md` Round 20.
+- 2026-11-19 (Yaz0 in C, issue #120): `_nxyaz0` (`dm/peanuts/pack_worker/nxyaz0.c`, a module of the phone's `lib-dynload` like `_nxaes`, and of the Linux builder's `peanuts/.build/pymod`) decodes `shader_split.py`'s Yaz0 with the Python loop's bytes; where the loop stops on a damaged stream it hands that stream back, so the error reads as before. Mario Kart 8 Deluxe 4.0.1's direct split on a PC: 374 s → 30 s, the full scan 544 s → 148 s; on the AYN Thor 8:09 → 16 s; outputs byte for byte the same. `build.gradle` refuses a stage without it. `peanuts/UPSTREAM-EDITS.md` Round 31; test `test_split_yaz0.py`.
 - 2026-11-17 (the launcher on the second display, `dev.peanuts.ui.BottomScreen` / `BottomPanel`): while Home, Settings or a game's page is in front, the
   second display (the Thor's Screen-2, or any presentation display) shows a page of the launcher instead of Android's own: the cover the D-pad is on
   (Ready: Play and Game page; to build: what the scan found and Build…; building: the step, the bar, Stop build and Screens off), else the logo.

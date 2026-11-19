@@ -2146,3 +2146,38 @@ with the app's caches kept took 1 min 16 s (a full build 7 min 55 s), the librar
 | `android/app/src/jvmtest/java/dev/nxnative/android/StorageScanJvmTest.java` | 3 | a game's cache is listed as a build cache, a folder under `reuse/` that is not a title ID is not | `PEANUTS` |
 
 Tests: `peanuts/tests/test_shader_reuse.py`, `peanuts/tests/test_rewrite_reuse.py`, `peanuts/tests/test_split_reuse.py`, `peanuts/tests/test_romfs_walk.py`, `dm/tools/tests/test_android_storage.py`. Upstream candidate: the mechanism, yes (moceure's delta needs a Mac manifest; this needs none).
+
+### Round 31, Yaz0 in C for the shader split (2026-11-19, GitHub issue #120)
+
+Nearly all of a Nintendo game's shaders are in Yaz0 files (`.szs`, and `.bfres` members of SARC archives), and `shader_split.py` decodes Yaz0 in a Python loop
+(`yaz0`). For Mario Kart 8 Deluxe 4.0.1 that loop was nearly all of the split: the 1,359 files that hold shaders are 752 Yaz0 streams, 5.5 GB that expand to
+10.7 GB. `_nxyaz0` (`dm/peanuts/pack_worker/nxyaz0.c`, new) is the same loop in C, as a module of the Python home's `lib-dynload` like `_nxaes`. `yaz0` takes
+its bytes when the module is there. The module returns None for every stream the loop stops on (the stream ends early, a back-reference reaches before the
+start, a size the stream cannot reach), and `yaz0` then runs its loop on that stream, so a damaged file names the same error as before. Without the module
+(a Mac, Windows, a Python without it) nothing changes.
+
+The module is built by `dm/peanuts/pack_worker/build.sh` into the stage (`peanuts/scripts/ondevice-stage.sh <work dir> zbic` adds it to an existing stage),
+`build.gradle` refuses a stage without it, and `peanuts_build.py` builds it on Linux for its own Python (`peanuts/.build/pymod`, on the pack step's
+`PYTHONPATH`; `build_pymod`, shared with `_nxaes`). The shader reader is not a shader-cache input (`dmsh_chain.py` `FILES`), so no library version moves.
+
+Measured (a PC under Linux, Python 3.14, the 4.0.1 dump of a `.nup` without add-on RomFS, `J=2 DM_SPLIT_TARGETED=1 DM_SPLIT_DIRECT=1`):
+
+| | Python loop | `_nxyaz0` |
+|---|---|---|
+| Yaz0 of the test corpus (`test_split_yaz0.py`'s streams) | 23–27 MB/s | 1,400–1,600 MB/s |
+| Yaz0 of the 752 streams of the 4.0.1 shader files (10.7 GB decoded, one core) | 15 MB/s | 670 MB/s |
+| the direct split of 4.0.1 (`DM_SPLIT_DIRECT=1`, the phone's path) | 374 s | 30 s |
+| the full scan of 4.0.1 (6,597 files; the fallback) | 544 s (Windows, 2026-11-18) | 148 s |
+| the direct split of 4.0.1 on an AYN Thor (test app, 4 workers, the 0.1.4 packer stage with `_nxyaz0`) | 8:09 (the same APK without the module, 2026-11-18) | 16 s (twice: 16.3 s, 15.5 s) |
+
+The package and the four tables of every run are byte-identical to a full scan of the same dump in Python (Windows), and every fifth of the 752 streams, decoded
+both ways, gave the same bytes; the Thor's two splits too. In the direct split, Yaz0 is now about 8 of its 30 s; the rest is reading the 7.8 GB of the 1,359 files and scanning them.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/shader_split.py` | 2 | `import _nxyaz0` (None without it), and `yaz0`'s first line: the module's bytes, else the loop as before | `# PEANUTS begin`/`end`, `# PEANUTS: ...` |
+| `android/app/build.gradle` | 1 | the stage must have `lib-dynload/_nxyaz0.cpython-314-aarch64-linux-android.so` (`need`) | `// PEANUTS: ...` |
+| `dm/peanuts/pack_worker/nxyaz0.c`, `build.sh`; `peanuts/scripts/peanuts_build.py`; `peanuts/docs/BUILDER.md` (Peanuts-owned) | | the module, its stage build, its PC build | |
+| `dm/tools/tests/test_split_yaz0.py` (new) | 1 | the module built with this machine's compiler against the loop: a corpus of runs, repeats at every distance, text and random bytes; a size that ends inside an operation; trailing bytes; every cut of a stream and references before the start (None, and the loop's error); 3,000 random streams; a size the stream cannot reach; bytes, bytearray and memoryview; the hook with and without the module | `PEANUTS` docstring |
+
+Tests: `test_split_yaz0.py` (8; 6 skipped without a C compiler or Python's headers), every `test_split_*.py` with and without the module, `peanuts/tests/test_peanuts_build.py`.

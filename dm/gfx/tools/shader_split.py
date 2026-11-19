@@ -2981,9 +2981,15 @@ def ungzip(d, label):
     return out
 
 
+# PEANUTS begin: Yaz0 in C (dm/peanuts/pack_worker/nxyaz0.c) where this Python has the module: the phone's Python home (lib-dynload), the PC builder's peanuts/.build/pymod
+try: import _nxyaz0
+except ImportError: _nxyaz0 = None
+# PEANUTS end
+
 def yaz0(s, label='Yaz0'):
     """Yaz0 decompression (Super Mario 3D World + Bowser's Fury: almost all of RomFS is .szs = SARC wrapped in Yaz0). Pure Python runs at about 20–45 MB/s per core, under a minute for the whole 4.7 GB RomFS in parallel, and needs no extra dependency.
     Group header bits: 1 = one literal byte; 0 = back-reference, 2 bytes {length high nibble, 12-bit distance} (distance + 1); length 0 reads one more byte + 0x12, else + 2. Overlapping copies are expanded by their period"""
+    if _nxyaz0 and (d := _nxyaz0.decode(s)) is not None: return d   # PEANUTS: the same bytes in C; None where the loop below stops with an error, which it then names
     n = int.from_bytes(s[4:8], 'big'); out = bytearray(); si = 16
     try:
         while len(out) < n:
