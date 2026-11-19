@@ -188,7 +188,7 @@ class Check:
     # a build ---------------------------------------------------------------------------------------------------------------------------------------
     def build(self, label, cmd, folder, **args):
         """One build through the control interface, followed to its end → its record (times, what was kept, the outputs' hashes)"""
-        checks_before = self.check_ends(folder)
+        checks_before = (self.check_count(folder, 'every shader translated again'), self.check_ends(folder))
         ans = self.p.ctl(cmd, title_id=self.title, **args)
         if not ans.get('ok'): raise RuntimeError(f'{label}: {cmd} refused: {ans.get("error")}: {ans.get("message")}')
         t0, timeline, seen, end, paused, unread = time.monotonic(), [], False, None, None, 0
@@ -221,21 +221,27 @@ class Check:
 
     def check_log(self, folder): return f'{folder}/{self.title}/{self.title}-work/ondevice/logs/check.log'
 
-    def check_ends(self, folder):
-        """How many full checks of this folder's job have ended (ReuseCheck.log's "check: …" lines in its check.log)"""
-        out = self.p.sh(f"grep -c '\\] check: ' {shlex.quote(self.check_log(folder))} 2>/dev/null || true").strip()
+    def check_count(self, folder, words):
+        """How many lines of this folder's job's check.log hold words (fixed text)"""
+        out = self.p.sh(f"grep -cF {shlex.quote(words)} {shlex.quote(self.check_log(folder))} 2>/dev/null || true").strip()
         return int(out) if out.isdigit() else 0
 
+    def check_ends(self, folder):
+        """How many full checks of this folder's job have ended (ReuseCheck.log's "check: …" lines in its check.log)"""
+        return self.check_count(folder, '] check: ')
+
     def wait_check(self, label, folder, before):
-        """The full check a build that kept shaders leaves due (check.todo), which the app starts at the build's end while the phone charges: followed to its end
-        (up to 40 minutes) → {'seconds', 'lines', 'ok', 'replaced'}; None when none was due; {'started': False} when none started within 90 s"""
+        """The full check a build that kept shaders leaves due (check.todo), which the app starts at the build's end while the phone is plugged in with 40 % or
+        more: followed to its end (up to 40 minutes) → {'seconds', 'lines', 'ok', 'replaced'}; None when none was due; {'started': False} when none started
+        within 3 minutes (the launcher's timer tries every two). before: (the check.log's start lines, its end lines) before the build"""
+        starts, ends = before
         due = self.p.run_as(f'test -f no_backup/reuse/{self.title}/check.todo && echo due || echo none', check=False).strip() == 'due'
-        if not due and self.check_ends(folder) == before: return None
+        if not due and self.check_ends(folder) == ends: return None
         t0 = time.monotonic()
-        while self.check_ends(folder) == before:
+        while self.check_ends(folder) == ends:
             time.sleep(5)
-            if time.monotonic() - t0 > 90 and 'reuse full check' not in self.p.sh(f'tail -c 4000 {shlex.quote(self.check_log(folder))} 2>/dev/null || true'):
-                print(f'{label}: the full check did not start within 90 s (the phone not charging? the build log says why)', flush=True)
+            if time.monotonic() - t0 > 180 and self.check_count(folder, 'every shader translated again') == starts:
+                print(f'{label}: the full check did not start within 3 minutes (below 40 % or not plugged in? the build log says why)', flush=True)
                 return {'started': False}
             if time.monotonic() - t0 > 2400: raise RuntimeError(f'{label}: the full check still runs after 40 minutes')
         text = self.p.sh(f'cat {shlex.quote(self.check_log(folder))} 2>/dev/null || true')
