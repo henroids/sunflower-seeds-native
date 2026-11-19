@@ -3893,8 +3893,30 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
     if (!bpb || r->width <= 0) return;
     size_t wb = (size_t)((r->width + bw - 1) / bw) * bpb, hb = (size_t)((r->height > 0 ? r->height : 1) + bh - 1) / bh, x0 = (size_t)(r->xoffset / bw) * bpb, y0 = (size_t)r->yoffset / bh;
     vka_img *im = vka_ok() ? vka_tex_acquire(t->serial) : NULL;
+    // PEANUTS begin: a texture the game reads without ever having bound it has no image of its own, and one whose storage the GPU wrote through another texture object
+    // holds nothing itself: on the Switch the read sees that write, the storage being one. So the GPU-written image over the storage is read instead: one of the texture's
+    // shape (same_shape), else one of its texel (or block) size and extent in texels (or blocks), whose bits are the texture's (as take_src; the region then in its texels).
+    // MLB The Show 26 reads its skin tone palette this way and got zeros: a zero target skin tone, the generated faces' albedo black
+    NVNcopyRegion rr = *r; const char *via = "";
+    if (vka_ok() && t->mem && !(im && im->gpu_owned)) {
+        vka_fmt f; vka_img *o2 = NULL; int twin = 0;
+        if (vka_fmt_of(t->d.format, &f)) {
+            uint32_t tbw = (t->d.width + f.bw - 1) / f.bw, tbh = (t->d.height + f.bh - 1) / f.bh; int k;
+            pthread_mutex_lock(&g_tmu);
+            for (vka_img *o = live_first(t->mem, &k); o; o = live_next(o, t->mem, &k)) {
+                if (o == im || !o->gpu_owned || o->par || o->samples > 1 || o->f.kind >= 3) continue;
+                if (same_shape(o, t, &f, 0)) { if (!o2 || twin || o->wgen > o2->wgen) { o2 = o; twin = 0; } }
+                else if (!compressed(&o->f) && o->f.bpb == f.bpb && o->w == tbw && o->h == tbh && o->d.target == t->d.target && (!o2 || (twin && o->wgen > o2->wgen))) { o2 = o; twin = 1; }
+            }
+            if (o2) { o2->refs++; o2->holds++; }
+            pthread_mutex_unlock(&g_tmu);
+        }
+        if (o2) { if (im) vka_tex_drop(im); im = o2; via = twin ? " (the GPU-written texture of its texel size over its storage)" : " (the GPU-written image of its shape over its storage)";
+            if (twin) { rr.xoffset /= bw; rr.yoffset /= bh; rr.width = (rr.width + bw - 1) / bw; rr.height = ((rr.height > 0 ? rr.height : 1) + bh - 1) / bh; } }
+    }
+    // PEANUTS end
     int gpu = im && im->gpu_owned, done = 0; const char *how = "storage";
-    if (gpu) { done = rt_gpu(im, level, layer0, r, dst, row, img, wb, hb, nz); how = done ? "image (GPU-written)" : "storage (the GPU-written image could not be copied back)"; }
+    if (gpu) { done = rt_gpu(im, level, layer0, &rr, dst, row, img, wb, hb, nz); how = done ? "image (GPU-written)" : "storage (the GPU-written image could not be copied back)"; }
     if (!done && t->mem) {   // from guest storage
         const uint8_t *mem = t->mem; uint8_t *part = NULL;
         if (t->pool && pool_sparse(t->pool)) {   // through the page table, unmapped pages as 0 (the range itself may be inaccessible)
@@ -3922,10 +3944,11 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
         free(part);
     }
     if (!done) memset(dst, 0, img * (size_t)(nz - 1) + row * (hb - 1) + wb);   // zeros rather than whatever dst held
-    static _Atomic int nl; if (atomic_fetch_add(&nl, 1) < 8)
-        VLOG("%sReadTexels: texture serial %llu %ux%ux%u target %d format %#x flags %#x level %u layer %u, region %d,%d,%d %dx%dx%d: read from its %s%s", done ? "" : "[RED] ",
+    size_t dn = img * (size_t)(nz - 1) + row * (hb - 1) + wb, dz = 0; while (dz < dn && !dst[dz]) dz++;   // PEANUTS: a read that answers nothing but zeros is said (dz == dn)
+    static _Atomic int nl, ng; if (gpu || !done || dz == dn ? atomic_fetch_add(&ng, 1) < 64 : atomic_fetch_add(&nl, 1) < 8)   // PEANUTS: GPU reads and failures have a count of their own (the boot's storage reads used every line)
+        VLOG("%sReadTexels: texture serial %llu %ux%ux%u target %d format %#x flags %#x level %u layer %u, region %d,%d,%d %dx%dx%d: read from its %s%s%s", done ? "" : "[RED] ",
              (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.target, t->d.format, t->d.flags, level, layer0, r->xoffset, r->yoffset, r->zoffset, r->width, r->height, r->depth,
-             done ? how : "nothing readable", done ? "" : ": zeros");
+             done ? how : "nothing readable", done ? via : "", !done ? ": zeros" : dz == dn ? ": all zero" : "");
     if (im) vka_tex_drop(im);
 }
 #endif
