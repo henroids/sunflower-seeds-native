@@ -563,6 +563,7 @@ def inline_shaders(path, key=None):
     shaders are in its container's shader libraries (neither counts). An encrypted index is read with key, main's (Keys; Octopath Traveler 0's holds the archives, DRAGON BALL Sparking! ZERO's
     pakchunk0-Switch.pak the global shader cache, its cooked packages in the encrypted containers beside it); without a key it counts as one with archives, as before keys were tried here.
     None: the pak names no shader archive, cooked export or global shader cache (including empty paks and movie paks)."""
+    # PEANUTS: Movie-only and empty paks can have no shader payload.
     with open(path, 'rb') as f:
         enc, ioff, isz, _, ver = footer(f)
         if ver in LEGACY: return True

@@ -928,6 +928,7 @@ uint64_t vka_addr_run(uint64_t addr, uint64_t len, VkBuffer *buf, VkDeviceSize *
     return n;
 }
 
+// PEANUTS: GPU bindings can resolve a contiguous run of physical pool pages.
 uint64_t nvn_sparse_run(uint64_t addr, uint64_t len, uint64_t *physical);
 uint64_t vka_gpu_addr_run(uint64_t addr, uint64_t len, VkBuffer *buf, VkDeviceSize *off) {
     uint64_t run = vka_addr_run(addr, len, buf, off);

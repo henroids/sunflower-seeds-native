@@ -110,9 +110,9 @@ public final class PrepareTextJvmTest {
         plain(f.text, "an exception");
         check(f.detail.contains("EACCES") && f.fix.equals(PrepareText.FIX_RETRY), "the exception in Details");
 
-        f = PrepareText.killed("Rewriting the game code", 2, "2.7");
+        f = PrepareText.killed("Rewriting the game code", 2);   // PEANUTS
         plain(f.text, "killed");
-        check(f.text.contains("2 times") && f.text.contains("2.7 GB"), "killed: " + f.text);
+        check(f.text.contains("2 times") && !f.text.contains("memory") && f.fix.equals(PrepareText.FIX_RETRY), "killed: " + f.text);
 
         f = PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", "The split's shader_map.tsv differs from the app's dm/games/0400A3A01EE4C000/shader_map.tsv.");
         plain(f.text, "shaders differ");

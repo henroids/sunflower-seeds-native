@@ -156,6 +156,18 @@ class Targeted(unittest.TestCase):
         self.assertIn(f"targeted split: not taken, main's build {BUILD.hex()} is not one the profile was made from", said)
         self.same(full, t)
 
+    def test_registered_build_outside_shader_versions_scans_new_files(self):   # PEANUTS: a supported executable can have unprofiled RomFS shaders
+        known, _ = self.split('known', False)
+        self.profile_from(known)
+        self.game_tsv('12' * 16)
+        with (self.prof / 'game.tsv').open('a') as f:
+            f.write(f'build\tv65536\t1.0.1\tmain={BUILD.hex()}\nshader_versions\tv0\n')
+        self.write('Update/new.bnsh', bnsh(vs(7), ps(8)))
+        full, _ = self.split('full', False)
+        actual, log = self.split('targeted', True)
+        self.same(full, actual)
+        self.assertIn('every file is scanned', log)
+
     def test_single_update_matches_version_tagged_profile(self):   # PEANUTS: the union profile has v327680 paths, the Android update-only split does not
         present, _ = self.split('present', False)
         self.profile_from(present)

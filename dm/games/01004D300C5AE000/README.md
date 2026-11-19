@@ -6,6 +6,8 @@ Update 1.1.0 (v65536) over the base game, SDK 11.4.0. HAL Laboratory's own engin
 
 <!-- PEANUTS begin -->
 On AYN Thor with Turnip v26.2.0 R5, a first walk from the opening beach with an empty cache triggered the 7% draw warning. The renderer recorded 23,880 draws waiting for pipelines in a 300-frame window. The profile bundles 418 recorded Vulkan pipeline keys from the opening route (412 graphics and six compute), so the Android host can prepare them before gameplay. Later stages can introduce additional pipelines.
+
+The 39-game 0.1.5 verification APK prepared all 418 keys in 10.8 seconds on Turnip R5. Two 112-frame walks from the opening save recorded zero skipped draws, out of 125,170 draws on an empty cache and 125,687 on the warm relaunch.
 <!-- PEANUTS end -->
 
 ## What it needs

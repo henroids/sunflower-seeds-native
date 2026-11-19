@@ -2197,6 +2197,7 @@ static int inst_ib(const p_draw_idx *di, VkBuffer *ib, VkDeviceSize *io, VkIndex
     *it = di->itype == 0 ? VK_INDEX_TYPE_UINT8 : di->itype == 1 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     size_t isz = di->itype == 0 ? 1 : di->itype == 1 ? 2 : 4;
     if (*it == VK_INDEX_TYPE_UINT8 && !V.idx8) return 0;
+    // PEANUTS: Resolve index buffers through sparse pools too.
     return di->count > 0 && vka_gpu_addr(di->ibuf, isz * (uint64_t)di->count, ib, io) && !(*io % isz);
 }
 typedef struct { uint64_t pt[9], ps[6], n, tot; } dprof;

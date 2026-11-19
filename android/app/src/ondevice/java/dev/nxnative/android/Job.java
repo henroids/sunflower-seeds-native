@@ -182,6 +182,7 @@ final class Job {
     synchronized String name() { return o.optString("name"); }
     synchronized String titleId() { return o.optString("title_id"); }
     synchronized long version() { return o.optLong("version"); }
+    synchronized int packPid() { return o.optInt("pack_pid"); }   // PEANUTS: 0 for jobs saved before the worker PID was recorded
     synchronized long updated() { return o.optLong("updated"); }
     synchronized long created() { return o.optLong("created"); }
     synchronized File dump() { return new File(o.optString("dump")); }
@@ -215,6 +216,7 @@ final class Job {
     synchronized void state(String state, String reason, String error) {
         try {
             o.put("state", state).put("reason", reason == null ? "" : reason).put("error", error == null ? "" : error);
+            if ("running".equals(state)) o.put("pack_pid", android.os.Process.myPid());   // PEANUTS: only PackService marks a job running
             o.remove("reason_detail");
             o.remove("go_on");
             o.remove("error_detail");

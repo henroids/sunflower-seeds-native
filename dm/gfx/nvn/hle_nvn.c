@@ -2171,6 +2171,7 @@ static int thermal_capped(void) {
 }
 __attribute__((weak)) int dm_fps_limit_step(void) { return 0; }   // hle_fpslock.c; graphics unit tests have no host
 static int fps_step_cap(void) {
+    // PEANUTS: Elapsed-time hooks pace independently of whole steps.
     if (!dm_fps_state || dm_fps_elapsed_step()) return 0;
     uint32_t b = __atomic_load_n((uint32_t *)dm_fps_state, __ATOMIC_RELAXED); float t; memcpy(&t, &b, sizeof t);
     if (t <= 0) return 0;
@@ -3190,7 +3191,7 @@ static struct vpool *vpool_at(const void *pool, uint64_t a) {   // caller holds 
 }
 int nvn_sparse_pool(const void *pool) { return pool && ((const pool_t *)pool)->vp; }   // no lock: set at Initialize, cleared at the first mapping (an aliased pool) or Finalize; called per texture lookup
 uint64_t nvn_sparse_gen(void) { return atomic_load(&g_vp_gen); }
-// Resolve one contiguous physical range for a Vulkan buffer binding. A hole or a different
+// PEANUTS: Resolve one contiguous physical range for a Vulkan buffer binding. A hole or a different
 // physical run ends the binding, since one VkBuffer cannot span both.
 uint64_t nvn_sparse_run(uint64_t a, uint64_t n, uint64_t *physical) {
     pthread_mutex_lock(&g_vp_mu);

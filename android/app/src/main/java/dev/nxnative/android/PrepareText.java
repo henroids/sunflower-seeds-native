@@ -103,10 +103,10 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
         return new Failure(step + " stopped because of an error in the app. Tap Retry. If it stops again, Details has the error.", exception, FIX_RETRY);
     }
 
-    /** A step that Android ended several times (most likely for memory) */
-    static Failure killed(String step, int times, String gb) {
-        return new Failure(step + " was stopped by Android " + times + " times, most likely for lack of memory (it needs up to " + gb + " GB). Close other apps, then tap Retry.",
-                "", FIX_RETRY);
+    /** PEANUTS: repeated service restarts can follow a crash, memory pressure, or an unreported exit. */
+    static Failure killed(String step, int times) {
+        return new Failure(step + " was stopped by Android " + times + " times. Check the build log, then tap Retry.",
+                "If Android reported low memory, close other apps before retrying.", FIX_RETRY);
     }
 
     /** The split's shaders differ from the profile's list: a dump of another version, modified or incomplete; Try anyway builds what the profile's list finds in it */

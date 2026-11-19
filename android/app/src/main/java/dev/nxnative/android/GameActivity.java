@@ -560,6 +560,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             if (maximum > 60) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes
                 int hz = capDisplayHz(maximum);
                 env.add("DM_PRESENT_HZ=" + hz); env.add("DM_VSYNC_HZ=" + hz);
+                // PEANUTS: Keep the elapsed-time target while changing display cadence.
                 if (prof == null || !prof.elapsedFrameStep) env.add("DM_FPS_TARGET=0");
                 if (prof != null && (prof.optInPresentRate() || prof.elapsedFrameStep)) env.add("DM_PRESENT_INTERVAL=display");
             }

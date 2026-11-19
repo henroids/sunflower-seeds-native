@@ -131,7 +131,7 @@ static const lock_t k_locks[] = {
     // this row the game keeps 30 fps at the right speed (the simulation at 60 and the regulator at 30: match clock as at 30). The game asks for present interval 2
     // (BaseDisplaySettings.PresentInterval), which the profile's present_interval display ignores
     { "a48c0de3bc353efa0e4d359bde05ef24", "FIFA frame regulator", 0xda20e38, 0x8, FPS_F64, 2, 0 },
-    // 1.8d.6523: main+0x5d66b50 loads the regulator and writes both doubles at +0x8; main+0x9a09100 reads its rate from +0x8.
+    // PEANUTS: 1.8d.6523: main+0x5d66b50 loads the regulator and writes both doubles at +0x8; main+0x9a09100 reads its rate from +0x8.
     { "570dc9f1750fa7ea9df20b95b482d039", "FIFA frame regulator", 0xda450d8, 0x8, FPS_F64, 2, 0 },
 };
 #define NLOCKS ((int)(sizeof k_locks / sizeof k_locks[0]))
@@ -644,11 +644,13 @@ static int limit_raw(void) { int l = atomic_load(&g_fps_limit); if (l < 0) l = f
 // before (a step of 4 vsyncs is not one the games' own logic uses). 0 = no limit, or no frame step. A framework's step count (a profile's fps_steps row, steps_tick) holds the limit the
 // same way: its steps a frame and its present interval are the limit's vsyncs
 static int limit_step(int l) { return l >= 60 ? 60 : l >= 30 ? 30 : l >= 20 ? 20 : 0; }
+// PEANUTS: Elapsed-time hooks do not quantize the rate to whole steps.
 int dm_fps_limit_step(void) { return (dm_fps_state && !dm_fps_elapsed_step()) || steps_row() ? limit_step(limit_raw()) : 0; }
 // The frame step's cap in the state page (+0, float; 0 = the stubs run the game's own logic): the frame rate cap (fps_target, the in-game panel's cap) and the frame limit's
 // step, whichever is lower. The stubs know 30 and 60 (several compare with 30.0): a 20 fps limit writes 30 there, and hle_nvn.c fps_step_cap takes the 20 from dm_fps_limit_step
 void dm_fps_step_fold(void) {
     if (!dm_fps_state) return;
+    // PEANUTS: Pass the selected cap to the elapsed-time hook.
     if (dm_fps_elapsed_step()) {
         int limit = limit_raw();
         float rate = (float)(limit ? limit : dm_fps_target());
@@ -679,6 +681,7 @@ int nxhost_fps_decoupled(void) {
 static void fps_limit_wait(void) {
     if (!PLAT_ANDROID) return;   // only the Android launcher sets a frame limit
     int lim = limit_raw();
+    // PEANUTS: Preserve fixed-rate cinematics.
     int fixed = dm_fps_elapsed_step() && (__atomic_load_n((const uint32_t *)(dm_fps_state + 0x24), __ATOMIC_RELAXED) || dm_movie_playing());
     if (fixed) lim = 30;
     static uint64_t next;

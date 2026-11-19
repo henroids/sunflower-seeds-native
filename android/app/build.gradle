@@ -443,6 +443,10 @@ android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/nxext
 tasks.named('preBuild') { dependsOn nxFont }
 
 // ./gradlew apk → out/nxnative-android.apk (-PnxPlay=true: nxnative-android-play.apk; -PnxApp=<suffix>: nxnative-android-<suffix>.apk)
+if (nxApp == 'peanuts') {
+    // PEANUTS: an incremental package can retain an entire replaced tools.zip as dead space. Recreate the final archive from its built inputs.
+    tasks.matching { it.name == 'packageRelease' }.configureEach { outputs.upToDateWhen { false } }
+}
 tasks.register('apk', Copy) {
     dependsOn 'assembleRelease'
     from(layout.buildDirectory.dir('outputs/apk/release')) { include '*.apk' }
@@ -505,6 +509,8 @@ if (nxPackEngine == 'native') {
             include 'dm/peanuts/profile/gen_runtime_profile.py'   // PEANUTS: a build with a code mod that adds a module writes its own profile.bin with it (pack_android.py --modules); without the file every such build stopped at "Rewriting the game's code"
             include 'dm/tools/rewriter_equiv/*'   // earlier rewriter files of identical output: their pack keys still count (pack_android.py EQUIV, RewriteKey)
             nxGames.each { include "dm/games/$it/**" }   // the profile of each game the APK runs
+            // PEANUTS: the phone packer needs neither the development notes nor the host's prewarm seeds (assets/profiles or compiled into the host).
+            exclude 'dm/games/*/README.md', 'dm/games/*/vk_prewarm.bin'
             include 'dm/games/*/patches.py'   // every profile's rewriter patches: patch_nso.py lists them all in build_src.sha256, as on the Mac
             include 'dm/gfx/tools/*.py', 'dm/gfx/tools/*.lock', 'dm/gfx/tools/*.metal', 'dm/gfx/tools/*.tsv', 'dm/gfx/tools/dmsh_xlate/Program.cs', 'dm/gfx/tools/dmsh_xlate/*.csproj'
             // the other files DMSH_CHAIN hashes (dmsh_chain.py FILES): vk_android_build.py recomputes the version on the phone

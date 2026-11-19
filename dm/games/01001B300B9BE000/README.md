@@ -1,4 +1,5 @@
 # Diablo III: Eternal Collection (`01001B300B9BE000`)
+<!-- PEANUTS: Android game profile and validation notes. -->
 
 Update 2.7.7.92380 (v1441792), SDK 8.2.0, NVN. Blizzard's own engine (the survey's Unreal 4 marker in `main` is a false one), FMOD, its data as SNO assets in Blizzard's console packages (`CPKs/*.cpk`, `Update/CPKs/*.cpk`: 37 files, 16 GB). Modules `main` and `sdk` only. Three DLC NSPs (indices 100–102) hold a licence and no content.
 

@@ -1,4 +1,5 @@
 # Tomodachi Life: Living the Dream (`010051F0207B2000`)
+<!-- PEANUTS: Android game profile and validation notes. -->
 
 Update 1.0.4 (v262144), SDK 20, NVN. `main` and `sdk` are the only modules. The PC shader build produced 14,469 Vulkan shaders.
 

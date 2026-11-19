@@ -172,14 +172,12 @@ public final class PackService extends Service {
         }
         if ("running".equals(j.state())) {   // PEANUTS: still "running" at a start: look up why the previous pack process ended
             // PEANUTS: ...unless the app was installed again after the job's last note: an update ends every process of the app, and that is no sign of low memory.
-            // Three installs during one build left Mario Kart 8 Deluxe's on one worker with 10 GB free
-            long installed = 0;
-            try { installed = getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime; } catch (android.content.pm.PackageManager.NameNotFoundException e) { /* 0: counted as a kill */ }
-            if (installed > j.updated()) stepLog(j, "the build's process ended when the app was updated; resuming with the same workers (level " + j.memLevel() + "; " + memLine() + ")");
+            // PEANUTS: Three installs during one build left Mario Kart 8 Deluxe's on one worker with 10 GB free
+            if (Job.installed(this) > j.updated()) stepLog(j, "the build's process ended when the app was updated; resuming with the same workers (level " + j.memLevel() + "; " + memLine() + ")");
             else {
                 // PEANUTS: Android's own record of that process's end (ApplicationExitInfo), not a guess: only an end for memory halves the workers. Mario Kart 8 Deluxe's
                 // split went 4 → 2 → 1 workers over three ends with 11 GB free, each run slower than the one before, and nothing in the log said what ended it
-                ApplicationExitInfo exit = lastPackExit(j.updated());
+                ApplicationExitInfo exit = ExitWatch.exitInfo(this, android.app.Application.getProcessName(), j.packPid(), j.updated());   // PEANUTS
                 int reason = exit == null ? ExitNotice.NONE : exit.getReason();
                 int status = exit == null ? 0 : exit.getStatus();
                 boolean reduce = ExitNotice.reducePackWorkers(reason, status, ActivityManager.isLowMemoryKillReportSupported());
@@ -228,22 +226,6 @@ public final class PackService extends Service {
             }
             return false;
         }
-    }
-
-    /** PEANUTS: select the latest exit of this process after the job last recorded progress. */
-    private ApplicationExitInfo lastPackExit(long updated) {
-        if (updated <= 0) return null;
-        try {
-            ActivityManager am = getSystemService(ActivityManager.class);
-            String me = android.app.Application.getProcessName();
-            for (ApplicationExitInfo exit : am.getHistoricalProcessExitReasons(getPackageName(), 0, 16)) {
-                if (exit.getTimestamp() < updated) break;
-                if (me.equals(exit.getProcessName())) return exit;
-            }
-        } catch (RuntimeException e) {
-            Log.w(TAG, "Could not read the pack process exit record", e);
-        }
-        return null;
     }
 
     /** A pause the user asked for, in logcat (nxpack) and in the current step's log (ondevice/logs/<step>.log): who asked and when */
@@ -392,11 +374,11 @@ public final class PackService extends Service {
                 j.stepState(s, "running");
                 int starts = j.start(s);
                 save(j, true);
-                if (starts > MAX_STARTS) {   // twice ended by Android inside this step (START_STICKY brought it back): stop instead of looping
+                if (starts > MAX_STARTS) {   // PEANUTS: repeated sticky restarts inside this step
                     stepLog(j, "stopping: the step was ended by Android " + (starts - 1) + " times before it finished; " + readings());
                     j.ended(s);
                     j.stepState(s, "pending");
-                    j.fail(PrepareText.killed(Job.STEP_TEXT[i], starts - 1, s.equals("rewrite") ? "2.7" : "1.5"));
+                    j.fail(PrepareText.killed(Job.STEP_TEXT[i], starts - 1));   // PEANUTS: a restart alone cannot diagnose low memory
                     save(j, true);
                     break;
                 }
@@ -1010,38 +992,41 @@ public final class PackService extends Service {
 
         @Override public void run() {
             while (!done) {
-                read();
-                SystemClock.sleep(300);
+                if (!read()) SystemClock.sleep(300);   // PEANUTS: catch up immediately if another chunk is ready
             }
-            read();
+            while (read()) { /* drain the finished tool's log through its summary */ }
         }
 
         void finish() {
             done = true;
-            try {
-                join(2000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            boolean interrupted = false;   // PEANUTS: finish draining before the job reads its counts and error
+            while (isAlive()) {
+                try { join(); }
+                catch (InterruptedException e) { interrupted = true; }
             }
+            if (interrupted) Thread.currentThread().interrupt();
         }
 
-        private void read() {
+        /** PEANUTS: true when another chunk is already available. */
+        private boolean read() {
+            boolean more;
             try (RandomAccessFile f = new RandomAccessFile(log, "r")) {
                 long len = f.length();
-                if (len <= pos) return;
+                if (len <= pos) return false;
                 f.seek(pos);
                 byte[] b = new byte[(int) Math.min(len - pos, 1 << 20)];
                 f.readFully(b);
                 pos += b.length;
+                more = pos < len;
                 partial.append(new String(b, StandardCharsets.UTF_8));
             } catch (IOException e) {
-                return;
+                return false;
             }
-            int nl;
+            int start = 0, nl;
             boolean changed = false;
-            while ((nl = partial.indexOf("\n")) >= 0) {
-                String line = partial.substring(0, nl).trim();
-                partial.delete(0, nl + 1);
+            while ((nl = partial.indexOf("\n", start)) >= 0) {   // PEANUTS: compact the consumed prefix once per chunk
+                String line = partial.substring(start, nl).trim();
+                start = nl + 1;
                 Matcher m = PROGRESS.matcher(line), st = STAGE.matcher(line);
                 if (m.find()) {
                     j.stepProgress(step, Long.parseLong(m.group(1)), Long.parseLong(m.group(2)), m.group(3));
@@ -1058,7 +1043,9 @@ public final class PackService extends Service {
                     if (miss != null) { j.shadersMissing(miss[0], miss[1]); changed = true; }
                 }
             }
+            partial.delete(0, start);
             if (changed) save(j, false);
+            return more;   // PEANUTS
         }
 
         /** Why the step stopped, read once the tool is done (finish): null when its log gave no reason */

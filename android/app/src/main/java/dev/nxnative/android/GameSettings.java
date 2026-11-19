@@ -753,6 +753,7 @@ final class GameSettings {
             String[] labels = new String[choices.length + 1];
             int pl = Prefs.profileLimit(g.titleId);   // the profile's own default (fps_limit), else the main screen's
             Integer rc = Prefs.recCap(a, g.titleId);
+            // PEANUTS: Describe the game-owned default for an optional presentation cap.
             Profile p = Profile.of(g.titleId);
             if (rc != null) labels[0] = "Recommended (" + Prefs.paceLabel(rc) + ")";
             else if (p != null && p.optInPresentRate()) labels[0] = "Default (Game owned)";
