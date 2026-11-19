@@ -416,6 +416,40 @@ def drop_unchecked(res):
     say(f'reuse: {len(keys or [])} shaders kept, or padded with kept ones, by a run that did not pass its check: deleted (kept again or translated now)')
 
 
+TAGS = '.pn-reuse-deps'   # in the results folder: {key: the part of the profile its result was made with (result_tag)}
+
+
+def result_tag(deps, wanted, k):
+    """What a shader's result was made with beyond what vk_android_build.py keys it by (the tools, the profile inputs, the key): its part of the profile
+    (Deps.digest: its pairs as load_pairs takes them, with the split's) and, for a vertex shader, the paired pixel shaders the build makes (PS_INPUTS)"""
+    ps = deps.pairs.get(k)
+    return deps.digest(k) + (':' + ','.join(p for p in ps if wanted is None or p in wanted) if ps else '')
+
+
+def drop_stale(res, deps, wanted):
+    """The results folder is the title's (PackService Outputs.results) and stays until a job is done: a job that did not finish leaves its results to the next
+    job of the title, which may have other split pairs or absences (an add-on imported since), and the tool would take them (a review found this before it
+    was published; Leftover in peanuts/tests/test_shader_reuse.py). Before the tool runs, each result whose tag (result_tag) is not this build's, or is not
+    known (TAGS missing: an earlier app's run), is deleted; then this build's tags are written, so a run stopped after them leaves results with the right tags"""
+    p = os.path.join(res, TAGS)
+    try: old = json.loads(Path(p).read_text(encoding='utf-8'))
+    except (OSError, ValueError): old = {}
+    if not isinstance(old, dict): old = {}
+    try: names = os.listdir(res)
+    except OSError: names = []
+    gone = 0
+    for f in names:
+        k = f[:-2]
+        if f.endswith('.r') and KEY.fullmatch(k) and (k not in deps.stage or old.get(k) != result_tag(deps, wanted, k)):
+            try: os.unlink(os.path.join(res, f)); gone += 1
+            except OSError: pass
+    if gone: say(f'reuse: {gone} results of an earlier run made with another part of the profile (pairs, absences): deleted (translated again)')
+    os.makedirs(res, exist_ok=True)
+    tmp = p + '.tmp'
+    Path(tmp).write_text(json.dumps({k: result_tag(deps, wanted, k) for k in deps.stage if wanted is None or k in wanted}), encoding='utf-8')
+    os.replace(tmp, p)
+
+
 TODO = 'check.todo'   # <PN_REUSE_DIR>/check.todo: the library a build wrote with kept shaders, for the full check (full_check)
 CHECKED = 'checked.tsv'   # the libraries the full check found a full translation's byte for byte
 FAILED = 'check.failed'   # what the last full check found different
@@ -563,6 +597,7 @@ def reuse(argv):
         finally:
             for L in libs: L.close()
         for l in lines: say(l)
+        drop_stale(res, deps, wanted)
         prof = None
         if kept and reuse_dir:
             try:
@@ -573,6 +608,9 @@ def reuse(argv):
         if prof is None: kept, sample = {}, {}
         if kept:
             os.makedirs(res, exist_ok=True)
+            for k in sample:   # translated by this run, never a result an earlier run left: the check compares a translation of now with the older library
+                try: os.unlink(os.path.join(res, k + '.r'))
+                except OSError: pass
             # unchecked with the kept shaders: each vertex shader paired with a kept pixel shader, which this run translates padded with the kept entry's inputs
             # (vk_android_build.py translate_keys reads them from it); its result is keyed without them, so a failed check or a stop before it would leave it
             # for the run after (a review found this before it was published; Padding in peanuts/tests/test_shader_reuse.py)

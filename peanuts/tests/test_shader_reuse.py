@@ -390,6 +390,40 @@ class Padding(Base):
         self.assertEqual(lib, self.full())
 
 
+class Leftover(Base):
+    """The results folder is the title's (PackService: Outputs.results, no_backup/xlate/<title ID>) and goes only when a job is done: a job that did not finish
+    leaves its results to the next job of the title, whose split pairs, absences or older library may be others. vk_android_build.py keys a result by the
+    tools, the profile inputs and the key alone"""
+    def test_an_addon_after_a_job_that_did_not_finish(self):
+        self.profile()
+        absent = self.d / 'absent.txt'; absent.write_text(f'{self.ps[3]}\n{self.ps[4]}\n')
+        os.environ['DMSH_VK_ABSENT_FILE'] = str(absent)
+        self.build()   # job A without the add-on: its shaders step done, the job not (no into_pack: its results stay)
+        del os.environ['DMSH_VK_ABSENT_FILE']
+        self.out = self.d / 'lib-b'   # job B: the add-on imported, another Build folder
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(lib, self.full())
+        self.assertTrue({self.vs[3], self.vs[4]} <= set(runs[0]))   # padded with the add-on's pixel shaders now
+
+    def test_the_sample_is_translated_not_taken_from_an_earlier_job(self):
+        self.profile(); self.build(); self.into_pack()
+        self.build()   # job A kept and checked; it did not finish: its results stay (its translations and the entries it kept)
+        self.profile(unseen='a change the rule and the result key do not see\n')
+        self.out = self.d / 'lib-b'
+        code, runs, lib = self.build()
+        self.assertTrue(self.sample(self.vs + self.ps) <= set(runs[0]))   # the check compared a translation of now, not job A's
+        self.assertEqual((code, len(runs)), (0, 2))   # so it failed, and the full run after it
+        self.assertEqual(lib, self.full())
+
+    def test_the_same_job_goes_on_from_its_results(self):
+        self.profile(); self.build()   # a job's shaders step, the job not done
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)   # no older library: only the results can spare a translation
+        code, runs, lib = self.build()   # the same job again (a Resume after the process was killed)
+        self.assertEqual((code, runs), (0, [[]]))   # every result taken, none translated again
+        self.assertEqual(lib, self.full())
+
+
 class Kept(Base):
     """The copy of the last library in <PN_REUSE_DIR>/library (keep_library): the next build keeps from it when the pack's library is gone"""
     def copy(self): return self.reuse / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'

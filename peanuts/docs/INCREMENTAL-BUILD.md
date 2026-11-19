@@ -50,7 +50,17 @@ sample is in the library, the kept shaders are deleted and the tool runs again w
 already. The log says `[RED] reuse check: …`. The record that led to it is deleted.
 
 Other cases that lead to a translation: an older entry that cannot be read, fewer than 32 shaders to keep, a run that stopped after keeping and before its check
-(the kept results are deleted at the next start: `.pn-reuse-unchecked` in the results folder), a failed step. The checks that were there stay: the library's
+(the kept results are deleted at the next start: `.pn-reuse-unchecked` in the results folder), a failed step.
+
+What the results folder keeps across runs is checked too. `vk_android_build.py` keys a result by the tools, the profile inputs and the key alone, and the
+folder is the title's (`no_backup/xlate/<title ID>`) until a job is done:
+
+- A vertex shader translated in a run that kept its pixel shaders is padded with the kept entries' inputs, so `.pn-reuse-unchecked` lists it with the kept
+  shaders: a failed check or a stop before it translates it again.
+- `.pn-reuse-deps` beside the results records what each was made with (its part of the profile and, for a vertex shader, the pixel shaders the build made).
+  Before the tool runs, a result made with another part (a job that did not finish, then an add-on imported) or with none recorded is deleted. A Resume of
+  the same job keeps every result.
+- The sample's results are deleted before the run, so the check compares a translation of now with the older library. The checks that were there stay: the library's
 own check, the split against the profile, every module through spirv-val.
 
 ## The full check, later
