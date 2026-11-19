@@ -44,7 +44,35 @@ public final class PeanutsPrefs {
     /** Settings › Library › Build folder: null (default) = beside the game, today's behaviour. A folder the user picked, on the phone or an SD card,
      *  to keep every build organized by title ID instead (one folder per game, nothing loose at its top level): {@code <build folder>/<title ID>/}. */
     public static String buildDir(Context c) { return of(c).getString("build_dir", null); }
-    public static void buildDir(Context c, String p) { put(c, "build_dir", p); }
+    /** The default remains in the original build_dir preference. Other folders follow in the order added. */
+    public static List<String> buildDirs(Context c) {
+        SharedPreferences prefs = of(c);
+        List<String> dirs = new ArrayList<>();
+        String first = prefs.getString("build_dir", null);
+        if (first != null && !first.isEmpty()) dirs.add(first);
+        try {
+            JSONArray extra = new JSONArray(prefs.getString("build_dirs_extra", "[]"));
+            for (int i = 0; i < extra.length(); i++) {
+                String dir = extra.optString(i, "");
+                if (!dir.isEmpty() && !dirs.contains(dir)) dirs.add(dir);
+            }
+        } catch (org.json.JSONException ignored) { /* the saved default still works */ }
+        return dirs;
+    }
+
+    public static void buildDirs(Context c, List<String> dirs) {
+        SharedPreferences.Editor e = of(c).edit();
+        if (dirs.isEmpty()) e.remove("build_dir"); else e.putString("build_dir", dirs.get(0));
+        JSONArray extra = new JSONArray();
+        for (int i = 1; i < dirs.size(); i++) extra.put(dirs.get(i));
+        e.putString("build_dirs_extra", extra.toString()).apply();
+    }
+
+    public static String chosenBuildDir(Context c, String titleId) {
+        String dir = of(c).getString(key(titleId, "build_dir"), null);
+        return dir != null && buildDirs(c).contains(dir) ? dir : null;
+    }
+    public static void chosenBuildDir(Context c, String titleId, String dir) { put(c, key(titleId, "build_dir"), dir); }
 
     private static final java.util.regex.Pattern TITLE_ID = java.util.regex.Pattern.compile("[0-9A-Fa-f]{16}");
 
@@ -55,9 +83,18 @@ public final class PeanutsPrefs {
     /** {@code <build folder>/<title ID>}, when a build folder is set and titleId passes {@link #validTitleId}; null otherwise, so a caller falls back to
      *  today's places (beside the game, the app's own storage). */
     public static File buildGameDir(Context c, String titleId) {
-        String b = buildDir(c);
-        if (b == null || b.isEmpty() || !validTitleId(titleId)) return null;
-        return new File(b, titleId.toUpperCase(Locale.ROOT));
+        return buildGameDir(buildDir(c), titleId);
+    }
+
+    public static File buildGameDir(String root, String titleId) {
+        if (root == null || root.isEmpty() || !validTitleId(titleId)) return null;
+        return new File(root, titleId.toUpperCase(Locale.ROOT));
+    }
+
+    public static List<File> buildGameDirs(Context c, String titleId) {
+        List<File> out = new ArrayList<>();
+        if (validTitleId(titleId)) for (String root : buildDirs(c)) out.add(buildGameDir(root, titleId));
+        return out;
     }
 
     /** {@code <build folder>/<title ID>/pack}: where a NEW build's pack goes when a build folder is set (AppStorage.pack still prefers an existing pack
@@ -105,8 +142,12 @@ public final class PeanutsPrefs {
      *  two levels deep, so its {@code <title ID>/<name>.nup} entries are found) */
     public static List<File> roots(Context c) {
         List<File> out = new ArrayList<>();
-        for (String p : new String[] {gameDir(c), updateDir(c), dlcDir(c), buildDir(c)}) {
+        for (String p : new String[] {gameDir(c), updateDir(c), dlcDir(c)}) {
             if (p == null || p.isEmpty()) continue;
+            File f = new File(p);
+            if (!out.contains(f)) out.add(f);
+        }
+        for (String p : buildDirs(c)) {
             File f = new File(p);
             if (!out.contains(f)) out.add(f);
         }

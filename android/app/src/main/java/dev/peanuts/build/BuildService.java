@@ -13,6 +13,8 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
+import dev.peanuts.PeanutsPrefs;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -37,7 +39,8 @@ import java.util.Locale;
 public final class BuildService extends Service {
     public static final String ACTION_BUILD = "dev.peanuts.build.BUILD", ACTION_CANCEL = "dev.peanuts.build.CANCEL";
     static final String EXTRA_ID = "id", EXTRA_TITLE = "title_id", EXTRA_NAME = "name", EXTRA_BASE = "base", EXTRA_UPDATE = "update", EXTRA_DLCS = "dlcs", EXTRA_GAME_DIR = "game_dir",
-            EXTRA_COMPANION = "companion", EXTRA_BUILD_ANYWAY = "build_anyway", EXTRA_REPLACE_NUP = "replace_nup", EXTRA_DELETE_FIRST = "delete_old_first";
+            EXTRA_COMPANION = "companion", EXTRA_BUILD_ANYWAY = "build_anyway", EXTRA_REPLACE_NUP = "replace_nup", EXTRA_DELETE_FIRST = "delete_old_first",
+            EXTRA_BUILD_DESTINATION = "build_destination";
     private static final String TAG = Prepare.TAG, CHANNEL = "peanuts_build";
     private static final int NOTE = 7001;
     /** Each step's share of the bar: import 0-45, prepare 45-90, companion 90-100 */
@@ -63,6 +66,7 @@ public final class BuildService extends Service {
     static Intent intent(Context c, int id, BuildRequest r, boolean buildAnyway) {
         Intent i = new Intent(c, BuildService.class).setAction(ACTION_BUILD).putExtra(EXTRA_ID, id).putExtra(EXTRA_TITLE, r.titleId).putExtra(EXTRA_NAME, r.name)
                 .putExtra(EXTRA_GAME_DIR, r.gameDir == null ? null : r.gameDir.getPath()).putExtra(EXTRA_COMPANION, r.companionPackage).putExtra(EXTRA_BUILD_ANYWAY, buildAnyway);
+        i.putExtra(EXTRA_BUILD_DESTINATION, r.buildDestination);
         if (r.base != null) i.putExtra(EXTRA_BASE, r.base.getPath());
         if (r.update != null) i.putExtra(EXTRA_UPDATE, r.update.getPath());
         List<String> d = new ArrayList<>();
@@ -84,6 +88,7 @@ public final class BuildService extends Service {
         if (d != null) for (String p : d) r.dlcs.add(new File(p));
         s = i.getStringExtra(EXTRA_GAME_DIR);
         r.gameDir = s == null ? null : new File(s);
+        r.buildDestination = i.getStringExtra(EXTRA_BUILD_DESTINATION);
         r.companionPackage = i.getStringExtra(EXTRA_COMPANION);
         s = i.getStringExtra(EXTRA_REPLACE_NUP);
         r.replaceNup = s == null ? null : new File(s);
@@ -162,7 +167,7 @@ public final class BuildService extends Service {
         log("update: " + fileLine(r.update));
         for (File d : r.dlcs) log("dlc: " + fileLine(d));
         log("game folder: " + (r.gameDir == null ? "not set" : r.gameDir + ", " + freeLine(r.gameDir)));
-        File b = dev.peanuts.PeanutsPrefs.buildGameDir(this, r.titleId);
+        File b = destination(r);
         log("build folder: " + (b == null ? "not set" : b + ", " + freeLine(b)));
         log("companion: " + (r.companionPackage == null || r.companionPackage.isEmpty() ? "none chosen" : r.companionPackage));
         String m = BuildMemory.readMeminfo();
@@ -184,6 +189,8 @@ public final class BuildService extends Service {
         logId = r.titleId;
         logStart(r);
         try {
+            if (r.buildDestination != null && !new File(r.buildDestination).isDirectory())
+                throw new IOException("The selected build folder is unavailable. Reconnect its storage or pick another Build destination.");
             File dump = stepImport(r);
             log("game file: " + fileLine(dump));
             try {
@@ -245,6 +252,10 @@ public final class BuildService extends Service {
         return BuildListener.OTHER;
     }
 
+    private File destination(BuildRequest r) {
+        return r.buildDestination == null ? PeanutsPrefs.buildGameDir(this, r.titleId) : PeanutsPrefs.buildGameDir(r.buildDestination, r.titleId);
+    }
+
     /** (a) the .nup from an NSP/XCI, or the base as it is */
     private File stepImport(BuildRequest r) throws IOException {
         if (r.base == null || !r.base.exists()) throw new BuildListener.Failure("The game's base file is missing" + (r.base == null ? "." : ": " + r.base), BuildListener.FILE_MISSING);
@@ -252,7 +263,7 @@ public final class BuildService extends Service {
         if (!r.needsImport()) { log("import: not needed, the base is a .nup or a dump"); progress("import", IMPORT_END, "Game file: " + r.base.getName()); return r.base; }
         // PEANUTS: a build folder (Settings - Library - Build folder), when set, is where this title's .nup and pack both go (<build folder>/<title ID>/),
         // instead of beside the game and in the app's own storage; PeanutsPrefs.buildGameDir validates the title ID and returns null without one set
-        File buildGameDir = dev.peanuts.PeanutsPrefs.buildGameDir(this, r.titleId);
+        File buildGameDir = destination(r);
         File replace = r.replaceNup;   // Import again: the .nup to make anew, where it is
         boolean again = replace != null;
         if (!again && buildGameDir == null && r.gameDir == null) throw new IOException("No game folder to write the .nup into (Setup).");
@@ -353,7 +364,9 @@ public final class BuildService extends Service {
         Prepare p = new Prepare(this);
         prepare = p;
         try {
-            return p.run(dump, r.titleId, buildAnyway, (pct, detail) -> progress("prepare", IMPORT_END + pct * (PREPARE_END - IMPORT_END) / 100, detail));
+            File dir = r.buildDestination == null ? null : destination(r);
+            File pack = dir == null ? null : new File(dir, "pack");
+            return p.run(dump, r.titleId, pack, buildAnyway, (pct, detail) -> progress("prepare", IMPORT_END + pct * (PREPARE_END - IMPORT_END) / 100, detail));
         } finally {
             prepare = null;
         }

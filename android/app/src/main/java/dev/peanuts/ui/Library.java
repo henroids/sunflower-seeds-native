@@ -1548,6 +1548,7 @@ public final class Library {
         r.dlcs = new ArrayList<>(s.dlcs);
         String root = PeanutsPrefs.gameDir(a);
         r.gameDir = root == null ? null : new File(root);
+        r.buildDestination = PeanutsPrefs.chosenBuildDir(a, s.titleId);
         r.companionPackage = s.installCompanion ? s.companionPackage : null;
         r.replaceNup = s.replaceNup; r.deleteOldFirst = s.deleteOldFirst;   // Import again (GameSheet.importAgain)
         int id = BuildPipeline.start(a, r, s.buildAnyway, new BuildListener() {   // a refusal comes back through this (id 0); a started build's listener is attached below

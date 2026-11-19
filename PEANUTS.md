@@ -29,7 +29,7 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
    - `android/app/src/main/java/dev/nxnative/android/AppStorage.java` — (2026-11-13) `pack()` prefers an existing pack already in the app's own storage,
      else a build folder's `<title ID>/pack` when the user set one (`PeanutsPrefs.buildPackDir`; Settings › Library › Build folder); (2026-11-13,
      code mods) the class and `pack()` made `public` so `dev.peanuts.build.ModdedBuild`/`Prepare` can ask for a modded variant's own pack folder by
-     its variant id, same call as every other pack lookup.
+     its variant id, same call as every other pack lookup. `Folders.find()` also considers existing packs in every configured Build folder.
    - `android/app/src/ondevice/java/dev/nxnative/android/Job.java` — (2026-11-13, code mods) `modArgs()`/`modArgs(String)` (a modded variant job's
      extra rewrite-step argv) and `reuseShaders(File)` (skip split/shaders, point the shader cache at the normal pack's own library) — block-marked,
      additive only; a normal job never sets either. `design/platform/DESIGN-MODS.md`.
