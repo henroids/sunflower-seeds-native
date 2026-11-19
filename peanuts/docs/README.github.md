@@ -54,6 +54,7 @@ Peanuts Native 0.1.5 includes 42 games. The Companion column shows whether a gam
 | Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No |
 | Resident Evil 4 | `010099A00BC1E000` | 131072 | Yes |
 | Kirby and the Forgotten Land | `01004D300C5AE000` | 1.1.0 | No |
+| DRAGON BALL: Sparking! ZERO | `010035F022078000` | 1.0.0 | No |
 | Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 | Yes |
 | Super Mario 3D World + Bowser's Fury | `010028600EBDA000` | 1.2.2 | No |
 | Super Mario Bros. Wonder | `010015100B514000` | 1.2.1 | Yes |
