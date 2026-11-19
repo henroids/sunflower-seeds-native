@@ -53,9 +53,11 @@ The documented requirement is 12 GB or more. On 8 GB devices, building large gam
 
 Plan for the size of the game plus a few GB. Before a build, the game's sheet shows **Needs about … free (a rough estimate)**, or a **Low disk space** warning. The estimate is rough, and a low-space warning does not block the build.
 
+A game compressed as a solid `.nsz` needs about its size once more while it is imported, for the temporary copy (see [Can I build from NSZ or XCZ files?](#can-i-build-from-nsz-or-xcz-files)). The sheet says how much of the estimate that is.
+
 ### What do I need from my own console?
 
-- Your own game dumps as NSP, XCI, `.nup` files or dump folders, with their updates and DLC if you use them.
+- Your own game dumps as NSP, XCI, `.nup` files or dump folders, with their updates and DLC if you use them. NSP and XCI files compressed with nsz (`.nsz`, `.xcz`) work too.
 - Your own `prod.keys`.
 - Your own firmware dump, as a folder or a `.zip`. The app extracts the fonts from it.
 
@@ -152,7 +154,7 @@ Later, change the folders in Settings › Library. **Rescan** reads them again.
 
 ### Where does the app look for my games?
 
-In the **Game folder**, the **Update folder**, the **DLC folder** and the **Build folder**, each up to two folders deep. It finds `.nsp`, `.xci` and `.nup` files and dump folders. Updates and DLC are matched to their game by title ID, wherever they are in those folders. A file deeper than two folders is not found: move it up, or point the folder setting at it.
+In the **Game folder**, the **Update folder**, the **DLC folder** and the **Build folder**, each up to two folders deep. It finds `.nsp`, `.xci`, `.nsz`, `.xcz` and `.nup` files and dump folders. Updates and DLC are matched to their game by title ID, wherever they are in those folders. A file deeper than two folders is not found: move it up, or point the folder setting at it.
 
 If the home screen says **No games found in …**, put your files in that folder and tap Settings › Library › **Rescan**.
 
@@ -334,6 +336,17 @@ Open the game's sheet (for a built game: hold the cover › **Storage** › **Bu
 The dumps must still be in their folders. If one is missing, the app names it and the folders it read, and changes nothing. Every part the old `.nup` has must be found again: its base, an update at least as new, and each of its DLC.
 
 The new file is written beside the old one, so for a while both are on the storage. If there is not enough room, the app says how much is needed. When deleting the old file first would make room, it offers that as a second choice. The risk: if the import then fails or is stopped, the game has no `.nup` and cannot be played until a build from its sheet has made one.
+
+### Can I build from NSZ or XCZ files?
+
+Yes. Files compressed with nsz (`.nsz`, `.xcz`) build like `.nsp` and `.xci`, also mixed with them: a compressed base with an uncompressed update, for example. You do not need to keep an uncompressed copy of the game. The game's `.nup` comes out the same as from the uncompressed files.
+
+- Before anything is written, the app rebuilds every compressed part of the game and checks it against the checksums the game's own files record. A damaged or incomplete file stops the build with its name, and nothing is changed: copy or compress the file again, or build from the uncompressed file.
+- A **solid** `.nsz` (nsz's default for `.nsz`) cannot be read out of order, so the import first unpacks it into a temporary file in a hidden folder beside the `.nup`. That needs about the game's size in extra free space for the length of the import, and it is deleted when the import ends, also when it fails or you tap Stop. The game's sheet counts it in its estimate.
+- A **block** file (nsz's default for `.xcz`, or `nsz -B`) is read where it is and needs no extra space. The check reads it once more, which takes a little longer.
+- When a folder holds both the `.nsp` and the `.nsz` of a game, the app uses the `.nsp`.
+- The app reads files made with nsz's own settings. A file compressed with settings it cannot read stops with a message that says so: compress it again with nsz's defaults.
+- The keys are your own `prod.keys` and the file's ticket, as for an `.nsp`.
 
 ### Can I build on a PC or a Mac instead?
 

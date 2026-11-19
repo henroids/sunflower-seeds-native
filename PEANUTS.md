@@ -211,3 +211,12 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   **Games without a companion** (`PeanutsPrefs.bottomScreenInGames`). Seen on the emulator (Android 13, a 1240x1080 and a 1920x1080 second display, hot-plugged both ways):
   the logo page, Settings by X and back, the cards of a game to build and of one marked Not Supported Yet, the setting off. Not yet run on the Thor.
 - 2026-11-19 (GitHub issue #170, Breath of the Wild's blocky Sheikah glow): the Android replay's view of a pass's own target follows the draw's sampler. A sampler that pins one level (mip filter, minimum and maximum LOD the same whole number) samples that level alone; any other keeps the levels below the attachment, as before. The glow chain's upsample reads level n + 1 while rendering level n, and the old cut clamped that read to level n - 1. nxnative's `fb_pinned_level` rule (its PR 1073) in `vka_tex.c`, an upstream candidate; `DM_VK_FB_PIN=0` turns it off, live. Test: `dm/tools/tests/test_vka_fb_pinned_level.py`. `peanuts/UPSTREAM-EDITS.md` Round 30.
+- 2026-11-19 (issue #149, compressed game files): `.nsz` and `.xcz` build like `.nsp` and `.xci`. The importer rebuilds each NCZ to the original NCA
+  below its NCA reader (`dm/peanuts/import/nx_ncz.c`, a store under `nx_nca.c`): a block NCZ is read in place, a solid one unpacked once into a temporary
+  file beside the `.nup` (unlinked as soon as it is open); each is checked against its name and its CNMT record before the writer starts, and the
+  `.nup` is the uncompressed files' byte for byte. Stop now ends any import within a second (`nximport_cancel`). The library lists the files, the sheet
+  counts the real size and the temporary space, the build card says Unpacking or Checking, a damaged file gets its own message
+  (`dev.peanuts.build.Compressed`). The desktop builder takes them too (`peanuts_build.py`, `nximport_cli check`). Thor, ACNH 3.0.3 with Happy Home
+  Paradise compressed with nsz 5.0.0: the `.nup` of the NSPs, of a solid set, of a block set and of a mixed set are one file (SHA-256 the same, 11.05
+  GiB); import 30.8 s from the NSPs, 41.7 s from blocks, 64.3 s from solid; peak memory 321 to 403 MiB. A Build in the test app from the solid set ran
+  to Ready in 8 min 4 s; Stop while unpacking left nothing behind. UPSTREAM-EDITS Round 29; HOOKS.md "Compressed dumps".
