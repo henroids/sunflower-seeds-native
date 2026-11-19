@@ -85,7 +85,8 @@ the "Update" mark beside the check, and "Update 3.0.4 and 1 add-on found" in its
 packages inside the `.nup` against the files beside it). Only an update the game's profile knows counts, and only one newer than the `.nup`'s. A tap asks
 first: **Build** takes them in with Import again (its checks for missing files and free space as on the game's page; its build keeps what did not change),
 **Play** plays the game as it is, **Not now** asks no more for these finds (`t.<title ID>.found_seen`; a newer find asks again, and the mark stays as
-"Update · later"). Nothing is built without the tap.
+"Update · later"). Nothing is built without the tap. On the second screen of a dual-screen handheld, the focused cover's card says the same
+under its state, and its A button reads "Update…" (A asks first, as the tap does).
 
 On the Thor (2026-11-19): ACNH built with its update but without its DLC, then the DLC folder set. The cover showed the "Update" mark, a tap asked "An add-on
 found", and its Build made a pack byte for byte the full build's in about a minute.

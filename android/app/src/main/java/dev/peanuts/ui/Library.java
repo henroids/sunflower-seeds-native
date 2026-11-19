@@ -1357,6 +1357,12 @@ public final class Library {
             k.companion = companionVersion(r); k.played = r.used(); k.play = play(r.id());
             k.primary = tap; k.primaryLabel = r.game != null ? "Play" : "Open"; k.primaryIcon = r.game != null ? R.drawable.ic_play : 0;
             if (r.game != null) { k.second = hold; k.secondLabel = "Game page"; }
+            UpdateFound.Found f = found(r);   // as on the cover: what was found, and A asks first while it is not "Not now"
+            if (f != null) {
+                boolean ask = !f.key().equals(PeanutsPrefs.foundSeen(a, r.id()));
+                k.update = UpdateFound.what(f, updateName(r, f)) + (ask ? "" : " · later");
+                if (ask) { k.primaryLabel = "Update…"; k.primaryIcon = R.drawable.ic_build; }
+            }
         } else if (st == BUILD) {
             k.kind = BottomScreen.Card.K_BUILD;
             LibraryScanner.VersionState vs = r.title == null ? LibraryScanner.VersionState.UNKNOWN : r.title.versionState;

@@ -17,6 +17,9 @@ class Wiring(unittest.TestCase):
         lib = (APP / 'main/java/dev/peanuts/ui/Library.java').read_text(encoding='utf-8')
         self.assertIn('UpdateFound.of(', lib)
         self.assertIn('askFound(', lib)
+        self.assertIn('k.update = UpdateFound.what(', lib)   # the bottom screen's card says it too, and its A asks first
+        panel = (APP / 'main/java/dev/peanuts/ui/BottomPanel.java').read_text(encoding='utf-8')
+        self.assertIn('k.update != null ? k.update', panel)
         sheet = (APP / 'main/java/dev/peanuts/ui/GameSheet.java').read_text(encoding='utf-8')
         self.assertIn('static void importAgain(Activity a, Library lib, LibraryScanner.Title t, CompanionPort.Item companion, Runnable started, boolean ask)', sheet)
 
