@@ -204,3 +204,8 @@ dm/games/0100DAE01E4C8000/pso_pairs.tsv	STORY OF SEASONS: Grand Bazaar's generat
 dm/games/0100DAE01E4C8000/pso_manifest.tsv	STORY OF SEASONS: Grand Bazaar's generated table (shader_split.py / dmsh_build.py), new in Peanuts Native (Banana Native has no profile for 0100DAE01E4C8000); a marker comment would change the profile's shader inputs digest and with it every built library's stamp
 dm/games/0100DAE01E4C8000/bf_want.tsv	STORY OF SEASONS: Grand Bazaar's generated table (shader_split.py / dmsh_build.py), new in Peanuts Native (Banana Native has no profile for 0100DAE01E4C8000); a marker comment would change the profile's shader inputs digest and with it every built library's stamp
 dm/games/0100C49025D3E000/shader_map.tsv	a data table read row by row (a marker line between rows would be a row to some readers); the 8 rows whose source starts /v524288/ are Peanuts edits: the pixel shaders update 1.8d.f570 adds (Patch installpackage_03), tagged as a split of both versions writes them; see the game note's Frame rate section and the commit "EA SPORTS FC 27: update 1.8d.f570 (v524288)"
+dm/games/01007A2027548000/shader_map.tsv	Generated shader key and offset map. Keep the shader input stamp reproducible.
+dm/games/01007A2027548000/shader_facts.tsv	Generated compute launch dimensions. Keep the shader input stamp reproducible.
+dm/games/01007A2027548000/shader_pairs.tsv	Generated vertex and pixel key pairs. Keep the shader input stamp reproducible.
+dm/games/01007A2027548000/pso_pairs.tsv	Generated supplemental pair list. Keep the shader input stamp reproducible.
+dm/games/01007A2027548000/shader_files.tsv	Generated shader-bearing file inventory for the targeted split.
