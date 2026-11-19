@@ -5,6 +5,7 @@ without any. No game files."""
 import os
 import pickle
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -42,12 +43,13 @@ class SplitReuse(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         return out
 
-    def split(self, nup, name, reuse=True):
+    def split(self, nup, name, reuse=True, **extra):
         out = self.tmp / name
         env = dict(os.environ, DM_GAME=str(self.prof), J='1', DM_SPLIT_SELECTED='0')
         for k in ('DM_SPLIT_RESUME', 'DM_SPLIT_TARGETED', 'DM_SPLIT_FILES', 'DM_GAMES_DIR', 'PN_REUSE', 'PN_REUSE_DIR'): env.pop(k, None)
         if reuse: env['PN_REUSE_DIR'] = str(self.reuse)
         else: env['PN_REUSE'] = '0'
+        env.update(extra)
         r = subprocess.run([sys.executable, REPO / 'dm/gfx/tools/shader_split.py', f'{nup}:base/romfs', f'{nup}:base/exefs/main', out / 'pkg',
                             *[out / t for t in TABLES]], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -121,6 +123,27 @@ class SplitReuse(unittest.TestCase):
         self.assertIsNotNone(keys[0])
         self.assertEqual(keys[0], keys[1])   # b.bin is not a.data's
         self.assertNotEqual(keys[0], keys[2])   # a.dict is
+
+    def test_a_decode_that_failed_once_is_not_kept(self):
+        # a size-prefixed container (HAL's .cmp: shader_split.py unsized) whose LZ4 frame the decoder could not open this once (no memory): the file is
+        # unreadable for this split, never a result to keep, and the next split reads its shaders. The stand-in lz4 undoes a XOR, or fails as asked
+        fake = self.tmp / 'fake' / 'lz4'; fake.mkdir(parents=True)
+        (fake / '__init__.py').write_text('')
+        (fake / 'frame.py').write_text("import os\n"
+                                       "def decompress(f):\n"
+                                       "    if os.environ.get('FAKE_LZ4_FAIL') == '1': raise MemoryError('the decoder could not allocate its output')\n"
+                                       "    return bytes(b ^ 0x5A for b in f[7:])\n")
+        payload = bnsh(vs(7), ps(7))
+        files = dict(self.files, **{'Shader/z.cmp': struct.pack('<I', len(payload)) + bytes.fromhex('04224d18404000') + bytes(b ^ 0x5A for b in payload)})
+        nup = self.nup(files)
+        path = os.pathsep.join([str(fake.parent)] + ([os.environ['PYTHONPATH']] if os.environ.get('PYTHONPATH') else []))
+        ref, _, _ = self.split(nup, 'ref', reuse=False, PYTHONPATH=path)
+        failed, _, out1 = self.split(nup, 'failed', PYTHONPATH=path, FAKE_LZ4_FAIL='1')
+        self.assertIn('Shader/z.cmp', out1)   # its red line
+        self.assertNotEqual([(failed / t).read_bytes() for t in TABLES], [(ref / t).read_bytes() for t in TABLES])   # that split lacks z.cmp's shaders
+        after, line, out2 = self.split(nup, 'after', PYTHONPATH=path)
+        self.assertNotIn('[RED] split reuse', out2)   # nothing kept that a check finds different
+        self.same(after, ref)
 
     def test_canon_ignores_the_order_of_sets_and_dicts(self):
         a = ('x', {'k2': (1, b'a'), 'k1': (2, b'b')}, {('v', 'p'), ('w', 'q')}, {})

@@ -178,7 +178,8 @@ keeps, across builds, the result of every plain file job (`<PN_REUSE_DIR>/split/
   environment and Python's version. Another common part (other tools, another main whose strings differ) starts the kept results over.
 
 Before the scan the kept results go into the `ScanCache` and each kept file is a batch of its own, so only the others are scanned, in runs as before; after it the
-new results are kept. A file whose result says it could not be read is never kept. The check: one kept file in 50 (at least one, once three could be kept),
+new results are kept. A file whose result says it could not be read is never kept, nor one whose decoder failed for something other than its bytes (no
+memory, a missing module: `shader_split.py unsized` used to read such a container as the file as it is, a result that would have been kept). The check: one kept file in 50 (at least one, once three could be kept),
 picked by a hash of its key, is scanned anyway and its result must equal the kept one as values (sets and dicts in any order); one that differs scans every file
 again without the kept results and deletes them. The split's own check after it stays: its tables against the profile's.
 

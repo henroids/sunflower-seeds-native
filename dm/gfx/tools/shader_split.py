@@ -3096,6 +3096,7 @@ def unsized(d, where):
             dec = lz4.frame.decompress(f)
         elif did and did not in ZDICTS: dec = None
         else: dec = unzs_dict(f, did, where) if did else zstd_mod().decompress(f)
+    except (MemoryError, ImportError): raise   # PEANUTS (issue #120): not a property of the bytes; scan_file makes the file unreadable this once, which split_reuse.py never keeps
     except Exception as e: why = str(e) or type(e).__name__
     else:
         if dec is None: why = f'the frame needs zstd dictionary {did}, which Pack/ZsDic.pack.zs does not have'
