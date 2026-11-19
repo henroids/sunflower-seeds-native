@@ -78,6 +78,7 @@ On the 0.1.5 verification build, an AYN Thor with Turnip v26.2.0 R5 reached the 
 | Game | Title ID | Game update | Thor validation |
 |---|---|---|---|
 | Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | Hotel lobby playable with Turnip v26.2.0 R5 and fixed docked resolution. Lamp-lit floors can flicker. |
+| Unicorn Overlord | `010069401ADB8000` | 1.05 | Opening battle playable at about 60 FPS with Turnip v26.2.0 R5 and inline Vulkan replay. A crash with the default replay worker remains open. |
 
 ## What you need
 
