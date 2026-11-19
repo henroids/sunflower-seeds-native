@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,8 +33,20 @@ static int parse_tid(const char *s, uint64_t *tid) {
 }
 
 // ---------------------------------------------------------------- probe
+// the body of a content NCA when it is an NCZ of the title's container, counted as solid (unpacked) or block (checked)
+static void ncz_bytes(const NxTitle *t, const char *id, unsigned long long *unpack, unsigned long long *check) {
+    char nm[48]; snprintf(nm, sizeof nm, "%s.nca", id);
+    if (!id[0] || nx_container_find(t->c, nm)) return;
+    snprintf(nm, sizeof nm, "%s.ncz", id); const NxEntry *e = nx_container_find(t->c, nm); NxNcz *z;
+    if (!e || nx_ncz_open(&z, t->c, e)) return;   // a broken one: the import says why
+    if (nx_ncz_solid(z)) *unpack += nx_ncz_body(z); else *check += nx_ncz_body(z);
+    nx_ncz_close(z);
+}
+
 static void fill_info(NxImportInfo *o, const NxTitle *t) {
     memset(o, 0, sizeof *o);
+    o->size = t->program_size + t->data_size;
+    ncz_bytes(t, t->program, &o->unpack, &o->check); ncz_bytes(t, t->data, &o->unpack, &o->check);
     snprintf(o->title_id, sizeof o->title_id, "%016llx", (unsigned long long)t->title_id);
     snprintf(o->app_id, sizeof o->app_id, "%016llx", (unsigned long long)t->app_id);
     o->kind = t->kind; o->version = t->version;
@@ -85,6 +98,9 @@ typedef struct Src { NxContainer c; NxTitle *ts; int n; } Src;
 typedef struct Job {
     Pkg pk[64]; int npk;
     NxNca ncas[192]; int nncas;   // every NCA the trees read from (kept open: nodes point at them)
+    NxNcz *ncz[192];              // ncz[i]: the NCZ ncas[i] is read from (an NSZ's or XCZ's), else NULL
+    char tmp[1200];               // where solid NCZs are unpacked: a hidden folder beside the .nup
+    long long prep_total, prep_done, prep_said; char prep_step[300];   // unpacking and checking the NCZs, before the trees: their own progress
     NxNode **dirs; uint32_t nd, dcap; NxNode **files; uint32_t nf, fcap; const char **step; // step[file id]
     uint8_t *pool; size_t pool_n, pool_cap; struct Intern *idx; uint32_t nidx, cidx;
     NxNode **shamap; uint32_t shacap;       // sha → written node
@@ -93,14 +109,73 @@ typedef struct Job {
     long long total, done; void (*progress)(void *, const char *, long long, long long); void *user; const char *cur_step;
 } Job;
 
-static NxNca *job_nca(Job *j, const NxContainer *c, const char *id) {
+_Atomic int nx_stop;
+void nximport_cancel(int on) { atomic_store(&nx_stop, on ? 1 : 0); }
+
+static const char *leaf_of(const char *p) { const char *s = strrchr(p, '/'), *b = strrchr(p, '\\'); if (b && (!s || b > s)) s = b; return s ? s + 1 : p; }
+
+// A file of the container hashed whole (an NSZ's small plain NCAs: its meta and control) → 0 when its SHA-256 is want (and, with name, starts as its
+// name says), else -1 with the reason
+static int entry_sha_is(const NxContainer *c, const NxEntry *e, const uint8_t *want, int by_name) {
+    uint8_t sha[32], id[16], *b = malloc(NX_CHUNK); NxSha256 h; nx_sha256_init(&h);
+    if (!b) { nx_err("out of memory"); return -1; }
+    for (uint64_t o = 0; o < e->size; ) { size_t k = e->size - o < NX_CHUNK ? (size_t)(e->size - o) : NX_CHUNK; if (nx_pread_all(c->fd, b, k, e->off + o)) { free(b); return -1; } nx_sha256_update(&h, b, k); o += k; }
+    free(b); nx_sha256_final(&h, sha);
+    if ((by_name && (nx_hex_prefix(e->name, id) || memcmp(sha, id, 16))) || (want && memcmp(sha, want, 32))) {
+        nx_err("%s: %s does not match its checksum: the file is damaged or incomplete. Nothing was changed. Compress the game again from its dump, or build from the uncompressed file.", leaf_of(c->path), e->name);
+        return -1;
+    }
+    return 0;
+}
+
+static void prep_tick(void *u, uint64_t n) {
+    Job *j = u; j->prep_done += (long long)n;
+    if (j->progress && (j->prep_done - j->prep_said >= (long long)NX_CHUNK || j->prep_done == j->prep_total)) { j->prep_said = j->prep_done; j->progress(j->user, j->prep_step, j->prep_done, j->prep_total); }
+}
+
+// A content NCA of title t (its id and the SHA-256 its CNMT records): <id>.nca, or <id>.ncz rebuilt from its compressed bytes and checked against both
+static NxNca *job_nca(Job *j, const NxTitle *t, const char *id, const uint8_t sha[32]) {
+    const NxContainer *c = t->c;
     if (j->nncas >= (int)(sizeof j->ncas / sizeof j->ncas[0])) { nx_err("too many NCAs"); return NULL; }
     char nm[48]; snprintf(nm, sizeof nm, "%s.nca", id);
-    const NxEntry *e = nx_container_find(c, nm); if (!e) { nx_err("%s is not in %s", nm, c->path); return NULL; }
-    NxNca *n = &j->ncas[j->nncas]; if (nx_nca_open(n, c, e)) return NULL;
+    const NxEntry *e = nx_container_find(c, nm); NxNcz *z = NULL;
+    if (!e) { snprintf(nm, sizeof nm, "%s.ncz", id); e = nx_container_find(c, nm); }
+    if (!e) { snprintf(nm, sizeof nm, "%s.nca", id); nx_err("%s is not in %s", nm, c->path); return NULL; }
+    NxNca *n = &j->ncas[j->nncas];
+    if (strlen(e->name) > 4 && !strcasecmp(e->name + strlen(e->name) - 4, ".ncz")) {
+        if (nx_ncz_open(&z, c, e)) return NULL;
+        if (nx_nca_open_store(n, c, e, nx_ncz_store(z))) { nx_ncz_close(z); return NULL; }
+    } else if (nx_nca_open(n, c, e)) return NULL;
     // PEANUTS fix (AUDIT #1): nx_nca_open can succeed with key_ok 0 (no titlekey/area key: key_why says why); it still opened the NCA's sections, so they must be closed here too
-    if (!n->key_ok) { nx_err("%s in %s: %s", nm, c->path, n->key_why); nx_nca_close(n); return NULL; }
-    j->nncas++; return n;
+    if (!n->key_ok) { nx_err("%s in %s: %s", nm, c->path, n->key_why); nx_nca_close(n); nx_ncz_close(z); return NULL; }
+    if (z) {
+        uint8_t got[32];
+        // its keys are the ones the ticket or prod.keys give (never a key of its own: a compressed file opens only where its uncompressed one would)
+        if (!nx_ncz_keys(z, n->key_raw)) NX_FAIL("%s: the keys inside %s do not match the ones from its ticket and your keys: the file is damaged, or was compressed from another dump", leaf_of(c->path), e->name);
+        { uint64_t hs; memcpy(&hs, n->hdr + 0x208, 8); if (hs != n->size) NX_FAIL("%s: %s rebuilds to %llu bytes, its header says %llu: the file is damaged", leaf_of(c->path), e->name, (unsigned long long)n->size, (unsigned long long)hs); }
+        // the CNMT is the reference: its meta NCA (plain) against its name, the control NCA against its record, then this one
+        if (t->meta && entry_sha_is(c, t->meta, NULL, 1)) goto fail;
+        if (t->control[0]) { char cn[48]; snprintf(cn, sizeof cn, "%s.nca", t->control); const NxEntry *ce = nx_container_find(c, cn); if (ce && entry_sha_is(c, ce, t->control_sha, 1)) goto fail; }
+        snprintf(j->prep_step, sizeof j->prep_step, "%s/%s", nx_ncz_solid(z) ? "unpack" : "check", leaf_of(c->path));
+        if (j->progress) j->progress(j->user, j->prep_step, j->prep_done, j->prep_total);
+        if (nx_ncz_prepare(z, j->tmp, got, prep_tick, j)) goto fail;
+        uint8_t want[16];
+        if (nx_hex_prefix(e->name, want) || memcmp(got, want, 16) || memcmp(got, sha, 32))
+            NX_FAIL("%s: %s does not match its checksum: the file is damaged or incomplete. Nothing was changed. Compress the game again from its dump, or build from the uncompressed file.", leaf_of(c->path), e->name);
+    }
+    j->ncz[j->nncas] = z; j->nncas++; return n;
+fail:
+    nx_nca_close(n); nx_ncz_close(z); return NULL;
+}
+
+// What unpacking and checking the job's NCZs will take (their bodies' bytes), before any is opened for good: the titles the writer takes, as it takes them
+static int job_ncz_bytes(const NxTitle *t, const char *id, uint64_t *sum) {
+    char nm[48]; snprintf(nm, sizeof nm, "%s.nca", id);
+    if (!id[0] || nx_container_find(t->c, nm)) return 0;
+    snprintf(nm, sizeof nm, "%s.ncz", id); const NxEntry *e = nx_container_find(t->c, nm); NxNcz *z;
+    if (!e) return 0;   // missing: job_nca says so
+    if (nx_ncz_open(&z, t->c, e)) return -1;
+    *sum += nx_ncz_body(z); nx_ncz_close(z); return 0;
 }
 
 static int add_pkg(Job *j, const NxTitle *t, int kind, uint64_t tid, uint32_t ver, NxNode *exefs, NxNode *romfs) {
@@ -248,6 +323,7 @@ static int thread_count(void) {
     if (n <= 0) { int c = nx_cpu_count(); n = c > 0 ? c : 2; if (n > 6) n = 6; }
     return n > 64 ? 64 : n;
 }
+int nx_threads(void) { return thread_count(); }
 
 static void *pipe_worker(void *arg) {
     Pipe *P = arg; NxCompCache cc; memset(&cc, 0, sizeof cc);
@@ -365,6 +441,7 @@ static int write_blob(Job *j, int fd, uint64_t *pos, const char **steps) {
         while (s->state != SL_HASHED) pthread_cond_wait(&P->cv_main, &P->mu);
         pthread_mutex_unlock(&P->mu);
         if (s->rc) { nx_err("%s", s->err); goto out; }
+        if (atomic_load(&nx_stop)) { nx_err("the import was stopped"); goto out; }
         const uint8_t *at = s->buf;
         for (int i = 0; i < s->nseg; i++) {
             Seg *g = &s->seg[i]; NxNode *f = g->f; const char *step = steps[f->id];
@@ -423,6 +500,7 @@ static int write_nup(Job *j, const char *out) {
     if ((fd = open(out, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0644)) < 0) NX_FAIL("cannot create %s: %s", out, strerror(errno));
     uint64_t pos = blob;
     if (write_blob(j, fd, &pos, steps)) goto out;
+    if (atomic_load(&nx_stop)) NX_FAIL("the import was stopped");   // a Stop while the last files went in: the .nup is not finished
     uint64_t end = blob; for (uint32_t i = 0; i < j->nf; i++) if (j->files[i]->size && j->files[i]->ext_off + j->files[i]->ext_stored > end) end = j->files[i]->ext_off + j->files[i]->ext_stored;
     if (ftruncate(fd, (off_t)end)) NX_FAIL("truncate failed: %s", strerror(errno));
     for (int p = 0; p < j->npk; p++) {   // the meta blocks, one after the other behind the last extent (where the nup packer puts them); the file ends with them
@@ -477,9 +555,23 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
     // the base first (its RomFS is the updates' base), then the updates by version, then the add-ons
     const NxTitle *base = NULL; NxNca *base_prog = NULL; int base_rom = -1;
     for (int i = 0; i < n_inputs && !base; i++) for (int k = 0; k < src[i].n; k++) if (src[i].ts[k].kind == 0 && src[i].ts[k].title_id == base_tid) { base = &src[i].ts[k]; break; }
+    // compressed inputs: where solid NCZs are unpacked (NXIMPORT_TMPDIR, else a hidden folder beside the .nup, which is gone again at the end), and what
+    // unpacking and checking them takes, for their progress. The titles as the loops below take them: the base, each update version once, each add-on once
+    { const char *td = getenv("NXIMPORT_TMPDIR"), *sl = strrchr(out_nup, '/'), *bs = strrchr(out_nup, '\\'); if (bs && (!sl || bs > sl)) sl = bs;
+      if (td && *td) snprintf(j->tmp, sizeof j->tmp, "%s", td);
+      else snprintf(j->tmp, sizeof j->tmp, "%.*s.%s.unpack", sl ? (int)(sl - out_nup + 1) : 0, out_nup, sl ? sl + 1 : out_nup); }
+    { uint64_t sum = 0; uint32_t vers[64]; uint64_t aoc[64]; int nv = 0, na = 0;
+      if (base && job_ncz_bytes(base, base->program, &sum)) goto out;
+      for (int pass = 0; pass < 2; pass++) for (int i = 0; i < n_inputs; i++) for (int k = 0; k < src[i].n; k++) {
+          const NxTitle *t = &src[i].ts[k]; int dup = 0;
+          if (t->app_id != base_tid || t->kind != (pass ? 2 : 1)) continue;
+          if (t->kind == 1) { for (int q = 0; q < nv; q++) dup |= vers[q] == t->version; if (dup || nv == 64) continue; vers[nv++] = t->version; if (job_ncz_bytes(t, t->program, &sum)) goto out; }
+          else { for (int q = 0; q < na; q++) dup |= aoc[q] == t->title_id; if (dup || na == 64) continue; aoc[na++] = t->title_id; if (job_ncz_bytes(t, t->data, &sum)) goto out; }
+      }
+      j->prep_total = (long long)sum; }
     if (base) {
         if (!base->program[0]) NX_FAIL("the base %s has no program NCA", base_title_id);
-        if (!(base_prog = job_nca(j, base->c, base->program))) goto out;
+        if (!(base_prog = job_nca(j, base, base->program, base->program_sha))) goto out;
         int ex = nx_nca_find_section(base_prog, NX_FS_PFS0); base_rom = nx_nca_find_section(base_prog, NX_FS_ROMFS);
         NxNode *exefs = ex >= 0 ? nx_pfs0_tree(base_prog, ex) : NULL; if (ex >= 0 && !exefs) goto out;
         // PEANUTS: a sparse base RomFS (Castlevania: Belmont's Curse) holds only the ranges its update reads from it, its own header included only in the update: it is the
@@ -496,7 +588,7 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
         if (t->kind == 1) {
             int dup = 0; for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 1 && j->pk[p].ver == t->version) dup = 1; if (dup) continue;
             if (!t->program[0]) NX_FAIL("update %016llx v%u has no program NCA", (unsigned long long)t->title_id, t->version);
-            NxNca *pn = job_nca(j, t->c, t->program); if (!pn) goto out;
+            NxNca *pn = job_nca(j, t, t->program, t->program_sha); if (!pn) goto out;
             int ex = nx_nca_find_section(pn, NX_FS_PFS0), ro = nx_nca_find_section(pn, NX_FS_ROMFS);
             if (ro >= 0 && pn->sec[ro].crypt_type == 4) {
                 if (!base_prog || base_rom < 0) NX_FAIL("the update v%u patches the base game's RomFS: the base %s must be among the inputs", t->version, base_title_id);
@@ -509,7 +601,7 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
         } else {
             int dup = 0; for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 2 && j->pk[p].tid == t->title_id) dup = 1; if (dup) continue;
             if (!t->data[0]) NX_FAIL("add-on %016llx has no data NCA", (unsigned long long)t->title_id);
-            NxNca *dn = job_nca(j, t->c, t->data); if (!dn) goto out;
+            NxNca *dn = job_nca(j, t, t->data, t->data_sha); if (!dn) goto out;
             int ro = nx_nca_find_section(dn, NX_FS_ROMFS); if (ro < 0) NX_FAIL("add-on %016llx has no RomFS", (unsigned long long)t->title_id);
             NxNode *romfs = nx_romfs_tree(dn, ro); if (!romfs) goto out;
             if (add_pkg(j, t, 2, t->title_id, t->version, NULL, romfs)) goto out;
@@ -522,8 +614,15 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
     rc = write_nup(j, out_nup);
 out:
 fail:
-    if (j) { for (int p = 0; p < j->npk; p++) { nx_node_free(j->pk[p].root); free(j->pk[p].meta); } for (int i = 0; i < j->nncas; i++) nx_nca_close(&j->ncas[i]); free(j->dirs); free(j->files); free(j->pool); free(j->idx); free(j->shamap); free(j->basefiles); free(j); }
+    if (j) {
+        for (int p = 0; p < j->npk; p++) { nx_node_free(j->pk[p].root); free(j->pk[p].meta); }   // the package's meta block (#158)
+        for (int i = 0; i < j->nncas; i++) { nx_nca_close(&j->ncas[i]); nx_ncz_close(j->ncz[i]); }   // an NCZ's temporary file goes with it
+        if (j->tmp[0] && !getenv("NXIMPORT_TMPDIR")) rmdir(j->tmp);   // the folder made for it, when empty (a folder of the caller's stays)
+        free(j->dirs); free(j->files); free(j->pool); free(j->idx); free(j->shamap); free(j->basefiles); free(j);
+    }
     if (src) { for (int i = 0; i < n_inputs; i++) { free(src[i].ts); nx_container_close(&src[i].c); } free(src); }
+    nx_ncz_thread_done();
+    atomic_store(&nx_stop, 0);   // a Stop ends this import only
     return rc;
 }
 
