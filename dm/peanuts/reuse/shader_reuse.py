@@ -395,7 +395,7 @@ def check(new_lib, sample, zstd, delta):
     finally: L.close()
 
 
-MARK = '.pn-reuse-unchecked'   # in the results folder: the keys a run kept before its check ran; a stop before the check leaves it
+MARK = '.pn-reuse-unchecked'   # in the results folder: the keys a run kept before its check ran, and the vertex shaders it padded with them; a stop before the check leaves it
 
 
 def results_dir(out_dir): return os.environ.get('DMSH_VK_RESULTS') or os.path.join(out_dir, 'results')
@@ -413,7 +413,7 @@ def drop_unchecked(res):
             except OSError: pass
     try: os.unlink(p)
     except OSError: pass
-    say(f'reuse: {len(keys or [])} shaders kept by a run that stopped before its check: deleted (kept again or translated now)')
+    say(f'reuse: {len(keys or [])} shaders kept, or padded with kept ones, by a run that did not pass its check: deleted (kept again or translated now)')
 
 
 TODO = 'check.todo'   # <PN_REUSE_DIR>/check.todo: the library a build wrote with kept shaders, for the full check (full_check)
@@ -573,7 +573,11 @@ def reuse(argv):
         if prof is None: kept, sample = {}, {}
         if kept:
             os.makedirs(res, exist_ok=True)
-            tmp = os.path.join(res, MARK + '.tmp'); Path(tmp).write_text(json.dumps(sorted(kept))); os.replace(tmp, os.path.join(res, MARK))
+            # unchecked with the kept shaders: each vertex shader paired with a kept pixel shader, which this run translates padded with the kept entry's inputs
+            # (vk_android_build.py translate_keys reads them from it); its result is keyed without them, so a failed check or a stop before it would leave it
+            # for the run after (a review found this before it was published; Padding in peanuts/tests/test_shader_reuse.py)
+            unchecked = set(kept) | {v for v, ps in deps.pairs.items() if any(p in kept for p in ps)}
+            tmp = os.path.join(res, MARK + '.tmp'); Path(tmp).write_text(json.dumps(sorted(unchecked))); os.replace(tmp, os.path.join(res, MARK))
         code = run_build(argv, {'DM_GAME': str(prof)} if prof else {})
         if code != 0 and kept: drop_unchecked(res)   # a failed step: its kept results are not left for a Retry that may not check them
         if code == 0 and kept:

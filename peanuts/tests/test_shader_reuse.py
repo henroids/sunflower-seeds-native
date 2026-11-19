@@ -90,6 +90,60 @@ FAKE = textwrap.dedent('''
 ''')
 
 
+FAKE_PAD = textwrap.dedent('''
+    # as FAKE, but as vk_android_build.py translate_keys pads: the pixel shaders first, then each vertex shader padded with its paired pixel shaders as this run
+    # has them (translated now, a result of an earlier run, or kept from an older library: PS_INPUTS), not with their facts
+    import json, os, sys
+    sys.path[:0] = [{tools!r}, {games!r}, {reuse!r}, {tests!r}]
+    import game, dmsh_chain, vk_android_delta as delta, test_shader_reuse as t
+    a = sys.argv[1:]
+    g = game.load(); inputs = dmsh_chain.inputs(g)
+    rows = [l.split('\\t') for l in open(g.table('shader_map.tsv')) if l.split('\\t')[0].endswith('.bin')]
+    absent = set(open(os.environ['DMSH_VK_ABSENT_FILE']).read().split()) if os.environ.get('DMSH_VK_ABSENT_FILE') else set()
+    keys = [c[3] for c in rows if c[0].startswith('ps') and c[3] not in absent] + [c[3] for c in rows if c[0].startswith('vs') and c[3] not in absent]
+    try: m = delta.parse_manifest(open(g.table('vk_delta.tsv')).read())
+    except (OSError, ValueError): m = None
+    if m and (m['version'], m['game'], m['inputs']) != (t.VERSION, g.id, inputs): m = None
+    libs = []
+    for r in os.environ.get('DMSH_VK_DELTA_FROM', '').split(os.pathsep):
+        for n in sorted(os.listdir(r)) if r and os.path.isdir(r) else []:
+            p = os.path.join(r, n, 'dmsh_vk.lib')
+            if not os.path.isfile(p) or os.path.realpath(os.path.dirname(p)) == os.path.realpath(os.path.join(a[3], 'v-' + t.VERSION)): continue
+            try: libs.append(delta.Library(p))
+            except (OSError, ValueError): pass
+    res = os.environ['DMSH_VK_RESULTS']; os.makedirs(res, exist_ok=True)
+    out, made = {{}}, []
+    for k in keys:
+        s, rp = None, os.path.join(res, k + '.r')
+        if os.path.isfile(rp):   # the real tool's result cache: keyed by the tools, the inputs and the key, not by the pixel shaders that padded it
+            with open(rp) as f: s = bytes.fromhex(f.read().split()[1])
+        if s is None and m and k in m['hashes']:
+            for L in libs:
+                if k in L.index:
+                    _, h, ent = L.hash_of(L.index[k], None)
+                    if h == m['hashes'][k]:
+                        s = bytes(ent[4][0][2])
+                        with open(rp, 'w') as f: f.write('kept ' + s.hex())
+                        break
+        if s is None:
+            s = t.translate_padded(g, a[2], k, out); made.append(k)
+            with open(rp, 'w') as f: f.write('made ' + s.hex())
+        out[k] = s
+    t.write_lib(os.path.join(a[3], 'v-' + t.VERSION, 'dmsh_vk.lib'), list(out.items()), inputs, game=g.id)
+    with open(os.environ['FAKE_LOG'], 'a') as f: f.write(json.dumps(made) + '\\n')
+''')
+
+
+def translate_padded(g, pkg, k, done):
+    """FAKE_PAD's translator: a pixel shader from its key, its facts and unseen.tsv; a vertex shader from its key, its facts and its paired pixel shaders' output
+    as this run has it (done)"""
+    d = sr.Deps(g, pkg, VERSION, b'')
+    if d.stage.get(k) == 'ps':
+        unseen = g.table('unseen.tsv').read_text() if g.table('unseen.tsv').exists() else ''
+        return spirv_of('\0'.join([k, d.fact_row(k), unseen]))
+    return spirv_of('\0'.join([k, d.fact_row(k)] + [hashlib.sha256(done[p]).hexdigest() for p in d.pairs.get(k, ()) if p in done]))
+
+
 _VIEW = {}
 
 
@@ -215,7 +269,8 @@ class Reuse(Base):
         self.assertEqual(len(runs), 2)   # the checked run, then the full one
         self.assertEqual(lib, self.full())
         self.assertEqual(set(runs[1]) | set(runs[0]), set(self.vs + self.ps))   # the second run translated what the first had kept
-        self.assertFalse(set(runs[0]) & set(runs[1]))   # and nothing twice: the first run's translations stay as results
+        padded = {self.vs[i] for i in range(200) if self.ps[i] not in runs[0]}   # vertex shaders whose pixel shader the first run kept (Padding)
+        self.assertEqual(set(runs[0]) & set(runs[1]), set(runs[0]) & padded)   # twice only those: the first run's other translations stay as results
 
     def test_inputs_changed_without_a_record_keeps_nothing(self):
         self.profile(); self.build(); self.into_pack()
@@ -291,6 +346,48 @@ class Reuse(Base):
         write_lib(self.pack / 'v-aaaaaaaaaaaa' / 'dmsh_vk.lib', list(self.full().items()), '000000000000', version='aaaaaaaaaaaa')
         code, runs, lib = self.build()
         self.assertEqual(len(runs[0]), 400)
+
+
+class Padding(Base):
+    """With FAKE_PAD: a vertex shader translated in a run that kept its pixel shaders is padded with the kept entries' inputs. When the kept shaders turn out
+    wrong (the check) or unchecked (a stop before it), that vertex shader's result must not stay for the run after it"""
+    def setUp(self):
+        super().setUp()
+        fake = self.d / 'fake_pad.py'
+        fake.write_text(FAKE_PAD.format(tools=str(REPO / 'dm/gfx/tools'), games=str(REPO / 'dm/games'), reuse=str(REPO / 'dm/peanuts/reuse'), tests=str(Path(__file__).parent)))
+        sr.BUILD = fake
+
+    def full(self):
+        game = sr.load_modules()[0]
+        g = game.load()
+        done = {}
+        for k in self.ps + self.vs: done[k] = translate_padded(g, str(self.pkg), k, done)
+        return done
+
+    def test_a_failed_check_translates_the_vertex_shaders_kept_pixel_shaders_padded(self):
+        self.profile(); code, _, lib = self.build(); self.assertEqual(lib, self.full()); self.into_pack()
+        self.profile(unseen='a change of the pixel shaders the rule does not see\n')
+        code, runs, lib = self.build()
+        self.assertEqual((code, len(runs)), (0, 2))   # the check failed: the full run after it
+        self.assertEqual(lib, self.full())
+        padded = {self.vs[i] for i in range(200) if self.ps[i] not in runs[0]} & set(runs[0])   # translated in the checked run against a kept pixel shader
+        self.assertTrue(padded and padded <= set(runs[1]))   # translated again
+
+    def test_a_stop_before_the_check_then_a_run_that_keeps_nothing(self):
+        self.profile(); self.build(); self.into_pack()
+        self.profile(unseen='a change of the pixel shaders the rule does not see\n')
+        saved = sr.check
+
+        def stopped(*a, **k): raise KeyboardInterrupt('the step stopped after the library was written, before its check')
+        sr.check = stopped
+        try:
+            with self.assertRaises(KeyboardInterrupt): self.build()
+        finally: sr.check = saved
+        self.assertTrue((self.res / sr.MARK).exists())
+        os.environ['PN_REUSE'] = '0'
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(lib, self.full())
 
 
 class Kept(Base):
