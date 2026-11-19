@@ -91,12 +91,28 @@ profile.
 These ran on 0.1.4, before a review's changes (the profile's own `pso_pairs.tsv` for "same inputs", the sample by class, the paired pixel shaders a build
 makes). The code as it is, on 0.1.5 (`DMSH_VK_CHAIN` `dfebef5d68a9`, the 0.1.5 release's translator), 2026-11-19:
 
-| Run | Shaders step | Whole build |
-|---|---|---|
-| Full build | full (9,766 translated) | 7 min 31 s |
-| Import again | 9,564 kept by the record (ACNH's profile has no `pso_pairs.tsv`), 202 translated to check them: 202 of 202 the older library's byte for byte | 2 min 13 s |
+| Run (`peanuts/scripts/incremental-check.py`) | Import | Rewrite | Split | Shaders | Pack | Whole build | Byte for byte as the full build |
+|---|---|---|---|---|---|---|---|
+| Full build | 25 s | 3 min 26 s | 56 s | 2 min 33 s (9,766 translated) | 6 s | 7 min 31 s | |
+| Import again | 29 s | not run | 58 s | 19 s (9,564 kept, 202 translated to check them, 202 of 202 equal) | 6 s | 1 min 59 s | library and modules: yes |
+| A build from the base and the update alone | 27 s | 3 min 28 s | 56 s | 2 min 31 s | 8 s | 7 min 35 s | |
+| Its DLC added, Import again | 25 s | not run | 56 s | 21 s (9,564 kept, 202 checked) | 4 s | 1 min 52 s | library and modules: yes |
 
-The library after Import again is the full build's byte for byte (SHA-256).
+ACNH's DLC brings no shaders of its own that the phone's split finds (the split reads the update's RomFS, not an add-on's), so the build without it makes the
+same 9,766. What is left of an Import again or an added DLC is the import and the split, which runs whole again: about three quarters of the 2 minutes.
+
+## Checking it on a phone
+
+`peanuts/scripts/incremental-check.py` runs the scenarios above on a phone through adb and the control interface (`peanuts/docs/CONTROL.md`) and compares the
+outputs byte for byte: `full` (the reference), `again` (Import again), `dlc-later` (copies of the base and the update in the check's folder, a build from
+them, then the DLC added and Import again). It drives only a development build installed beside the player's app (`-PnxAppId`, debuggable, the real packer:
+`-PnxPackStage`), builds in `/sdcard/PeanutsCheck/<title ID>/`, keeps the app's settings on the computer while it runs and puts them back at the end (also after
+an error), and deletes its folder unless `--keep`. It picks the phone once at the start (`--serial` when there are several). Exit status 0 when every
+comparison held.
+
+```sh
+python3 peanuts/scripts/incremental-check.py --package dev.nxnative.android.<suffix> --title 01006F8002326000 --out report.json
+```
 
 ## Tests
 
