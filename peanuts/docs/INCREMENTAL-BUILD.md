@@ -74,6 +74,10 @@ translation (`ondevice/logs/check.log`).
   the game should have, so it takes the library's place in the pack, as the pack step copies one (a `.partial`, then a rename), and becomes the record and the
   kept copy; `check.failed` lists the shaders, `check.log` has a `[RED] reuse full check` line, and a notification says the game has the full translation now.
 
+On the Thor (ACNH 3.0.3 with its DLC, 2026-11-19, plugged in): the check started by itself at the end of an Import again and of a build in another Build
+folder, and both times found all 9,766 shaders of the library a full translation's byte for byte (9,564 of them kept from earlier builds); after the Import
+again it took 2 min 45 s.
+
 ## A new update or DLC: the cover asks
 
 A built game whose base is a `.nup`, with a newer update or add-on content found beside it that the `.nup` does not hold yet, says so on its cover in Home:
