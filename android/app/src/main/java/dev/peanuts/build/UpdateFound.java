@@ -7,8 +7,8 @@ import java.util.Locale;
 import java.util.TreeSet;
 
 /**
- * A built game whose base is a .nup, with a newer update or add-on content (DLC) found beside it that the .nup does not hold yet (issue #120, "Fragen, dann
- * bauen": the cover says so, a tap asks, and Build takes it in with Import again, whose build keeps what did not change). Only an update the game's profile
+ * A built game whose base is a .nup, with a newer update or add-on content (DLC) found beside it that the .nup does not hold yet (issue #120, ask, then
+ * build: the cover says so, a tap asks, and Build takes it in with Import again, whose build keeps what did not change). Only an update the game's profile
  * knows counts (one it does not would build as a version it was not made for), and only one newer than the .nup's. No Android class: the JVM test drives it.
  */
 public final class UpdateFound {

@@ -105,9 +105,10 @@ again it took 2 min 45 s.
 A built game whose base is a `.nup`, with a newer update or add-on content found beside it that the `.nup` does not hold yet, says so on its cover in Home:
 the "Update" mark beside the check, and "Update 3.0.4 and 1 add-on found" in its state (`dev.peanuts.build.UpdateFound`, from the library's last scan: the
 packages inside the `.nup` against the files beside it). Only an update the game's profile knows counts, and only one newer than the `.nup`'s. A tap asks
-first: **Build** takes them in with Import again (its checks for missing files and free space as on the game's page; its build keeps what did not change),
-**Play** plays the game as it is, **Not now** asks no more for these finds (`t.<title ID>.found_seen`; a newer find asks again, and the mark stays as
-"Update · later"). Nothing is built without the tap. On the second screen of a dual-screen handheld, the focused cover's card says the same
+first: **Build** takes them in with Import again (its checks for missing files and free space as on the game's page; its build keeps what did not change;
+when its plan would take another update than the one named, such as a newer one the profile does not know or one picked on the game's page, Import again
+asks first as it does there), **Play** plays the game as it is, **Not now** asks no more for these finds (`t.<title ID>.found_seen`; a newer find asks again,
+and the mark stays as "Update later", the card's line ends in ", for later"). Nothing is built without the tap. On the second screen of a dual-screen handheld, the focused cover's card says the same
 under its state, and its A button reads "Update…" (A asks first, as the tap does).
 
 On the Thor (2026-11-19): ACNH built with its update but without its DLC, then the DLC folder set. The cover showed the "Update" mark, a tap asked "An add-on
@@ -122,7 +123,7 @@ found", and its Build made a pack byte for byte the full build's in about a minu
   older library's byte for byte; N shaders kept`, and `reuse: this library kept for the next build of this game (S MB)` (or why not). The card shows
   "Translating M new shaders (the other N are reused)" from the tool's own count.
 - The ready message (the card and the notification) says what the build took from earlier builds, from the reuse lines of the steps that ran in it
-  (`dev.peanuts.build.BuildReuse`): "Animal Crossing: New Horizons is ready to play. It took 1 min 16 s: 9,564 shaders, 3 modules and 91 game files came from
+  (`dev.peanuts.build.BuildReuse`): "Animal Crossing: New Horizons is ready to play. It took 1 min 16 s: 9,564 shaders, 3 parts of the game's code and 91 game files came from
   earlier builds." A build that kept nothing, or whose check failed, says nothing more. The build log has it as `reused: …`.
 
 ## The rewrite: a module whose own part did not change

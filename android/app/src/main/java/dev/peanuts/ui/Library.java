@@ -1161,7 +1161,7 @@ public final class Library {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(PUi.dp(a, 22), PUi.dp(a, 22), Gravity.TOP | Gravity.END);
             lp.setMargins(p8, p8, p8, p8);
             cover.addView(ok, lp);
-            if (found != null) cover.addView(mark(askFound ? "Update" : "Update · later", PUi.col(a, R.color.bn_banana), R.color.bn_on_banana, false, Gravity.TOP | Gravity.START));
+            if (found != null) cover.addView(mark(askFound ? "Update" : "Update later", PUi.col(a, R.color.bn_banana), R.color.bn_on_banana, false, Gravity.TOP | Gravity.START));
         } else if (st == BUILD) {
             String pill = fileGone ? "File gone" : wrongVersion ? "Wrong version" : "Build";
             int fill = fileGone || wrongVersion ? R.color.bn_danger_tint : R.color.bn_banana;
@@ -1241,7 +1241,7 @@ public final class Library {
         return n != null && !n.isEmpty() ? n : String.valueOf(f.update);
     }
 
-    /** "Fragen, dann bauen": Build takes the finds in (Import again, whose build keeps what did not change), Play plays as it is, Not now asks no more for these */
+    /** Ask, then build: Build takes the finds in (Import again, whose build keeps what did not change), Play plays as it is, Not now asks no more for these */
     private void askFound(Row r, UpdateFound.Found f) {
         AlertDialog.Builder d = new AlertDialog.Builder(a).setTitle(UpdateFound.what(f, updateName(r, f))).setMessage(UpdateFound.ask(f, r.name()))
                 .setPositiveButton("Build", (x, w) -> GameSheet.importAgain(a, this, r.title, CompanionPort.forTitle(catalog, r.id()), null, f))
@@ -1360,7 +1360,7 @@ public final class Library {
             UpdateFound.Found f = found(r);   // as on the cover: what was found, and A asks first while it is not "Not now"
             if (f != null) {
                 boolean ask = !f.key().equals(PeanutsPrefs.foundSeen(a, r.id()));
-                k.update = UpdateFound.what(f, updateName(r, f)) + (ask ? "" : " · later");
+                k.update = UpdateFound.what(f, updateName(r, f)) + (ask ? "" : ", for later");
                 if (ask) { k.primaryLabel = "Update…"; k.primaryIcon = R.drawable.ic_build; }
             }
         } else if (st == BUILD) {

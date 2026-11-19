@@ -25,6 +25,13 @@ class Wiring(unittest.TestCase):
         self.assertIn('if (UpdateFound.takesWhatItNamed(named, had, p.update != null ? p.updateVersion : -1))', sheet)   # else Import again's confirmation
         self.assertIn('GameSheet.importAgain(a, this, r.title, CompanionPort.forTitle(catalog, r.id()), null, f))', lib)
 
+    def test_the_marks_follow_the_text_rules(self):
+        # UI-RULES 1: no separator glyph between values (the cover's mark and the second screen's card had a middle dot before "later")
+        lib = (APP / 'main/java/dev/peanuts/ui/Library.java').read_text(encoding='utf-8')
+        self.assertNotIn('· later', lib)
+        self.assertIn('"Update later"', lib)
+        self.assertIn('", for later"', lib)
+
     def test_the_cover_knows_the_profiles_updates(self):
         # the cover asks for a READY title, whose supportedBuilds the scanner never fills (a BUILD title's only): an update was never counted (found in review)
         lib = (APP / 'main/java/dev/peanuts/ui/Library.java').read_text(encoding='utf-8')
