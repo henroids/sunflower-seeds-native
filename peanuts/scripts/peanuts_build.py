@@ -239,6 +239,9 @@ STEP_MARKERS = (
 # The games whose Oodle or Unreal shader step this computer does itself (Linux only), each one checked on a PC against its profile's shader keys
 # (dm/third_party/ooz/README.md "Checked"). True: it has Oodle streams, which the unoodle worker decodes; False: an Unreal game whose archives need no Oodle decoder.
 PC_DECODE = {
+    '010051C0134F8000': True,    # PEANUTS: Kakarot (inline Unreal cooked packages, Oodle)
+    '0100A3D008C5C000': True,    # PEANUTS: Pokémon Scarlet (Trinity packs, Oodle)
+    '01008F6008C5E000': True,    # PEANUTS: Pokémon Violet (Trinity packs, Oodle)
     '01001F5010DFA000': True,    # Pokémon Legends: Arceus (GFPAK entries, Oodle Kraken)
     '01009720213B0000': True,    # Captain Tsubasa 2: World Fighters (Unreal IoStore, Oodle)
     '0100AD80208A8000': True,    # PEANUTS: Demon Slayer 2 (inline Unreal IoStore shaders, Oodle)
