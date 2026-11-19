@@ -65,6 +65,7 @@ shows which update you have and which one a game supports, and asks before build
 | Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes | 60 fps on AYN Thor in single races; with the 120 fps limit, 118 to 120 in the menus and 81 to 97 in a race; new, little tested |
 | Captain Tsubasa 2: World Fighters | `01009720213B0000` | 1.0.6 | No | 53–60 fps in a short offline match on AYN Thor with Turnip v26.2.0 R5 |
 | DAVE THE DIVER | `010097F018538000` | 1.0.6.1267 | No | 20–120 fps caps, cold-start shader prewarm on Turnip |
+| Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2 | `0100AD80208A8000` | 1.80 | No | About 30 fps in the opening combat tutorial on AYN Thor with Turnip |
 | Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 only | No | Experimental. On AYN Thor, Turnip: the title and the opening at 30 fps; 57 to 60 fps with the 60 fps limit in two sessions of 5 and 10 minutes; little tested beyond that |
 | My Time at Sandrock | `0100B63016916000` | 1.4.2.0 | Yes | 30 fps on AYN Thor: a 15-minute session through the opening, the town and the menus; new, little tested |
 | Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Not checked | Runs on AYN Thor; new, little tested |

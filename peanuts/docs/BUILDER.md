@@ -83,6 +83,7 @@ On Linux the builder does that step itself for the games below. Each game's shad
 |---|---|---|
 | Pokémon Legends: Arceus (`01001F5010DFA000`) | decodes its Oodle Kraken archives with `unoodle` | 12,851 of 12,851 shader keys |
 | Captain Tsubasa 2: World Fighters (`01009720213B0000`) | decodes its IoStore shader libraries with `unoodle` | 21,903 of 21,903 shader keys on version 1.0.6 |
+| Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2 (`0100AD80208A8000`) | reads inline IoStore shaders with `unoodle` | 128,449 shader keys on 1.80 |
 | FINAL FANTASY RESONANCE (`0100606026F12000`) | decodes its Unreal shader libraries (Oodle Mermaid) with `unoodle` | 73,496 of 73,496 keys; the shader package is the phone's byte for byte |
 | OCTOPATH TRAVELER 0 (`01005270232F2000`) | the same | its 10,596 streams and 10,324 keys; a build from its game files was not run on a PC yet |
 | DRAGON QUEST III HD-2D Remake (`01003E601E324000`) | reads its Unreal shader archives (LZ4, no Oodle) | 47,298 of 47,298 keys |

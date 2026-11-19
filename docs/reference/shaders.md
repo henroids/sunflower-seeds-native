@@ -436,6 +436,13 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Fix:** shared and local memory arrays get a type of their own (`CodeGen/Spirv/Declarations.cs` `DeclareMemories`, `TypeArray(…, forceIdAllocation: true)`).
 - **Found on:** [Orbitals](../../dm/games/040032B023CA4000/README.md): 24 compute shaders.
 
+### A movie pak is mistaken for an Unreal shader archive
+
+- **Symptom:** shader splitting stops with `there are no decoded shader code archives` even though the game's global shaders and material shaders are inline.
+- **Cause:** `uepak.inline_shaders` classified every readable nonempty pak without inline shaders as a shader archive. Movie and other asset paks therefore triggered a decode step with no shader archives to decode.
+- **Fix:** classify asset-only paks separately. The splitter and profile survey check explicitly for shader libraries in IoStore so a library remains discoverable beside an asset-only pak.
+- **Found on:** [Demon Slayer 2](../../dm/games/0100AD80208A8000/README.md#shaders).
+
 ### IoStore patch containers keep their shader groups in the base container
 
 - **Symptom:** `ValueError: …/Glow-Switch_0_P.utoc: shader group 0 has no chunk` from `uepak.py io_archive` while the NSP script decodes the shaders (`decode_ue_shaders`, after `[4/8] UE shader decode`).
