@@ -1809,6 +1809,13 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Fix:** the high bits of both offsets go in reserved fields, `dmsh_vk_module.off_hi` (bits 32-47) and `dmsh_vk_entry.c1_off_hi`, which are 0 in every smaller library, so those are written and read as before and the format stays version 1 ([android/SHADERS.md, Library format](../../android/SHADERS.md#library-format)). The replay reads them through `vka_shlib_mod_off` / `vka_shlib_c1_off`, the tools through `vk_android_delta.py` `mod_off` / `c1_off`; `c1_off_hi` is one of the positions the delta update's entry hash leaves out. `read_result` leaves the stored modules in their result files (`Stored`), `write_library` lays out the tables first and then copies the pieces one at a time, and `--check` maps the library. Checks: `t_android_shlib` (the high bits refused past a small blob, the offsets they give), `test_android_shader_delta` (`test_high_offset_bits`).
 - **Found on:** [Pokémon Pokopia](../../dm/games/0400A3A01EE4C000/README.md#found-on-this-game): the full library, 131,426 shaders.
 
+### Other versions' pixel shaders return during Android translation
+
+- **Symptom:** The Android build stops at 18%. The Vulkan builder requests more shaders than the launcher selected and reports the extra keys missing from the package. <!-- PEANUTS -->
+- **Cause:** A shared vertex shader can be paired with different pixel shaders across game updates. Expanding those pairs against the whole profile restored keys the split had already verified belonged to another version.
+- **Fix:** Both packers pass the validated missing keys to the Vulkan builder. It expands vertex dependencies within the remaining profile keys and checks the required records in the package.
+- **Found on:** [Super Mario Bros. Wonder](../../dm/games/010015100B514000/README.md#shaders) 1.2.1 and [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md#files-and-shaders) 4.0.0 and 4.0.1.
+
 ### A library with failed shaders passed as finished (Android)
 
 - **Symptom:** the phone's card says Ready, and the game draws black where shaders are missing (`[RED] vk: shader … is not in the shader library`); the shaders step's log lists failed shaders, but the step did not fail.

@@ -486,6 +486,7 @@ public final class PackService extends Service {
         String[] argv;
         List<String> selected = null;
         String keysFrom = ShaderLibs.SELECTED;   // where the shaders step's key list comes from, for its log line
+        String absentFile = "";   // PEANUTS: validated exclusions for this invocation, including paired pixel shaders
         String otherVersionsNote = null;   // PEANUTS: the line for a dump that lacks only other listed versions' shaders (ShaderLibs.otherVersionsLine), for the step's log
         // The tools' arguments: the in-process forms (pack_android.py --in-process: the rewriter in the same Python; shader_split.py with J=1 below: no process pool;
         // vk_android_build.py with the translator and the validator as libraries, XLATE / SPIRV_VAL below; the app's process must not fork, ONDEVICE.md "No subprocesses").
@@ -545,6 +546,10 @@ public final class PackService extends Service {
                 if (absent != null) {
                     if (selected == null) selected = new java.util.ArrayList<>(new java.util.TreeSet<>(ShaderLibs.mapKeys(new File(PackNative.repo(), "dm/games/" + j.titleId() + "/shader_map.tsv"))));
                     selected.removeAll(absent);
+                    // PEANUTS: the Vulkan builder also expands vertex/pixel pairs from the multi-version profile.
+                    File excluded = new File(od, "absent-shaders.tsv");
+                    Files.write(excluded.toPath(), absent, StandardCharsets.UTF_8);
+                    absentFile = excluded.getPath();
                     keysFrom = "shader_map.tsv without " + absent.size() + " absent shaders";   // PEANUTS: optional or boot-generated outputs
                     // PEANUTS begin: a dump of one of the versions the tables are the union of (game.tsv shader_versions): one plain line, in logcat and in the step's log
                     File prof = new File(PackNative.repo(), "dm/games/" + j.titleId());
@@ -677,6 +682,7 @@ public final class PackService extends Service {
         PackEngine.setenv("DM_NUP_FD", nupFd);
         // vk_android_build.py: the per-shader results (kept until the job is done: a rerun resumes from them), the translator and SPIRV-Tools from the APK's lib/
         // (bare names: the linker finds them in the APK, as System.loadLibrary does; ctypes loads them in this process)
+        PackEngine.setenv("DMSH_VK_ABSENT_FILE", absentFile);   // PEANUTS: reset for every step and retry
         PackEngine.setenv("DMSH_VK_RESULTS", xlate.getPath());
         // the delta update: entries of the pack's older libraries that the profile's manifest has unchanged are kept, only the rest translated (android/SHADERS.md#delta-updates)
         PackEngine.setenv("DMSH_VK_DELTA_FROM", new File(pack, "shaders").getPath());

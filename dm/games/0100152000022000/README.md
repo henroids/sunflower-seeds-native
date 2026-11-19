@@ -62,6 +62,8 @@ The game builds Mii heads from the console's MiiModel system data, starting at b
 
 ## Found on this game
 
+- [Version-specific pixel shaders in an Android build](../../../docs/reference/shaders.md#other-versions-pixel-shaders-return-during-android-translation). <!-- PEANUTS -->
+
 - **Android title-screen NULL texture registration:** `treg` cleared the entry and then dereferenced the NULL texture while updating its buffer flag (SIGSEGV read at `0x4`). The flag now clears without reading the texture; the production registration regression passes under UBSan. A 90-second Turnip run reaches the title and menus at about 60 fps, including a NULL registration, with no recorded crash; a race remains unchecked. See [Clearing a Vulkan texture registration](../../../docs/reference/rendering.md#clearing-a-vulkan-texture-registration).
 
 - **Display sleep during controller play on the Mac (resolved, player-confirmed):** [Mac display sleep during controller play](../../../docs/reference/services.md#mac-display-sleep-during-controller-play).
