@@ -87,7 +87,8 @@ allowlist_reason() {
 
 # Hunk-level marker check: every changed *hunk* in a touched upstream file must itself carry a
 # PEANUTS marker, OR fall inside a `PEANUTS begin` / `PEANUTS end` span in the file as it stands
-# at $branch. A file-level "grep PEANUTS anywhere in the file" check (the old behaviour) passes a
+# at $branch. The documented PEANUTS(upstream-candidate) form denotes the same kind of span.
+# A file-level "grep PEANUTS anywhere in the file" check (the old behaviour) passes a
 # file that has one marked hook plus a second, unmarked hunk dropped in by mistake -- exactly the
 # gap a review found. The span support (found in review) covers the case
 # a single trailing "see above" comment doesn't sit inside every hunk's own line window when
@@ -95,8 +96,8 @@ allowlist_reason() {
 check_hunks_marked() {
     f="$1"
     spans=$(git show "$branch:$f" 2>/dev/null | awk '
-        /PEANUTS begin/ { b = NR }
-        /PEANUTS end/   { if (b) { print b":"NR; b = 0 } }
+        /PEANUTS(\(upstream-candidate\))? begin/ { b = NR }
+        /PEANUTS(\(upstream-candidate\))? end/   { if (b) { print b":"NR; b = 0 } }
     ')
     git diff -U1 "$base" "$branch" -- "$f" | awk -v spans="$spans" '
         BEGIN {

@@ -61,8 +61,7 @@ def frame_step(ctx):
     # (0 is fixed-step cinematics), x20 is this frame's timestamp. The ordinary
     # epilogue restores d8/x19/x20/x21. s0/s1/s2 and x8/x16/x17 are scratch here.
     core = ctx.here(); ctx.emit(ADRP(16, core, ctx.state))
-    # PEANUTS: Relocate the elapsed-time branch to the emitted clock.
-    clock_start = core + (len(elapsed_clock) + 1) * 4
+    clock_start = core + (len(elapsed_clock) + 1) * 4  # PEANUTS: Relocate the elapsed-time branch to the emitted clock.
     for i, word in enumerate(elapsed_clock):
         if i == len(elapsed_clock) - 1:
             word = B(ctx.here(), clock_start + 22 * 4)  # game's positive speed override
@@ -71,8 +70,7 @@ def frame_step(ctx):
         if i == 22: w = B(ctx.here(), 0x8a9570) | 0x80000000  # game's positive speed override
         elif i == len(clock) - 1: w = B(ctx.here(), 0x91dcb4)  # timestamp and epilogue
         ctx.emit(w)
-    # PEANUTS: Initialize the clock before the first elapsed sample.
-    first = ctx.here()
+    first = ctx.here()  # PEANUTS: Initialize the clock before the first elapsed sample.
     ctx.emit(0x1e2703e0)  # fmov s0,wzr: no previous time sample
     ctx.emit(B(ctx.here(), core))
     targets = {0xa0e7d0: core, 0xa0e828: first}
