@@ -740,15 +740,16 @@ Out of memory, typically on an 8 GB device: update to 0.1.1 or later, which buil
 
 ### How do I report a bug well?
 
-Open an issue at https://github.com/igawa6/peanuts-native/issues with:
+Open an issue at https://github.com/igawa6/peanuts-native/issues and pick the form that fits:
 
-- what happened, and what you did just before;
-- the device, its RAM and the Android version;
-- the game, its title ID and its update version;
-- the app version and the GPU driver;
-- the Readiness check report (**Copy report**);
-- the log: hold the game's cover › **Storage** › **Share log**, or Settings › **Share log** for the newest log of any game;
-- for a problem with a build (it fails, stops, never finishes, or the app closes during it): the `.zip` of **Share build log** instead, attached as it is.
+- **Game problem**: a game crashes, freezes, shows a black screen, draws wrong, runs slowly, or its sound, controls or saves misbehave. It asks for the log of that run: hold the game's cover › **Storage** › **Share log** right after the problem, before you start the game again, or Settings › **Share log**. Its file name starts with the game's title ID.
+- **Build problem**: adding a game went wrong (the import, Prepare or the companion fails, stops, never finishes, or the app closes during it). It asks for the `.zip` of **Share build log**, attached as it is.
+- **Setup or app problem**: keys, firmware, the game folder and the library (a missing game, **Wrong version**, **File gone**), storage, installing a driver, a companion or a mod, saves, the second screen, or the app itself.
+- **Desktop builder problem**: building a game on a computer ([BUILDER.md](BUILDER.md)) fails.
+- **Game request** and **Feature request**: one game or one idea per post; search first and add a 👍 to an existing one.
+- A companion's page shows something wrong: that goes to the [companions' own issues](https://github.com/igawa6/eden-duo-companions/issues).
+
+The problem forms ask the rest mostly as picks from a list: the game with its version, the app version, the device, chip, RAM and Android version, the GPU driver, the Readiness check's verdict (its **Copy report** text goes in the last box), the settings you changed and whether it worked before. Before you report, update the app and build the game again (hold the cover › **Storage** › **Build again**): many reports are fixed by that.
 
 A screenshot or a short video helps for a wrong picture. Never attach or link game files, keys or firmware.
 

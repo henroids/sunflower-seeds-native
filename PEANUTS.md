@@ -168,6 +168,19 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   never keys, game files, saves or packs. `BuildLogProvider` serves it read-only; the sheet offers Share (the chooser on the app's display) and Save to
   a folder (request 71 through `LibrarySettings.result`). Entry points: Home's stopped build card, the Prepare card and its Manage sheet, the game's
   Storage tab, Settings › Share log, and ctl `share_build_log`. Tests: `dm/tools/tests/test_android_build_log.py` (`BuildLogJvmTest`).
+- 2026-11-19 (game catalog and issue forms): `peanuts/games.json` is the machine-readable list of the games this version ships, written by
+  `peanuts/scripts/games_catalog.py` from `peanuts/release-titles.txt` (which games), each `dm/games/<title ID>/game.tsv` (the builds Android
+  plays, `android_builds` respected, and the package) and the README's Supported games table (the name players know, a display version a
+  profile lacks, the companion). Seven issue forms, written by `peanuts/scripts/issue_forms.py` from one source: **Game problem** (the log
+  of the run required), **Build problem** (the Share build log `.zip` required), **Setup or app problem** (keys, firmware, the library,
+  storage, drivers, companions, mods, saves, the second screen, the app), **Desktop builder problem**, **Game request**, **Feature
+  request**, and **Question, device report or development topic**; `config.yml` links companion content to eden-duo-companions. They ask
+  mostly by picks: the game with its version (one option per catalog build, then another version or another game with a line to write it),
+  the app version (peanuts/VERSION first), device, chip with its GPU, RAM, Android, the driver family, the settings changed, whether it
+  worked before, and a required check that the log is this game's; every form keeps optional text boxes. The fields come from what issues
+  #1-#170 had to ask for again and again. `.github/workflows/catalog.yml` (PEANUTS, own repository only) runs both scripts on a push to main
+  that touches their inputs and commits what changed. `peanuts/tests/test_issue_forms.py` checks the scripts and the forms' structure and
+  only skips, never fails, while the written files are out of date.
 
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` — (2026-11-17, the launcher on a second display) one line in `buildHome`
      after the header: `dev.peanuts.ui.BottomScreen.home(...)` gets Home's header (it steps aside while the second display shows the launcher's
