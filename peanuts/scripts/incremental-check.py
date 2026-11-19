@@ -5,14 +5,16 @@ Runs on a computer with adb against a development build of the app installed bes
 writes its settings with run-as) whose packer is the real one (`-PnxPackStage`). It changes only that app's settings, builds in a folder of its own on the
 phone (Tests/<title ID>/ in the app's Build folder), and puts the settings back at the end, also after an error or Ctrl-C. It never sends anything to the player's app.
 
-Scenarios (--scenarios, run in this order; `again` and `dlc-later` need `full` before them):
+Scenarios (--scenarios, run in this order; `again`, `new-folder` and `dlc-later` need `full` before them):
   full       a build from nothing: the reference (each step's time, the SHA-256 of the shader library and of each rewritten module)
   again      Import again of that build: its time and what was kept; the library and the modules must be the full build's byte for byte
+  new-folder a Build of the same game in another, empty Build folder, the app's build caches kept (no_backup/reuse: another Build folder, a build deleted):
+             the .nup made again, the shaders kept from the caches' copy of the library; the library and the modules must be the full build's byte for byte
   dlc-later  copies of the base and the update without the DLC, in the check's folder: a build from them (its addon_missing answered with Try anyway),
              then the DLC added and Import again; the library must be the full build's byte for byte
 Each step's time comes from the app's status file, read every two seconds (the times are good to about that).
 
-Usage: incremental-check.py --package <development build's id> --title <title ID> [--serial <adb serial>] [--scenarios full,again,dlc-later]
+Usage: incremental-check.py --package <development build's id> --title <title ID> [--serial <adb serial>] [--scenarios full,again,new-folder,dlc-later]
                            [--out <report.json>] [--keep] [--backup <folder>]
   --serial is needed when adb sees more than one phone; the phone is chosen once, at the start (a device appearing later does not change it).
   --keep leaves the check's folder on the phone (its builds, the copies of the game's files); by default it is deleted at the end.
@@ -219,8 +221,15 @@ class Check:
             c = l.split()
             if len(c) == 2: mods[posixpath.basename(c[1]).split('.')[0]] = c[0]
         logs = f'{base}/{self.title}-work/ondevice/logs'
-        reuse = [l.strip() for l in self.p.sh(f"cat {logs}/split.log {logs}/shaders.log {logs}/rewrite.log 2>/dev/null | grep -E 'reuse|kept,' || true").splitlines()]
-        return {'library': lib[0] if lib else None, 'modules': mods, 'reuse': reuse[-8:]}
+        reuse = [l.strip() for l in self.p.sh(f"cat {logs}/split.log {logs}/shaders.log {logs}/rewrite.log 2>/dev/null | grep -E 'reuse|kept,|kept from' || true").splitlines()]
+        return {'library': lib[0] if lib else None, 'modules': mods, 'reuse': reuse[-40:]}
+
+    def used(self, what, rec, pattern):
+        """A cache this run had to use, by its log lines: the outputs alone would be the same from a translation of everything"""
+        ok = any(re.search(pattern, l) for l in rec.get('reuse') or [])
+        self.report['checks'].append({'check': what, 'ok': ok})
+        print(f'{"OK  " if ok else "FAIL"} {what}', flush=True)
+        return ok
 
     def same(self, what, a, b, field):
         ok = a.get(field) is not None and a.get(field) == b.get(field)
@@ -229,9 +238,9 @@ class Check:
         return ok
 
     # scenarios -------------------------------------------------------------------------------------------------------------------------------------
-    def fresh(self, name, **dirs):
+    def fresh(self, name, keep_caches=False, **dirs):
         folder = f'{self.root}/{name}'
-        self.p.run_as('rm -rf no_backup/reuse no_backup/xlate no_backup/split.scan', check=False)
+        self.p.run_as('rm -rf ' + ('no_backup/xlate no_backup/split.scan' if keep_caches else 'no_backup/reuse no_backup/xlate no_backup/split.scan'), check=False)
         q = shlex.quote(folder)
         self.p.sh(f'rm -rf {q}; mkdir -p {q}')
         self.use(folder, **dirs)
@@ -253,6 +262,14 @@ class Check:
             runs['again'] = self.build('Import again', 'reimport', self.full_folder, confirm=True)
             self.same('Import again: the shader library is the full build\'s byte for byte', runs['again'], runs['full'], 'library')
             self.same('Import again: the modules are the full build\'s byte for byte', runs['again'], runs['full'], 'modules')
+        if 'new-folder' in scenarios:
+            folder = self.fresh('new-folder', keep_caches=True)
+            runs['new-folder'] = self.build('another Build folder, the caches kept: Build', 'build', folder)
+            self.same('Another Build folder: the shader library is the full build\'s byte for byte', runs['new-folder'], runs['full'], 'library')
+            self.same('Another Build folder: the modules are the full build\'s byte for byte', runs['new-folder'], runs['full'], 'modules')
+            self.used('Another Build folder: shaders kept from the app\'s copy of the library', runs['new-folder'], r'/library/v-[0-9a-f]+/dmsh_vk\.lib: [1-9]\d* shaders kept')
+            self.used('Another Build folder: modules put back from the app\'s copies', runs['new-folder'], r'kept from the app\'s copy of its last rewrite')
+            self.used('Another Build folder: game files kept by the split', runs['new-folder'], r'split reuse: [1-9]\d* of \d+ files kept')
         if 'dlc-later' in scenarios:
             files = (self.p.ctl('reimport', title_id=self.title).get('data') or {})   # without confirm: what an Import again would read, nothing changed
             base, update, dlc = files.get('base'), files.get('update'), files.get('dlc') or []
@@ -279,14 +296,14 @@ class Check:
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--package', required=True); ap.add_argument('--title', required=True); ap.add_argument('--serial')
-    ap.add_argument('--scenarios', default='full,again,dlc-later'); ap.add_argument('--out'); ap.add_argument('--keep', action='store_true')
+    ap.add_argument('--scenarios', default='full,again,new-folder,dlc-later'); ap.add_argument('--out'); ap.add_argument('--keep', action='store_true')
     ap.add_argument('--backup', help='where the app\'s settings are kept on this computer while the check runs (default: a folder in the temp folder)')
     a = ap.parse_args()
     if a.package in NOT_THESE: sys.exit(f'{a.package} is a player\'s app: give the development build\'s id (-PnxAppId)')
     if not re.fullmatch(r'[0-9A-Fa-f]{16}', a.title): sys.exit(f'{a.title} is no title ID')
     scenarios = [s for s in a.scenarios.split(',') if s]
-    if any(s not in ('full', 'again', 'dlc-later') for s in scenarios): sys.exit(f'unknown scenario in {a.scenarios}')
-    if ('again' in scenarios or 'dlc-later' in scenarios) and 'full' not in scenarios: sys.exit('again and dlc-later compare with full: run it too')
+    if any(s not in ('full', 'again', 'new-folder', 'dlc-later') for s in scenarios): sys.exit(f'unknown scenario in {a.scenarios}')
+    if any(s in scenarios for s in ('again', 'new-folder', 'dlc-later')) and 'full' not in scenarios: sys.exit('again, new-folder and dlc-later compare with full: run it too')
     try: serial = pick_serial(a.serial)
     except SetupError as e: print(f'setup: {e}', file=sys.stderr); return 2
     phone = Phone(serial, a.package)
