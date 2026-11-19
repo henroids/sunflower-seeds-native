@@ -89,6 +89,7 @@ public final class PackService extends Service {
     private volatile boolean checking;   // PEANUTS: the full check of the shaders a build kept runs (checkKept, dev.peanuts.build.ReuseCheck): the shaders step's tool with --check
     private volatile boolean checkRunning;   // PEANUTS: its worker is alive (until its end is posted)
     private volatile Intent afterCheck;   // PEANUTS: a job's start that came during the check: it runs once the check has stopped
+    private volatile Job checkJob;   // PEANUTS: the done job the check runs with: save and publish write and send nothing of it (a build that binds meanwhile must not take it for its own)
     private PrepareText.Failure failure;   // what the last step that failed said for the card (step() sets it with its reason; the worker thread only)
     private volatile boolean heatOverride;   // Go on anyway: the heat pause is lifted while this service runs the job
     private int batteryPct = 100, thermal;
@@ -156,12 +157,13 @@ public final class PackService extends Service {
             Log.w(TAG, "job: " + e.getMessage());
         }
         // PEANUTS begin: dev.peanuts.build.ReuseCheck's start: the full check of the shaders the done job's last build kept (shader_reuse.py --check), only while it is due
-        final boolean check = intent != null && intent.getBooleanExtra(dev.peanuts.build.ReuseCheck.EXTRA_CHECK, false) && j != null && "done".equals(j.state())
+        final boolean checkAsked = intent != null && intent.getBooleanExtra(dev.peanuts.build.ReuseCheck.EXTRA_CHECK, false);
+        final boolean check = checkAsked && j != null && "done".equals(j.state())
                 && !j.apkChanged() && !engine.simulated() && dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId()) && (worker == null || !worker.isAlive());
         if (check) checking = true;   // the notification says so from the start (note)
         // PEANUTS end
         // A sticky restart (no intent: the process was killed) resumes only a job that was running; a start resumes one that is not done
-        boolean go = check || j != null && (intent == null ? "running".equals(j.state()) : !"done".equals(j.state()) || j.apkChanged());   // PEANUTS: check ||
+        boolean go = check || !checkAsked && j != null && (intent == null ? "running".equals(j.state()) : !"done".equals(j.state()) || j.apkChanged());   // PEANUTS: check ||, !checkAsked: a check's start never runs a job (an app update's job waits for the user)
         if (go && intent == null) stepLog(j, "going on after Android ended the job's process (a sticky restart; " + readings() + ")");
         if (!go && (worker == null || !worker.isAlive())) {
             // startForegroundService must be answered by startForeground even when there is nothing to do
@@ -196,6 +198,7 @@ public final class PackService extends Service {
             stopReason = null;
             heatOverride = false;
             final Job cj = j;
+            checkJob = j;
             checkRunning = true;
             worker = new Thread(() -> checkKept(cj), "nxpack-check");
             worker.start();
@@ -236,7 +239,7 @@ public final class PackService extends Service {
     @Override public void onTimeout(int startId, int fgsType) {
         Job j = job;
         stepLog(j, "pausing: timeout: Android's daily limit for background work (6 h of dataSync) is reached; " + readings());
-        if (j != null) {
+        if (j != null && j != checkJob) {   // PEANUTS: the full check's job stays done
             j.state("paused", "timeout", null);
             save(j, true);
         }
@@ -291,7 +294,7 @@ public final class PackService extends Service {
             if (w != null && w.isAlive() && worker == w) {
                 Job j = job;
                 stepLog(j, "the tool did not stop within 20 s of the " + reason + " pause: ending the process (the step runs again on Resume)");
-                if (j != null) {
+                if (j != null && j != checkJob) {   // PEANUTS: the full check's job stays done (the check goes on another time)
                     j.state("paused", reason, null);
                     save(j, true);
                     stopForeground(STOP_FOREGROUND_DETACH);
@@ -448,6 +451,7 @@ public final class PackService extends Service {
                 // the split and the translation results are not needed once the library is in the pack
                 try {
                     if (!dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId())) Outputs.delete(new File(j.dir(), "split"));   // PEANUTS: kept for the full check of the shaders this build kept (checkKept), which deletes it
+                    else dev.peanuts.build.ReuseCheck.remember(getNoBackupFilesDir(), j.titleId(), j.file);   // PEANUTS: the job it checks with, for every way a job ends (ReuseCheck.startAny)
                 } catch (IOException e) {
                     Log.w(TAG, "split: " + e.getMessage());   // the job is done all the same; a later split begins by deleting it again
                 }
@@ -489,14 +493,15 @@ public final class PackService extends Service {
     private void checkKept(Job j) {
         wake.acquire(7 * 3600_000L);
         long since = System.currentTimeMillis();
-        String what;
+        String what = "ended";
+        String fixed = null;
         try {
             if (autoReason != null) what = "waits (" + autoReason + "; " + readings() + ")";
             else if (dev.peanuts.build.ReuseCheck.gameRunning(this)) what = "waits (a game runs)";
             else {
-                Thread watch = new Thread(() -> {
+                Thread watch = new Thread(() -> {   // a game that starts stops the tool; before the tool runs, step() looks itself
                     while (checking) {
-                        if (dev.peanuts.build.ReuseCheck.gameRunning(this)) { Log.i(TAG, "check: a game started: stopping the check"); if (inTool) engine.interrupt(); return; }
+                        if (inTool && dev.peanuts.build.ReuseCheck.gameRunning(this)) { Log.i(TAG, "check: a game started: stopping the check"); engine.interrupt(); return; }
                         SystemClock.sleep(3000);
                     }
                 }, "nxpack-check-game");
@@ -505,30 +510,36 @@ public final class PackService extends Service {
                 String fail = step(j, Job.SHADERS);
                 what = fail == null ? "done" : fail;
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {   // the end below runs whatever happened: a check left running would hold every later job's start
             Log.e(TAG, "check", e);
             what = String.valueOf(e);
         } finally {
             checking = false;
             if (wake.isHeld()) wake.release();
+            try {
+                File nb = getNoBackupFilesDir();
+                boolean due = dev.peanuts.build.ReuseCheck.due(nb, j.titleId());
+                if (!due) Outputs.delete(new File(j.dir(), "split"));
+                fixed = dev.peanuts.build.ReuseCheck.replacedText(nb, j.titleId(), j.name(), since);
+                dev.peanuts.build.ReuseCheck.log(new File(j.dir(), "logs"), "check: " + what + (due ? "; the check is still due (another time)" : ""));
+            } catch (IOException | RuntimeException e) {
+                Log.w(TAG, "check: after it: " + e);
+            }
+            final String note = fixed;
+            main.post(() -> {
+                Intent next = afterCheck;
+                afterCheck = null;
+                checkRunning = false;
+                checkJob = null;
+                worker = null;
+                if (next != null) {   // the job that started during the check: started again now, while this service is still in the foreground
+                    try { startForegroundService(next); } catch (RuntimeException e) { Log.w(TAG, "check: the job that waited could not start: " + e); }
+                } else stopForeground(STOP_FOREGROUND_REMOVE);
+                if (note != null) nm.notify(NOTE + 7, new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_banana_mono).setContentTitle(j.name() + ": shaders made again")
+                        .setContentText(note).setStyle(new Notification.BigTextStyle().bigText(note)).setAutoCancel(true).build());
+                if (next == null) stopSelf();
+            });
         }
-        File nb = getNoBackupFilesDir();
-        boolean due = dev.peanuts.build.ReuseCheck.due(nb, j.titleId());
-        if (!due) try { Outputs.delete(new File(j.dir(), "split")); } catch (IOException e) { Log.w(TAG, "check: split: " + e.getMessage()); }
-        String fixed = dev.peanuts.build.ReuseCheck.replacedText(nb, j.titleId(), j.name(), since);
-        dev.peanuts.build.ReuseCheck.log(new File(j.dir(), "logs"), "check: " + what + (due ? "; the check is still due (another time)" : ""));
-        main.post(() -> {
-            Intent next = afterCheck;
-            afterCheck = null;
-            checkRunning = false;
-            worker = null;
-            if (next != null) {   // the job that started during the check: started again now, while this service is still in the foreground
-                try { startForegroundService(next); } catch (RuntimeException e) { Log.w(TAG, "check: the job that waited could not start: " + e); }
-            } else stopForeground(STOP_FOREGROUND_REMOVE);
-            if (fixed != null) nm.notify(NOTE + 7, new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_banana_mono).setContentTitle(j.name() + ": shaders made again")
-                    .setContentText(fixed).setStyle(new Notification.BigTextStyle().bigText(fixed)).setAutoCancel(true).build());
-            if (next == null) stopSelf();
-        });
     }
     // PEANUTS end
 
@@ -830,6 +841,7 @@ public final class PackService extends Service {
         long began = SystemClock.elapsedRealtime();   // PEANUTS
         try {
             if (autoReason != null || stopReason != null) return "interrupted";
+            if (checking && (afterCheck != null || dev.peanuts.build.ReuseCheck.gameRunning(this))) return "interrupted";   // PEANUTS: a job or a game came while the check got ready (the interrupt reaches only a running tool)
             code = engine.run(tool, argv, log.getPath());
         } finally {
             inTool = false;
@@ -1162,6 +1174,7 @@ public final class PackService extends Service {
 
     /** Writes job.json (at most every 2 s unless forced) and tells the notification and the launcher */
     private void save(Job j, boolean force) {
+        if (j != null && j == checkJob) return;   // PEANUTS: the full check's done job: its job.json may be a new job's by now (checkKept)
         long now = SystemClock.elapsedRealtime();
         synchronized (this) {
             if (force || now - lastSave >= 2000) {
@@ -1177,7 +1190,7 @@ public final class PackService extends Service {
     }
 
     private void publish(Job j, boolean force) {
-        if (j == null) return;
+        if (j == null || j == checkJob) return;   // PEANUTS: never the full check's done job (checkKept): a build waiting for its own job would read "done"
         long now = SystemClock.elapsedRealtime();
         if (force || now - lastSend >= 250) {
             lastSend = now;

@@ -55,19 +55,21 @@ own check, the split against the profile, every module through spirv-val.
 
 ## The full check, later
 
-The sample checks a build's kept shaders at once; the full check checks every one of them later, while the phone charges. A build that kept shaders leaves
-`no_backup/reuse/<title ID>/check.todo` (the library's id) and, beside it, the job's path (`check.job`). The packer (`PackService`) then runs the done job's
+The sample checks a build's kept shaders at once; the full check checks every one of them later, while the phone is plugged in. A build that kept shaders
+leaves `no_backup/reuse/<title ID>/check.todo` (the library's id) and, beside it, the job's path (`check.job`, written when the job ends). The packer (`PackService`) then runs the done job's
 shaders step again with `--check` first (`shader_reuse.py full_check`): every shader translated again as a build from nothing, into
 `no_backup/reuse/<title ID>/check/` (results of its own: the build's results hold the kept entries), then each entry of the library compared with that
 translation (`ondevice/logs/check.log`).
 
 - When: at the end of a build (`dev.peanuts.build.BuildService`, after graphics setup and the companion), and from the launcher's 30 s timer while the app
-  runs (`dev.peanuts.ui.Library`, at most every two minutes), each only while the phone charges and no game runs (`dev.peanuts.build.ReuseCheck`). The
-  notification says "Checking <game>'s shaders".
-- It changes nothing of the job (its own log, its progress under a step of its own; the done shaders step stays as it was) and the game plays as usual: the
-  library is only read. The job's `split/` stays until the check is done.
-- It stops when a game starts (checked every 3 s), when the packer's policy pauses (battery, heat), or when a job starts (the job goes first: the packer starts
-  it once the check has stopped). It goes on another time from the results it kept.
+  runs (`dev.peanuts.ui.Library`, at most every two minutes), each only while the phone is plugged in with 40 % or more and no game runs
+  (`dev.peanuts.build.ReuseCheck`; plugged in, not "charging": with a charge limit or bypass charging Android says the phone is not charging). The
+  notification says "Checking <game>'s shaders". A check's start never runs a job (a job an app update left waits for the user).
+- It changes nothing of the job: its `job.json` is neither written nor sent to the launcher (a build that binds meanwhile must not read "done" for its own
+  job), its progress goes under a step of its own, and a timeout or a pause leaves it done. The game plays as usual: the library is only read. The job's
+  `split/` stays until the check is done.
+- It stops when a game starts (checked every 3 s, and once more before the tool runs), when the packer's policy pauses (battery, heat), or when a job starts
+  (the job goes first: the packer starts it once the check has stopped). It goes on another time from the results it kept.
 - All the same: `checked.tsv` says so, and the check's files and the split go. One that differs (or a shader only one of them has): the full translation is what
   the game should have, so it takes the library's place in the pack, as the pack step copies one (a `.partial`, then a rename), and becomes the record and the
   kept copy; `check.failed` lists the shaders, `check.log` has a `[RED] reuse full check` line, and a notification says the game has the full translation now.

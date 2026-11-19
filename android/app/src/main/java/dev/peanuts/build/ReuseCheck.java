@@ -55,9 +55,19 @@ public final class ReuseCheck {
         return false;
     }
 
+    /** Battery the check needs at least, plugged in: a port that does not keep up under load (a computer's) drains the phone while the check translates */
+    static final int MIN_PCT = 40;
+    static final String NOT_PLUGGED = "not plugged in with " + MIN_PCT + " % or more";
+
+    /**
+     * Whether the phone is plugged in with at least MIN_PCT % (plugged, not "charging": with a charge limit or bypass charging the phone runs from the charger and
+     * Android says it is not charging). The packer's own policy still pauses below 20 % on battery
+     */
     static boolean charging(Context c) {
         Intent b = c.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        return b != null && b.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
+        if (b == null || b.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) == 0) return false;
+        int level = b.getIntExtra(BatteryManager.EXTRA_LEVEL, -1), scale = b.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+        return level < 0 || scale <= 0 || level * 100 / scale >= MIN_PCT;
     }
 
     /**
@@ -67,7 +77,7 @@ public final class ReuseCheck {
     public static String start(Context c, File jobFile, String titleId) {
         if (!due(c.getNoBackupFilesDir(), titleId)) return "nothing due";
         if (jobFile == null || !jobFile.isFile()) return "no job";
-        if (!charging(c)) return "not charging";
+        if (!charging(c)) return NOT_PLUGGED;
         if (gameRunning(c)) return "a game runs";
         try {
             c.startForegroundService(Upstream.packStart(c, jobFile).putExtra(EXTRA_CHECK, true));
@@ -109,8 +119,8 @@ public final class ReuseCheck {
                     File job = new File(new String(Files.readAllBytes(new File(g, JOB).toPath()), StandardCharsets.UTF_8).trim());
                     String why = start(app, job, g.getName());
                     if (why == null) return;   // one at a time
-                    if (!why.equals("not charging") && !why.equals("a game runs")) Log.i(TAG, "reuse check: " + g.getName() + ": " + why);
-                    if (why.equals("not charging") || why.equals("a game runs")) return;   // the same for every game
+                    if (!why.equals(NOT_PLUGGED) && !why.equals("a game runs")) Log.i(TAG, "reuse check: " + g.getName() + ": " + why);
+                    if (why.equals(NOT_PLUGGED) || why.equals("a game runs")) return;   // the same for every game
                 } catch (IOException e) {
                     Log.i(TAG, "reuse check: " + g.getName() + ": no job to check with (" + e.getMessage() + ")");
                 }
