@@ -57,6 +57,18 @@ def digest(*parts):
     return h.hexdigest()
 
 
+def own_sources():
+    """What decides a result besides the tools digest_sources lists: this module (what is kept, canon) and the C Yaz0 decoder shader_split.py takes when it is
+    there (_nxyaz0: its bytes are the loop's or None, but a module of another build must not keep results it made). → [(name, its SHA-256)]"""
+    out = [('split_reuse.py', hashlib.sha256(Path(__file__).read_bytes()).digest())]
+    import importlib.util
+    spec = importlib.util.find_spec('_nxyaz0')
+    if spec is None: out.append(('_nxyaz0', b'none'))
+    elif spec.origin and os.path.isfile(spec.origin): out.append(('_nxyaz0', hashlib.sha256(Path(spec.origin).read_bytes()).digest()))
+    else: out.append(('_nxyaz0', f'module {spec.origin}'.encode()))   # (built in: no file to hash)
+    return out
+
+
 class Context:
     """One split's reuse: the common part of its keys, the folder of that part's kept results, and what fill() put into the ScanCache (forget() takes it out)"""
 
@@ -69,6 +81,7 @@ class Context:
         for p in sources:
             h.update(f'{os.path.basename(p)}\0'.encode())
             with open(p, 'rb') as f: h.update(hashlib.sha256(f.read()).digest())
+        for name, sha in own_sources(): h.update(f'{name}\0'.encode() + sha)
         h.update(repr(canon(common)).encode()); h.update(repr(canon(zdicts)).encode())
         h.update(repr(sorted(keep) if keep is not None else None).encode())
         h.update(repr([(k, os.environ.get(k)) for k in ENV] + sorted((k, v) for k, v in os.environ.items() if k.startswith('DM_SPLIT_'))).encode())
@@ -81,6 +94,7 @@ class Context:
             for d in (self.root.parent.iterdir() if self.root.parent.is_dir() else []):   # one common part a game: older ones (other tools, another main) go
                 if d.name != self.part: shutil.rmtree(d, ignore_errors=True)
             self.root.mkdir(parents=True, exist_ok=True)
+            for f in self.root.rglob('*.tmp'): f.unlink(missing_ok=True)   # what a split stopped while it wrote left (the packer runs one job at a time)
             self.empty = self._load_empty()
         except Exception as e: self._stop(e)
 
@@ -143,13 +157,21 @@ class Context:
     def _has(self, key): return key in self.empty or self._path(key).is_file()
 
     def _get(self, key):
+        """The kept result of key; None when its file does not read as one (cut short by a reboot after its rename, or not a result): the file goes and the
+        job is scanned, so one damaged file does not turn the reuse off on every later split"""
         if key in self.empty: return self.empty[key]
-        with open(self._path(key), 'rb') as f: return self.unpickler(f).load()
+        try:
+            with open(self._path(key), 'rb') as f: r = self.unpickler(f).load()
+            if isinstance(r, tuple) and len(r) == 4: return r
+        except Exception: pass
+        self._path(key).unlink(missing_ok=True)
+        return None
 
     def _write(self, rel, data):
+        """data to rel, whole or not at all: a temporary file of this process, flushed to storage, then renamed"""
         p = self.root / rel; p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix('.tmp')
-        with open(tmp, 'wb') as f: f.write(data)
+        tmp = p.with_name(f'{p.name}.{os.getpid()}.tmp')
+        with open(tmp, 'wb') as f: f.write(data); f.flush(); os.fsync(f.fileno())
         os.replace(tmp, p)
 
     def _stop(self, e):
@@ -162,14 +184,15 @@ class Context:
         if self.off: return
         try:
             self.keys = [self.key(j) for j in jobs]
-            can = [i for i, k in enumerate(self.keys) if k is not None and start + i not in cache.have and self._has(k)]
+            got = {i: r for i, k in enumerate(self.keys) if k is not None and start + i not in cache.have and self._has(k) and (r := self._get(k)) is not None}
+            can = sorted(got)
             salt = os.urandom(16)   # another sample at every split: there is no full check after it, so a kept result that went stale is met within builds, not never
             order = sorted(can, key=lambda i: digest('pn-sample', salt, self.keys[i]))
             n = min(len(can), max(SAMPLE_MIN, -(-len(can) // SAMPLE_SHARE)))
             check = set(order[:n]) if len(can) >= CHECK_FROM else set()   # too few to spare one: all kept (the split's tables are still compared with the profile)
             for i in can:
-                if i in check: self.expect[i] = self._get(self.keys[i])
-                else: cache.have[start + i] = self._get(self.keys[i]); self.filled.append(start + i)
+                if i in check: self.expect[i] = got[i]
+                else: cache.have[start + i] = got[i]; self.filled.append(start + i)
             self.kept += len(self.filled); self.checked += len(self.expect)
         except Exception as e:
             self.forget(cache); self._stop(e)

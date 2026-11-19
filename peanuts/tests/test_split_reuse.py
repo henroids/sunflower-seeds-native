@@ -139,6 +139,38 @@ class SplitReuse(unittest.TestCase):
             seen |= set(names)
         self.assertGreater(len(seen), 2)
 
+    def test_a_damaged_kept_file_is_scanned_again_not_the_reuse_turned_off(self):
+        nup = self.nup(self.files)
+        ref, _, _ = self.split(nup, 'ref', reuse=False)
+        self.split(nup, 'first')
+        kept = [p for p in self.reuse.rglob('*.pkl') if not p.name.startswith('empty-')]
+        self.assertTrue(kept)
+        for p in kept: p.write_bytes(b'')   # what a rename that reached storage before its data leaves after a reboot
+        for name in ('second', 'third'):
+            got, line, out = self.split(nup, name)
+            self.assertNotIn('off for this split', out)
+            self.same(got, ref)
+        self.assertTrue(all(p.stat().st_size for p in kept if p.exists()))   # kept anew, whole
+
+    def test_the_common_part_covers_the_reuse_and_the_yaz0_module(self):
+        # what split_reuse.py keeps (canon, its rules) and the C Yaz0 decoder (its bytes are the loop's, or None) decide results as the tools do
+        os.environ['PN_REUSE_DIR'] = str(self.reuse)
+        try:
+            parts = [split_reuse.Context(None, {}, None, None, [], pickle.Unpickler).part]
+            copy = self.tmp / 'mod' / 'split_reuse.py'; copy.parent.mkdir()
+            copy.write_text((REPO / 'dm/peanuts/reuse/split_reuse.py').read_text(encoding='utf-8') + '\n# another rule\n', encoding='utf-8')
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('split_reuse_changed', copy)
+            changed = importlib.util.module_from_spec(spec); spec.loader.exec_module(changed)
+            parts.append(changed.Context(None, {}, None, None, [], pickle.Unpickler).part)
+            fake = self.tmp / 'yaz0'; fake.mkdir()
+            (fake / '_nxyaz0.py').write_text('def decode(s): return None\n')
+            sys.path.insert(0, str(fake))
+            try: parts.append(split_reuse.Context(None, {}, None, None, [], pickle.Unpickler).part)
+            finally: sys.path.remove(str(fake))
+        finally: del os.environ['PN_REUSE_DIR']
+        self.assertEqual(len(set(parts)), 3, parts)
+
     def test_a_decode_that_failed_once_is_not_kept(self):
         # a size-prefixed container (HAL's .cmp: shader_split.py unsized) whose LZ4 frame the decoder could not open this once (no memory): the file is
         # unreadable for this split, never a result to keep, and the next split reads its shaders. The stand-in lz4 undoes a XOR, or fails as asked

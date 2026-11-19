@@ -174,8 +174,12 @@ keeps, across builds, the result of every plain file job (`<PN_REUSE_DIR>/split/
 - the names and SHA-256s of the files beside it whose name starts with its stem: what a plain file's reader opens besides it (`stem + '.dict'`,
   `stem + '.patch'`, each name a Next Level Games index lists);
 - the job's direct-scan entry (its recorded containers, `DM_SPLIT_DIRECT`);
-- a common part: the tools' and the profile's sources (`digest_sources`), Unity's common strings from main, the zstd dictionaries, `DM_SPLIT_SELECTED`, the split's
-  environment and Python's version. Another common part (other tools, another main whose strings differ) starts the kept results over.
+- a common part: the tools' and the profile's sources (`digest_sources`), `split_reuse.py` itself and the `_nxyaz0` module (or none), Unity's common strings
+  from main, the zstd dictionaries, `DM_SPLIT_SELECTED`, the split's environment and Python's version. Another common part (other tools, another main whose
+  strings differ) starts the kept results over.
+
+A kept result is written whole or not at all (a temporary file, flushed to storage, then renamed); one that does not read back (cut short by a reboot) is
+deleted and its file scanned, so it does not turn the reuse off for later splits.
 
 Before the scan the kept results go into the `ScanCache` and each kept file is a batch of its own, so only the others are scanned, in runs as before; after it the
 new results are kept. A file whose result says it could not be read is never kept, nor one whose decoder failed for something other than its bytes (no
