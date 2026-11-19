@@ -471,9 +471,14 @@ final class Prefs {
     static boolean instancedDraws(Context c, String titleId) { return of(c).getBoolean(gameKey("vk_instance", titleId), false); }
     static void instancedDraws(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("vk_instance", titleId), on).commit(); }
     /** Game settings › Background pipelines (DM_VK_PSO_ASYNC): a pipeline the cache doesn't have yet is made on two background threads instead of on the frame,
-     *  so a cold cache gives a short pop-in instead of a freeze (Bananza's heaviest area with an empty cache: worst frame 8.1 s → 3.7 s). On by default */
-    static boolean psoAsync(Context c, String titleId) { return of(c).getBoolean(gameKey("vk_pso_async", titleId), true); }
-    static void psoAsync(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("vk_pso_async", titleId), on).commit(); }
+     *  so a cold cache gives a short pop-in instead of a freeze (Bananza's heaviest area with an empty cache: worst frame 8.1 s → 3.7 s). On by default, except MLB The Show 26:
+     *  it bakes skin, faces and hair once into textures it keeps, and a bake skipped while its pipeline was being made stays black (every run on an empty pipeline
+     *  cache: a fresh install, cleared data). Its own key, so an older saved "on" does not carry over */
+    static final String MLB26 = "0100AA7024094000";
+    static boolean psoAsync(Context c, String titleId) {
+        return MLB26.equalsIgnoreCase(titleId) ? of(c).getBoolean(gameKey("vk_pso_async2", titleId), false) : of(c).getBoolean(gameKey("vk_pso_async", titleId), true);
+    }
+    static void psoAsync(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey(MLB26.equalsIgnoreCase(titleId) ? "vk_pso_async2" : "vk_pso_async", titleId), on).commit(); }
     /**
      * RAM saver (per game, off by default; from Anka Native, NOTICE.md): DM_MEM_FILEBACK=1 with DM_MEM_FILEBACK_KINDS=shader,texture for the host (shader-code pools are
      * file-backed for every game by default; this adds the texture kind), so the game's large write-once texture pools live in a file in the app's cache folder instead of anonymous memory: clean file pages the kernel drops instead of compressing them into
