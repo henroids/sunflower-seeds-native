@@ -15,10 +15,29 @@ class SwapScreens(unittest.TestCase):
 
     def test_off_means_the_start_as_before(self):
         src = (JAVA / 'dev/peanuts/Screens.java').read_text(encoding='utf-8')
-        body = src[src.index('public static void startGame'):]
-        self.assertLess(body.index('PeanutsPrefs.swapScreens(launcher) ? external(launcher) : null'), body.index('setLaunchDisplayId'))
-        self.assertLess(body.index('manager.isActivityStartAllowedOnDisplay'), body.index('setLaunchDisplayId'))
-        self.assertLess(body.index('catch (SecurityException | IllegalArgumentException e)'), body.index('launcher.startActivity(intent);'))
+        start = src[src.index('public static void startGame'):src.index('static boolean startOn')]
+        self.assertLess(start.index('PeanutsPrefs.swapScreens(launcher) ? external(launcher) : null'), start.index('startOn(launcher, intent, d.getDisplayId())'))
+        self.assertLess(start.index('startOn(launcher, intent, d.getDisplayId())'), start.index('launcher.startActivity(intent);'))
+        on = src[src.index('static boolean startOn'):]
+        self.assertLess(on.index('d.isValid()'), on.index('setLaunchDisplayId'))
+        self.assertLess(on.index('manager.isActivityStartAllowedOnDisplay'), on.index('setLaunchDisplayId'))
+        self.assertLess(on.index('catch (SecurityException | IllegalArgumentException e)'), on.index('return false;'))
+
+    def test_the_display_the_game_started_on_is_kept(self):
+        src = (JAVA / 'dev/peanuts/Screens.java').read_text(encoding='utf-8')
+        start = src[src.index('public static void startGame'):src.index('static boolean startOn')]
+        self.assertIn('GameReturn.startedOn(launcher, d.getDisplayId());', start)
+        # a start on the launcher's display forgets an earlier game's other display
+        self.assertLess(start.index('GameReturn.startedOn(launcher, Display.INVALID_DISPLAY);'), start.index('launcher.startActivity(intent);'))
+
+    def test_app_icon_brings_the_game_back_to_its_display(self):
+        src = (JAVA / 'dev/peanuts/GameReturn.java').read_text(encoding='utf-8')
+        self.assertIn('putInt("display", display)', src)
+        back = src[src.index('public static boolean back'):src.index('private static Map<String, String> record')]
+        self.assertIn('p.getInt("display", Display.INVALID_DISPLAY)', back)
+        # the recorded display first, the plain start only when it is gone or refused
+        self.assertRegex(back, r'boolean there = display != Display\.INVALID_DISPLAY && Screens\.startOn\(home, i, display\);\s+if \(!there\) home\.startActivity\(i\);')
+        self.assertNotRegex(back, r'(?<!if \(!there\) )home\.startActivity\(i\);')
 
     def test_launcher_panel_yields_to_an_external_game_without_hiding_home_settings(self):
         bottom = (JAVA / 'dev/peanuts/ui/BottomScreen.java').read_text(encoding='utf-8')
