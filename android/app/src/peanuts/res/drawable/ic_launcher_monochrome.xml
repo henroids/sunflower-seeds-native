@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sunflower Seeds: the themed icon's seed at 57 %, as ic_launcher_foreground.xml -->
+<!-- Sunflower Seeds: the themed icon's seed at 76 %, as ic_launcher_foreground.xml -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/ic_banana_happy_mono" android:left="23dp" android:top="23dp" android:right="23dp" android:bottom="23dp" />
+    <item android:drawable="@drawable/ic_banana_happy_mono" android:left="13dp" android:top="13dp" android:right="13dp" android:bottom="13dp" />
     <item android:drawable="@drawable/ic_launcher_badge_mono" />
 </layer-list>
