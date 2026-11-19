@@ -1621,7 +1621,7 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
                     VRED("shader %016llx binding %u: buffer texture ID %d bound as a storage image: its stores go into its image of rows, not into the texture's memory (a read of that memory, or through a texel buffer, does not see them)", (unsigned long long)sh->key, r[i].binding, tid); }
                 if (tid && !storage && vka_tex_id_is_buffer(tid) && tbuf_img_gpu(tid, r[i].dim) && vktb_memo_bind_gpu(&g_tig, tid, r[i].dim) && (v = vka_tbuf_image_view(tid, r[i].dim))) tid = 0;
                 // PEANUTS end
-                else if (tid) v = vka_tex_id_view_rec(tid, g_cb, r[i].dim, wbf_view_of_binding(storage, r[i].flags, DMSH_VK_BF_RW), &lay);   // (a shader image only read: not a GPU write)
+                else if (tid) v = vka_tex_id_view_samp_rec(tid, storage ? 0 : r[i].sid, g_cb, r[i].dim, wbf_view_of_binding(storage, r[i].flags, DMSH_VK_BF_RW), &lay);   // (a shader image only read: not a GPU write)   // PEANUTS(upstream-candidate): with the binding's sampler (vka_tex.c fb_view_levels)
                 if (tid && v) class_note(sh, st, &r[i], tid, storage);
                 if (tid) tex_peek(sh->key, st, &r[i], v, storage);
                 if (tid && g_rtl_pass && rtl_room()) {   // PEANUTS: DM_VK_RT_LOG: each draw's textures, in order with its draw lines (the tex peek line is logged once per texture)

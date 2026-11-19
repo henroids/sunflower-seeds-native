@@ -1281,21 +1281,10 @@ the drift is passed unwrapped, as upstream does.
 
 The secondary panel’s lifecycle, focus and build controls live in `dev.peanuts.ui`.
 
-### On-device packer archive (2026-11-19)
-
-The marked `nxPackTools` exclusion in `android/app/build.gradle` omits developer notes and duplicate prewarm seeds from the phone packer archive. The host receives each seed through its generated runtime asset or compiled header.
-
-The marked `packageRelease` rule requests a full packaging step for Peanuts builds. Incrementally replacing `tools.zip` left the previous 23 MB entry inside the signed APK.
-
-`dm/tools/vk_prewarm.py` reads the declared number of records, including records flagged bad, before merging a capture into a seed. A truncated record header aborts the merge. The parser and its regression in `dm/tools/tests/test_vk_prewarm.py` carry upstream-candidate markers.
-
-The environment and Advanced tables document `DMSH_VK_ABSENT_FILE` as an internal packer path. The troubleshooting wiki documents the build-log share action. The Linux fixtures in `test_vk_encoder_wait.py` and `test_romfs_image.py` now compile the current encoder worker and build their synthetic index validator under GCC warning checks.
-
 ### Targeted shader splits for released games (2026-11-19)
 
 `dm/gfx/tools/shader_split.py` resolves a single registered build's paths in multi-version profiles and recognizes
-file offsets in Diablo III's CPK sources. A registered executable outside the profile's explicit shader versions triggers a full scan.
-Single-build validation checks shader keys, package groups, facts and pairs. Profiles without optional or version-specific keys skip a second parse of the shader map.
+file offsets in Diablo III's CPK sources. Single-build validation checks shader keys, package groups, facts and pairs.
 The generated `shader_files.tsv` tables for Wonder, both Kirby games, Pokémon Sword and Pokémon Shield include files
 that contribute pairs without introducing new shader keys. The targeted packages for those games and Diablo III
 matched their full-scan references by SHA-256. The Python hunks and profile tables carry `PEANUTS` markers.
@@ -1320,3 +1309,17 @@ A texture in a shader-code pool placed its parts and queued a join like a buffer
 without a PID keep their worker counts. `PrepareText.java` points an interrupted build at the log for its cause.
 The service drains the tool log before the final job save and scans each chunk once. A JVM replay with two pack
 processes selected the interrupted job’s native crash. A 2,304,000-byte backlog retained the final shader summary.
+
+### Round 30, an upsample pass reads the level its sampler pins (2026-11-19, GitHub issue #170)
+
+Breath of the Wild's Sheikah glow (the pedestal in the Shrine of Resurrection) came out low-resolution and blocky on the Thor. `view_of` gave every mip-chain pass a view of the levels below its attachment, which assumes the pass downsamples; an upsample pass renders level n and reads level n + 1 through a sampler pinned to it, and Vulkan clamped that read to level n - 1. The rule of nxnative's `fb_pinned_level` (its pull request 1073, MIT; MacNativeGames took it for Tears of the Kingdom) on the Android replay: a sampler that pins one level samples that level alone, any other keeps the levels below. A general fix, to go upstream. Runtime only: the shader chain does not move. Reference: [Upsample pass reading the level above the one it renders (Android)](../docs/reference/rendering.md#upsample-pass-reading-the-level-above-the-one-it-renders-android).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_tex.c` | 3 | `fb_samp_pin` (the level a sampler pins), `fb_view_levels` (the pinned level alone, else the levels below), `fb_pin_of` and `t_view_sid` (the draw's sampler, `DM_VK_FB_PIN`); `view_of`'s cut through `fb_view_levels`; `vka_tex_id_view_samp_rec` | `PEANUTS(upstream-candidate)` (begin/end spans) |
+| `dm/gfx/vk_android/vka_draw.c` | 1 | a sampled texture binding's view asked with its sampler ID (`vka_tex_id_view_samp_rec`), a storage image's without | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/vk_android/vka.h` | 1 | the declaration | `PEANUTS(upstream-candidate)` |
+| `docs/env_switches.tsv` | 1 row | `DM_VK_FB_PIN` (diagnostic, live) | `[PEANUTS]` |
+| `docs/reference/rendering.md`, `dm/games/01007EF00011E000/README.md` | 1 each | the entry and the game's line | `PEANUTS(upstream-candidate)` |
+| `docs/agents/symptoms.md` | 1 | regenerated (`docs_symptoms.py`, allow-listed) | `(PEANUTS, Android)` in the symptom |
+| `dm/tools/tests/test_vka_fb_pinned_level.py` (new) | whole file | runs `fb_samp_pin` and `fb_view_levels` from the production file: upsample, DKB's downsample and environment cube, every small view | `PEANUTS(upstream-candidate)` in its docstring |
