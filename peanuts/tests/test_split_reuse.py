@@ -1,0 +1,133 @@
+"""dm/peanuts/reuse/split_reuse.py (issue #120): the shader split keeps the scan results of game files that did not change across builds and scans only the
+others; its outputs are always the ones a split without it makes, byte for byte. shader_split.py runs as on the phone (a .nup's RomFS, PN_REUSE_DIR), on a
+synthetic game packed with dm/tools/nup_pack.py (raw files, so no zstd): BNSH and SARC files with shaders made as the targeted split's test makes them, and files
+without any. No game files."""
+import os
+import pickle
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(REPO / 'dm/tools/tests'), str(REPO / 'dm/peanuts/reuse')]
+from test_split_targeted import BUILD, GAME, TABLES, bnsh, ps, sarc, vs   # noqa: E402  (its synthetic shader files)
+import split_reuse   # noqa: E402
+
+MODELS = 60   # files with no shader: four batches of 16 with the others, so the check has batches to take
+
+
+class SplitReuse(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix='pnsplit_')); self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.reuse = self.tmp / 'reuse'
+        self.prof = self.tmp / 'profiles' / GAME; self.prof.mkdir(parents=True)
+        (self.prof / 'game.tsv').write_text(f'title_id\t{GAME}\nbuild\tv0\t1.0.0\tmain={BUILD.hex()}\nshader_groups\t/Shader/=shader\nshader_note\tTest shaders\n')
+        self.files = {'Shader/a.bnsh': bnsh(vs(1), ps(1)), 'Shader/pack.sarc': sarc([(b'b.bnsh', bnsh(vs(2), ps(2)))])}
+        self.files.update({f'Model/m{i:02}.bin': b'no shaders here %d' % i for i in range(MODELS)})
+        self.n = 0
+
+    def nup(self, files):
+        """A .nup of the base with these RomFS files and a main of the profile's build"""
+        self.n += 1
+        dump = self.tmp / f'dump{self.n}'
+        for rel, data in files.items():
+            p = dump / 'base' / 'romfs' / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(data)
+        main = dump / 'base' / 'exefs' / 'main'; main.parent.mkdir(parents=True, exist_ok=True)
+        main.write_bytes(b'NSO0' + bytes(0x3c) + BUILD + bytes(0x100 - 0x50))
+        out = self.tmp / f'game{self.n}.nup'
+        r = subprocess.run([sys.executable, REPO / 'dm/tools/nup_pack.py', dump, out, '--raw'], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return out
+
+    def split(self, nup, name, reuse=True):
+        out = self.tmp / name
+        env = dict(os.environ, DM_GAME=str(self.prof), J='1', DM_SPLIT_SELECTED='0')
+        for k in ('DM_SPLIT_RESUME', 'DM_SPLIT_TARGETED', 'DM_SPLIT_FILES', 'DM_GAMES_DIR', 'PN_REUSE', 'PN_REUSE_DIR'): env.pop(k, None)
+        if reuse: env['PN_REUSE_DIR'] = str(self.reuse)
+        else: env['PN_REUSE'] = '0'
+        r = subprocess.run([sys.executable, REPO / 'dm/gfx/tools/shader_split.py', f'{nup}:base/romfs', f'{nup}:base/exefs/main', out / 'pkg',
+                            *[out / t for t in TABLES]], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        line = [l for l in r.stdout.splitlines() if l.startswith('split reuse')]
+        return out, line[-1] if line else '', r.stdout
+
+    def same(self, a, b):
+        self.assertEqual(sorted(os.listdir(a / 'pkg')), sorted(os.listdir(b / 'pkg')))
+        for f in os.listdir(a / 'pkg'): self.assertEqual((a / 'pkg' / f).read_bytes(), (b / 'pkg' / f).read_bytes(), f)
+        for t in TABLES: self.assertEqual((a / t).read_bytes(), (b / t).read_bytes(), t)
+
+    @staticmethod
+    def kept(line):   # 'split reuse: K of N files kept ...' → K
+        return int(line.split()[2])
+
+    def test_a_second_split_keeps_every_file_and_makes_the_same_outputs(self):
+        nup = self.nup(self.files)
+        ref, _, _ = self.split(nup, 'ref', reuse=False)
+        first, line, _ = self.split(nup, 'first')
+        self.assertEqual(self.kept(line), 0)
+        self.same(first, ref)
+        again, line, _ = self.split(nup, 'again')
+        self.assertGreater(self.kept(line), MODELS // 2)   # all but the batches scanned to check them
+        self.same(again, ref)
+
+    def test_a_changed_file_and_a_new_one_are_scanned(self):
+        self.split(self.nup(self.files), 'first')
+        changed = dict(self.files)
+        changed['Shader/a.bnsh'] = bnsh(vs(3), ps(1))   # another vertex shader in a file that had one
+        changed['Shader/new.bnsh'] = bnsh(vs(4), ps(4))   # a file that was not there
+        changed['Model/m05.bin'] = b'changed'   # a file beside many unchanged ones
+        nup = self.nup(changed)
+        after, line, _ = self.split(nup, 'after')
+        ref, _, _ = self.split(nup, 'ref', reuse=False)
+        self.same(after, ref)
+        self.assertGreaterEqual(self.kept(line), MODELS - 16 - 1)   # the unchanged files of the Model folder (less a batch scanned to check them and m05)
+
+    def test_off(self):
+        nup = self.nup(self.files)
+        self.split(nup, 'first')
+        off, line, _ = self.split(nup, 'off', reuse=False)
+        self.assertEqual(line, '')
+        self.same(off, self.split(nup, 'ref', reuse=False)[0])
+
+    def test_kept_results_that_differ_are_caught_and_scanned_again(self):
+        nup = self.nup(self.files)
+        ref, _, _ = self.split(nup, 'ref', reuse=False)
+        self.split(nup, 'first')
+        # every kept result altered: the batches scanned to check differ from them
+        for f in self.reuse.rglob('*.pkl'):
+            data = pickle.loads(f.read_bytes())
+            if f.name.startswith('empty-'): data = {k: (r[0], r[1], {('0' * 16, '1' * 16)}, r[3]) for k, r in data.items()}
+            else: data = (data[0], {}, set(), data[3])
+            f.write_bytes(pickle.dumps(data))
+        again, _, out = self.split(nup, 'again')
+        self.assertIn('[RED] split reuse:', out)
+        self.same(again, ref)
+        self.assertFalse(any(self.reuse.rglob('*.pkl')) and 'kept results deleted' not in out)
+
+    def test_a_files_key_follows_the_files_of_its_stem(self):
+        # a reader may open stem + '.dict' or stem + '.patch' beside a file (Next Level Games): their change changes its key; another file of the folder does not
+        base = {'Data/a.data': b'data', 'Data/a.dict': b'dict 1', 'Data/b.bin': b'other 1'}
+        keys = []
+        for files in (base, dict(base, **{'Data/b.bin': b'other 2'}), dict(base, **{'Data/a.dict': b'dict 2'})):
+            nup = self.nup(files)
+            os.environ['PN_REUSE_DIR'] = str(self.reuse)
+            try:
+                c = split_reuse.Context(None, {}, None, None, [], pickle.Unpickler)
+                keys.append(c.key((f'{nup}:base/romfs/Data/a.data', 'Data/a.data')))
+            finally: del os.environ['PN_REUSE_DIR']
+        self.assertIsNotNone(keys[0])
+        self.assertEqual(keys[0], keys[1])   # b.bin is not a.data's
+        self.assertNotEqual(keys[0], keys[2])   # a.dict is
+
+    def test_canon_ignores_the_order_of_sets_and_dicts(self):
+        a = ('x', {'k2': (1, b'a'), 'k1': (2, b'b')}, {('v', 'p'), ('w', 'q')}, {})
+        b = ('x', {'k1': (2, b'b'), 'k2': (1, b'a')}, {('w', 'q'), ('v', 'p')}, {})
+        self.assertEqual(split_reuse.canon(a), split_reuse.canon(b))
+        self.assertNotEqual(split_reuse.canon(a), split_reuse.canon(('x', {}, set(), {})))
+
+
+if __name__ == '__main__':
+    unittest.main()

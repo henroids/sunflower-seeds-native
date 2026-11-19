@@ -70,12 +70,36 @@ Tests: `peanuts/tests/test_rewrite_reuse.py`. On an AYN Thor (ACNH 3.0.3, 2026-1
 own builds' rows changed; Prepare took 3 min 37 s. The kept `sdk.patched.bin` is byte for byte (SHA-256) the one a build from nothing makes with that
 profile.
 
+## The split: game files that did not change
+
+The split scans every file of the profile's list (targeted) or of the RomFS (full) on every build; its `ScanCache` keeps results only to resume a stopped split,
+keyed by the job's place and the container's time, and is deleted once the split is done. [`dm/peanuts/reuse/split_reuse.py`](../../dm/peanuts/reuse/split_reuse.py)
+keeps, across builds, the result of every plain file job (`<PN_REUSE_DIR>/split/`): a file inside a `.nup`, whose table of contents has its SHA-256. A job's key:
+
+- that SHA-256 and size;
+- the names and SHA-256s of the files beside it whose name starts with its stem: what a plain file's reader opens besides it (`stem + '.dict'`,
+  `stem + '.patch'`, each name a Next Level Games index lists);
+- the job's direct-scan entry (its recorded containers, `DM_SPLIT_DIRECT`);
+- a common part: the tools' and the profile's sources (`digest_sources`), Unity's common strings from main, the zstd dictionaries, `DM_SPLIT_SELECTED`, the split's
+  environment and Python's version. Another common part (other tools, another main whose strings differ) starts the kept results over.
+
+Before the scan the kept results go into the `ScanCache` and each kept file is a batch of its own, so only the others are scanned, in runs as before; after it the
+new results are kept. A file whose result says it could not be read is never kept. The check: one kept file in 50 (at least one, once three could be kept),
+picked by a hash of its key, is scanned anyway and its result must equal the kept one as values (sets and dicts in any order); one that differs scans every file
+again without the kept results and deletes them. The split's own check after it stays: its tables against the profile's.
+
+Archive ranges (several files, ranges planned over the whole archive), files without a hash (a plaintext NSP, a folder dump) and the Unity second pass are scanned
+as before. Tests: `peanuts/tests/test_split_reuse.py` (`shader_split.py` run on a `.nup` made by `dm/tools/nup_pack.py`: a second split keeps every file but the
+ones it checks and makes the same outputs byte for byte, a changed and a new file are scanned, kept results that differ are caught, `PN_REUSE=0`, the stem rule).
+
+On ACNH the targeted, direct split reads only 93 files at their recorded containers: kept, they take 1 s in place of 9 s, and the split 50 s in place of 58 s.
+The rest of it is listing the `.nup`'s 103,400 files (13 s) and reading and scanning main and planning the jobs (36 s), which run on every build.
+
 ## Not done yet
 
-- The split's scan: a cache by each RomFS file's SHA-256 (the `.nup`'s table of contents has one) would help plain files only, where the targeted split is
-  quick already; the slow scans (archives, Unreal paks, Unity files with borrowed type trees) depend on several files.
+- The split's work before the scan (listing the files, main) on every build.
+- Archive jobs in the split's cache: their key must cover every file they read.
 - The import: Import again writes the whole `.nup` again (on an AYN Thor 11.9 GB in about 20 s: not worth it there).
-- The targeted split of a profile made of several game versions (`shader_versions`) falls back to the full scan (its own task).
 
 ## Measured (AYN Thor, ACNH 3.0.3 with its DLC, 2026-11-18 and 19)
 

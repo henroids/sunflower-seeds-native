@@ -213,8 +213,8 @@ class Check:
             c = l.split()
             if len(c) == 2: mods[posixpath.basename(c[1]).split('.')[0]] = c[0]
         logs = f'{base}/{self.title}-work/ondevice/logs'
-        reuse = [l.strip() for l in self.p.sh(f"cat {logs}/shaders.log {logs}/rewrite.log 2>/dev/null | grep -E 'reuse|kept,' || true").splitlines()]
-        return {'library': lib[0] if lib else None, 'modules': mods, 'reuse': reuse[-6:]}
+        reuse = [l.strip() for l in self.p.sh(f"cat {logs}/split.log {logs}/shaders.log {logs}/rewrite.log 2>/dev/null | grep -E 'reuse|kept,' || true").splitlines()]
+        return {'library': lib[0] if lib else None, 'modules': mods, 'reuse': reuse[-8:]}
 
     def same(self, what, a, b, field):
         ok = a.get(field) is not None and a.get(field) == b.get(field)
