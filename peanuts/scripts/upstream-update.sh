@@ -23,7 +23,7 @@ target="${1:-upstream/android}"
 branch="$(git branch --show-current)"
 allowlist="peanuts/upstream-unmarked.txt"
 
-git fetch -q upstream --tags
+if [ "$mode" = "rebase" ]; then git fetch -q upstream --tags; fi
 git rev-parse -q --verify "$target^{commit}" >/dev/null || { echo "no such ref: $target"; exit 1; }
 
 # The hunk check must compare against the MERGE-BASE, not $target itself, whenever the branch
@@ -41,7 +41,10 @@ git rev-parse -q --verify "$target^{commit}" >/dev/null || { echo "no such ref: 
 # only for the check-mode message/comparison; in rebase mode, reset `base="$target"` once the
 # rebase has actually succeeded.
 if [ "$mode" = "check" ]; then
-    base=$(git merge-base HEAD "$target")
+    base=$(git merge-base HEAD "$target") || {
+        echo "no common ancestor between HEAD and $target; pass --check <base-ref> from this branch's history" >&2
+        exit 1
+    }
     echo "--check: hunk-marker check only (no rebase) -- $branch vs $target, since merge-base $(git rev-parse --short "$base")"
 else
     [ -z "$(git status --porcelain)" ] || { echo "working tree not clean; commit first"; exit 1; }

@@ -28,6 +28,7 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Check:** `test_vbf.py` covers raw and zlib blocks, shared/missing members, truncation, unaligned effects, loose shader keys and inconsistent lengths. All 5,752 programs translate on the Mac.
 
 ### Diablo III's console packages
+<!-- PEANUTS: Diablo III shader package support. -->
 
 - **Symptom:** the split finds no shaders (`[RED] the shader split found no shaders in main or the RomFS`), the RomFS holds only `.cpk` files, and `cpk.py` refuses them (`not a CPK`); the run prints `[RED] shader … is not in the shader map` for every program.
 - **Cause:** Diablo III: Eternal Collection's `.cpk` files are Blizzard's console packages, not CRI's: they start with the u32 `0xa1b2c3d4` and a version (7), then bit-packed tables and the data in 64 KiB sectors. Each file is stored or one zlib stream behind a 6-byte record `{u32 decoded length, u16 stored length}`; the game's SNO assets (`0xdeadbeef` headers) are such streams, and its shader assets hold each program as a control section directly followed by its code area. No reader looked inside the streams.
@@ -437,6 +438,7 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Found on:** [Orbitals](../../dm/games/040032B023CA4000/README.md): 24 compute shaders.
 
 ### A movie pak is mistaken for an Unreal shader archive
+<!-- PEANUTS: Unreal movie-only package detection. -->
 
 - **Symptom:** shader splitting stops with `there are no decoded shader code archives` even though the game's global shaders and material shaders are inline.
 - **Cause:** `uepak.inline_shaders` classified every readable nonempty pak without inline shaders as a shader archive. Movie and other asset paks therefore triggered a decode step with no shader archives to decode.

@@ -160,6 +160,7 @@ To enroll a cut for any game's own module:
 - **Note:** a census of all the `br x18` sites first (each shape within 16 / 32 / 48 instructions) saves a 12-minute rewrite per site.
 
 ### A TLS access uses the guest x18 register
+<!-- PEANUTS: Guest TLS register handling. -->
 
 - **Symptom:** a rewritten TLS load faults at an unmapped low address after the game executes `mrs x18, tpidr_el0`.
 - **Cause:** the system-register rewrite put the guest TLS pointer in the real `x18`. Later rewritten instructions loaded `x18` from the guest's saved slot, which still held the previous value.

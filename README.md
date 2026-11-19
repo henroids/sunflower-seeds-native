@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="status" src="https://img.shields.io/badge/release-0.1.4-brightgreen">
+  <img alt="status" src="https://img.shields.io/badge/release-0.1.5-brightgreen"> <!-- PEANUTS -->
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
 </p>
@@ -30,7 +30,9 @@ too.
 
 ## Supported games
 
-The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric build IDs.
+<!-- PEANUTS: supported game versions and Eden Duo companion availability -->
+
+Peanuts Native 0.1.5 includes 39 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion |
 |---|---|---|---|
@@ -49,7 +51,8 @@ The Companion column shows whether a game appears in the Eden Duo Companions cat
 | Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Yes |
 | Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes |
 | Pokémon Shield | `01008DB008C2C000` | 1.3.2 | Yes |
-| The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.9.0 | Yes |
+| The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.6.0, 1.9.0 | Yes |
+| The Legend of Zelda: Tears of the Kingdom | `0100F2C0115B6000` | 1.4.3 | No <!-- PEANUTS --> |
 | FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No |
 | The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Yes |
 | Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No |
@@ -60,11 +63,20 @@ The Companion column shows whether a game appears in the Eden Duo Companions cat
 | Super Mario Bros. Wonder | `010015100B514000` | 1.2.1 | Yes |
 | DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 | Yes |
 | Chained Echoes | `0100C510166F0000` | 1.41 | Yes |
-| Yoru, Tomosu | `0100C2901153C000` | 1.0.0 | Yes |
+| Yoru, Tomosu | `0100C2901153C000` | Base game (v0) | Yes |
 | Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes |
+| Captain Tsubasa 2: World Fighters | `01009720213B0000` | 1.0.6 | No <!-- PEANUTS --> |
+| DAVE THE DIVER | `010097F018538000` | 1.0.6.1267 | Yes <!-- PEANUTS --> |
+| Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2 | `0100AD80208A8000` | 1.80 | No <!-- PEANUTS --> |
 | Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 | No |
 | My Time at Sandrock | `0100B63016916000` | 1.4.2.0 | Yes |
 | Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Yes |
+| Astral Chain | `01007300020FA000` | 1.0.1 | No <!-- PEANUTS --> |
+| Diablo III: Eternal Collection | `01001B300B9BE000` | 2.7.7.92380 | Yes |
+| EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523 | No |
+| Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No |
+
+On the 0.1.5 verification build, an AYN Thor with Turnip v26.2.0 R5 reached the rooftop fight in Demon Slayer 2 and the opening cave in Tears of the Kingdom. Kirby and the Forgotten Land skipped no draws in the opening walk with either a fresh or a saved shader cache.
 
 ## What you need
 

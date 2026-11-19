@@ -104,6 +104,7 @@ The game may also write into an NVN object directly, without an NVN call, throug
 - **Found on:** [Mario Kart World](../../dm/games/0400C3F00006E000/README.md), on the arm64 emulator, 2 s into its first frames.
 
 ### Sparse pool buffers on the Vulkan replay
+<!-- PEANUTS: Android sparse buffer binding. -->
 
 - **Symptom:** `[RED] vk: index buffer … is not in placed guest RAM: skipped` and `[RED] vk: vertex stream … is not in placed guest RAM: it reads zeros` during an otherwise running match. The HUD renders and the pitch or players are black or incomplete.
 - **Cause:** Android keeps NVN's sparse mapping in its page table. A draw's virtual buffer address has no Vulkan allocation of its own, even when its physical backing can be placed and bound.
