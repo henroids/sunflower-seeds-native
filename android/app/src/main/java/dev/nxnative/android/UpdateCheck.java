@@ -32,6 +32,7 @@ final class UpdateCheck {
      */
     static final class Source {
         final String name, api, accept, page; final List<String> assetHosts;
+        Pattern apkName; String tagPrefix;   // PEANUTS: the APK names this app takes from the source (null: any) and its tags' prefix (null: none), where one repository publishes two apps (github(repo, apkName, tagPrefix))
         Source(String name, String api, String accept, String page, String... assetHosts) {
             this.name = name; this.api = api; this.accept = accept; this.page = page; this.assetHosts = Arrays.asList(assetHosts);
         }
@@ -43,6 +44,15 @@ final class UpdateCheck {
     static Source github(String repo) {
         return new Source("GitHub", "https://api." + GITHUB_HOST + "/repos/" + repo + "/releases?per_page=10", "application/vnd.github+json",
                 "https://" + GITHUB_HOST + "/" + repo + "/releases", GITHUB_HOST, "objects.githubusercontent.com");
+    }
+
+    // PEANUTS: owner/name's GitHub releases of one of the apps it publishes: only APKs whose name matches apkName, and 50 releases a list, since the other app's
+    // releases may come between this app's (Sunflower Seeds publishes its test app and its play app from one repository)
+    // A tag prefix keeps the other app's releases out of a build without the filter: "sunflower-v1.0.3" is no vX.Y.Z tag to the test apps up to 0.2.30
+    static Source github(String repo, String apkName, String tagPrefix) {
+        Source s = github(repo);
+        Source f = new Source(s.name, s.api.replace("per_page=10", "per_page=50"), s.accept, s.page, s.assetHosts.toArray(new String[0]));
+        f.apkName = Pattern.compile(apkName); f.tagPrefix = tagPrefix; return f;
     }
 
     /** The Forgejo mirror's releases of owner/name (Gitea's API) */
@@ -192,6 +202,7 @@ final class UpdateCheck {
         for (Asset a : r.assets) {
             if (a == null || a.name == null || a.url == null) continue;
             if (!a.name.toLowerCase(Locale.ROOT).endsWith(".apk") || !allowedAsset(a.url, r.source)) continue;
+            if (r.source != null && r.source.apkName != null && !r.source.apkName.matcher(a.name).matches()) continue;   // PEANUTS: another app's APK (github(repo, apkName))
             if (BAD_DIGEST.equals(sha256(a.digest))) continue;
             return a;
         }
@@ -208,7 +219,8 @@ final class UpdateCheck {
         Update best = null;
         for (Release r : releases) {
             if (r == null || r.draft) continue;
-            int[] v = tagVersion(r.tag);
+            String tp = r.source != null ? r.source.tagPrefix : null;   // PEANUTS: a source's tag prefix (github(repo, apkName, tagPrefix)): its tags only, read past it
+            int[] v = tp == null ? tagVersion(r.tag) : r.tag.startsWith(tp) ? tagVersion(r.tag.substring(tp.length())) : null;
             if (v == null || compare(v, current) <= 0) continue;
             if (best != null && compare(v, best.version) <= 0) continue;
             Asset a = apk(r);
