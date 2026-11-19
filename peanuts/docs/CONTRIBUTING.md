@@ -224,6 +224,15 @@ If you hit this symptom on a new title, look for it before assuming the pack is 
   public repository begins with one commit that imports Banana Native at that point (crediting it, its license and
   its authors in the message and in the README), followed by Peanuts' own commits.
 
+### Release prewarm inputs
+
+For a signed generic-host build, set `PN_PREWARM_SEEDS` to a directory containing
+`<title ID>.seed` for each selected title listed in `peanuts/prewarm-sha256.tsv`.
+The build checks these captures against the recorded SHA-256 values. To reproduce
+a published version, extract its signed APK's `assets/profiles/*.seed` into that
+directory with `unzip -j`. Development builds can collect their own pipelines
+during play when a seed is absent.
+
 ### Checks of a release APK
 
 Run both on the APK that is to be published, after it is built and signed:
