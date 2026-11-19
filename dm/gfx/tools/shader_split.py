@@ -3975,14 +3975,16 @@ def main():
         # Unreal Engine shader code archives decoded on the Mac (uepak.py): <version dir>/ue_shaders, or DM_UE_SHADERS; needed when the RomFS has Unreal paks
         ued = os.environ.get('DM_UE_SHADERS') or os.path.join(os.path.dirname(os.path.abspath(romfs)), 'ue_shaders')
         names = sorted(f for f in os.listdir(ued) if f.endswith('.ushaderbytecode') and not f.startswith('._')) if os.path.isdir(ued) else []   # PEANUTS(upstream-candidate): AppleDouble metadata, not decoded shader archives
-        def ue_paks(romfs=romfs, mainnso=mainnso):   # PEANUTS: bind this version; uepak.unreal_paks with the mains reads an encrypted index, off the Mac with the builder's _nxaes module: a Python without it stopped with a traceback
-            try: return uepak.unreal_paks(romfs, inline=False, mains=[mainnso])
+        if not names:
+            # PEANUTS: test for the archive itself. IoStore can hold a library beside a pak containing only other assets.
+            try: needs_archives = uepak.unreal_paks(romfs, inline=False, mains=[mainnso]) or uepak.io_shader_tocs(romfs)
             except ImportError as e: red(f'the RomFS has Unreal paks whose index is encrypted, and this Python has no AES to read it with ({e}): the Peanuts builder makes the module (peanuts-build, peanuts/docs/BUILDER.md); pack_android.py run by hand needs its folder in PYTHONPATH')
-        if not names and os.environ.get('DM_UE_DECODE') and ue_paks():   # PEANUTS: the phone decodes them here (ue_ondevice.py; the Mac's NSP script did)
-            import ue_ondevice
-            ued = ue_ondevice.decode(romfs, mainnso, os.environ['DM_UE_DECODE'])
-            names = sorted(f for f in os.listdir(ued) if f.endswith('.ushaderbytecode') and not f.startswith('._'))   # PEANUTS
-        if not names and ue_paks(): red(f'the RomFS has Unreal paks, but there are no decoded shader code archives in {ued} (the NSP script writes them)')
+            if needs_archives and os.environ.get('DM_UE_DECODE'):
+                import ue_ondevice
+                ued = ue_ondevice.decode(romfs, mainnso, os.environ['DM_UE_DECODE'])
+                names = sorted(f for f in os.listdir(ued) if f.endswith('.ushaderbytecode') and not f.startswith('._'))
+            if needs_archives and not names:
+                red(f'the RomFS has Unreal shader archives, but there are no decoded shader code archives in {ued} (the NSP script writes them)')
         for nm in names: found += ue_shaders(open(os.path.join(ued, nm), 'rb').read(), f'/ue_shaders/{nm}')
         results.append(('main', last_entries(found), var_pairs(found), {}))
     for romfs in dlc_v:
