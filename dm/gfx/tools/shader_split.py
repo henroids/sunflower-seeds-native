@@ -4069,6 +4069,9 @@ def single_shader_version(mains):
 
 def profile_source_version(source):
     m = re.match(r'(?:/|main@)(v[0-9]+)(?:/|#|$)', source)
+    if not m and source.startswith('main#'):
+        # PEANUTS: Breath of the Wild's combined map appends the version to the variation label.
+        m = re.search(r'@(v[0-9]+)$', source)
     return m[1] if m else None
 
 
@@ -4162,6 +4165,13 @@ def profile_differs(t, pairsout, psopairsout, version=None):
         p = GAME.table(name)
         if text is None or not os.path.isfile(p): continue
         with open(p, encoding='utf-8', newline='') as f: want = absent_tables(name, f.read(), absent)
+        if version and name == 'pso_pairs.tsv':   # PEANUTS: some pairs exist only in another build even when both shader keys are shared
+            optional_pso = GAME.table('pso_pairs_optional.tsv')
+            if os.path.isfile(optional_pso):
+                with open(optional_pso, encoding='utf-8') as f:
+                    may_lack = {ln.rstrip('\n').split('\t', 1)[1] for ln in f if ln.startswith(version + '\t')}
+                missing = may_lack.difference(tables_data(text))
+                want = ''.join(ln for ln in want.splitlines(keepends=True) if ln.rstrip('\r\n') not in missing)
         compare = version_map_rows if version and name == 'shader_map.tsv' else tables_data   # PEANUTS: compare records by key even if this version's source order differs
         # the comment lines are left out: they name the game and the split's wording at the time, which a newer split or a renamed profile changes
         # (Orbitals Deluxe Edition: its map's first line named the title ID, the split now writes the game's name, and every file was scanned in full)

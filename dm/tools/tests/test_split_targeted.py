@@ -166,7 +166,8 @@ class Targeted(unittest.TestCase):
         old_rows = [ln for ln in (full_union / 'shader_map.tsv').read_text().splitlines() if '\t/Old/' in ln]
         self.assertEqual(len(old_rows), 2)
         with mapping.open('a') as f:
-            for row in old_rows: f.write(row.replace('\t/Old/', '\t/v65536/Old/') + '\n')
+            f.write(old_rows[0].replace('\t/Old/', '\t/v65536/Old/') + '\n')
+            f.write(old_rows[1].rsplit('\t', 1)[0] + '\tmain#BNSH@0x0#var0@v65536\n')   # PEANUTS: a version tag at the end of an executable source
         for table in TABLES[1:]:
             shutil.copyfile(full_union / table, self.prof / table)
         (self.rom / 'Old/old.bnsh').unlink()
@@ -174,6 +175,20 @@ class Targeted(unittest.TestCase):
             + 'build\tv65536\t1.0.0\tmain=' + '12' * 16 + '\nshader_versions\tv65536 v327680\n')
         actual, log = self.split('update-targeted', True)
         self.assertIn("2 shader(s) of the other listed builds", log)
+        self.assertIn('targeted split: its tables match the profile for v327680', log)
+        self.same(present, actual)
+
+        pso = self.prof / 'pso_pairs.tsv'   # PEANUTS: supplemental pairs can be optional for a particular build
+        pair = f'{self.key(vs(1))}\t{self.key(ps(2))}\n'
+        with pso.open('a') as f:
+            f.write(pair)
+        optional_pso = self.prof / 'pso_pairs_optional.tsv'
+        optional_pso.write_text('v65536\t' + pair)
+        actual, log = self.split('update-with-required-pair', True)
+        self.assertIn("made a pso_pairs.tsv that differs from the profile's", log)
+        self.same(present, actual)
+        optional_pso.write_text('v327680\t' + pair)
+        actual, log = self.split('update-with-optional-pair', True)
         self.assertIn('targeted split: its tables match the profile for v327680', log)
         self.same(present, actual)
 
