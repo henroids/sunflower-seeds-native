@@ -92,12 +92,15 @@ Archive ranges (several files, ranges planned over the whole archive), files wit
 as before. Tests: `peanuts/tests/test_split_reuse.py` (`shader_split.py` run on a `.nup` made by `dm/tools/nup_pack.py`: a second split keeps every file but the
 ones it checks and makes the same outputs byte for byte, a changed and a new file are scanned, kept results that differ are caught, `PN_REUSE=0`, the stem rule).
 
-On ACNH the targeted, direct split reads only 93 files at their recorded containers: kept, they take 1 s in place of 9 s, and the split 50 s in place of 58 s.
-The rest of it is listing the `.nup`'s 103,400 files (13 s) and reading and scanning main and planning the jobs (36 s), which run on every build.
+On ACNH the targeted, direct split reads only 93 files at their recorded containers: kept, they take 1 s in place of 9 s. A profile of the rest put 72 % of the
+split in `romfs.walk`, which the split runs three times over the RomFS: each entry's `is_dir` was a stat of its whole path, which a `.nup` resolved from its root
+(103,400 files). `dm/tools/romfs.py` `walk` now goes by the image's nodes (the same names in the same order, `topdown` and a caller's pruning as before;
+`peanuts/tests/test_romfs_walk.py`; an upstream candidate). With both, the split takes 12 s from nothing in place of 56 s, and 6 s with its files kept in place
+of 58 s.
 
 ## Not done yet
 
-- The split's work before the scan (listing the files, main) on every build.
+- The split's own work on every build (reading main, planning the jobs): a few seconds since the walk by nodes.
 - Archive jobs in the split's cache: their key must cover every file they read.
 - The import: Import again writes the whole `.nup` again (on an AYN Thor 11.9 GB in about 20 s: not worth it there).
 
@@ -122,8 +125,18 @@ makes). The code as it is, on 0.1.5 (`DMSH_VK_CHAIN` `dfebef5d68a9`, the 0.1.5 r
 | A build from the base and the update alone | 27 s | 3 min 28 s | 56 s | 2 min 31 s | 8 s | 7 min 35 s | |
 | Its DLC added, Import again | 25 s | not run | 56 s | 21 s (9,564 kept, 202 checked) | 4 s | 1 min 52 s | library and modules: yes |
 
+The split as it is now (its files kept, the walk by nodes), the same scenarios, 2026-11-19:
+
+| Run | Import | Rewrite | Split | Shaders | Pack | Whole build | Byte for byte as the full build |
+|---|---|---|---|---|---|---|---|
+| Full build | 23 s | 3 min 15 s | 12 s | 2 min 32 s (9,766 translated) | 6 s | 6 min 33 s | |
+| Import again | 25 s | not run | 6 s (91 of 93 files kept, 2 scanned to check, the same) | 19 s (9,564 kept, 202 of 202 checked equal) | 8 s | 1 min 2 s | library and modules: yes |
+| A build from the base and the update alone | 25 s | 3 min 17 s | 15 s | 2 min 30 s | 6 s | 6 min 37 s | |
+| Its DLC added, Import again | 27 s | not run | 6 s (91 kept, 2 checked) | 21 s (9,564 kept, 202 checked) | 6 s | 1 min 4 s | library and modules: yes |
+
 ACNH's DLC brings no shaders of its own that the phone's split finds (the split reads the update's RomFS, not an add-on's), so the build without it makes the
-same 9,766. What is left of an Import again or an added DLC is the import and the split, which runs whole again: about three quarters of the 2 minutes.
+same 9,766. An Import again went from 7 min 31 s to 1 min 2 s; what is left of it is mostly the import (the whole `.nup` written again) and the 202 shaders
+translated to check the kept ones. A build from nothing is a minute faster too (the split's 56 s are 12 s); its largest part is the rewrite, `main` on one core.
 
 ## Checking it on a phone
 
