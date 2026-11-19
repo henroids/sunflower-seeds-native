@@ -3,7 +3,9 @@ others, with a sample translated to check. The libraries here are small ones in 
 stood in for by a script that does what its delta path does with a manifest (keep an older entry whose hash is the manifest's, translate the rest) and "translates" a
 shader as a function of its key, its facts, its pixel shaders' facts and one input the reuse rule does not know (unseen.tsv), so a change there is caught by the
 check alone. No game files."""
+import contextlib
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -642,10 +644,86 @@ class FullCheck(Base):
         self.assertEqual(self.check()[0], 0)
         self.assertIsNone(self.todo())
 
+    def kept_wrong(self):
+        """A build that kept an entry a translation got wrong, which the sample did not take; its library in the pack (and the kept copy) → (its path, the key)"""
+        self.profile()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i]}\n' for i in range(50)))
+        self.build(); self.into_pack()
+        lib_path = self.pack / f'v-{VERSION}' / 'dmsh_vk.lib'
+        L = delta.Library(str(lib_path)); inputs = L.inputs; L.close()
+        wrong = next(k for k in self.vs[60:] if k not in self.sample(self.vs + self.ps))
+        lib = self.library(lib_path); lib[wrong] = spirv_of('a translation that went wrong')
+        self.went_wrong(lib_path, lib, inputs)
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)
+        self.build(); self.into_pack()
+        self.assertEqual(self.library(lib_path)[wrong], lib[wrong])
+        return lib_path, wrong
+
+    def test_an_app_update_that_changes_the_profile_drops_the_check(self):
+        # the version the same, the profile not (a fact): a translation now is not what the build should have made, so it says nothing of the library
+        self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
+        lib_path = self.pack / f'v-{VERSION}' / 'dmsh_vk.lib'
+        before = self.library(lib_path)
+        self.profile(facts={self.ps[5]: {'tex': [2]}})
+        self.assertEqual(self.check(), (0, []))
+        self.assertIsNone(self.todo())
+        self.assertEqual(self.library(lib_path), before)   # not replaced
+        self.assertFalse((self.reuse / sr.FAILED).exists())
+        self.assertTrue(list((self.reuse / 'shaders').glob('*.tsv')))   # nor its records deleted
+
+    def test_another_translator_drops_the_check(self):
+        self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
+        saved = sr.translator_tree
+        sr.translator_tree = lambda: 'f' * 16
+        try: self.assertEqual(self.check(), (0, []))
+        finally: sr.translator_tree = saved
+        self.assertIsNone(self.todo())
+        self.assertFalse((self.reuse / sr.FAILED).exists())
+
+    def test_storage_full_while_the_full_translation_takes_the_librarys_place(self):
+        lib_path, wrong = self.kept_wrong()
+        saved = sr.shutil.copyfile
+
+        def full(src, dst):
+            if not str(dst).endswith('.partial'): return saved(src, dst)
+            Path(dst).write_bytes(b'part of it'); raise OSError(28, 'No space left on device')
+        sr.shutil.copyfile = full
+        try: code, _ = self.check()
+        finally: sr.shutil.copyfile = saved
+        self.assertEqual(code, 1)
+        self.assertEqual(list(self.pack.rglob('*.partial')), [])
+        self.assertIsNotNone(self.todo())   # still due
+        self.assertFalse((self.reuse / sr.FAILED).exists())   # nothing replaced: no notice of it
+        code, runs = self.check()   # the next check, with room: from the results it kept
+        self.assertEqual((code, runs), (sr.DIFFER, [[]]))
+        self.assertEqual(self.library(lib_path), self.full())
+        failed = json.loads((self.reuse / sr.FAILED).read_text())
+        self.assertEqual((failed['replaced'], failed['differ_count'], failed['differ']), (True, 1, [wrong]))
+
+    def test_a_stop_after_the_library_is_replaced_leaves_no_wrong_copy(self):
+        lib_path, wrong = self.kept_wrong()
+        self.assertEqual(self.library(self.copy())[wrong], self.library(lib_path)[wrong])   # the kept copy is the wrong library too
+        saved = sr.write_record
+
+        def stopped(*a, **k): raise KeyboardInterrupt('a game started right after the library was replaced')
+        sr.write_record = stopped
+        try:
+            with self.assertRaises(KeyboardInterrupt): self.check()
+        finally: sr.write_record = saved
+        self.assertEqual(self.library(lib_path), self.full())
+        self.assertFalse(self.copy().exists())   # gone before the pack's library was replaced: a later build cannot keep from it
+        shutil.rmtree(self.pack.parent)   # then another Build folder
+        code, runs, lib = self.build()
+        self.assertEqual(lib, self.full())
+
     def test_a_library_another_build_replaced(self):
         self.profile(); self.build(); self.into_pack(); self.build()
-        (self.reuse / sr.TODO).write_text(json.dumps({'library': 'ab' * 16, 'version': VERSION, 'game': GAME, 'kept': 3}))
-        self.assertEqual(self.check(), (0, []))
+        game, dmsh_chain, _ = sr.load_modules()
+        (self.reuse / sr.TODO).write_text(json.dumps({'library': 'ab' * 16, 'version': VERSION, 'game': GAME, 'inputs': dmsh_chain.inputs(game.load()),
+                                                      'tree': sr.translator_tree(), 'kept': 3}))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): self.assertEqual(self.check(), (0, []))
+        self.assertIn('the library to check is gone', out.getvalue())
         self.assertIsNone(self.todo())
 
 

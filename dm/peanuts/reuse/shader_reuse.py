@@ -500,14 +500,16 @@ CHECK_DIR = 'check'   # the full check's own results (a stopped check resumes fr
 DIFFER = 3   # full_check's exit code when the library is not a full translation's byte for byte (PackService then has the game's shaders made again)
 
 
-def note_check(reuse_dir, lib_id, version, game_id, kept):
-    """After a library is written: with kept shaders (checked by the sample alone), the full check is due for it; without, a full translation needs none"""
+def note_check(reuse_dir, lib_id, version, game_id, kept, inputs, tree):
+    """After a library is written: with kept shaders (checked by the sample alone), the full check is due for it; without, a full translation needs none. The
+    todo names what the library was made with besides its version (the profile inputs, the translator's sources): a check with others translates what another
+    build would make, which says nothing of this library"""
     p = Path(reuse_dir) / TODO
     if not kept:
         p.unlink(missing_ok=True); shutil.rmtree(Path(reuse_dir) / CHECK_DIR, ignore_errors=True)
         return
     tmp = p.with_suffix('.tmp')
-    tmp.write_text(json.dumps({'library': lib_id, 'version': version, 'game': game_id, 'kept': kept}))
+    tmp.write_text(json.dumps({'library': lib_id, 'version': version, 'game': game_id, 'inputs': inputs, 'tree': tree, 'kept': kept}))
     os.replace(tmp, p)
     shutil.rmtree(Path(reuse_dir) / CHECK_DIR, ignore_errors=True)   # an earlier library's check: this one replaces it
 
@@ -549,6 +551,11 @@ def full_check(argv):
     if (todo['version'], todo['game']) != (version, g.id):
         say(f'reuse full check: the library to check is of version {todo["version"]}, game {todo["game"]}: not this build\'s, dropped')
         (Path(reuse_dir) / TODO).unlink(missing_ok=True); return 0
+    now = (dmsh_chain.inputs(g), translator_tree())
+    if (todo.get('inputs'), todo.get('tree')) != now or now[1] is None:   # an app update since the build: another profile, or another translator library
+        say(f'reuse full check: the library was made from the profile inputs {todo.get("inputs")} and the translator {todo.get("tree")}, this app has {now[0]} '
+            f'and {now[1]}: a translation now says nothing of it, dropped (the next build of this game makes a library of this app)')
+        (Path(reuse_dir) / TODO).unlink(missing_ok=True); shutil.rmtree(Path(reuse_dir) / CHECK_DIR, ignore_errors=True); return 0
     roots = os.environ.get('DMSH_VK_DELTA_FROM', '')
     os.environ['DMSH_VK_DELTA_FROM'] = os.pathsep.join(p for p in (roots, str(Path(reuse_dir) / KEEP_DIR)) if p)
     root = Path(reuse_dir) / CHECK_DIR
@@ -584,15 +591,29 @@ def full_check(argv):
         say(f'reuse full check: all {n} shaders of the library are a full translation\'s byte for byte ({todo.get("kept", "?")} of them kept from earlier builds)')
         return 0
     say(f'[RED] reuse full check: {len(differ)} of {n} shaders differ from a full translation ({", ".join(differ[:3])}), {len(missing)} are not in it, {len(extra)} only in it')
-    (Path(reuse_dir) / FAILED).write_text(json.dumps({'library': todo['library'], 'differ': differ[:50], 'missing': missing[:50], 'extra': extra[:50], 'of': n,
-                                                     'at': time.strftime('%Y-%m-%d %H:%M:%S')}))
     shutil.rmtree(Path(reuse_dir) / 'shaders', ignore_errors=True)   # the records that kept them are not trusted again
+    # the kept copy is the checked library or one the same records made: gone before the pack's library is replaced, so a stop after that leaves none to keep
+    # from (with the same sizes the new library has the old one's id, and the next check would find the pack's equal and end; a review found this)
+    shutil.rmtree(Path(reuse_dir) / KEEP_DIR, ignore_errors=True)
     dst = pack_library(roots, version, todo['library'])
     if dst is not None:
         tmp = dst.with_name(dst.name + '.partial')
-        shutil.copyfile(new_dir / 'dmsh_vk.lib', tmp); os.replace(tmp, dst)
+        try:
+            shutil.copyfile(new_dir / 'dmsh_vk.lib', tmp)
+            with open(tmp, 'rb+') as f: os.fsync(f.fileno())   # whole on storage before it takes the library's name (#82: shared storage can keep a rename before the data)
+            os.replace(tmp, dst)
+        except OSError as e:   # storage full: the pack keeps its library; check.todo and the check's results stay, and the next check replaces it
+            try: tmp.unlink()
+            except OSError: pass
+            say(f'[RED] reuse full check: the full translation cannot take the library\'s place ({e}): the pack keeps the library it has; the check is still due')
+            return 1
         say(f'reuse full check: the full translation is the game\'s library now ({dst})')
     else: say('reuse full check: the pack holds another library now: it stays as it is')
+    tmp = Path(reuse_dir) / (FAILED + '.tmp')   # what the launcher's notification says: written once the pack holds what it says
+    tmp.write_text(json.dumps({'library': todo['library'], 'replaced': dst is not None, 'differ_count': len(differ), 'missing_count': len(missing),
+                               'extra_count': len(extra), 'kept': todo.get('kept'), 'differ': differ[:50], 'missing': missing[:50], 'extra': extra[:50], 'of': n,
+                               'at': time.strftime('%Y-%m-%d %H:%M:%S')}))
+    os.replace(tmp, Path(reuse_dir) / FAILED)
     tree = translator_tree()
     if tree is not None: write_record(reuse_dir, new_id, version, g.id, dmsh_chain.inputs(g), tree, new_record)
     try: say(keep_library(reuse_dir, str(new_dir), version))
@@ -681,8 +702,8 @@ def reuse(argv):
         try:
             L = delta.Library(os.path.join(out_dir, 'dmsh_vk.lib'))
             try:
-                note_check(reuse_dir, library_id(L), version, g.id, len(kept))   # first: a library with kept shaders has its full check due whatever comes next
                 tree = translator_tree()
+                note_check(reuse_dir, library_id(L), version, g.id, len(kept), inputs, tree)   # first: a library with kept shaders has its check due whatever comes next
                 if tree is None: raise ValueError('the translator\'s source tree cannot be told')
                 write_record(reuse_dir, library_id(L), version, g.id, inputs, tree, record_of(L, out_dir, deps, zstd))
             finally: L.close()

@@ -84,8 +84,12 @@ translation (`ondevice/logs/check.log`).
 - It stops when a game starts (checked every 3 s, and once more before the tool runs), when the packer's policy pauses (battery, heat), or when a job starts
   (the job goes first: the packer starts it once the check has stopped). It goes on another time from the results it kept.
 - All the same: `checked.tsv` says so, and the check's files and the split go. One that differs (or a shader only one of them has): the full translation is what
-  the game should have, so it takes the library's place in the pack, as the pack step copies one (a `.partial`, then a rename), and becomes the record and the
-  kept copy; `check.failed` lists the shaders, `check.log` has a `[RED] reuse full check` line, and a notification says the game has the full translation now.
+  the game should have. The records and the kept copy go first, then it takes the library's place in the pack (a `.partial`, flushed to storage, then a
+  rename) and becomes the record and the kept copy; `check.failed` says how many differed and whether the pack's library was replaced, `check.log` has a
+  `[RED] reuse full check` line, and a notification says the game has the full translation now. Storage too full for the copy leaves the pack's library and
+  the check due (`[RED]` line, no notification).
+- `check.todo` names what the library was made from besides its version: the profile inputs and the translator's sources. After an app update that changed
+  either, a translation now is not what that build should have made, so the check is dropped (the next build of the game makes a library of this app).
 
 On the Thor (ACNH 3.0.3 with its DLC, 2026-11-19, plugged in): the check started by itself at the end of an Import again and of a build in another Build
 folder, and both times found all 9,766 shaders of the library a full translation's byte for byte (9,564 of them kept from earlier builds); after the Import
