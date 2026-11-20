@@ -2397,9 +2397,9 @@ int vka_tex_id_take_pending(int id) {
     pthread_mutex_unlock(&g_tmu);
     return r;
 }
-void vka_tex_id_take(int id, VkCommandBuffer cb) {
-    pthread_mutex_lock(&g_tmu);
-    vka_img *im = take_img_of(id), *src = im ? take_src(im) : NULL;
+// Takes into im the newest GPU write through another texture over its storage, if one is pending. Caller holds g_tmu, which is released; outside a pass
+static void take_locked(vka_img *im, VkCommandBuffer cb) {
+    vka_img *src = im ? take_src(im) : NULL;
     if (!src) { pthread_mutex_unlock(&g_tmu); return; }
     VkImageCopy rc[16]; uint32_t n = 0;
     for (uint32_t lv = 0; lv < im->levels && lv < src->levels && n < 16; lv++) {   // the levels whose extent in texels (blocks) is the source level's
@@ -2416,6 +2416,15 @@ void vka_tex_id_take(int id, VkCommandBuffer cb) {
     else im->wgen = src->wgen;   // (no level fits: not asked again until the source is written again)
     pthread_mutex_unlock(&g_tmu);
     if (n) vka_img_written(im);   // (its wgen past the source's: taken again only after the next write through it)
+}
+void vka_tex_id_take(int id, VkCommandBuffer cb) { pthread_mutex_lock(&g_tmu); take_locked(take_img_of(id), cb); }
+// The same for an image a copy reads (vka_exec.c copy_t2t, copy_bt): a texture the game only copies from, never samples, was copied empty. MLB The Show 26 outside
+// create-a-player copies its GPU-compressed skin textures on without sampling them there: every generated player's skin black unless create-a-player had sampled them first
+void vka_tex_take(vka_img *im, VkCommandBuffer cb) {
+    if (!im || !cb) return;
+    pthread_mutex_lock(&g_tmu);
+    if (take_src(im)) { static _Atomic int nl; if (atomic_fetch_add(&nl, 1) < 32) VLOG("storage take for a copy: texture serial %llu %ux%u format %#x is copied from", (unsigned long long)im->serial, im->w, im->h, im->d.format); }
+    take_locked(im, cb);
 }
 // PEANUTS end
 // PEANUTS begin: DM_VK_TEX_STATS: GPU writes, so that a texture's report can name what the GPU wrote over its storage, live or since dropped (vka_tex_id_storage):
