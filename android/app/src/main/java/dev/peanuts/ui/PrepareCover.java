@@ -142,7 +142,14 @@ public final class PrepareCover extends FrameLayout {
     private static Bitmap cover(Context c, String titleId) {
         if (titleId == null || titleId.isEmpty() || "null".equals(titleId)) return null;
         File f = new File(c.getFilesDir(), "icons/" + titleId + ".png");
-        return f.isFile() ? BitmapFactory.decodeFile(f.getPath()) : null;
+        if (!f.isFile()) return null;
+        // about twice the 176 dp it is shown at: a full-size icon is not decoded whole
+        int target = Math.round(352 * c.getResources().getDisplayMetrics().density);
+        BitmapFactory.Options b = new BitmapFactory.Options(); b.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(f.getPath(), b);
+        BitmapFactory.Options o = new BitmapFactory.Options(); o.inSampleSize = 1;
+        while (o.inSampleSize < 16 && b.outWidth / (o.inSampleSize * 2) >= target && b.outHeight / (o.inSampleSize * 2) >= target) o.inSampleSize *= 2;
+        return BitmapFactory.decodeFile(f.getPath(), o);
     }
 
     /**
