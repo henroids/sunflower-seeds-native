@@ -215,6 +215,41 @@ class Resume(unittest.TestCase):
         for body in (run0, modded):
             self.assertLess(body.index('firstRead'), body.index('Upstream.jobSave(job);') if 'Upstream.jobSave(job);' in body else len(body))
 
+    def test_try_anyway_restarts_once_the_failed_run_has_ended(self):
+        # read from job.json, a "failed" can come before the packer's worker has ended: its last save then wrote the job over Try anyway's (the restart failed
+        # the same way), a start beside a worker that runs is dropped (the build waited with nothing running), and the end's message ("failed") came after the
+        # restart and ended the build. The restart waits for the run's end, then reads job.json as the packer left it
+        s = PREPARE.read_text(encoding='utf-8')
+        relax = s[s.index('if (AutoRelax.auto(fix, cause, o.optBoolean("try_anyway"), relaxed)) {'):]
+        relax = relax[:relax.index('continue;')]
+        self.assertLess(relax.index('runEnded()'), relax.index('Upstream.jobRead(file)'))
+        self.assertLess(relax.index('runEnded()'), relax.index('startForegroundService'))
+        # a cancel while it waits ends the build as cancelled, with no restart, also when the run's end came in the same moment (found in review)
+        self.assertRegex(relax, r'boolean ended = runEnded\(\);\s*if \(cancelled\) break;[^\n]*\n\s*if \(!ended\) \{')
+        self.assertRegex(relax, r'add\(earlier, o\.optLong\("updated", -1\)\);')   # the failed state as this run saw it
+        ended = s[s.index('    private boolean runEnded() {'):]
+        ended = ended[:ended.index('\n    }\n')]
+        self.assertRegex(ended, r'if \(l == null \|\| l\.service == null \|\| l\.heard && !l\.alive\) return true;')
+        self.assertIn('RUN_END_MS', ended)
+        on = s[s.index('        boolean onMessage(Message m) {'):]
+        on = on[:on.index('\n        }\n')]
+        self.assertLess(on.index('!own.equals('), on.index('heard = true;'))   # of this build's job only
+        self.assertRegex(s, r'private volatile Link link;')
+        self.assertRegex(s, r'volatile Messenger service;')
+
+    def test_a_job_the_packer_finished_while_the_build_got_ready_ends_it(self):
+        # `since` read from job.json right before the start took a "done" the packer wrote while the build got ready (a job it ran on after a build was
+        # cancelled), and the packer has nothing more to write for a done job: the build waited for the stall rule (found in review)
+        s = PREPARE.read_text(encoding='utf-8')
+        self.assertNotIn('updated(file)', s)
+
+    def test_a_state_a_message_alone_carries_still_counts(self):
+        # a state whose file write failed (a full disk: Job.save puts "updated" in memory first) reaches the build by the packer's message alone: reading the
+        # state from the file only left such a build to the stall rule (found in review)
+        s = PREPARE.read_text(encoding='utf-8')
+        self.assertNotIn('written(own', s)
+        self.assertEqual(s.count('if (fs != null && fromServiceAt > lastChange) json = fs;'), 2)
+
 
 class Notice(unittest.TestCase):
     def test_a_timeout_during_the_check_leaves_no_notification(self):

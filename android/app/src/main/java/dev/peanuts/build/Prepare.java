@@ -50,6 +50,8 @@ final class Prepare {
     private static final String[] STEP_TEXT = {"Checking the dump", "Rewriting the game's code", "Finding the shaders", "Translating shaders", "Finishing the pack"};
     /** How long a job may sit "running" with no job.json change and no service message before we call it stalled (the service writes at least every few seconds while it runs) */
     private static final long STALL_MS = 10 * 60 * 1000;
+    /** How long Try anyway's restart waits for the failed run's end in the packer (its worker's last save and its end's message come moments after the failure) */
+    private static final long RUN_END_MS = 30_000;
 
     private final Context c;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -57,7 +59,7 @@ final class Prepare {
     private volatile String fromService;   // the newest job JSON the service sent over the Messenger, of this build's job only
     private volatile long fromServiceAt;
     private volatile String ownJob;   // this build's job file (its path, as the service sends it): the packer sends every client whatever job it holds (issue #120 review)
-    private Link link;
+    private volatile Link link;   // set on the main thread (bind, unbind), read by the build's thread (the stall rule, runEnded)
     private volatile String logId;   // the game whose build log (BuildLog) this run's lines go to
 
     Prepare(Context c) { this.c = c.getApplicationContext(); }
@@ -274,8 +276,19 @@ final class Prepare {
                 }
                 if (AutoRelax.auto(fix, cause, o.optBoolean("try_anyway"), relaxed)) {   // the panel's "Try anyway…" button, pressed for the player: once
                     relaxed = true;
+                    // the failed run's end first (issue #120 review): read from job.json, its "failed" can come before the packer's worker has ended. Its last
+                    // save then wrote the job over this Try anyway (the restart failed the same way), a start beside a worker that runs is dropped (the build
+                    // waited with nothing running), and the end's message ("failed") came after the restart and ended the build
+                    boolean ended = runEnded();
+                    if (cancelled) break;   // the build is cancelled (below the loop), and nothing restarts: also when the run's end came in the same moment
+                    if (!ended) {
+                        log("prepare: the packer still ran the failed job " + RUN_END_MS / 1000 + " s after it failed: not trying anyway now");
+                        throw new BuildListener.Failure(dev.nxnative.android.PrepareText.failureSummary(STEP_TEXT[si], err, o.optString("error_detail")), BuildListener.TOOL_STOPPED);
+                    }
                     log("prepare: failed with the Try anyway fix (" + err + "): going on with the checks relaxed");
-                    Object j = Upstream.jobRead(file);
+                    Object j = Upstream.jobRead(file);   // as the packer left it
+                    add(earlier, o.optLong("updated", -1));   // the failed state as this run saw it, and as the packer left the file: not the new run's
+                    add(earlier, updatedOf(j));
                     Upstream.jobTryAnyway(j, true);
                     Upstream.jobSave(j);
                     add(earlier, updatedOf(j));   // the failed run's state is not the new run's
@@ -521,6 +534,20 @@ final class Prepare {
 
     private static void add(Set<Long> earlier, long updated) { if (updated > 0) earlier.add(updated); }
 
+    /**
+     * Waits until the packer has ended the job's run, at most RUN_END_MS: its worker gone (the last message of this build's job says so; PackService.finished
+     * sends one), or no packer to wait for (not bound, or its process ended). False when it still runs then, or the build was cancelled meanwhile
+     */
+    private boolean runEnded() {
+        long until = SystemClock.elapsedRealtime() + RUN_END_MS;
+        while (true) {
+            Link l = link;
+            if (l == null || l.service == null || l.heard && !l.alive) return true;
+            if (cancelled || SystemClock.elapsedRealtime() > until) return false;
+            SystemClock.sleep(100);
+        }
+    }
+
     private static String read(File f) {
         try { return new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8); } catch (IOException e) { return null; }
     }
@@ -554,8 +581,9 @@ final class Prepare {
 
     private final class Link implements ServiceConnection {
         final Messenger client = new Messenger(new Handler(Looper.getMainLooper(), this::onMessage));
-        Messenger service;
+        volatile Messenger service;   // read by the build's thread too (runEnded)
         volatile boolean alive;
+        volatile boolean heard;   // a message of this build's job came: alive is then the packer's word (runEnded)
 
         @Override public void onServiceConnected(ComponentName n, IBinder b) {
             service = new Messenger(b);
@@ -575,6 +603,7 @@ final class Prepare {
             String j = d.getString("job");
             if (j != null) { fromService = j; fromServiceAt = SystemClock.elapsedRealtime(); }
             alive = d.getBoolean("alive");
+            heard = true;
             return true;
         }
     }
