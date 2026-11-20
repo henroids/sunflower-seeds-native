@@ -240,6 +240,25 @@ class Notice(unittest.TestCase):
         self.assertIn('if ((checking || checkRunning) && j == job) return b.setContentTitle("Checking "', note)
 
 
+class WorkerEnd(unittest.TestCase):
+    """A job's worker that has ended and the post of its end (work's finally: finished on the main thread)"""
+    def test_a_workers_end_leaves_a_worker_started_since_alone(self):
+        # a job's start between the worker's end (its thread gone, so onStartCommand's isAlive check lets it through) and that end's post (finished) started a
+        # new worker, and the post then took it for the one that ended: worker = null forgot it, its notification read "Paused" with Resume, and stopSelf()
+        # stopped the service under it. A start after that (Resume, Retry) found no worker and ran a second one on the same job
+        s = PACK.read_text(encoding='utf-8')
+        work = s[s.index('    private void work() {'):]
+        work = work[:work.index('\n    }\n')]
+        fin = work[work.index('} finally {'):]
+        self.assertNotIn('main.post(this::finished);', fin)
+        self.assertRegex(fin, r'Thread self = Thread\.currentThread\(\);[^\n]*\n\s*main\.post\(\(\) -> finished\(self\)\);')
+        end = s[s.index('    private void finished('):]
+        end = end[:end.index('\n    }\n')]
+        self.assertRegex(end, r'private void finished\(Thread w\) \{[^\n]*\n\s*if \(worker != w\) return;')
+        self.assertLess(end.index('if (worker != w) return;'), end.index('worker = null;'))
+        self.assertNotRegex(s, r'finished\(\)')   # no other caller takes the end of a worker it did not name
+
+
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
 class Jvm(unittest.TestCase):
     def test_jvm(self):

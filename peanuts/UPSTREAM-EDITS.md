@@ -2186,3 +2186,16 @@ both ways, gave the same bytes; the Thor's two splits too. In the direct split, 
 | `dm/tools/tests/test_split_yaz0.py` (new) | 1 | the module built with this machine's compiler against the loop: a corpus of runs, repeats at every distance, text and random bytes; a size that ends inside an operation; trailing bytes; every cut of a stream and references before the start (None, and the loop's error); 3,000 random streams; a size the stream cannot reach; bytes, bytearray and memoryview; a buffer that is not one run of bytes, and a size with no memory for it (None, not an error); the hook with and without the module | `PEANUTS` docstring |
 
 Tests: `test_split_yaz0.py` (10; 8 skipped without a C compiler or Python's headers), every `test_split_*.py` with and without the module, `peanuts/tests/test_peanuts_build.py`.
+
+### Round 32, a worker's end and a build's earlier states (2026-11-20, issue #120 review)
+
+A race the review of the incremental builds (pull request #150) found in upstream's code. A job's start between a worker's end (its thread gone,
+so `onStartCommand`'s `isAlive` check lets it through) and that end's post (`finished`) started a new worker, which the post then took for the one that
+ended: `worker = null` forgot it, its notification read "Paused" with Resume, `stopSelf()` stopped the service under it, and a start after that found no
+worker and ran a second one on the same job. The post now names its worker and leaves one started since alone.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` (a worker's end) | 2 | `work()`'s end posts `finished(self)`; `finished(Thread w)` returns when `worker != w` | `PEANUTS` |
+
+Tests: `peanuts/tests/test_reuse_check.py` (`WorkerEnd`). Upstream candidate: yes (upstream's own race).

@@ -523,11 +523,13 @@ public final class PackService extends Service {
             save(j, true);
         } finally {
             if (wake.isHeld()) wake.release();
-            main.post(this::finished);
+            Thread self = Thread.currentThread();   // PEANUTS: the post names the worker that ended (finished)
+            main.post(() -> finished(self));
         }
     }
 
-    private void finished() {
+    private void finished(Thread w) {   // PEANUTS: w, the worker whose end this is
+        if (worker != w) return;   // PEANUTS: a job's start before this post (the thread gone, the post not yet run) runs its own worker now, under its own foreground; it was forgotten (worker = null) and its service stopped under it, and a later start ran a second worker on the job
         Job j = job;
         worker = null;
         publish(j, true);
