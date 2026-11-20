@@ -36,7 +36,7 @@ Each found by one boot ([Hardware Opus decoders built on the SDK's software deco
 
 <!-- PEANUTS: 0.1.6 Dev verification on AYN Thor -->
 - Update 1.05 ran on Turnip v26.2.0 R5 in Game owned mode. The launcher linked both supplied DLC licences. In-game entitlement checks remain open.
-- The first run crashed in the Vulkan replay thread during the opening after logging malformed command records. A retry with `DM_VK_WORKER=0` progressed through the tutorial into combat. A 90-frame tutorial sample measured 59.90 FPS. Inline replay was a test environment override. The cause of the crash and the experimental cap timings remain open.
+- The first run crashed in the Vulkan replay thread during the opening. The game copies command lists into its frame's commands with `nvnCommandBufferCopyCommands` and later records over the source's memory. The host had replayed the copy as a call into the source, which the replay worker read a frame later. `CopyCommands` now copies the records when the game makes the copy (`hle_nvn.c` `cmd_copy_list`). With the default replay worker the opening and the first battle map then ran for six minutes at about 60 FPS with no crash. <!-- PEANUTS -->
 - The 186-key Vulkan seed was captured from the opening and first battle. The profile seed and the copy staged on Thor matched byte for byte. Cold preparation and warm cache reuse remain to be timed.
 - The PC targeted pack for update 1.05 and both DLC licences took 20.80 seconds. The full pack took 134.58 seconds and the incremental build took 0.56 seconds. The full and targeted runtime payloads matched byte for byte.
 
