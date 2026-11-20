@@ -180,11 +180,22 @@ class Resume(unittest.TestCase):
         # file since this run started it (Job.save puts "updated")
         s = PREPARE.read_text(encoding='utf-8')
         self.assertEqual(len(re.findall(r'long since = updated\(file\);[^\n]*\n\s*ownJob = file\.getPath\(\);', s)), 2)   # the build and the modded build
-        self.assertEqual(len(re.findall(r'String state = o\.optString\("state"\), reason = o\.optString\("reason"\), step = o\.optString\("step"\);\s*'
-                                        r'if \(since > 0 && o\.optLong\("updated", -1\) == since\) state = "";', s)), 2)
         retry = s[s.index('Upstream.jobTryAnyway(j, true);'):]
         retry = retry[:retry.index('startForegroundService')]
-        self.assertIn('since = updated(file);', retry)   # Try anyway's restart: the failed run's state (a late message of it too) is not the new run's
+        self.assertIn('since = updated(file);', retry)   # Try anyway's restart: the failed run's file is not the new run's
+
+    def test_a_builds_state_comes_from_its_jobs_file_only(self):
+        # a message of the packer's can be of a Job it still held from before, whatever its "updated" (a done or failed run's, a late one after Try anyway's
+        # restart): an older one passed a check of "updated" for equality (found in review). Every state change the packer makes is a forced save, so the
+        # state is read from the file; the messages give the progress between its writes
+        s = PREPARE.read_text(encoding='utf-8')
+        self.assertEqual(s.count('String json = read(file), own = json;'), 2)
+        self.assertEqual(len(re.findall(r'JSONObject f = written\(own, since\);\s*String state = f == null \? "" : f\.optString\("state"\);', s)), 2)
+        self.assertEqual(len(re.findall(r'if \(state\.equals\("done"\) \|\| state\.equals\("failed"\) \|\| state\.equals\("paused"\)\) o = f;', s)), 2)
+        self.assertNotIn('o.optString("state")', s)
+        written = s[s.index('    private static JSONObject written(String own, long since) {'):]
+        written = written[:written.index('\n    }\n')]
+        self.assertIn('since > 0 && f.optLong("updated", -1) == since ? null : f', written)
 
 
 class Notice(unittest.TestCase):

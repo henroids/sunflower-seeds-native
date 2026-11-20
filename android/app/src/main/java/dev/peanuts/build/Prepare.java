@@ -228,9 +228,9 @@ final class Prepare {
         String lastJson = null;
         while (!cancelled) {
             SystemClock.sleep(1000);
-            String json = read(file);
+            String json = read(file), own = json;   // own: the job's file, whose state alone counts (below)
             String fs = fromService;
-            if (fs != null && fromServiceAt > lastChange) json = fs;
+            if (fs != null && fromServiceAt > lastChange) json = fs;   // the progress between the file's writes
             if (json == null) {
                 if (SystemClock.elapsedRealtime() - lastReadable > 30000) throw new BuildListener.Failure("The job file went missing: " + file, BuildListener.OTHER);
                 continue;
@@ -239,8 +239,13 @@ final class Prepare {
             if (!json.equals(lastJson)) { lastJson = json; lastChange = lastReadable; }
             JSONObject o;
             try { o = new JSONObject(json); } catch (org.json.JSONException e) { continue; }
-            String state = o.optString("state"), reason = o.optString("reason"), step = o.optString("step");
-            if (since > 0 && o.optLong("updated", -1) == since) state = "";   // a paused or failed job resumed: not yet this run's (the full check holds the packer, a slow start)
+            // the state from the job's file alone, once the packer has written it since this run started it (issue #120): every state change the packer makes
+            // is a forced save, and a message may be of a Job it still held from before (a done or failed run's, a late one after Try anyway's restart), whatever
+            // its "updated"; the file as this run left it is a paused or failed job's from before (resumed while the full check holds the packer, a slow start)
+            JSONObject f = written(own, since);
+            String state = f == null ? "" : f.optString("state");
+            if (state.equals("done") || state.equals("failed") || state.equals("paused")) o = f;   // what the branches below read (error, fix, reason) is the file's too
+            String reason = o.optString("reason"), step = o.optString("step");
             int si = Math.max(0, java.util.Arrays.asList(STEPS).indexOf(step));
             JSONObject st = o.optJSONObject("steps") != null ? o.optJSONObject("steps").optJSONObject(STEPS[si]) : null;
             long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
@@ -416,9 +421,9 @@ final class Prepare {
         String lastJson = null;
         while (!cancelled) {
             SystemClock.sleep(1000);
-            String json = read(file);
+            String json = read(file), own = json;   // own: the job's file, whose state alone counts (below)
             String fs = fromService;
-            if (fs != null && fromServiceAt > lastChange) json = fs;
+            if (fs != null && fromServiceAt > lastChange) json = fs;   // the progress between the file's writes
             if (json == null) {
                 if (SystemClock.elapsedRealtime() - lastReadable > 30000) throw new BuildListener.Failure("The modded build's job file went missing: " + file, BuildListener.OTHER);
                 continue;
@@ -427,8 +432,13 @@ final class Prepare {
             if (!json.equals(lastJson)) { lastJson = json; lastChange = lastReadable; }
             JSONObject o;
             try { o = new JSONObject(json); } catch (org.json.JSONException e) { continue; }
-            String state = o.optString("state"), reason = o.optString("reason"), step = o.optString("step");
-            if (since > 0 && o.optLong("updated", -1) == since) state = "";   // a paused or failed job resumed: not yet this run's (the full check holds the packer, a slow start)
+            // the state from the job's file alone, once the packer has written it since this run started it (issue #120): every state change the packer makes
+            // is a forced save, and a message may be of a Job it still held from before (a done or failed run's, a late one after Try anyway's restart), whatever
+            // its "updated"; the file as this run left it is a paused or failed job's from before (resumed while the full check holds the packer, a slow start)
+            JSONObject f = written(own, since);
+            String state = f == null ? "" : f.optString("state");
+            if (state.equals("done") || state.equals("failed") || state.equals("paused")) o = f;   // what the branches below read (error, fix, reason) is the file's too
+            String reason = o.optString("reason"), step = o.optString("step");
             int si = Math.max(0, java.util.Arrays.asList(STEPS).indexOf(step));
             JSONObject st = o.optJSONObject("steps") != null ? o.optJSONObject("steps").optJSONObject(STEPS[si]) : null;
             long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
@@ -491,6 +501,15 @@ final class Prepare {
         String t = read(f);
         if (t == null) return -1;
         try { return new JSONObject(t).optLong("updated", -1); } catch (org.json.JSONException e) { return -1; }
+    }
+
+    /** The job's file (own: its text) as the packer wrote it since this run started it, null while it is as this run left it ("updated" since) or unreadable */
+    private static JSONObject written(String own, long since) {
+        if (own == null) return null;
+        try {
+            JSONObject f = new JSONObject(own);
+            return since > 0 && f.optLong("updated", -1) == since ? null : f;
+        } catch (org.json.JSONException e) { return null; }
     }
 
     private static String read(File f) {
