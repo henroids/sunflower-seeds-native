@@ -521,6 +521,11 @@ int vka_shader_variant_key(uint64_t key);   // 1 when a key is no library key bu
 typedef struct { vka_shader *sh[VKA_NSTAGE]; unsigned bad; } vka_progsh;   // by NVN stage; bad: stages whose shader is refused (bit = NVN stage) or VKA_BAD_MISSING (their draws are skipped)
 #define VKA_BAD_MISSING (1u << VKA_NSTAGE)   // vka_progsh.bad: a stage's shader is not in the library (its NVN stage unknown)
 int vka_prog_shaders(const prog_t *p, vka_progsh *out);      // 1 = resolved (stages the program lacks are NULL); 0 = no library or no program
+void vka_pso_prefetch(const uint8_t md[6][8], unsigned n);   // PEANUTS: a program's shader parts made from now (vka_pso.c pf_main), from nvnProgramSetShaders
+int vka_shaders_by_keys(const uint8_t md[6][8], unsigned n, vka_shader *sh[VKA_NSTAGE]);   // PEANUTS: (vka_shader.c)
+void vka_pso_prefetch_line(char *out, size_t n);   // PEANUTS
+void vka_tex_bindless_ready(void);   // PEANUTS: (vka_tex.c) before a pipeline layout is made
+size_t vka_shader_drop_modules(void);   // PEANUTS: (vka_shader.c) the end of the preparing step
 void vka_prog_put(uint64_t serial, const vka_progsh *ps);   // a program made by the host itself (the selftest), by serial
 vka_shader *vka_shader_make(const vka_shlib *L, uint64_t key);
 const char *vka_shader_lib_path(void);   // the library file loaded ("" before or without one): this version's, or an older one of the same ABI or of a compatible older one (vka_abi_compat.h)

@@ -2938,8 +2938,10 @@ static void pfb_consume_locked(void) {
     }
 }
 
-static void bindless_init(void) {
-    static int done; if (done) return; done = 1;
+static void bindless_init_once(void);
+// PEANUTS: once, from any thread (was a flag read on the replay thread alone): vka_tex_bindless_ready below
+static void bindless_init(void) { static pthread_once_t once = PTHREAD_ONCE_INIT; pthread_once(&once, bindless_init_once); }
+static void bindless_init_once(void) {
     if (!V.uab) { VRED("no update-after-bind descriptor indexing: the texture and sampler pools have no tables"); return; }
     VkPhysicalDeviceVulkan12Properties p12 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES};
     VkPhysicalDeviceProperties2 p2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &p12}; vk.vkGetPhysicalDeviceProperties2(V.pd, &p2);
@@ -2974,6 +2976,11 @@ static void bindless_init(void) {
 }
 VkDescriptorSet vka_bindless_set(void) { return g_set; }
 VkDescriptorSetLayout vka_bindless_layout(void) { return g_dsl; }
+// PEANUTS: the tables made before the first pipeline layout (vka_pso.c layout_slow). They were made at the first frame's textures (vka_tex_prepare), so a layout made
+// before the game's first frame (the startup prewarm, the preparing step) had set 0 alone: another layout than the same shaders' at a draw of a later run, and the
+// pipelines and shader parts compiled with it were never found in the driver's cache again (Super Mario Odyssey, 2026-11-20: 9 of 267 fetches in the run after the
+// one that prepared them)
+void vka_tex_bindless_ready(void) { if (V.dev) bindless_init(); }
 VkDescriptorSetLayout vka_pfb_layout(void) { return atomic_load(&g_pfb) > 0 ? g_pfb_dsl : VK_NULL_HANDLE; }
 VkDescriptorSet vka_pfb_set(void) { return atomic_load(&g_pfb) > 0 ? g_pfb_set : VK_NULL_HANDLE; }
 
