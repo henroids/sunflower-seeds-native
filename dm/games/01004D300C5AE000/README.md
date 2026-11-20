@@ -75,6 +75,15 @@ Open: **120 on a 120 Hz panel.** The window asked for 120 (`window frame rate 12
 
 <!-- PEANUTS end -->
 
+<!-- PEANUTS begin: picture shapes -->
+## Picture shapes (Android)
+
+Game settings › Aspect ratio offers 21:9, 8:7 and Screen shape, with no code of the game's own: one `aspect_plan` row (`width_movz` at `main+0x747408`). The game builds its screen size there (`mov x8,#1920; movk x8,#1080,lsl #32`, read on the 1.1.0 pack's main), and the loader makes the width the one for the picture's shape before code is sealed: 2520 for 21:9, 1234 for 8:7 ([`aspect_plan.h`](../../host/aspect_plan.h), `test_aspect_plan.py`). The site is the one the community's 21:9 patch for this build changes (Fl4sh9174, Switch-Emulator-Ultrawide-FPS-Mods: 2580 there, for 3440x1440), which says the cameras and part of the menus follow it.
+
+**Not yet seen on a device.** Checked so far: the row applied to the 1.1.0 pack's main image on a PC changes those two bytes only, and leaves 16:9 alone. Open: what the cameras, the HUD and the menus do at each shape, and the frame rate at 21:9.
+
+<!-- PEANUTS end -->
+
 ## Audio
 
 - `nn::atk2` through an audio renderer (96 voices, 14 effects, one sink). 131,543 of the first 132,000 rendered frames were not silent.

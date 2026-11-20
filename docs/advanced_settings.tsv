@@ -23,6 +23,7 @@ DM_AOC_DIR	internal	Diagnostics			text			both						Mac or iOS only
 DM_AOC_OWNED	developer	Game			text			both						
 DM_APP_POOL_MB	developer	Diagnostics			text			both						
 DM_APP_VERSION	developer	Game			text			both						
+DM_ASPECT_PLAN	developer	Graphics			text			both						
 DM_AUDIO	internal	Audio			text			both						Mac or iOS only
 DM_AUDIO_DUMP	developer	Diagnostics			text			both						
 DM_AUDIO_FEED	developer	Audio			text			both						
