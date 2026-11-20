@@ -408,7 +408,8 @@ def keep_library(reuse_dir, out_dir, version):
 
 def wanted_keys(argv, deps, delta):
     """The keys this build makes, as vk_android_build.py takes them: the key list's (none: every key of the map) with the pixel shaders paired with them
-    (dmsh_build.py build_keys), less the absences validated against the split (DMSH_VK_ABSENT_FILE, vk_android_delta.py package_keys). None when that cannot be
+    (dmsh_build.py build_keys), less the absences validated against the split (DMSH_VK_ABSENT_FILE, vk_android_delta.py package_keys), and of them only the ones
+    the split found (its shader_map.tsv beside the package). None when that cannot be
     told (an absence file that cannot be read, an empty selection: the tool says why), and then nothing is kept"""
     absent = set()
     if f := os.environ.get('DMSH_VK_ABSENT_FILE'):
@@ -417,9 +418,15 @@ def wanted_keys(argv, deps, delta):
     build_keys, = borrowed('build_keys')
     loc = dict.fromkeys(deps.stage)
     try:
-        if hasattr(delta, 'package_keys'): return set(delta.package_keys(set(argv[4:]), loc, deps.pairs, absent, build_keys))
-        return set(build_keys(set(argv[4:]), loc, deps.pairs))
+        if hasattr(delta, 'package_keys'): w = set(delta.package_keys(set(argv[4:]), loc, deps.pairs, absent, build_keys))
+        else: w = set(build_keys(set(argv[4:]), loc, deps.pairs))
     except ValueError: return None
+    # only a shader the split found in this dump (its own shader_map.tsv): with Try anyway (DMSH_VK_REQUIRE_ALL=0) vk_android_build.py leaves out one its
+    # package lacks, but a kept one never goes through that check, so an older library's (a dump with an add-on) would pad the vertex shaders and stay
+    # (found in review). Without Try anyway the split holds every key the build makes, and this changes nothing
+    found = Path(argv[2]).parent / 'shader_map.tsv'
+    if found.is_file(): w &= {c[3] for c in (l.split('\t') for l in rows(found)) if len(c) > 4 and c[0].endswith('.bin')}
+    return w
 
 
 def check(new_lib, sample, zstd, delta):

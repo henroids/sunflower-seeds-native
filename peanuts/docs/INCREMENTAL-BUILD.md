@@ -30,7 +30,7 @@ the inputs digest does not cover; an added DLC can add pairs there while the pro
 pairs as `load_pairs` takes them (a review found this before it was published; `test_split_pairs_are_not_taken_for_the_same_inputs`).
 
 Either way only a shader this build makes is kept (`vk_android_build.py`'s own selection: the profile's keys less the absences validated against the split,
-`DMSH_VK_ABSENT_FILE`), and a vertex shader only when the pixel shaders paired with it that this build makes are those the older library holds. Its outputs
+`DMSH_VK_ABSENT_FILE`, and of them only those the split found: with Try anyway the tool leaves out a shader its package lacks, but never checks a kept one), and a vertex shader only when the pixel shaders paired with it that this build makes are those the older library holds. Its outputs
 are padded with the inputs of the pixel shaders the build makes (`PS_INPUTS`), so an add-on installed since the last build (its pixel shaders absent then)
 changes the vertex shaders it pairs with although the profile stays the same (`test_a_pixel_shader_that_comes_with_an_addon`).
 

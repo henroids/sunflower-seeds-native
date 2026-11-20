@@ -63,6 +63,11 @@ FAKE = textwrap.dedent('''
     try: m = delta.parse_manifest(open(g.table('vk_delta.tsv')).read())
     except (OSError, ValueError): m = None
     if m and (m['version'], m['game'], m['inputs']) != (t.VERSION, g.id, inputs): m = None
+    # Try anyway (DMSH_VK_REQUIRE_ALL=0): a key the split's package lacks is left out of the translation (open_packs), but a kept one never goes through it
+    split_map = os.path.join(os.path.dirname(a[2]), 'shader_map.tsv')
+    if os.path.isfile(split_map):
+        found = {{l.split('\\t')[3] for l in open(split_map) if l.split('\\t')[0].endswith('.bin')}}
+        keys = [k for k in keys if k in found or (m and k in m['hashes'])]
     libs = []
     for r in os.environ.get('DMSH_VK_DELTA_FROM', '').split(os.pathsep):
         for n in sorted(os.listdir(r)) if r and os.path.isdir(r) else []:
@@ -323,6 +328,20 @@ class Reuse(Base):
         code, runs, lib = self.build()
         self.assertEqual((code, len(runs[0])), (0, 400))   # without a record not even then: the translator it was made with cannot be told (Records)
         self.assertEqual(lib, self.full())
+
+    def test_try_anyway_keeps_no_shader_this_dump_lacks(self):
+        # Try anyway: the split need not hold every shader of the profile's map, and vk_android_build.py leaves out one its package lacks. A kept one never
+        # goes through that check: kept from an older library (a dump with the add-on), it padded the vertex shaders, and every full check after it found the
+        # library other than a translation of this dump and replaced it (found in review)
+        self.profile(); self.build(); self.into_pack()
+        rows = (self.prof / 'shader_map.tsv').read_text().splitlines()
+        (self.pkg.parent / 'shader_map.tsv').write_text('\n'.join(l for l in rows if self.ps[3] not in l) + '\n')   # this dump's split: no ps[3]
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertNotIn(self.ps[3], lib)
+        game = sr.load_modules()[0]
+        present = set(self.vs + self.ps) - {self.ps[3]}
+        self.assertEqual(lib[self.vs[3]], translate(game.load(), str(self.pkg), self.vs[3], present))   # padded without it
 
     def test_off(self):
         self.profile(); self.build(); self.into_pack()
