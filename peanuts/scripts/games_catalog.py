@@ -19,6 +19,7 @@ adding or removing a game needs no step by hand. Warnings (printed, never fatal)
 games.tsv row of a game that does not ship, companion releases that could not be read.
 """
 from pathlib import Path
+import http.client
 import json
 import os
 import re
@@ -194,7 +195,7 @@ def refresh(root=ROOT, warn=print, fetch=companions):
     text = path.read_text(encoding='utf-8')
     try:
         live = fetch(os.environ.get('GITHUB_TOKEN'))
-    except (OSError, ValueError) as e:   # the network or GitHub (URLError is an OSError): the column stays as it is
+    except (OSError, ValueError, http.client.HTTPException, AttributeError, TypeError) as e:   # the network (URLError is an OSError, a cut reply an HTTPException) or an unexpected reply from GitHub: the column stays as it is
         warn(f'catalog: companion releases not read ({e}); the companion column is left as it is')
         live = None
     out, seen = [], set()

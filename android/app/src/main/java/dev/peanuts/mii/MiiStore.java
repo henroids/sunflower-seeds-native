@@ -144,7 +144,10 @@ public final class MiiStore {
     /** The name of a duplicate: the name and " 2", the name cut short so the 2 still fits and the copy reads differently */
     public static String copyName(String name) {
         String base = cleanName(name);
-        if (base.length() > NAME_MAX - 2) base = base.substring(0, NAME_MAX - 2);
+        if (base.length() > NAME_MAX - 2) {
+            base = base.substring(0, NAME_MAX - 2);
+            if (Character.isHighSurrogate(base.charAt(base.length() - 1))) base = base.substring(0, base.length() - 1);   // never half a surrogate pair
+        }
         return cleanName(base + " 2");
     }
 
