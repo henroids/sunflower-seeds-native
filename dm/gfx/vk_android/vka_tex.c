@@ -2379,6 +2379,10 @@ static int img_wb_kind(const vka_img *im) { return (im->d.flags & (NVN_TEXTURE_F
 // the cube a generated face is lit by stayed zero, the face black, its specular left). A sampled texture now takes the newest GPU write through an uncompressed image over the
 // same storage of its texel (or block) size and its extent in texels (or blocks) and layers, written after its own last write, by a copy between size-compatible formats
 // (vkCmdCopyImage copies the bits), each time that image is written again. DM_VK_BC_TAKE=0 turns it off. Caller holds g_tmu
+// A texture of the source's own format and target takes too when it is a GPU-side one (gpu_owned: its storage is never uploaded from the CPU): two such textures over one
+// storage that do not share an image (same_shape says no: other levels or flags) are still one memory on the Switch. MLB The Show 26 renders a composed face into one
+// 512x256 RGBA8 texture and averages it through another over the same storage (SPRITE db36c1459370f8a1, the WookieMean passes) for the body skin's target tone: the
+// average of an empty image, a zero target (ICE_SKINSHADER fp_c4[2]), every generated player's body black
 static uint64_t g_wgen;
 static vka_img *take_src(const vka_img *im) {
     if (!im->mem || im->par || im->samples > 1 || im->f.kind >= 3 || !VKA_ENV("DM_VK_BC_TAKE", 1)) return NULL;
@@ -2387,7 +2391,7 @@ static vka_img *take_src(const vka_img *im) {
     vka_img *best = NULL; int k;
     for (vka_img *o = live_first(im->mem, &k); o; o = live_next(o, im->mem, &k))
         if (o != im && !compressed(&o->f) && o->f.kind < 3 && o->f.bpb == im->f.bpb && o->gpu_owned && o->wgen > im->wgen && o->w == bw && o->h == bh && o->layers == im->layers
-            && o->depth == im->depth && o->samples == 1 && !o->par && (c || o->f.vk != im->f.vk || o->d.target != im->d.target) && (!best || o->wgen > best->wgen)) best = o;
+            && o->depth == im->depth && o->samples == 1 && !o->par && (c || o->f.vk != im->f.vk || o->d.target != im->d.target || im->gpu_owned) && (!best || o->wgen > best->wgen)) best = o;
     return best;
 }
 static vka_img *take_img_of(int id) { smap_ent *e = id > 0 && id < g_ntreg && g_treg[id].t.serial ? map_get(g_treg[id].t.serial) : NULL; return e ? e->im : NULL; }
