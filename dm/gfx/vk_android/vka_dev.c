@@ -311,7 +311,7 @@ static int init_once(void) {
     VLOG("driver: %s (%s), driver ID %d, conformance %u.%u.%u.%u, driver version %#x; %s", pdr.driverName, pdr.driverInfo, pdr.driverID, pdr.conformanceVersion.major,
          pdr.conformanceVersion.minor, pdr.conformanceVersion.subminor, pdr.conformanceVersion.patch, V.props.driverVersion, vka_driver_tag() ? "custom (DM_VK_DRIVER)" : "the system's");
     V.driver_id = (int)pdr.driverID;
-    // PurpleVK T30 reports 30.2 MHz on this A650, but its timestamp queries read the 19.2 MHz always-on counter (measured against CLOCK_MONOTONIC).
+    // PEANUTS (PR #164): PurpleVK T30 reports 30.2 MHz on this A650, but its timestamp queries read the 19.2 MHz always-on counter (measured against CLOCK_MONOTONIC).
     if (V.driver_id == VK_DRIVER_ID_MESA_TURNIP && V.props.driverVersion == 0x06802063 &&
         strstr(pdr.driverInfo, "git-62ac221a33") && strstr(V.props.deviceName, "Adreno (TM) 650") &&
         V.props.limits.timestampPeriod == 33.112583160f) {

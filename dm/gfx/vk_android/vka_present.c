@@ -852,7 +852,7 @@ static int present_one(const pq_item *it) {
     // The frame done on the GPU before the queue lock is taken: a submission that waits for a timeline value still pending can block inside vkQueueSubmit until it is
     // signalled (Turnip on KGSL emulates timeline semaphores: 25-35 ms a frame with the lock held, so every replay submission behind it waited; Ocarina of Time's note).
     // The copy cannot start before the frame ends anyway; only a value already handed to the queue is waited for here (a later one is handled under the lock below)
-    // Trails on the tested Turnip T30 build is faster without the CPU wait when the host signals the timeline:
+    // PEANUTS (PR #164): Trails on the tested Turnip T30 build is faster without the CPU wait when the host signals the timeline:
     // Android otherwise stalls in queueBuffer under the queue lock. The submit below still waits for it->fence.
     static int prewait = -1;
     if (prewait < 0) {
