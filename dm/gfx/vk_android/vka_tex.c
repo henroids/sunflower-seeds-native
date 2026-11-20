@@ -1709,7 +1709,8 @@ static int bc_alias_match(const vka_img *src, const vka_img *dst) {
     return src->w == bw && src->h == bh;
 }
 static void bc_sync_queue_locked(vka_img *src) {
-    if (!src || compressed(&src->f) || !src->mem || g_nbc_sync >= 64) return;
+    if (!src || compressed(&src->f) || !src->mem) return;
+    if (g_nbc_sync >= 64) { static _Atomic int full; if (!atomic_exchange(&full, 1)) VRED("bc alias sync: more than 64 images wait for a copy into their block-compressed alias; the rest are skipped until the queue drains"); return; }   // PEANUTS
     int has_dst = 0, lk;
     for (vka_img *o = live_first(src->mem, &lk); o; o = live_next(o, src->mem, &lk))
         if (bc_alias_match(src, o)) { has_dst = 1; break; }
@@ -3704,17 +3705,22 @@ void vka_tex_prepare(VkCommandBuffer cb) {
     pfb_consume_locked();   // the texture IDs read through the pool in submissions done: their images stamped used, null slots written again with their images ("Texture pool reads")
     vka_tex_prune_locked();   // (the limit measured again every 60 frames; nothing to do under it)
     if (g_nbc_sync) {
-        int any_bc = 0, out = 0;
+        // PEANUTS: each queued image is copied once and leaves the queue; its next GPU write queues it again (vka_img_written_at), so an unchanged pool is not copied every frame
+        int any_bc = 0;
         for (int i = 0; i < g_nbc_sync; i++) {
             vka_img *src = g_bc_sync[i];
-            int keep = 0;
             if (src->inited && !img_pool_dead(src) && src->mem) {
                 int lk_bc; for (vka_img *dst = live_first(src->mem, &lk_bc); dst; dst = live_next(dst, src->mem, &lk_bc)) {
                     if (!dst->inited || img_pool_dead(dst) || !bc_alias_match(src, dst)) continue;
-                    keep = 1;
                     if (!any_bc) { vka_barrier(cb); any_bc = 1; }
-                    VkImageCopy reg = { {src->aspect, 0, 0, src->layers}, {0, 0, 0}, {dst->aspect, 0, 0, dst->layers}, {0, 0, 0}, {src->w, src->h, 1} };
-                    vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, 1, &reg);
+                    // PEANUTS: every mip (bc_alias_match requires the same count): level l of the uncompressed image holds one texel per block of the alias's level l
+                    VkImageCopy reg[16]; uint32_t nreg = 0;
+                    for (uint32_t l = 0; l < src->levels && nreg < 16; l++) {
+                        uint32_t sw = src->w >> l ? src->w >> l : 1, sh = src->h >> l ? src->h >> l : 1, dw = dst->w >> l ? dst->w >> l : 1, dh = dst->h >> l ? dst->h >> l : 1;
+                        if (sw != (dw + dst->f.bw - 1) / dst->f.bw || sh != (dh + dst->f.bh - 1) / dst->f.bh) break;   // the block grid stops lining up: copy no further level
+                        reg[nreg++] = (VkImageCopy){ {src->aspect, l, 0, src->layers}, {0, 0, 0}, {dst->aspect, l, 0, dst->layers}, {0, 0, 0}, {sw, sh, 1} };
+                    }
+                    if (nreg) vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, nreg, reg);
                     dst->gpu_owned = 1;
                     static _Atomic int n_bc;
                     if (atomic_fetch_add(&n_bc, 1) < 8)
@@ -3723,11 +3729,10 @@ void vka_tex_prepare(VkCommandBuffer cb) {
                              (unsigned long long)dst->serial, dst->w, dst->h, dst->f.vk, (const void *)src->mem);
                 }
             }
-            if (keep) g_bc_sync[out++] = src;
-            else unref_locked(src);
+            unref_locked(src);   // PEANUTS: copied (or its alias is gone): out of the queue
         }
         if (any_bc) vka_barrier(cb);
-        g_nbc_sync = out;
+        g_nbc_sync = 0;
     }
     int n_up = 0;
     for (int i = 0; i < g_nredo; i++) {   // CPU writes to textures that already have an image (WriteTexels): from now on they follow their storage
