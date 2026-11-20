@@ -212,6 +212,7 @@ final class Prepare {
         // The translator calls at once (4 on a phone with 14 GB or more, 2 on an 8 GB one) are set by PackService from the phone's memory (BuildMemory), not by a line here:
         // a fixed 4 in env.txt ran an 8 GB phone out of memory (Fire Emblem Engage on a Thor Base, issue #10). A line env.txt has still applies, up to that count
         // 4. the service, as the panel starts it
+        long since = updated(file);   // job.json as this run starts the packer: its state is the job's from before until the packer writes the file (issue #120)
         ownJob = file.getPath();   // the service's messages of this job only (Link.onMessage)
         bind();
         try {
@@ -239,6 +240,7 @@ final class Prepare {
             JSONObject o;
             try { o = new JSONObject(json); } catch (org.json.JSONException e) { continue; }
             String state = o.optString("state"), reason = o.optString("reason"), step = o.optString("step");
+            if (since > 0 && o.optLong("updated", -1) == since) state = "";   // a paused or failed job resumed: not yet this run's (the full check holds the packer, a slow start)
             int si = Math.max(0, java.util.Arrays.asList(STEPS).indexOf(step));
             JSONObject st = o.optJSONObject("steps") != null ? o.optJSONObject("steps").optJSONObject(STEPS[si]) : null;
             long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
@@ -267,6 +269,7 @@ final class Prepare {
                     Object j = Upstream.jobRead(file);
                     Upstream.jobTryAnyway(j, true);
                     Upstream.jobSave(j);
+                    since = updated(file);   // the failed run's state, and a late message of it, are not the new run's
                     fromService = null;
                     lastJson = null;
                     lastChange = SystemClock.elapsedRealtime();
@@ -399,6 +402,7 @@ final class Prepare {
         File file = Upstream.jobFile(job);
         log("modded prepare: job " + file + " (" + (resumedMod ? "resumed, it was " + Upstream.jobState(job) : "new") + "), pack " + packDir);
         BuildLogShare.remember(c, id, workDir);
+        long since = updated(file);   // job.json as this run starts the packer: its state is the job's from before until the packer writes the file (issue #120)
         ownJob = file.getPath();   // the service's messages of this job only (Link.onMessage)
         bind();
         try {
@@ -424,6 +428,7 @@ final class Prepare {
             JSONObject o;
             try { o = new JSONObject(json); } catch (org.json.JSONException e) { continue; }
             String state = o.optString("state"), reason = o.optString("reason"), step = o.optString("step");
+            if (since > 0 && o.optLong("updated", -1) == since) state = "";   // a paused or failed job resumed: not yet this run's (the full check holds the packer, a slow start)
             int si = Math.max(0, java.util.Arrays.asList(STEPS).indexOf(step));
             JSONObject st = o.optJSONObject("steps") != null ? o.optJSONObject("steps").optJSONObject(STEPS[si]) : null;
             long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
@@ -479,6 +484,13 @@ final class Prepare {
 
     private String appName() {
         try { return c.getString(c.getApplicationInfo().labelRes); } catch (RuntimeException e) { return "the app"; }
+    }
+
+    /** job.json's "updated" (Job.save writes it at every save), -1 when it cannot be read */
+    private static long updated(File f) {
+        String t = read(f);
+        if (t == null) return -1;
+        try { return new JSONObject(t).optLong("updated", -1); } catch (org.json.JSONException e) { return -1; }
     }
 
     private static String read(File f) {

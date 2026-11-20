@@ -172,6 +172,21 @@ class Stale(unittest.TestCase):
         self.assertEqual(len(re.findall(r'ownJob = file\.getPath\(\);[^\n]*\n\s*bind\(\);', s)), 2)   # set before each bind: the build and the modded build
 
 
+class Resume(unittest.TestCase):
+    def test_a_build_takes_no_state_its_job_had_before_it_started_the_packer(self):
+        # Prepare resumes a paused or failed job as it is and reads its job.json every second. While the full check held the packer (afterCheck: the job runs
+        # once the check has stopped) it read the old "paused" or "failed", ended the build ("Preparing paused"), and the packer then ran the job with no build
+        # following it; a resume read it too when the job's worker took more than a second to write "running". A state counts once the packer has written the
+        # file since this run started it (Job.save puts "updated")
+        s = PREPARE.read_text(encoding='utf-8')
+        self.assertEqual(len(re.findall(r'long since = updated\(file\);[^\n]*\n\s*ownJob = file\.getPath\(\);', s)), 2)   # the build and the modded build
+        self.assertEqual(len(re.findall(r'String state = o\.optString\("state"\), reason = o\.optString\("reason"\), step = o\.optString\("step"\);\s*'
+                                        r'if \(since > 0 && o\.optLong\("updated", -1\) == since\) state = "";', s)), 2)
+        retry = s[s.index('Upstream.jobTryAnyway(j, true);'):]
+        retry = retry[:retry.index('startForegroundService')]
+        self.assertIn('since = updated(file);', retry)   # Try anyway's restart: the failed run's state (a late message of it too) is not the new run's
+
+
 class Notice(unittest.TestCase):
     def test_a_timeout_during_the_check_leaves_no_notification(self):
         # onTimeout (Android's daily dataSync limit) detached the notification and posted note(j) again: during the check that is "Checking <game>'s shaders",
