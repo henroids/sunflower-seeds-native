@@ -29,6 +29,22 @@ typedef struct __attribute__((packed)) {
 } mii_charinfo;
 _Static_assert(sizeof(mii_charinfo) == 0x58, "nn::mii::CharInfo is 0x58 bytes");
 
+// PEANUTS begin: the console's own six default Miis (three men, three women: their hair, skin, eyes and favourite colours), not one Mii six times.
+// Mario Kart 8 Deluxe's Select a Mii showed the host's copies, the first a blank tile (GitHub request: Mii heads from the firmware's MiiModel)
+// The console's six default Miis (nn::mii DefaultMii), as StoreData::BuildDefault turns them into a CharInfo: colours through the Ver3 tables, eyebrow_y - 3.
+// From Ryujinx (MIT; via Eden src/core/hle/service/mii/types/raw_data.cpp), generated; PEANUTS
+static const struct mii_def { uint8_t faceline_type, faceline_color, faceline_wrinkle, faceline_make, hair_type, hair_color, hair_flip, eye_type, eye_color, eye_scale, eye_aspect, eye_rotate, eye_x, eye_y,
+    eyebrow_type, eyebrow_color, eyebrow_scale, eyebrow_aspect, eyebrow_rotate, eyebrow_x, eyebrow_y, nose_type, nose_scale, nose_y, mouth_type, mouth_color, mouth_scale, mouth_aspect, mouth_y,
+    mustache_type, beard_type, beard_color, mustache_scale, mustache_y, glass_type, glass_color, glass_scale, glass_y, mole_type, mole_scale, mole_x, mole_y, height, build, gender, favorite_color,
+    region_move, font_region, type; } mii_defs[6] = {
+    {0, 4, 0, 0, 68, 8, 0, 2, 8, 4, 3, 4, 2, 12, 6, 8, 4, 3, 6, 2, 7, 1, 4, 9, 23, 19, 4, 3, 13, 0, 0, 8, 4, 10, 0, 8, 4, 10, 0, 4, 2, 20, 64, 64, 0, 4, 0, 0, 0},
+    {0, 0, 0, 0, 55, 6, 0, 2, 12, 4, 3, 4, 2, 12, 6, 6, 4, 3, 6, 2, 7, 1, 4, 9, 23, 19, 4, 3, 13, 0, 0, 8, 4, 10, 0, 8, 4, 10, 0, 4, 2, 20, 64, 64, 0, 5, 0, 0, 0},
+    {0, 1, 0, 0, 33, 1, 0, 2, 8, 4, 3, 4, 2, 12, 6, 1, 4, 3, 6, 2, 7, 1, 4, 9, 23, 19, 4, 3, 13, 0, 0, 8, 4, 10, 0, 8, 4, 10, 0, 4, 2, 20, 64, 64, 0, 0, 0, 0, 0},
+    {0, 2, 0, 0, 24, 8, 0, 4, 8, 4, 3, 3, 2, 12, 0, 8, 4, 3, 6, 2, 7, 1, 4, 9, 23, 19, 4, 3, 13, 0, 0, 8, 4, 10, 0, 8, 4, 10, 0, 4, 2, 20, 64, 64, 1, 2, 0, 0, 0},
+    {0, 0, 0, 0, 14, 7, 0, 4, 13, 4, 3, 3, 2, 12, 0, 7, 4, 3, 6, 2, 7, 1, 4, 9, 23, 19, 4, 3, 13, 0, 0, 8, 4, 10, 0, 8, 4, 10, 0, 4, 2, 20, 64, 64, 1, 6, 0, 0, 0},
+    {0, 0, 0, 0, 12, 1, 0, 4, 8, 4, 3, 3, 2, 12, 0, 1, 4, 3, 6, 2, 7, 1, 4, 9, 23, 19, 4, 3, 13, 0, 0, 8, 4, 10, 0, 8, 4, 10, 0, 4, 2, 20, 64, 64, 1, 7, 0, 0, 0},
+};
+// PEANUTS end
 // index ≥ 0: default Mii <index> (a fixed create ID, so a game that saved one finds the same Mii again); < 0: a random Mii (a fresh one)
 static void mii_default(mii_charinfo *c, int gender, int index) {
     memset(c, 0, sizeof *c);
@@ -38,6 +54,22 @@ static void mii_default(mii_charinfo *c, int gender, int index) {
     if (index >= 0) c->favorite_color = (uint8_t)(index * 2);   // red, yellow, green, sky blue, purple, white
     static const char name[] = "no name";
     for (size_t i = 0; i < sizeof name - 1; i++) c->nickname[i] = (uint16_t)name[i];
+    if (index >= 0 && index < 6) {   // PEANUTS: a default Mii from the console's table (mii_defs)
+        const struct mii_def *d = &mii_defs[index];
+        c->faceline_type = d->faceline_type; c->faceline_color = d->faceline_color; c->faceline_wrinkle = d->faceline_wrinkle; c->faceline_make = d->faceline_make;
+        c->hair_type = d->hair_type; c->hair_color = d->hair_color; c->hair_flip = d->hair_flip;
+        c->eye_type = d->eye_type; c->eye_color = d->eye_color; c->eye_scale = d->eye_scale; c->eye_aspect = d->eye_aspect; c->eye_rotate = d->eye_rotate; c->eye_x = d->eye_x; c->eye_y = d->eye_y;
+        c->eyebrow_type = d->eyebrow_type; c->eyebrow_color = d->eyebrow_color; c->eyebrow_scale = d->eyebrow_scale; c->eyebrow_aspect = d->eyebrow_aspect; c->eyebrow_rotate = d->eyebrow_rotate;
+        c->eyebrow_x = d->eyebrow_x; c->eyebrow_y = d->eyebrow_y;
+        c->nose_type = d->nose_type; c->nose_scale = d->nose_scale; c->nose_y = d->nose_y;
+        c->mouth_type = d->mouth_type; c->mouth_color = d->mouth_color; c->mouth_scale = d->mouth_scale; c->mouth_aspect = d->mouth_aspect; c->mouth_y = d->mouth_y;
+        c->mustache_type = d->mustache_type; c->beard_type = d->beard_type; c->beard_color = d->beard_color; c->mustache_scale = d->mustache_scale; c->mustache_y = d->mustache_y;
+        c->glass_type = d->glass_type; c->glass_color = d->glass_color; c->glass_scale = d->glass_scale; c->glass_y = d->glass_y;
+        c->mole_type = d->mole_type; c->mole_scale = d->mole_scale; c->mole_x = d->mole_x; c->mole_y = d->mole_y;
+        c->height = d->height; c->build = d->build; c->gender = d->gender; c->favorite_color = d->favorite_color;
+        c->region_move = d->region_move; c->font_region = d->font_region; c->type = d->type;
+        return;
+    }
     c->gender = gender == 1; c->height = 64; c->build = 64;
     c->hair_type = 33; c->hair_color = 1;
     c->eye_type = 2; c->eye_color = 8; c->eye_scale = 4; c->eye_aspect = 3; c->eye_rotate = 4; c->eye_x = 2; c->eye_y = 12;
