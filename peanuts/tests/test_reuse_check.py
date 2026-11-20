@@ -188,15 +188,17 @@ class Notice(unittest.TestCase):
         self.assertRegex(s, r'private static final int NOTE_CHECK = NOTE \+ 8;')
         fg = s[s.index('    private boolean startForeground(Job j) {'):]
         fg = fg[:fg.index('\n    }\n')]
-        self.assertIn('startForeground(checking ? NOTE_CHECK : NOTE, note(j), ', fg)
-        self.assertIn('if (!checking) nm.cancel(NOTE_CHECK);', fg)   # a job that waited takes the service over: no "Checking ..." stays
+        # checkRunning too: checkKept's finally clears `checking` and then still works (CheckDue, the split's delete, seconds) before its post; a start then
+        # took NOTE with the done job's "ready to play", and the post's REMOVE took that and a build's notification from before with it (found in review)
+        self.assertIn('startForeground(checking || checkRunning ? NOTE_CHECK : NOTE, note(j), ', fg)
+        self.assertIn('if (!checking && !checkRunning) nm.cancel(NOTE_CHECK);', fg)   # a job that waited takes the service over: no "Checking ..." stays
 
     def test_only_the_checks_job_is_shown_as_the_check(self):
         # note() said "Checking <job>'s shaders" (ongoing) for any job while the check ran: a job's own notification posted then (a job that waited and was
         # paused) would have read so, and stayed
         s = PACK.read_text(encoding='utf-8')
         note = s[s.index('    private Notification note(Job j) {'):]
-        self.assertIn('if (checking && j == job) return b.setContentTitle("Checking "', note)
+        self.assertIn('if ((checking || checkRunning) && j == job) return b.setContentTitle("Checking "', note)
 
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')

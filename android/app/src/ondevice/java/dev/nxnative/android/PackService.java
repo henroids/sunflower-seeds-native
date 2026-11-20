@@ -300,8 +300,9 @@ public final class PackService extends Service {
 
     private boolean startForeground(Job j) {
         try {
-            startForeground(checking ? NOTE_CHECK : NOTE, note(j), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);   // PEANUTS: checking: the check's own notification
-            if (!checking) nm.cancel(NOTE_CHECK);   // PEANUTS: a job that took the service from the check: the check's goes (Android cancels it too when the foreground id changes)
+            // PEANUTS: the check's own notification from its start to its end's post (checkRunning: its finally clears `checking`, then works on for seconds)
+            startForeground(checking || checkRunning ? NOTE_CHECK : NOTE, note(j), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            if (!checking && !checkRunning) nm.cancel(NOTE_CHECK);   // PEANUTS: a job that took the service from the check: the check's goes (Android cancels it too when the foreground id changes)
             return true;
         } catch (RuntimeException e) {   // ForegroundServiceStartNotAllowedException, or the type's time limit used up
             Log.w(TAG, "startForeground refused: " + e);
@@ -1312,7 +1313,7 @@ public final class PackService extends Service {
         String name = j == null ? "a game" : j.name();
         String sim = engine.simulated() ? " (simulated)" : "";
         if (j == null) return b.setContentTitle("Preparing " + name + sim).setContentText("Starting…").build();
-        if (checking && j == job) return b.setContentTitle("Checking " + name + "'s shaders").setContentText(dev.peanuts.build.ReuseCheck.NOTE).setOngoing(true).build();   // PEANUTS: checkKept
+        if ((checking || checkRunning) && j == job) return b.setContentTitle("Checking " + name + "'s shaders").setContentText(dev.peanuts.build.ReuseCheck.NOTE).setOngoing(true).build();   // PEANUTS: checkKept
         String state = j.state();
         int pct = (int) Math.round(j.overall() * 100);
         int i = j.current();
