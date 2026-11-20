@@ -1282,10 +1282,21 @@ the drift is passed unwrapped, as upstream does.
 
 The secondary panel’s lifecycle, focus and build controls live in `dev.peanuts.ui`.
 
+### On-device packer archive (2026-11-19)
+
+The marked `nxPackTools` exclusion in `android/app/build.gradle` omits developer notes and duplicate prewarm seeds from the phone packer archive. The host receives each seed through its generated runtime asset or compiled header.
+
+The marked `packageRelease` rule requests a full packaging step for Peanuts builds. Incrementally replacing `tools.zip` left the previous 23 MB entry inside the signed APK.
+
+`dm/tools/vk_prewarm.py` reads the declared number of records, including records flagged bad, before merging a capture into a seed. A truncated record header aborts the merge. The parser and its regression in `dm/tools/tests/test_vk_prewarm.py` carry upstream-candidate markers.
+
+The environment and Advanced tables document `DMSH_VK_ABSENT_FILE` as an internal packer path. The troubleshooting wiki documents the build-log share action. The Linux fixtures in `test_vk_encoder_wait.py` and `test_romfs_image.py` now compile the current encoder worker and build their synthetic index validator under GCC warning checks.
+
 ### Targeted shader splits for released games (2026-11-19)
 
 `dm/gfx/tools/shader_split.py` resolves a single registered build's paths in multi-version profiles and recognizes
-file offsets in Diablo III's CPK sources. Single-build validation checks shader keys, package groups, facts and pairs.
+file offsets in Diablo III's CPK sources. A registered executable outside the profile's explicit shader versions triggers a full scan.
+Single-build validation checks shader keys, package groups, facts and pairs. Profiles without optional or version-specific keys skip a second parse of the shader map.
 The generated `shader_files.tsv` tables for Wonder, both Kirby games, Pokémon Sword and Pokémon Shield include files
 that contribute pairs without introducing new shader keys. The targeted packages for those games and Diablo III
 matched their full-scan references by SHA-256. The Python hunks and profile tables carry `PEANUTS` markers.
