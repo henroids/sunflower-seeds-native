@@ -91,7 +91,7 @@ Peanuts Native 0.1.5 includes 39 games, and 13 more are coming in 0.1.6 (marked 
 
 <!-- PEANUTS end: the Supported games table -->
 
-On the 0.1.5 verification build, an AYN Thor with Turnip v26.2.0 R5 reached the rooftop fight in Demon Slayer 2 and the opening cave in Tears of the Kingdom. Kirby and the Forgotten Land skipped no draws in the opening walk with either a fresh or a saved shader cache.
+The 0.1.6 release candidate installed over 0.1.5 on an AYN Thor with its saves kept. Each of the 13 new games reached early gameplay on an AYN Thor with Turnip, among them the Hyrule Field battle in Hyrule Warriors: Age of Calamity and Lumiose Station in Pokémon Legends: Z-A.
 
 ## What you need
 
