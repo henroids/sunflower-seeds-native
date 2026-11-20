@@ -3928,6 +3928,10 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
     if (!bpb || r->width <= 0) return;
     size_t wb = (size_t)((r->width + bw - 1) / bw) * bpb, hb = (size_t)((r->height > 0 ? r->height : 1) + bh - 1) / bh;
     size_t dn = img * (size_t)(nz - 1) + row * (hb - 1) + wb;
+    // PEANUTS: everything the game has submitted is replayed and done first. A submission still being replayed on the worker thread (its dispatch or draw recorded, not yet
+    // queued) was missed by rt_gpu's wait for the queued work alone, and the read answered what the image held before it. behind: the submissions that were not done yet
+    uint64_t behind = 0;
+    if (vka_ok()) { uint64_t last = vka_fence_last(), dn0 = vka_done(); behind = last > dn0 ? last - dn0 : 0; if (behind) vka_wait_done(last, 2000000000ull); }   // (bounded: a submission parked on something this thread does later must not hang the read)
     vka_img *im = vka_ok() ? vka_tex_acquire(t->serial) : NULL;
     // PEANUTS begin: a texture the game reads without ever having bound it has no image of its own, and one whose storage the GPU wrote through another texture object
     // holds nothing itself: on the Switch the read sees that write, the storage being one. So the GPU-written image over the storage is read instead: one of the texture's
@@ -3964,6 +3968,9 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
         VLOG("%sReadTexels: texture serial %llu %ux%ux%u target %d format %#x flags %#x level %u layer %u, region %d,%d,%d %dx%dx%d: read from its %s%s%s", done ? "" : "[RED] ",
              (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.target, t->d.format, t->d.flags, level, layer0, r->xoffset, r->yoffset, r->zoffset, r->width, r->height, r->depth,
              done ? how : "nothing readable", done ? via : "", !done ? ": zeros" : z0 ? ": all zero" : "");
+    if (gpu) { size_t nzb = 0; uint32_t h = 2166136261u; for (size_t i = 0; i < dn; i++) { nzb += dst[i] != 0; h = (h ^ dst[i]) * 16777619u; }   // PEANUTS: what a GPU read answered, to compare runs
+        static _Atomic int nc; if (atomic_fetch_add(&nc, 1) < 64) VLOG("ReadTexels: serial %llu answered %zu bytes, %zu non-zero, hash %08x, from image serial %llu; %llu submissions were not done yet (waited for)",
+            (unsigned long long)t->serial, dn, nzb, h, (unsigned long long)(im ? im->serial : 0), (unsigned long long)behind); }
     if (im) vka_tex_drop(im);
 }
 #endif
