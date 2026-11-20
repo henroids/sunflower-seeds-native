@@ -183,7 +183,9 @@ Contributors:
 - [intermission88](https://github.com/intermission88): the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`, pull request #13), the profiles of Kirby's Return to Dream Land Deluxe, Kirby and the Forgotten Land and Super Mario 3D World + Bowser's Fury (pull requests #34, #84 and #83), the guide for adding a game (`peanuts/docs/NEW-GAME.md`, pull request #34), and fixes to the on-device packer, the release notes popup and the Unreal shader step (pull requests #37, #35 and #71).
 - [davdxpx](https://github.com/davdxpx): the issue and discussion forms rebuilt from the ground up, with a game catalog that also keeps the Supported games table up to date (pull request #175), building from .nsz and .xcz files, the launcher and companion on the second screen, Swap screens, the GPU driver page, Share build log, game icons that outlive their NSP, companion release notes, and many smaller fixes across the app.
 - [elliott-groves](https://github.com/elliott-groves): development builds that install beside the Peanuts Native app (pull request #60).
-- [tapionallanaire](https://github.com/tapionallanaire): building the APK on Windows (pull request #54).
+- [tapionallanaire](https://github.com/tapionallanaire): building the APK on Windows (pull request #54), and the Trails in the Sky 2nd Chapter and Double Dragon Revive profiles (pull requests #164 and #197).
+- [dnyan007](https://github.com/dnyan007): the DRAGON BALL: Sparking! ZERO profile and the sync of GPU-written terrain into block-compressed textures (pull requests #168 and #167).
+- [skyhong2002](https://github.com/skyhong2002): STEINS;GATE RE:BOOT 1.0.4, standalone NUP updates in the library, and Prepare surviving a missed job status read (pull requests #192, #185 and #181).
 - [ArchOwlen](https://github.com/ArchOwlen): the first issue and discussion forms (pull request #5).
 
 The project as a whole is licensed GPL-3.0-or-later. Frame generation (ported from Eden and lsfg-vk) and other
