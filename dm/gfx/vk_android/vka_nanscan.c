@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { NBATCH = 16, MAXR = 1024, NKEY = 8, MAXSPLIT = 256 };
+enum { NBATCH = 16, MAXR = 1024, NKEY = 16, MAXSPLIT = 256 };
 typedef struct { uint32_t nan, inf, first, pad, nz[4], mx[4]; } res_t;   // nz, mx: per channel, texels with |c| > 1/1024 and the largest |c| (float bits)
 typedef struct { uint64_t frame, serial; uint32_t pass, fmt, w, h, lv, layer, d0, ndraws, nkeys; uint64_t vs[NKEY], fs[NKEY]; int bind, tid; uint32_t dz; uint64_t stats; } rec_t;   // stats: DM_VK_TEX_STATS's fragment shader (0: a NaN scan)
 typedef struct { rec_t r[MAXR]; int n; res_t *res; VkDeviceSize off; } batch_t;
@@ -164,7 +164,7 @@ int vka_nan_probe(uint64_t fs) {
 int vka_texstats_on(void) {
     uint32_t g = atomic_load_explicit(&vka_env_gen, memory_order_relaxed);
     if (g != g_ts_gen) {
-        g_ts_gen = g; char b[256]; int n = 0;
+        g_ts_gen = g; char b[512]; int n = 0;
         if (vka_env_str("DM_VK_TEX_STATS", b, sizeof b)) for (const char *q = b; *q && n < NKEY;) { char *e; unsigned long long k = strtoull(q, &e, 16); if (e == q) break; g_ts_keys[n++] = k; q = *e == ',' ? e + 1 : e; }
         static uint64_t prev[NKEY]; static int nprev = -1; int changed = n != nprev; for (int i = 0; !changed && i < n; i++) changed = prev[i] != g_ts_keys[i];
         if (changed) {
