@@ -1019,7 +1019,7 @@ static void copy_bt(const p_copy_b2t *c, int to_tex) {
     if (!c->tex) return;
     vka_img *im = vka_tex_get(c->tex, g_cb);
     if (!im) return;
-    if (to_tex) vka_tex_own(im, g_cb);
+    if (to_tex) vka_tex_own(im, g_cb); else vka_tex_take(im, g_cb);   // PEANUTS: (a copy source: vka_tex.c take_src)
     // PEANUTS: DM_RES_SCALE: the buffer's texels are the texture's size, so a scaled image is made 1x first (and its shape stays 1x: vka_resscale.inc)
     if (im->rsc && !vka_tex_rs_down(im, g_cb, to_tex ? RS_WHY_B2T : RS_WHY_T2B)) { vka_rs_st.skip++; VRED_ONCE("res scale: a buffer copy with scaled texture serial %llu was left out (it could not be made 1x then)", (unsigned long long)im->serial); return; }
     VkImageAspectFlags asp = copy_aspect(im, to_tex ? "buffer → texture copy" : "texture → buffer copy"); if (!asp) return;
@@ -1170,6 +1170,7 @@ static void copy_t2t(const p_copy_t2t *c) {
     if (!c->src || !c->dst) return;
     vka_img *s = vka_tex_get(c->src, g_cb), *d = vka_tex_get(c->dst, g_cb);
     if (!s || !d) return;
+    vka_tex_take(s, g_cb);   // PEANUTS
     vka_tex_own(d, g_cb);
     // PEANUTS: the copy goes by the formats of the two textures the game named, not by their images'. A texture may be a view of an image of another format (textures of
     // two formats over one memory share an image: vka_tex.c, Learned view formats), and judged by the images a copy between two R11G11B10 textures, the second sharing an
