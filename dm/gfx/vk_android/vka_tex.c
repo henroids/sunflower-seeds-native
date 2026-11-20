@@ -3880,19 +3880,54 @@ static int rt_gpu(vka_img *im, unsigned level, unsigned layer0, const NVNcopyReg
     pthread_mutex_unlock(&g_rtmu);
     return ok;
 }
+// The region from the texture's guest storage (de-swizzled); 0 = not readable there
+static int rt_storage(const tex_t *t, unsigned level, unsigned layer0, const NVNcopyRegion *r, uint8_t *dst, size_t row, size_t img, size_t wb, size_t hb, int nz) {
+    int bw, bh, bpb = nvn_fmt_bpb(t->d.format, &bw, &bh), is3d = t->d.target == NVN_TEXTURE_TARGET_3D, done = 0;
+    size_t x0 = (size_t)(r->xoffset / bw) * bpb, y0 = (size_t)r->yoffset / bh;
+    const uint8_t *mem = t->mem; uint8_t *part = NULL;
+    if (!mem) return 0;
+    if (t->pool && pool_sparse(t->pool)) {   // through the page table, unmapped pages as 0 (the range itself may be inaccessible)
+        if ((part = malloc(t->L.size ? t->L.size : 1))) { nvn_sparse_copy(t->pool, part, (uint64_t)(uintptr_t)t->mem, t->L.size); mem = part; }
+    }
+    uint32_t lw = t->d.width >> level ? t->d.width >> level : 1, lh = t->d.height >> level ? t->d.height >> level : 1, lz = is3d ? (t->d.depth >> level ? t->d.depth >> level : 1) : 1;
+    size_t lp = (size_t)((lw + bw - 1) / bw) * bpb, lr = (lh + bh - 1) / bh;
+    if (t->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) {   // rows at the texture's pitch (level 0, as the uploads take it)
+        size_t pitch = t->d.stride ? t->d.stride : lp;
+        if (level == 0 && !is3d) {
+            for (int z = 0; z < nz; z++) { uint64_t lo = (uint64_t)(layer0 + r->zoffset + z) * t->L.layer_size;
+                for (size_t y = 0; y < hb; y++) { uint64_t so = lo + (y0 + y) * pitch + x0; if (so + wb <= t->L.size) memcpy(dst + z * img + y * row, mem + so, wb); else memset(dst + z * img + y * row, 0, wb); } }
+            done = 1;
+        }
+    } else {   // block-linear: the whole level de-swizzled, then the region's rows copied
+        uint8_t *lin = malloc(lp * lr * lz); done = lin != NULL;
+        for (int z = 0; z < nz && lin; z++) {
+            unsigned layer = is3d ? 0 : layer0 + (unsigned)r->zoffset + (unsigned)z;
+            if ((is3d && z == 0) || !is3d) if (nvn_deswizzle(&t->d, level, layer, mem, lin, lp)) { done = 0; break; }
+            const uint8_t *src = lin + (is3d ? (size_t)(r->zoffset + z) * lp * lr : 0);
+            for (size_t y = 0; y < hb && y0 + y < lr; y++) memcpy(dst + z * img + y * row, src + (y0 + y) * lp + x0, wb);
+        }
+        free(lin);
+    }
+    free(part); return done;
+}
+static int rt_zero(const uint8_t *d, size_t n) { size_t i = 0; while (i < n && !d[i]) i++; return i == n; }
 // (hle_nvn.c read_texels: the game has waited for the GPU, as NVN requires; row and img are dst's pitches)
 void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNcopyRegion *r, uint8_t *dst, size_t row, size_t img) {
     if (!t || !r || !dst || !VKA_ENV("DM_VK_READTEXELS", 1)) return;
     int bw, bh, bpb = nvn_fmt_bpb(t->d.format, &bw, &bh);
-    int nz = r->depth > 0 ? r->depth : 1, is3d = t->d.target == NVN_TEXTURE_TARGET_3D;
+    int nz = r->depth > 0 ? r->depth : 1;
     if (!bpb || r->width <= 0) return;
-    size_t wb = (size_t)((r->width + bw - 1) / bw) * bpb, hb = (size_t)((r->height > 0 ? r->height : 1) + bh - 1) / bh, x0 = (size_t)(r->xoffset / bw) * bpb, y0 = (size_t)r->yoffset / bh;
+    size_t wb = (size_t)((r->width + bw - 1) / bw) * bpb, hb = (size_t)((r->height > 0 ? r->height : 1) + bh - 1) / bh;
+    size_t dn = img * (size_t)(nz - 1) + row * (hb - 1) + wb;
     vka_img *im = vka_ok() ? vka_tex_acquire(t->serial) : NULL;
     // PEANUTS begin: a texture the game reads without ever having bound it has no image of its own, and one whose storage the GPU wrote through another texture object
     // holds nothing itself: on the Switch the read sees that write, the storage being one. So the GPU-written image over the storage is read instead: one of the texture's
     // shape (same_shape), else one of its texel (or block) size and extent in texels (or blocks), whose bits are the texture's (as take_src; the region then in its texels).
-    // MLB The Show 26 reads its skin tone palette this way and got zeros: a zero target skin tone, the generated faces' albedo black
-    NVNcopyRegion rr = *r; const char *via = "";
+    // MLB The Show 26 reads its skin tone palette this way and got zeros: a zero target skin tone, the generated faces' albedo black.
+    // But only when the storage itself holds nothing: the host never copies GPU results into guest storage, so storage with data was written by the CPU (a loaded file),
+    // later than any GPU image that merely aliases it. MLB The Show 26 entering Road to the Show without create-a-player first reads a palette whose storage holds the
+    // data, and a stale GPU image of the same shape over it (another pass's scratch) gave every player black skin
+    NVNcopyRegion rr = *r; const char *via = ""; int done = 0; const char *how = "storage";
     if (vka_ok() && t->mem && !(im && im->gpu_owned)) {
         vka_fmt f; vka_img *o2 = NULL; int twin = 0;
         if (vka_fmt_of(t->d.format, &f)) {
@@ -3906,44 +3941,20 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
             if (o2) { o2->refs++; o2->holds++; }
             pthread_mutex_unlock(&g_tmu);
         }
-        if (o2) { if (im) vka_tex_drop(im); im = o2; via = twin ? " (the GPU-written texture of its texel size over its storage)" : " (the GPU-written image of its shape over its storage)";
+        if (o2 && (done = rt_storage(t, level, layer0, r, dst, row, img, wb, hb, nz)) && !rt_zero(dst, dn)) { vka_tex_drop(o2); via = " (it holds data: the GPU-written image over it not taken)"; }
+        else if (o2) { done = 0; if (im) vka_tex_drop(im); im = o2; via = twin ? " (the GPU-written texture of its texel size over its storage)" : " (the GPU-written image of its shape over its storage)";
             if (twin) { rr.xoffset /= bw; rr.yoffset /= bh; rr.width = (rr.width + bw - 1) / bw; rr.height = ((rr.height > 0 ? rr.height : 1) + bh - 1) / bh; } }
     }
     // PEANUTS end
-    int gpu = im && im->gpu_owned, done = 0; const char *how = "storage";
+    int gpu = !done && im && im->gpu_owned;
     if (gpu) { done = rt_gpu(im, level, layer0, &rr, dst, row, img, wb, hb, nz); how = done ? "image (GPU-written)" : "storage (the GPU-written image could not be copied back)"; }
-    if (!done && t->mem) {   // from guest storage
-        const uint8_t *mem = t->mem; uint8_t *part = NULL;
-        if (t->pool && pool_sparse(t->pool)) {   // through the page table, unmapped pages as 0 (the range itself may be inaccessible)
-            if ((part = malloc(t->L.size ? t->L.size : 1))) { nvn_sparse_copy(t->pool, part, (uint64_t)(uintptr_t)t->mem, t->L.size); mem = part; }
-        }
-        uint32_t lw = t->d.width >> level ? t->d.width >> level : 1, lh = t->d.height >> level ? t->d.height >> level : 1, lz = is3d ? (t->d.depth >> level ? t->d.depth >> level : 1) : 1;
-        size_t lp = (size_t)((lw + bw - 1) / bw) * bpb, lr = (lh + bh - 1) / bh;
-        if (t->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) {   // rows at the texture's pitch (level 0, as the uploads take it)
-            size_t pitch = t->d.stride ? t->d.stride : lp;
-            if (level == 0 && !is3d) {
-                for (int z = 0; z < nz; z++) { uint64_t lo = (uint64_t)(layer0 + r->zoffset + z) * t->L.layer_size;
-                    for (size_t y = 0; y < hb; y++) { uint64_t so = lo + (y0 + y) * pitch + x0; if (so + wb <= t->L.size) memcpy(dst + z * img + y * row, mem + so, wb); else memset(dst + z * img + y * row, 0, wb); } }
-                done = 1;
-            }
-        } else if (mem) {   // block-linear: the whole level de-swizzled, then the region's rows copied
-            uint8_t *lin = malloc(lp * lr * lz); done = lin != NULL;
-            for (int z = 0; z < nz && lin; z++) {
-                unsigned layer = is3d ? 0 : layer0 + (unsigned)r->zoffset + (unsigned)z;
-                if ((is3d && z == 0) || !is3d) if (nvn_deswizzle(&t->d, level, layer, mem, lin, lp)) { done = 0; break; }
-                const uint8_t *src = lin + (is3d ? (size_t)(r->zoffset + z) * lp * lr : 0);
-                for (size_t y = 0; y < hb && y0 + y < lr; y++) memcpy(dst + z * img + y * row, src + (y0 + y) * lp + x0, wb);
-            }
-            free(lin);
-        }
-        free(part);
-    }
-    if (!done) memset(dst, 0, img * (size_t)(nz - 1) + row * (hb - 1) + wb);   // zeros rather than whatever dst held
-    size_t dn = img * (size_t)(nz - 1) + row * (hb - 1) + wb, dz = 0; while (dz < dn && !dst[dz]) dz++;   // PEANUTS: a read that answers nothing but zeros is said (dz == dn)
-    static _Atomic int nl, ng; if (gpu || !done || dz == dn ? atomic_fetch_add(&ng, 1) < 64 : atomic_fetch_add(&nl, 1) < 8)   // PEANUTS: GPU reads and failures have a count of their own (the boot's storage reads used every line)
+    if (!done) done = rt_storage(t, level, layer0, r, dst, row, img, wb, hb, nz);
+    if (!done) memset(dst, 0, dn);   // zeros rather than whatever dst held
+    int z0 = rt_zero(dst, dn);   // PEANUTS: a read that answers nothing but zeros is said
+    static _Atomic int nl, ng; if (gpu || *via || !done || z0 ? atomic_fetch_add(&ng, 1) < 64 : atomic_fetch_add(&nl, 1) < 8)   // PEANUTS: GPU reads and failures have a count of their own (the boot's storage reads used every line)
         VLOG("%sReadTexels: texture serial %llu %ux%ux%u target %d format %#x flags %#x level %u layer %u, region %d,%d,%d %dx%dx%d: read from its %s%s%s", done ? "" : "[RED] ",
              (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.target, t->d.format, t->d.flags, level, layer0, r->xoffset, r->yoffset, r->zoffset, r->width, r->height, r->depth,
-             done ? how : "nothing readable", done ? via : "", !done ? ": zeros" : dz == dn ? ": all zero" : "");
+             done ? how : "nothing readable", done ? via : "", !done ? ": zeros" : z0 ? ": all zero" : "");
     if (im) vka_tex_drop(im);
 }
 #endif
