@@ -222,13 +222,18 @@
       "profile_name": "EA SPORTS FC 27",
       "builds": [
         {
+          "version": "v524288",
+          "number": 524288,
+          "display": "1.8d.f570"
+        },
+        {
           "version": "v458752",
           "number": 458752,
           "display": "1.8d.6523"
         }
       ],
-      "readme_update": "1.8d.6523",
-      "package": "v458752",
+      "readme_update": "1.8d.6523, 1.8d.f570",
+      "package": "v524288",
       "companion": false,
       "profile": "dm/games/0100C49025D3E000/game.tsv",
       "note": "dm/games/0100C49025D3E000/README.md"

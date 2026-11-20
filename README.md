@@ -58,7 +58,6 @@ Peanuts Native 0.1.5 includes 42 games. The Companion column shows whether a gam
 | Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No |
 | Resident Evil 4 | `010099A00BC1E000` | 131072 | Yes |
 | Kirby and the Forgotten Land | `01004D300C5AE000` | 1.1.0 | No |
-| DRAGON BALL: Sparking! ZERO | `010035F022078000` | 1.0.0 | No |
 | Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 | Yes |
 | Super Mario 3D World + Bowser's Fury | `010028600EBDA000` | 1.2.2 | No |
 | Super Mario Bros. Wonder | `010015100B514000` | 1.2.1 | Yes |
@@ -74,7 +73,7 @@ Peanuts Native 0.1.5 includes 42 games. The Companion column shows whether a gam
 | Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Yes |
 | Astral Chain | `01007300020FA000` | 1.0.1 | No |
 | Diablo III: Eternal Collection | `01001B300B9BE000` | 2.7.7.92380 | Yes |
-| EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523 | No |
+| EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523, 1.8d.f570 | No |
 | Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No |
 | Unicorn Overlord | `010069401ADB8000` | 1.05 | No |
 | Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | No |
