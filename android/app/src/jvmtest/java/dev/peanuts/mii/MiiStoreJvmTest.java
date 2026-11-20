@@ -28,6 +28,8 @@ public final class MiiStoreJvmTest {
         m.set("hair_type", 500); m.set("eyebrow_y", 0); m.set("favorite_color", -3);
         check(m.get("hair_type") == 131 && m.get("eyebrow_y") == 3 && m.get("favorite_color") == 0, "values clamp to the console's ranges");
         check(MiiStore.cleanName("  ").equals("Mii") && MiiStore.cleanName("ABCDEFGHIJKL").length() == 10, "names: never empty, at most 10");
+        check(MiiStore.cleanName("123456789\uD83D\uDE00").equals("123456789"), "names: no half a surrogate pair at the cut");
+        check(MiiStore.copyName("Abcdefghij").equals("Abcdefgh 2") && MiiStore.copyName("Ana").equals("Ana 2"), "a duplicate's name differs and fits");
         Random r = new Random(1);
         for (int i = 0; i < 200; i++) {
             byte[] c = MiiStore.charInfo(MiiStore.random("R", r));

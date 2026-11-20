@@ -123,7 +123,7 @@ public final class MiiStore {
         for (String k : new String[]{"gender", "favorite_color", "faceline_type", "faceline_color", "hair_type", "hair_flip", "eye_type", "eyebrow_type", "nose_type", "mouth_type"}) {
             Field fd = field(k); m.set(k, fd.min + r.nextInt(fd.max - fd.min + 1));
         }
-        for (String k : new String[]{"hair_color", "eyebrow_color"}) m.set(k, r.nextInt(8));   // the classic hair colours (common colours 0 to 7)
+        m.set("hair_color", r.nextInt(8));                                                      // the classic hair colours (common colours 0 to 7)
         m.set("eyebrow_color", m.get("hair_color"));
         m.set("eye_color", 8 + r.nextInt(6));                                                   // the classic eye colours (8 to 13)
         m.set("height", 32 + r.nextInt(64)); m.set("build", 32 + r.nextInt(64));
@@ -134,7 +134,18 @@ public final class MiiStore {
     public static String cleanName(String s) {
         String t = s == null ? "" : s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ').trim();
         if (t.isEmpty()) t = "Mii";
-        return t.length() > NAME_MAX ? t.substring(0, NAME_MAX) : t;
+        if (t.length() > NAME_MAX) {
+            t = t.substring(0, NAME_MAX);
+            if (Character.isHighSurrogate(t.charAt(t.length() - 1))) t = t.substring(0, t.length() - 1);   // never half a surrogate pair
+        }
+        return t;
+    }
+
+    /** The name of a duplicate: the name and " 2", the name cut short so the 2 still fits and the copy reads differently */
+    public static String copyName(String name) {
+        String base = cleanName(name);
+        if (base.length() > NAME_MAX - 2) base = base.substring(0, NAME_MAX - 2);
+        return cleanName(base + " 2");
     }
 
     private static final SecureRandom RNG = new SecureRandom();
