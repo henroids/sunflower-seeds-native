@@ -57,14 +57,13 @@ int main(void) {
             subprocess.run(['cc','-std=c11','-D_GNU_SOURCE','-Wall','-Werror','-I',str(ROOT/'dm/host'),str(src),'-lm','-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True)
     def test_profile_rows_are_well_formed(self):
-        """Every aspect_plan row in dm/games: five fields, a known kind, and aspect rows in the same profile (build.gradle aspectPlanOf's rule)."""
+        """Every aspect_plan row in dm/games: five fields, a known kind, and a main build of the same profile (build.gradle aspectPlanOf's rule)."""
         seen=0
         for tsv in sorted((ROOT/'dm/games').glob('*/game.tsv')):
             rows=[l.split('\t') for l in tsv.read_text(encoding='utf-8').splitlines() if l.startswith('aspect_plan\t')]
             if not rows: continue
             seen+=len(rows)
             text=tsv.read_text(encoding='utf-8')
-            self.assertTrue(re.search(r'^aspect\t\d+:\d+$',text,re.M),f'{tsv}: aspect_plan rows need aspect rows')
             for r in rows:
                 self.assertEqual(len(r),5,f'{tsv}: {r}')
                 self.assertRegex(r[1],r'^[0-9a-f]{32}$');self.assertIn(r[2],('ratio_f32','width_movz','width_u32'))

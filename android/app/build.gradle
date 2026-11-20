@@ -286,15 +286,14 @@ def recommendOf = { String game ->
     }.join(';') }
 def linkPlayOf = { String game -> tsvRows(game, 'link_play').any { it.size() > 1 && it[1].trim() == '1' } ? '1' : '' }   // opt-in join settings only for profiles with checked Link Play
 // PEANUTS: game.tsv aspect_plan rows (dm/host/aspect_plan.h): "<main build>,<kind>,m0x<offset>,<expected word>", ';' between them. The loader makes the game's own
-// 16:9 number the picture's shape for a game that needs no camera code of its own; the shapes offered are the profile's aspect rows (aspectsOf)
+// 16:9 number the picture's shape for a game that needs no camera code of its own. Such a profile gets Game settings > Display > Fill (GameSettings.fillable); fixed
+// shapes under Aspect ratio are its aspect rows, if it has any (aspectsOf)
 def aspectPlanOf = { String game ->
-    def rows = tsvRows(game, 'aspect_plan').collect { c ->
+    tsvRows(game, 'aspect_plan').collect { c ->
         if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['ratio_f32', 'width_movz', 'width_u32']) || !(c[3] ==~ /m0x[0-9a-f]+/) || !(c[4] ==~ /[0-9a-f]{8}/))
             throw new GradleException("$game: invalid aspect_plan row")
         c[1..4].join(',')
-    }
-    if (!rows.isEmpty() && tsvRows(game, 'aspect').isEmpty()) throw new GradleException("$game: aspect_plan rows need aspect rows (the shapes to offer)")
-    rows.join(';')
+    }.join(';')
 }
 def aspectsOf = { String game -> tsvRows(game, 'aspect').findAll { it.size() > 1 && it[1].trim() }.collect { it[1].trim() }.join(',') }   // game.tsv aspect rows: the picture shapes whose 3D cameras the host follows, no module variant ("21:9,4:3"); Game settings > Aspect ratio
 def handheldGames = nxGames.findAll { g -> tsvRows(g, 'op_mode').any { it.size() > 1 && it[1].trim() == 'handheld' } }.join(' ')   // PEANUTS: the games whose profile says op_mode handheld (ScreenMode's default for them)

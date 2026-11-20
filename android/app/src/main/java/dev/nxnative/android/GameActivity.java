@@ -621,7 +621,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             shapeNote = "[nxlaunch] aspect ratio: the profile's aspect rows are for another game version; 16:9 kept";
         } else if (aspect != null && Profile.of(id) != null && Arrays.asList(Profile.of(id).cameraAspects.split(",")).contains(aspect)) {   // a shape the host's camera patch follows (game.tsv aspect rows): the picture at that shape, no variant
             env.add("DM_VK_PICTURE_ASPECT=" + aspect);
-        } else if (ScreenShape.CHOICE.equals(aspect) && Profile.of(id) != null && !Profile.of(id).cameraAspects.isEmpty()) {   // Screen shape: the window's own shape (ScreenShape), read now, once; a 16:9-ish window passes nothing
+        } else if (ScreenShape.CHOICE.equals(aspect) && GameSettings.fillable(Profile.of(id))) {   // PEANUTS: fillable, so aspect_plan rows alone do (Display › Fill)   // Screen shape: the window's own shape (ScreenShape), read now, once; a 16:9-ish window passes nothing
             android.graphics.Rect b = getWindowManager().getCurrentWindowMetrics().getBounds();
             String shape = ScreenShape.ratio(b.width(), b.height(), orientationFixed());
             if (shape != null) env.add("DM_VK_PICTURE_ASPECT=" + shape);
