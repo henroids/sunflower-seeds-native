@@ -751,7 +751,8 @@ final class SidePanel extends FrameLayout {
         if (canFill) { box.addView(fillNow); fillNote.run(); }   // PEANUTS: Fill's restart line, under the three choices
         box.addView(sl);
         box.addView(ss);
-        if (canFill) note("Fill makes the game draw for this screen's shape, so nothing is stretched and there are no bars: from the next start.");   // PEANUTS
+        if (canFill) note("Fill makes the game draw for this screen's shape, so nothing is stretched and there are no bars: from the next start."
+                + (Profile.of(game()).aspectUntested ? " Untested on this game: it may look wrong or not start; pick Fit to go back." : ""));   // PEANUTS
         note(live ? "Fit keeps the game's shape, Stretch fills the screen; below 100 % the picture is smaller, with black around it. Applies now, kept for this game."
                 : "Applies at the next start (this run takes no live changes: DM_CTL is off).");
         rows.position(box);

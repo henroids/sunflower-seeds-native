@@ -76,3 +76,10 @@ General changes first needed here; each applies to every game on the same path:
 - **iPhone:** not built or tested. The 7 GB block is more than the 5 GB proven on a phone without the extended-virtual-addressing entitlement, so the game's arenas likely need less address space there (open: whether its command line or `MemoryInit.ini` can size them).
 - **Gameplay:** a whole match, its result screens, other modes (Career, Ultimate Team offline parts, Tournaments), other stadiums and weather, local multiplayer and other languages are untested.
 - Online play needs EA's servers: offline only.
+
+<!-- PEANUTS begin: picture shapes -->
+## Picture shapes (Android)
+
+**Untested.** Game settings › Display offers **Fill the screen** on 1.8d.6523 through 1 `aspect_plan` row that nobody has seen on a device (`aspect_plan_untested 1`, and the Fill choice says so). They are every place this build's main has the packed 1920x1080 sizes in code and the 16/9 float words, from a scan of the code on 2026-11-21 with each expected word read on the pack; no community patch stands behind them. With Fill the 3D view may follow the screen, the HUD and menus may not, or the game may draw wrongly or not start. Fit and Stretch are unchanged. Open: every screen, at any shape.
+
+<!-- PEANUTS end -->

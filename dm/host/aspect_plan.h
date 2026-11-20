@@ -5,17 +5,18 @@
 // Kinds: ratio_f32 (a float 16/9 becomes the shape), width_movz (a MOVZ's imm16 width for 16:9 becomes the width for the shape),
 // width_u32 (the same for a 32-bit width in data), area_width_u32 and area_height_u32 (a 16:9 width and height that change together,
 // the pixel count about kept), nop (a BL the shape makes needless), ratio_fmov (an FDIV or LDR that leaves the ratio in a float
-// register becomes FMOV #imm8: the nearest value that instruction holds, within 3.2 % of the shape). All rows are checked before any is written.
+// register becomes FMOV #imm8: the nearest value that instruction holds, within 3.2 % of the shape), ratio_movz and ratio_movk (the two
+// halves of the float 16/9 built in a register become the shape's). All rows are checked before any is written.
 #ifndef DM_ASPECT_PLAN_H
 #define DM_ASPECT_PLAN_H
 #include "fpslocker_plan.h"
 #include <math.h>
 #include <stdio.h>
-#define ASP_ROWS 32
-#define ASP_TEXT 4096
+#define ASP_ROWS 64
+#define ASP_TEXT 8192
 #define ASP_K169 (16.0 / 9.0)
 struct asp_row {
-  char kind;   // 'r' ratio_f32, 'w' width_movz, 'u' width_u32, 'a' area_width_u32, 'h' area_height_u32, 'n' nop, 'f' ratio_fmov
+  char kind;   // 'r' ratio_f32, 'w' width_movz, 'u' width_u32, 'a' area_width_u32, 'h' area_height_u32, 'n' nop, 'f' ratio_fmov, 'l' ratio_movz, 'k' ratio_movk
   uint64_t off;
   uint32_t expected;
 };
@@ -92,6 +93,15 @@ static inline int asp_word(const struct asp_row *r, double shape, uint32_t *out)
     *out = 0x1e201000u | ((uint32_t)asp_fmov_imm8(shape) << 13) | (r->expected & 0x1f);
     return 1;
   }
+  if (r->kind == 'l' || r->kind == 'k') {   // the float 16/9 built in a register: MOVZ Wn,#0x8e39 then MOVK Wn,#0x3fe3,LSL #16. Each half becomes the shape's
+    float f = (float)shape;
+    uint32_t bits;
+    memcpy(&bits, &f, 4);
+    if (r->kind == 'l' ? (r->expected & 0x7fffffe0u) != (0x52800000u | (0x8e39u << 5)) : (r->expected & 0x7fffffe0u) != (0x72a00000u | (0x3fe3u << 5)))
+      return 0;
+    *out = (r->expected & ~(0xffffu << 5)) | ((r->kind == 'l' ? bits & 0xffff : bits >> 16) << 5);
+    return 1;
+  }
   if (r->kind == 'n') {   // a call the shape makes needless (a BL), made a NOP
     if ((r->expected >> 26) != 0x25)
       return 0;
@@ -132,10 +142,11 @@ static inline int asp_plan_parse(const char *spec, const char *build, struct asp
         return -1;
     struct asp_row r = {0};
     r.kind = !strcmp(f[1], "ratio_f32") ? 'r' : !strcmp(f[1], "width_movz") ? 'w' : !strcmp(f[1], "width_u32") ? 'u'
-             : !strcmp(f[1], "area_width_u32") ? 'a' : !strcmp(f[1], "area_height_u32") ? 'h' : !strcmp(f[1], "nop") ? 'n' : !strcmp(f[1], "ratio_fmov") ? 'f' : 0;
+             : !strcmp(f[1], "area_width_u32") ? 'a' : !strcmp(f[1], "area_height_u32") ? 'h' : !strcmp(f[1], "nop") ? 'n' : !strcmp(f[1], "ratio_fmov") ? 'f'
+             : !strcmp(f[1], "ratio_movz") ? 'l' : !strcmp(f[1], "ratio_movk") ? 'k' : 0;
     if (!r.kind || f[2][0] != 'm' || !fpw_plan_hex(f[2] + 1, &r.off) || !fpw_plan_word(f[3], &r.expected))
       return -1;
-    if ((r.kind == 'w' || r.kind == 'n' || r.kind == 'f') && (r.off & 3))
+    if (strchr("wnflk", r.kind) && (r.off & 3))
       return -1;
     uint32_t probe;
     if (!asp_word(&r, 21.0 / 9.0, &probe))   // the expected word must be one the kind takes, whatever the build

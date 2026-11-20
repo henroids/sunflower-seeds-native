@@ -68,6 +68,14 @@ int main(void) {
  for (double s=0.4;s<4.0;s+=0.01) { double v=asp_fmov_value(asp_fmov_imm8(s));assert(fabs(v/s-1)<0.032); }   // every shape has a value within 3.2 %
  assert(asp_fmov_value(asp_fmov_imm8(21.0/9))==2.375 && asp_fmov_value(asp_fmov_imm8(31.0/27))==1.125);
  assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,ratio_fmov,m0x100,08f080d2",bid,&p)==-1);    // a MOVZ leaves no ratio in a float register
+ // the float 16/9 built in a register (mov w8,#0x8e39; movk w8,#0x3fe3,lsl #16): the two halves become the shape's, the register kept
+ const char *m="a6ce40dc3aedb1becacd2f1ff4515307,ratio_movz,m0x100,28c79152;a6ce40dc3aedb1becacd2f1ff4515307,ratio_movk,m0x104,68fca772";
+ assert(asp_plan_parse(m,bid,&p)==2);
+ memset(image,0,sizeof image);put(0x100,0x5291c728);put(0x104,0x72a7fc68);
+ assert(asp_plan_apply(&p,image,sizeof image,asp_shape("21:9"))==2);
+ { float f=21.0f/9.0f;uint32_t b;memcpy(&b,&f,4);assert(get(0x100)==(0x52800008u|((b&0xffff)<<5)) && get(0x104)==(0x72a00008u|((b>>16)<<5))); }
+ assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,ratio_movz,m0x100,08f080d2",bid,&p)==-1);    // a MOVZ of another number
+ assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,ratio_movk,m0x104,28c79152",bid,&p)==-1);    // the halves are not interchangeable
  return 0;
 }'''
         with tempfile.TemporaryDirectory() as d:
@@ -85,9 +93,36 @@ int main(void) {
             text=tsv.read_text(encoding='utf-8')
             for r in rows:
                 self.assertEqual(len(r),5,f'{tsv}: {r}')
-                self.assertRegex(r[1],r'^[0-9a-f]{32}$');self.assertIn(r[2],('ratio_f32','width_movz','width_u32','area_width_u32','area_height_u32','nop','ratio_fmov'))
+                self.assertRegex(r[1],r'^[0-9a-f]{32}$');self.assertIn(r[2],('ratio_f32','width_movz','width_u32','area_width_u32','area_height_u32','nop','ratio_fmov','ratio_movz','ratio_movk'))
                 self.assertRegex(r[3],r'^m0x[0-9a-f]+$');self.assertRegex(r[4],r'^[0-9a-f]{8}$')
                 self.assertIn(f'main={r[1]}',text,f'{tsv}: {r[1]} is not one of the profile\'s main builds')
         self.assertGreater(seen,0)
+    def test_every_profile_plan_passes_the_loader_parser(self):
+        """Each profile's rows as the launcher passes them (DM_ASPECT_PLAN): the loader's parser takes every row, and every row has a word for a wide and a narrow shape."""
+        c=r'''
+#include <assert.h>
+#include "aspect_plan.h"
+int main(int argc,char **argv) {
+ struct asp_plan p;int n=asp_plan_parse(argv[2],argv[1],&p);
+ if (n!=atoi(argv[3])) { printf("parse %d, want %s\n",n,argv[3]);return 1; }
+ const char *shapes[]={"21:9","8:7","31:27","4:3","20:9"};
+ for (int s=0;s<5;s++) for (unsigned i=0;i<p.n;i++) { uint32_t w;if (!asp_word(&p.row[i],asp_shape(shapes[s]),&w)) { printf("row %u has no word for %s\n",i,shapes[s]);return 1; } }
+ return 0;
+}'''
+        with tempfile.TemporaryDirectory() as d:
+            src=pathlib.Path(d)/'t.c';src.write_text(c)
+            exe=pathlib.Path(d)/'t'
+            subprocess.run(['cc','-std=c11','-D_GNU_SOURCE','-Wall','-Werror','-I',str(ROOT/'dm/host'),str(src),'-lm','-o',str(exe)],check=True)
+            games=0
+            for tsv in sorted((ROOT/'dm/games').glob('*/game.tsv')):
+                rows=[l.split('\t') for l in tsv.read_text(encoding='utf-8').splitlines() if l.startswith('aspect_plan\t')]
+                builds=sorted({r[1] for r in rows})
+                for b in builds:
+                    mine=[r for r in rows if r[1]==b]
+                    spec=';'.join(','.join(r[1:5]) for r in rows)
+                    out=subprocess.run([str(exe),b,spec,str(len(mine))],capture_output=True,text=True)
+                    self.assertEqual(out.returncode,0,f'{tsv}: {out.stdout}')
+                games+=bool(rows)
+            self.assertGreater(games,0)
 if __name__=='__main__':
     unittest.main()

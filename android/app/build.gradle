@@ -290,7 +290,7 @@ def linkPlayOf = { String game -> tsvRows(game, 'link_play').any { it.size() > 1
 // shapes under Aspect ratio are its aspect rows, if it has any (aspectsOf)
 def aspectPlanOf = { String game ->
     tsvRows(game, 'aspect_plan').collect { c ->
-        if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['ratio_f32', 'width_movz', 'width_u32', 'area_width_u32', 'area_height_u32', 'nop', 'ratio_fmov']) || !(c[3] ==~ /m0x[0-9a-f]+/) || !(c[4] ==~ /[0-9a-f]{8}/))
+        if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['ratio_f32', 'width_movz', 'width_u32', 'area_width_u32', 'area_height_u32', 'nop', 'ratio_fmov', 'ratio_movz', 'ratio_movk']) || !(c[3] ==~ /m0x[0-9a-f]+/) || !(c[4] ==~ /[0-9a-f]{8}/))
             throw new GradleException("$game: invalid aspect_plan row")
         c[1..4].join(',')
     }.join(';')
@@ -301,7 +301,7 @@ def handheldGames = nxGames.findAll { g -> tsvRows(g, 'op_mode').any { it.size()
 def cheatsOf = { String game -> tsvRows(game, 'cheats').isEmpty() ? '' : '1' }
 def timeOfDayOf = { String game -> tsvRows(game, 'time_of_day').any { it.size() > 1 && it[1].trim() == '1' } ? '1' : '' }   // the Game tab's Time of day row only for profiles whose day/night cycle follows the user clock
 // PEANUTS: include each game's supported options in the launcher profile.
-def nxProfiles = nxGames.collect { g -> [g, nameOf(g).replaceAll(/[\t\n\\"]/, ' '), shaderTotalOf(g), shaderInputsOf(g), buildsOf(g), reqsOf(g), statusOf(g), deltaOf(g), stampOf(g), resolutionOf(g), romfsChecksOf(g), gpuTsOf(g), windowOf(g), decoupleOf(g), drsOf(g), fpsLimitOf(g), dlssOf(g), presentOnlyOf(g), stepsOf(g), tsvRows(g, 'mesh_vegetation_cut').isEmpty() ? '' : '1', optionsOf(g), sceneOf(g), presetsOf(g), skipLayersOf(g), recommendOf(g), variantsOf(g), presetFromOf(g), linkPlayOf(g), aspectsOf(g), timeOfDayOf(g), cheatsOf(g), fpsLimitMaxOf(g), fpsLockerOf(g), fpsLockerPlanOf(g), fpsLimitMinOf(g), fpsModesOf(g), fpsPlan120Of(g), tsvRows(g, 'fps_step_elapsed').isEmpty() ? '' : '1', tsvRows(g, 'fps_owned_default').isEmpty() ? '' : '1', aspectPlanOf(g)].join('\\t') }.join('\\n')   // PEANUTS: fps_owned_default, then aspect_plan, the last column
+def nxProfiles = nxGames.collect { g -> [g, nameOf(g).replaceAll(/[\t\n\\"]/, ' '), shaderTotalOf(g), shaderInputsOf(g), buildsOf(g), reqsOf(g), statusOf(g), deltaOf(g), stampOf(g), resolutionOf(g), romfsChecksOf(g), gpuTsOf(g), windowOf(g), decoupleOf(g), drsOf(g), fpsLimitOf(g), dlssOf(g), presentOnlyOf(g), stepsOf(g), tsvRows(g, 'mesh_vegetation_cut').isEmpty() ? '' : '1', optionsOf(g), sceneOf(g), presetsOf(g), skipLayersOf(g), recommendOf(g), variantsOf(g), presetFromOf(g), linkPlayOf(g), aspectsOf(g), timeOfDayOf(g), cheatsOf(g), fpsLimitMaxOf(g), fpsLockerOf(g), fpsLockerPlanOf(g), fpsLimitMinOf(g), fpsModesOf(g), fpsPlan120Of(g), tsvRows(g, 'fps_step_elapsed').isEmpty() ? '' : '1', tsvRows(g, 'fps_owned_default').isEmpty() ? '' : '1', aspectPlanOf(g), tsvRows(g, 'aspect_plan_untested').isEmpty() ? '' : '1'].join('\\t') }.join('\\n')   // PEANUTS: fps_owned_default, then aspect_plan and aspect_plan_untested, the last column
 def lockOf = { String key -> def f = new File(repo, 'dm/gfx/tools/dmsh_chain.lock'); f.isFile() ? (f.readLines().find { it.startsWith(key + '\t') }?.split('\t')?.getAt(1) ?: 'unknown') : 'unknown' }
 
 android {

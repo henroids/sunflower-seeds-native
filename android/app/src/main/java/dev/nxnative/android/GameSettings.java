@@ -726,7 +726,8 @@ final class GameSettings {
     // PEANUTS end
     private static void display(MainActivity a, Game g, Runnable done) {
         boolean fill = fillable(Profile.of(g.titleId));   // PEANUTS: a third choice for a game that can fill
-        String[] names = fill ? new String[] {Prefs.DISPLAY_NAMES[0], Prefs.DISPLAY_NAMES[1], FILL_NAME} : Prefs.DISPLAY_NAMES;   // PEANUTS
+        boolean guess = fill && Profile.of(g.titleId).aspectUntested;   // PEANUTS: rows nobody has seen on a device (game.tsv aspect_plan_untested)
+        String[] names = fill ? new String[] {Prefs.DISPLAY_NAMES[0], Prefs.DISPLAY_NAMES[1], FILL_NAME + (guess ? ". Untested on this game: it may look wrong or not start; pick Fit to go back" : "")} : Prefs.DISPLAY_NAMES;   // PEANUTS
         new PadFocus.Builder(a).setTitle("Display · " + g.name).setSingleChoiceItems(names, filling(a, g.titleId) ? 2 : Prefs.stretch(a, g.titleId) ? 1 : 0, (x, w) -> {   // PEANUTS: names, Fill
             Prefs.stretch(a, g.titleId, w == 1);
             if (w == 2) Prefs.aspect(a, g.titleId, ScreenShape.CHOICE);   // PEANUTS: Fill
