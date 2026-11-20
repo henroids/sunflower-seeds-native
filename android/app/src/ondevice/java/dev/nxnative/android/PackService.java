@@ -301,7 +301,7 @@ public final class PackService extends Service {
     private boolean startForeground(Job j) {
         try {
             startForeground(checking ? NOTE_CHECK : NOTE, note(j), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);   // PEANUTS: checking: the check's own notification
-            if (!checking) nm.cancel(NOTE_CHECK);   // PEANUTS: a job that took the service from the check: the check's goes (ongoing, it would stay)
+            if (!checking) nm.cancel(NOTE_CHECK);   // PEANUTS: a job that took the service from the check: the check's goes (Android cancels it too when the foreground id changes)
             return true;
         } catch (RuntimeException e) {   // ForegroundServiceStartNotAllowedException, or the type's time limit used up
             Log.w(TAG, "startForeground refused: " + e);

@@ -530,7 +530,8 @@ final class Prepare {
             if (m.what != Upstream.MSG_STATE) return false;
             Bundle d = m.getData();
             String own = ownJob;
-            if (own == null || !own.equals(d.getString("file"))) return true;   // another job's (a done one the packer still held, the full check's): never this build's state
+            if (own == null || !own.equals(d.getString("file"))) return true;   // another job file's (a game's done one the packer still held, the full check's): never this build's state. A
+                                                                               // game's builds share one job.json, so this keeps out no older state of this game's own
             String j = d.getString("job");
             if (j != null) { fromService = j; fromServiceAt = SystemClock.elapsedRealtime(); }
             alive = d.getBoolean("alive");
