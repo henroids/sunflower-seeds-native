@@ -42,7 +42,8 @@
     "0100C49025D3E000",
     "010051F0207B2000",
     "010069401ADB8000",
-    "0100DCA0064A6000"
+    "0100DCA0064A6000",
+    "0100F43008C44000"
   ],
   "games": [
     {
@@ -474,6 +475,23 @@
       "companion": false,
       "profile": "dm/games/01001F5010DFA000/game.tsv",
       "note": "dm/games/01001F5010DFA000/README.md"
+    },
+    {
+      "title_id": "0100F43008C44000",
+      "name": "Pokémon Legends: Z-A",
+      "profile_name": "Pokémon Legends: Z-A",
+      "builds": [
+        {
+          "version": "v393216",
+          "number": 393216,
+          "display": "2.0.2"
+        }
+      ],
+      "readme_update": "2.0.2",
+      "package": "v393216",
+      "companion": false,
+      "profile": "dm/games/0100F43008C44000/game.tsv",
+      "note": "dm/games/0100F43008C44000/README.md"
     },
     {
       "title_id": "01008DB008C2C000",
