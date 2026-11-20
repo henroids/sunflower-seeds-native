@@ -190,25 +190,30 @@ class Resume(unittest.TestCase):
         # following it; a resume read it too when the job's worker took more than a second to write "running". A state counts once its "updated" is not the
         # job's as this run last read or wrote it (Job.save puts "updated" at every save)
         s = PREPARE.read_text(encoding='utf-8')
-        self.assertEqual(len(re.findall(r'long since = updatedOf\(job\);[^\n]*\n\s*ownJob = file\.getPath\(\);', s)), 2)   # the build and the modded build
+        self.assertEqual(len(re.findall(r'Set<Long> earlier = earlier\(updatedOf\(job\), firstRead\);[^\n]*\n\s*ownJob = file\.getPath\(\);', s)), 2)   # the build and the modded build
         self.assertEqual(len(re.findall(r'String state = o\.optString\("state"\), reason = o\.optString\("reason"\), step = o\.optString\("step"\);(?:\s*//[^\n]*)*\s*'
-                                        r'if \(since > 0 && o\.optLong\("updated", -1\) == since\) state = "";', s)), 2)
+                                        r'if \(earlier\.contains\(o\.optLong\("updated", -1\)\)\) state = "";', s)), 2)
+        self.assertNotIn('long since', s)
+        helper = s[s.index('    private static Set<Long> earlier(long... updated) {'):]
+        helper = helper[:helper.index('\n    }\n')]
+        self.assertIn('if (u > 0)', helper)   # an unknown "updated" (-1) is no state from before: a state without one counts
         retry = s[s.index('Upstream.jobTryAnyway(j, true);'):]
         retry = retry[:retry.index('startForegroundService')]
-        self.assertRegex(retry, r'Upstream\.jobSave\(j\);\s*since = updatedOf\(j\);')   # Try anyway's restart: the failed run's file is not the new run's
+        self.assertRegex(retry, r'Upstream\.jobSave\(j\);\s*add\(earlier, updatedOf\(j\)\);')   # Try anyway's restart: the failed run's file is not the new run's
 
-    def test_a_job_the_packer_finished_while_the_build_got_ready_ends_it(self):
-        # `since` read from job.json right before the start took a "done" the packer wrote while the build got ready (a job it ran on after a build was
-        # cancelled), and the packer has nothing more to write for a done job: the build waited for the stall rule (found in review)
+    def test_a_job_the_packer_still_holds_from_an_earlier_run_is_not_this_runs(self):
+        # the packer sends a client that binds whatever job it holds (MSG_REGISTER publishes `job`), and a game's builds share one job.json: a done or failed
+        # job of an earlier run of the game, still held, ended a build that had made a new job (an Import again: a pack adopted with its shaders to make)
+        # at once, "Pack finished" or its old failure. Its "updated" is job.json's as this run first read it, before the run saved its own job
         s = PREPARE.read_text(encoding='utf-8')
-        self.assertNotIn('updated(file)', s)
-
-    def test_a_state_a_message_alone_carries_still_counts(self):
-        # a state whose file write failed (a full disk: Job.save puts "updated" in memory first) reaches the build by the packer's message alone: reading the
-        # state from the file only left such a build to the stall rule (found in review)
-        s = PREPARE.read_text(encoding='utf-8')
-        self.assertNotIn('written(own', s)
-        self.assertEqual(s.count('if (fs != null && fromServiceAt > lastChange) json = fs;'), 2)
+        run0 = s[s.index('    private File run0('):s.index('    private File runModded0(')]
+        self.assertRegex(run0, r'long firstRead = existing == null \? -1 : updatedOf\(existing\);')
+        self.assertLess(run0.index('long firstRead = '), run0.index('if (reimported) existing = null;'))   # read before the old job is let go
+        modded = s[s.index('    private File runModded0('):]
+        modded = modded[:modded.index('\n    }\n')]
+        self.assertRegex(modded, r'Object existing = Upstream\.jobRead\(jf\);\s*firstRead = updatedOf\(existing\);')
+        for body in (run0, modded):
+            self.assertLess(body.index('firstRead'), body.index('Upstream.jobSave(job);') if 'Upstream.jobSave(job);' in body else len(body))
 
 
 class Notice(unittest.TestCase):

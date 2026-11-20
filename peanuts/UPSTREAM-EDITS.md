@@ -2189,13 +2189,17 @@ Tests: `test_split_yaz0.py` (10; 8 skipped without a C compiler or Python's head
 
 ### Round 32, a worker's end and a build's earlier states (2026-11-20, issue #120 review)
 
-A race the review of the incremental builds (pull request #150) found in upstream's code. A job's start between a worker's end (its thread gone,
+Two races the review of the incremental builds (pull request #150) found in code from before it. A job's start between a worker's end (its thread gone,
 so `onStartCommand`'s `isAlive` check lets it through) and that end's post (`finished`) started a new worker, which the post then took for the one that
 ended: `worker = null` forgot it, its notification read "Paused" with Resume, `stopSelf()` stopped the service under it, and a start after that found no
-worker and ran a second one on the same job. The post now names its worker and leaves one started since alone.
+worker and ran a second one on the same job. The post now names its worker and leaves one started since alone. In `Prepare`, a game's builds share one
+`job.json`, and the packer sends a client that binds whatever job it holds: a done or failed job of an earlier run, still held, could end a build that had
+made a new job at once. Such a state is now one from before the run by its `"updated"` (job.json's as the run first read it), as a resumed job's own state
+already was.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
 | `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` (a worker's end) | 2 | `work()`'s end posts `finished(self)`; `finished(Thread w)` returns when `worker != w` | `PEANUTS` |
 
-Tests: `peanuts/tests/test_reuse_check.py` (`WorkerEnd`). Upstream candidate: yes (upstream's own race).
+Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/build/Prepare.java` (`earlier`: the states from before the run, `firstRead`).
+Tests: `peanuts/tests/test_reuse_check.py` (`WorkerEnd`; `Resume`: a job the packer still holds). Upstream candidate: the `PackService` part, yes (upstream's own race).
