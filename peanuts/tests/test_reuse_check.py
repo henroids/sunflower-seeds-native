@@ -109,11 +109,31 @@ class Starts(unittest.TestCase):
         s = PACK.read_text(encoding='utf-8')
         return s[s.index('final boolean checkAsked'):s.index('boolean go = ')]
 
+    def nothing(self):
+        """The branch that answers a check's start that runs nothing"""
+        on = self.on_start()
+        br = on[on.index('if (checkAsked && !check && (worker == null || !worker.isAlive())) {'):]
+        br = br[:br.index('return START_NOT_STICKY;')]
+        return '\n'.join(l.split('//')[0] for l in br.splitlines())   # the code, not what its comments tell of the code before
+
     def test_a_checks_start_that_runs_nothing_marks_no_job(self):
         # such a start went on to upstream's answer, startForeground(j): refused (a start from the background, Android's dataSync limit), it marks a job that
         # is not done paused "refused", and a build whose job.json was that job just then (its own start right behind) stopped with "Preparing paused"
-        self.assertRegex(self.on_start(), r'if \(checkAsked && !check && \(worker == null \|\| !worker\.isAlive\(\)\)\) \{[^}]*startForeground\(\(Job\) null\);'
-                                          r'\s*stopForeground\(STOP_FOREGROUND_REMOVE\);\s*stopSelf\(startId\);\s*return START_NOT_STICKY;')
+        br = self.nothing()
+        self.assertNotIn('startForeground(j)', br)
+        self.assertRegex(br, r'try \{ startForeground\(id, id == NOTE \? note\(job\) : note\(\(Job\) null\), ServiceInfo\.FOREGROUND_SERVICE_TYPE_DATA_SYNC\); \}')
+
+    def test_a_checks_start_that_runs_nothing_takes_no_builds_notification(self):
+        # answered under NOTE ("Preparing a game", then removed), it took a failed or finished build's notification away, as the check did before it had its own
+        br = self.nothing()
+        self.assertRegex(br, r'int id = ending && !checkRunning \? NOTE : NOTE_CHECK;')
+
+    def test_a_checks_start_while_a_workers_end_is_to_post_leaves_the_service_to_that_post(self):
+        # in that window (9699ef8 sends such starts here) it removed the foreground and asked the service to stop: the post's start of a job that waited for the
+        # check ("while this service is still in the foreground") then came from the background, and a stop while a foreground start is unanswered ends the process
+        br = self.nothing()
+        self.assertRegex(br, r'boolean ending = worker != null;')
+        self.assertRegex(br, r'if \(!ending\) \{ stopForeground\(STOP_FOREGROUND_REMOVE\); stopSelf\(startId\); \}')
 
     def test_a_check_starts_only_once_the_last_workers_end_has_run(self):
         # a check's start between the last worker's end (its thread gone) and that end's post (worker = null, checkJob = null, stopSelf) started a second

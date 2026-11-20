@@ -189,12 +189,18 @@ public final class PackService extends Service {
             Log.i(TAG, "check: " + j.titleId() + ": the app was updated since the build: its full check is dropped (the next build makes a library of this app)");
         }
         if (checkAsked && !check && (worker == null || !worker.isAlive())) {
-            // a check's start that runs nothing: answered as upstream answers a start with nothing to do, but with no job. Its startForeground(j), refused
-            // (a start from the background, the dataSync limit), marked a job that is not done paused "refused": a build whose job.json that was just then
-            // (its own start right behind) stopped with "Preparing paused" (found in review)
-            startForeground((Job) null);
-            stopForeground(STOP_FOREGROUND_REMOVE);
-            stopSelf(startId);
+            // a check's start that runs nothing (found in review, twice):
+            // - with no job: upstream's startForeground(j), refused (a start from the background, the dataSync limit), marked a job that is not done paused
+            //   "refused", and a build whose job.json that was just then (its own start right behind) stopped with "Preparing paused";
+            // - under the check's own notification, which no build's is: under NOTE it took a failed or finished build's away;
+            // - while a worker's end is still to post (finished, checkKept's): that post decides the foreground and the service. Answered under the notification
+            //   in the foreground then, and nothing removed or stopped: a removed foreground made the post's start of a job that waited for the check one from
+            //   the background, and a service that stops with a foreground start unanswered ends the process
+            boolean ending = worker != null;
+            int id = ending && !checkRunning ? NOTE : NOTE_CHECK;   // a job's end to post: its notification is the one in the foreground
+            try { startForeground(id, id == NOTE ? note(job) : note((Job) null), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC); }
+            catch (RuntimeException e) { Log.w(TAG, "check: startForeground refused: " + e); }
+            if (!ending) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId); }
             return START_NOT_STICKY;
         }
         // PEANUTS end
