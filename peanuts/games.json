@@ -1,6 +1,6 @@
 {
   "about": "Written by peanuts/scripts/games_catalog.py from peanuts/release-titles.txt, dm/games/<title ID>/game.tsv and peanuts/games.tsv. Do not edit by hand.",
-  "app_version": "0.1.5",
+  "app_version": "0.1.6",
   "readme_order": [
     "01006BB00C6F0000",
     "01008CF01BAAC000",

@@ -28,7 +28,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.5 includes 39 games, and 13 more are coming in 0.1.6 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.6 includes 52 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion |
 |---|---|---|---|
@@ -71,19 +71,19 @@ Peanuts Native 0.1.5 includes 39 games, and 13 more are coming in 0.1.6 (marked 
 | Diablo III: Eternal Collection | `01001B300B9BE000` | 2.7.7.92380 | Yes |
 | EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523, 1.8d.f570 | No |
 | Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No |
-| Unicorn Overlord (coming in 0.1.6) | `010069401ADB8000` | 1.05 | No |
-| Luigi's Mansion 3 (coming in 0.1.6) | `0100DCA0064A6000` | 1.4.0 | No |
-| Pokémon Legends: Z-A (coming in 0.1.6) | `0100F43008C44000` | 2.0.2 | No |
-| STORY OF SEASONS: Grand Bazaar (coming in 0.1.6) | `0100DAE01E4C8000` | v655360 | No |
-| Double Dragon Revive (coming in 0.1.6) | `01006AE02236C000` | 1.0.0, N1.10 | No |
-| Trails in the Sky 2nd Chapter (coming in 0.1.6) | `01007A2027548000` | 1.0.3 | No |
-| DRAGON BALL: Sparking! ZERO (coming in 0.1.6) | `010035F022078000` | 1.0.0 | No |
-| Pokémon Scarlet (coming in 0.1.6) | `0100A3D008C5C000` | 4.0.0 | No |
-| Pokémon Violet (coming in 0.1.6) | `01008F6008C5E000` | 4.0.0 | No |
-| DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET (coming in 0.1.6) | `010051C0134F8000` | 1.70 | No |
-| STEINS;GATE RE:BOOT (coming in 0.1.6) | `01008BC024FDE000` | 1.0.3, 1.0.4 | No |
-| NieR:Automata The End of YoRHa Edition (Asian release) (coming in 0.1.6) | `0100B8E016F76000` | 1.0.3 | No |
-| Hyrule Warriors: Age of Calamity (coming in 0.1.6) | `01002B00111A2000` | 1.3.0 | No |
+| Unicorn Overlord | `010069401ADB8000` | 1.05 | No |
+| Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | No |
+| Pokémon Legends: Z-A | `0100F43008C44000` | 2.0.2 | No |
+| STORY OF SEASONS: Grand Bazaar | `0100DAE01E4C8000` | v655360 | No |
+| Double Dragon Revive | `01006AE02236C000` | 1.0.0, N1.10 | No |
+| Trails in the Sky 2nd Chapter | `01007A2027548000` | 1.0.3 | No |
+| DRAGON BALL: Sparking! ZERO | `010035F022078000` | 1.0.0 | No |
+| Pokémon Scarlet | `0100A3D008C5C000` | 4.0.0 | No |
+| Pokémon Violet | `01008F6008C5E000` | 4.0.0 | No |
+| DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET | `010051C0134F8000` | 1.70 | No |
+| STEINS;GATE RE:BOOT | `01008BC024FDE000` | 1.0.3, 1.0.4 | No |
+| NieR:Automata The End of YoRHa Edition (Asian release) | `0100B8E016F76000` | 1.0.3 | No |
+| Hyrule Warriors: Age of Calamity | `01002B00111A2000` | 1.3.0 | No |
 
 <!-- PEANUTS end: the Supported games table -->
 
