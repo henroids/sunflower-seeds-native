@@ -881,6 +881,9 @@ void mtl_prog_release(prog_t *p) {
 // are copied (made at nvnProgramSetShaders, prog_key); the shaders are resolved on the prefetch thread (vka_shaders_by_keys)
 void mtl_prog_prefetch(const prog_t *p) {
     if (!p || !p->serial || !p->nstage) return;
+    // Only a program whose stage keys were all made at nvnProgramSetShaders: prog_key would hash a missing one from the stage's code here, before the game has
+    // placed or written it (and keep that key for the program's draws). Such a program is learned from its first draw's miss instead
+    for (unsigned i = 0; i < p->nstage && i < 6; i++) if (!prog_key_ready(p, i)) return;
     uint8_t md[6][8]; memset(md, 0, sizeof md); unsigned n = 0;
     for (unsigned i = 0; i < p->nstage && i < 6; i++) if (prog_key(p, i, md[n])) n++;
     vka_pso_prefetch(md, n);

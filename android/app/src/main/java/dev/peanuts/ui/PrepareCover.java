@@ -36,9 +36,9 @@ public final class PrepareCover extends FrameLayout {
     private final TextView count;
     private final BananaBackgroundView back;
 
-    private boolean skipped;
+    private boolean skipped, closed;
 
-    /** driver: the GPU driver's name as the settings show it; playAnyway: the step stops and the game starts; close: the game is left */
+    /** driver: the GPU driver's name as the settings show it, null for the system's; playAnyway: the step stops and the game starts; close: the game is left */
     public PrepareCover(Activity a, String titleId, String name, String driver, Runnable playAnyway, Runnable close) {
         super(a);
         setClickable(true);   // nothing under it takes a touch
@@ -93,7 +93,7 @@ public final class PrepareCover extends FrameLayout {
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
         cp.topMargin = PUi.dp(a, 10);
         col.addView(count, cp);
-        TextView drv = PUi.text(a, "For the graphics driver " + driver, 14, R.color.bn_text_2, 500);
+        TextView drv = PUi.text(a, driver == null ? "For the system's graphics driver" : "For the graphics driver " + driver, 14, R.color.bn_text_2, 500);
         drv.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(-2, -2);
         dp.topMargin = PUi.dp(a, 6);
@@ -118,7 +118,7 @@ public final class PrepareCover extends FrameLayout {
             playAnyway.run();
         });
         actions.addView(play[0], PUi.wrap());
-        View shut = Library.headerAction(a, R.drawable.ic_close, "Close", "Close: leave the game, the shaders prepared so far are kept", null, v -> close.run());
+        View shut = Library.headerAction(a, R.drawable.ic_close, "Close", "Close: leave the game. Shaders prepared up to the last half minute are kept", null, v -> { if (closed) return; closed = true; close.run(); });
         LinearLayout.LayoutParams sp = PUi.wrap();
         sp.leftMargin = PUi.dp(a, 14);
         actions.addView(shut, sp);
@@ -133,7 +133,7 @@ public final class PrepareCover extends FrameLayout {
         if (done > total) done = total;
         bar.setMax(total);
         bar.setProgress(done);
-        count.setText(String.format(Locale.US, "Preparing shaders · %,d of %,d · %d%%", done, total, (int) (100L * done / total)));
+        count.setText(PUi.joined("Preparing shaders", String.format(Locale.US, "%,d of %,d", done, total), (int) (100L * done / total) + "%"));
         peanut.open(done / (float) total);
     }
 

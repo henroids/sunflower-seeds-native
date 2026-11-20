@@ -1051,6 +1051,9 @@ static int keys_hash(const NVNshaderData *sd, int mapped, uint8_t out[8]) {
 // PEANUTS: the Android replay notes what a shader's control section says it captures by transform feedback (vka_tf.c), where the shader's key is made: the section
 // is only guaranteed valid during SetShaders
 __attribute__((weak)) void nvn_tf_ctl_note(const uint8_t key[8], const void *control) { (void)key; (void)control; }
+// PEANUTS: whether nvnProgramSetShaders made the stage's key (prog_key would otherwise hash the stage's code now, which is not known to be readable or
+// written yet at that time: the reason the key is left to the first draw). For the Android replay's program list (vka_shader.c mtl_prog_prefetch)
+int prog_key_ready(const prog_t *p, unsigned st) { if (st >= p->nstage) return 0; prog_keys_t *k = pk_get(p, 0); return k && (k->ok >> st & 1); }
 int prog_key(const prog_t *p, unsigned st, uint8_t key[8]) {
     if (st >= p->nstage) return 0;
     prog_keys_t *k = pk_get(p, 1);

@@ -30,7 +30,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;   // PEANUTS: startup shader progress
+// PEANUTS: (the startup shader progress has its own view now, dev.peanuts.ui.PrepareCover: no ProgressBar here)
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -253,7 +253,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         v.requestLayout();
     }
 
-    // PEANUTS: show the cold pipeline build while the native host waits to start the game.
+    // PEANUTS begin: show the cold pipeline build while the native host waits to start the game.
     private final Runnable prewarmPoll = this::prewarmTick;
     private dev.peanuts.ui.PrepareCover prewarmCover;   // PEANUTS: the home screen's background, the game's cover, a peanut cracking open, the count (dev.peanuts.ui.PrepareCover)
 
@@ -272,7 +272,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             int total = (int) (progress >>> 32), done = (int) progress;
             if (prewarmCover == null) {
                 GpuDriver.Info drv = GpuDriver.selected(this, titleId());
-                prewarmCover = new dev.peanuts.ui.PrepareCover(this, titleId(), getIntent().getStringExtra("name"), drv == null ? "the system's driver" : drv.label(),
+                prewarmCover = new dev.peanuts.ui.PrepareCover(this, titleId(), getIntent().getStringExtra("name"), drv == null ? null : drv.label(),
                         Native::prewarmSkip, this::end);
                 rootView.addView(prewarmCover, rootView.indexOfChild(pausedView), new FrameLayout.LayoutParams(-1, -1));
             }
@@ -280,6 +280,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         }
         ui.postDelayed(prewarmPoll, 150);
     }
+    // PEANUTS end
 
     private boolean overlayOn() { return overlayEnv != null ? overlayEnv : Prefs.overlay(this); }
 
@@ -1499,6 +1500,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
         if (dev.peanuts.build.ShaderCapture.active(this) && gamepad(e.getSource())) return true;   // PEANUTS: no gameplay input during preparation
+        if (prewarmCover != null && gamepad(e.getSource())) return super.dispatchKeyEvent(e);   // PEANUTS: Preparing shaders: the pad moves over its buttons; nothing goes to the game or the panel under it
         if (panel == null) return super.dispatchKeyEvent(e);   // no host for this game (onCreate): only the message is shown
         // A controller opens and closes the in-game panel (PadPanel.Combo: Home, or − and + held; Settings › Controller: in-game panel); while it is open the pad moves
         // through it and the game gets no pad keys. A key the panel took a press of stays the panel's until it comes up
@@ -1570,7 +1572,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     /** Back (the phone's button or its edge swipe) opens and closes the in-game panel, which has Stop; while the controller applet's join screen shows, it cancels that */
     @SuppressWarnings("deprecation")
-    @Override public void onBackPressed() { if (dev.peanuts.build.ShaderCapture.active(this)) { dev.peanuts.build.ShaderCapture.cancel(this); return; } /* PEANUTS: Back cancels preparation */ if (panel != null && !panel.isOpen() && CtrlScreen.back()) return; if (panel != null) panel.toggle(); else end(); }
+    @Override public void onBackPressed() { if (prewarmCover != null) return; /* PEANUTS: Preparing shaders has its own Close; the panel is under it */ if (dev.peanuts.build.ShaderCapture.active(this)) { dev.peanuts.build.ShaderCapture.cancel(this); return; } /* PEANUTS: Back cancels preparation */ if (panel != null && !panel.isOpen() && CtrlScreen.back()) return; if (panel != null) panel.toggle(); else end(); }
 
     // For CtrlScreen: the view tree it goes into (under the in-game panel), and whether a gamepad is connected (then the on-screen controls are hidden and cannot join)
     FrameLayout rootView() { return rootView; }

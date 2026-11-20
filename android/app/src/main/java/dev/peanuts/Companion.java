@@ -90,7 +90,7 @@ public final class Companion {
     private static boolean preparedSeen;
     private static volatile boolean preparing;
     /** GameActivity.prewarmTick: the host is preparing shaders before the game starts (or has not said yet) */
-    public static void preparing(boolean on) { preparing = on; }
+    public static void preparing(boolean on) { preparing = on; if (on) preparedSeen = true; }   // (seen even when it ends before the limit first looks)
 
     private static void settle(Activity game) {
         wanted = PeanutsPrefs.bottomScreen(game) && PeanutsPrefs.bottomScreenInGames(game) ? GameScreen.PLAYING : -1;
@@ -196,6 +196,7 @@ public final class Companion {
         // A pack from before main.orig.bin gets the file now, on a thread of its own, before the host starts: the runtime waits for it (dev.peanuts.pack.PackUpgrade)
         try { dev.peanuts.pack.PackUpgrade.atGameStart(game); } catch (RuntimeException e) { Log.w(TAG, "pack upgrade: " + e); }
         stopped = false;
+        preparedSeen = false;
         allowed = false;
         away = false;
         screenUp = false;
