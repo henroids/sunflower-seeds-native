@@ -32,7 +32,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.5 includes 42 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.5 includes 46 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion |
 |---|---|---|---|
@@ -78,6 +78,10 @@ Peanuts Native 0.1.5 includes 42 games. The Companion column shows whether a gam
 | Unicorn Overlord | `010069401ADB8000` | 1.05 | No |
 | Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | No |
 | Pokémon Legends: Z-A | `0100F43008C44000` | 2.0.2 | No |
+| STORY OF SEASONS: Grand Bazaar | `0100DAE01E4C8000` | v655360 | No |
+| Double Dragon Revive | `01006AE02236C000` | 1.0.0, N1.10 | No |
+| Trails in the Sky 2nd Chapter | `01007A2027548000` | 1.0.3 | No |
+| DRAGON BALL: Sparking! ZERO | `010035F022078000` | 1.0.0 | No |
 
 <!-- PEANUTS end: the Supported games table -->
 
