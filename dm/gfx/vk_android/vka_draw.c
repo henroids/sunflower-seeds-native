@@ -1394,7 +1394,10 @@ VkImageView placeholder(uint8_t dim, int storage) {
 static uint64_t g_pt_last, g_pt[9], g_ps[6], g_pt_n, g_pt_tot; static int g_pt_ph;
 static inline uint64_t cntvct(void) { uint64_t v; __asm__ volatile("mrs %0, cntvct_el0" : "=r"(v)); return v; }
 // ---------- Set 0 from the walk ----------
-typedef struct { VkWriteDescriptorSet w[512]; VkDescriptorBufferInfo bi[512]; VkDescriptorImageInfo ii[512]; VkBufferView bv[512]; uint64_t ad[512]; uint8_t dim[512]; uint32_t n; } writes_t;   // ad: a guest buffer's address (0 = other); dim: the shape the shader declares (set_no_nulls)
+// PEANUTS: the most descriptors one draw or dispatch writes (512 before): a shader with arrays of texture handles read by record has 256 an array (the vendored
+// BindlessToArray's RecordArrayLength; Tomodachi Life: Living the Dream's ground draws have eight)
+enum { VKA_DESC_MAX = 4096 };
+typedef struct { VkWriteDescriptorSet w[VKA_DESC_MAX]; VkDescriptorBufferInfo bi[VKA_DESC_MAX]; VkDescriptorImageInfo ii[VKA_DESC_MAX]; VkBufferView bv[VKA_DESC_MAX]; uint64_t ad[VKA_DESC_MAX]; uint8_t dim[VKA_DESC_MAX]; uint32_t n; } writes_t;   // PEANUTS: VKA_DESC_MAX   // ad: a guest buffer's address (0 = other); dim: the shape the shader declares (set_no_nulls)
 static writes_t g_w;
 // A texture or image read by a shader that declares it in another numeric class (float / uint / sint) than the view the game binds: logged once per shader, stage and binding
 // (the first 64), with the texture. Such a binding is read through a view of the shader's class of the same texel size (vka_tex.c class_twin) unless its module is retyped
@@ -1569,7 +1572,7 @@ static int rs_support(const vka_dstate *d, int st, const vka_shader *sh, VkDescr
 // PEANUTS end
 static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const vka_res *r, int n, int pool, c0_at *c0) {
     for (int i = 0; i < n; i++) {
-        if (g_w.n == 512) { VRED_ONCE("more than 512 descriptors in one draw"); return 0; }
+        if (g_w.n == VKA_DESC_MAX) { VRED_ONCE("more than %d descriptors in one draw", (int)VKA_DESC_MAX); return 0; }   // PEANUTS: VKA_DESC_MAX
         uint32_t k = g_w.n;
         VkWriteDescriptorSet *w = &g_w.w[k]; VkDescriptorBufferInfo *bi = &g_w.bi[k]; VkDescriptorImageInfo *ii = &g_w.ii[k];
         g_w.ad[k] = r[i].what == VKA_R_BUF ? r[i].addr : 0; g_w.dim[k] = r[i].dim;
@@ -1666,14 +1669,14 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
     return 1;
 }
 // Each stage's bindings, walked once a draw or dispatch (walk_all): the images first used are made from them (make_images), then set 0 is written from them (bind_sets)
-static struct { int n[VKA_NSTAGE], pool[VKA_NSTAGE]; char why[VKA_NSTAGE][200]; vka_res r[VKA_NSTAGE][512]; } g_wk;
+static struct { int n[VKA_NSTAGE], pool[VKA_NSTAGE]; char why[VKA_NSTAGE][200]; vka_res r[VKA_NSTAGE][VKA_DESC_MAX]; } g_wk;   // PEANUTS: VKA_DESC_MAX
 static void walk_all(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE]) {
     uint64_t t0_ = g_prof ? cntvct() : 0;
     vka_texu_elem = VKA_ENV("DM_VK_TEXU_ELEM", 1);   // see vka_bind.h (live, A/B)
     if (vka_rs_on()) memset(g_rsx, 0, sizeof g_rsx);   // PEANUTS: (rs_fetch_fix sets it for the walk's draw or dispatch)
     for (int st = 0; st < VKA_NSTAGE; st++) {
         vka_shader *s = sh[st]; g_wk.n[st] = 0; g_wk.pool[st] = 0; if (!s) continue;
-        g_wk.n[st] = vka_walk(&d->b, st, s->e, s->b, s->lib->h->ssbo_align, V.sb_align, rd_cb, NULL, g_wk.r[st], 512, &g_wk.pool[st], g_wk.why[st], sizeof g_wk.why[st]);
+        g_wk.n[st] = vka_walk(&d->b, st, s->e, s->b, s->lib->h->ssbo_align, V.sb_align, rd_cb, NULL, g_wk.r[st], VKA_DESC_MAX /* PEANUTS */, &g_wk.pool[st], g_wk.why[st], sizeof g_wk.why[st]);
     }
     if (g_prof) g_ps[0] += cntvct() - t0_;
 }
@@ -1724,7 +1727,7 @@ void vka_drv_memo_stats(char *b, size_t n) {
              g_pd_delta_all ? 100.0 * g_pd_delta_w / (double)g_pd_delta_all : 0.0);
     g_pd_delta_w = g_pd_delta_all = 0;
 }
-static VkWriteDescriptorSet g_dw[512]; static uint32_t g_dwn;   // the writes that changed (push_same returns 2)
+static VkWriteDescriptorSet g_dw[VKA_DESC_MAX] /* PEANUTS */; static uint32_t g_dwn;   // the writes that changed (push_same returns 2)
 static int push_same(VkPipelineBindPoint bp, VkPipelineLayout layout) {
     static uint64_t *buf; static size_t cap;
     size_t need = 2 + (size_t)g_w.n * 5, k = 0;
@@ -1817,7 +1820,7 @@ static int bind_sets(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], cons
     }
     if (g_prof) g_ps[1] += cntvct() - t1_;
     if (sh[2] && sh[2]->gs_fx > 0 && bp == VK_PIPELINE_BIND_POINT_GRAPHICS) {   // the claim words, zeroed (vka_spv_gs_claim); bound also when the draw takes no claim (the layout has them)
-        if (g_w.n == 512) { VRED_ONCE("more than 512 descriptors in one draw"); return 0; }
+        if (g_w.n == VKA_DESC_MAX) { VRED_ONCE("more than %d descriptors in one draw", (int)VKA_DESC_MAX); return 0; }   // PEANUTS: VKA_DESC_MAX
         VkDeviceSize n = 4 * (VkDeviceSize)(g_claim_words ? g_claim_words : 1); vka_span cs;
         if (!vka_scratch(n, V.sb_align, &cs)) return 0;
         memset(cs.ptr, 0, (size_t)n);
