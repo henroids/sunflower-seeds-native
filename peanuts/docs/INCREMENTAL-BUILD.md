@@ -78,8 +78,9 @@ translation (`ondevice/logs/check.log`).
   runs (`dev.peanuts.ui.Library`, at most every two minutes), each only while the phone is plugged in with 40 % or more and no game runs
   (`dev.peanuts.build.ReuseCheck`; plugged in, not "charging": with a charge limit or bypass charging Android says the phone is not charging). The
   notification says "Checking <game>'s shaders". A check's start never runs a job (a job an app update left waits for the user).
-- It changes nothing of the job: its `job.json` is neither written nor sent to the launcher (a build that binds meanwhile must not read "done" for its own
-  job), its progress goes under a step of its own, and a timeout or a pause leaves it done. The game plays as usual: the library is only read. The job's
+- It changes nothing of the job's state: its `job.json` is neither written nor sent to the launcher (a build that binds meanwhile must not read "done" for
+  its own job), its progress goes under a step of its own, and a timeout or a pause leaves it done. Its lines go to the job's logs (`check.log`, and the
+  packer's own lines to `pack.log`), and the shaders step's `absent-shaders.tsv` in the job's folder is written again. The game plays as usual: the library is only read. The job's
   `split/` stays until the check is done.
 - It stops when a game starts (checked every 3 s, and once more before the tool runs), when the packer's policy pauses (battery, heat), or when a job starts
   (the job goes first: the packer starts it once the check has stopped). The stop is sent again every 3 s while the tool runs (one sent before its run began
@@ -214,6 +215,12 @@ of 58 s.
 - Archive jobs in the split's cache: their key must cover every file they read.
 - The full check while the phone is idle with the app closed: Android gives the app no start then (no JobScheduler in it); it runs from a build's end and while the app is open.
 - The import: Import again writes the whole `.nup` again (on an AYN Thor 11.9 GB in about 20 s: not worth it there).
+- One full check a game: `check.todo` and `check.job` are one each in `no_backup/reuse/<title ID>/`. A build of the game in another Build folder replaces
+  the first folder's due check with its own (or ends it, when it kept nothing), so the first folder's library keeps what only its sample checked until a later
+  build there. One check for each Build folder needs a Java side that keeps one job for each.
+- The split's kept results are outside the 4 GB of the kept copies and are never pruned within one common part (the files an update replaced stay, and
+  every split loads the list of empty results whole). A game of 100,000 files keeps some tens of MB; one with many shader files without
+  `DM_SPLIT_SELECTED` keeps their scan results, which can be more.
 
 ## Measured (AYN Thor, ACNH 3.0.3 with its DLC, 2026-11-18 and 19)
 
