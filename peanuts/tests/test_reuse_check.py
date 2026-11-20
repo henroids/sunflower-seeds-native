@@ -176,26 +176,28 @@ class Resume(unittest.TestCase):
     def test_a_build_takes_no_state_its_job_had_before_it_started_the_packer(self):
         # Prepare resumes a paused or failed job as it is and reads its job.json every second. While the full check held the packer (afterCheck: the job runs
         # once the check has stopped) it read the old "paused" or "failed", ended the build ("Preparing paused"), and the packer then ran the job with no build
-        # following it; a resume read it too when the job's worker took more than a second to write "running". A state counts once the packer has written the
-        # file since this run started it (Job.save puts "updated")
+        # following it; a resume read it too when the job's worker took more than a second to write "running". A state counts once its "updated" is not the
+        # job's as this run last read or wrote it (Job.save puts "updated" at every save)
         s = PREPARE.read_text(encoding='utf-8')
-        self.assertEqual(len(re.findall(r'long since = updated\(file\);[^\n]*\n\s*ownJob = file\.getPath\(\);', s)), 2)   # the build and the modded build
+        self.assertEqual(len(re.findall(r'long since = updatedOf\(job\);[^\n]*\n\s*ownJob = file\.getPath\(\);', s)), 2)   # the build and the modded build
+        self.assertEqual(len(re.findall(r'String state = o\.optString\("state"\), reason = o\.optString\("reason"\), step = o\.optString\("step"\);(?:\s*//[^\n]*)*\s*'
+                                        r'if \(since > 0 && o\.optLong\("updated", -1\) == since\) state = "";', s)), 2)
         retry = s[s.index('Upstream.jobTryAnyway(j, true);'):]
         retry = retry[:retry.index('startForegroundService')]
-        self.assertIn('since = updated(file);', retry)   # Try anyway's restart: the failed run's file is not the new run's
+        self.assertRegex(retry, r'Upstream\.jobSave\(j\);\s*since = updatedOf\(j\);')   # Try anyway's restart: the failed run's file is not the new run's
 
-    def test_a_builds_state_comes_from_its_jobs_file_only(self):
-        # a message of the packer's can be of a Job it still held from before, whatever its "updated" (a done or failed run's, a late one after Try anyway's
-        # restart): an older one passed a check of "updated" for equality (found in review). Every state change the packer makes is a forced save, so the
-        # state is read from the file; the messages give the progress between its writes
+    def test_a_job_the_packer_finished_while_the_build_got_ready_ends_it(self):
+        # `since` read from job.json right before the start took a "done" the packer wrote while the build got ready (a job it ran on after a build was
+        # cancelled), and the packer has nothing more to write for a done job: the build waited for the stall rule (found in review)
         s = PREPARE.read_text(encoding='utf-8')
-        self.assertEqual(s.count('String json = read(file), own = json;'), 2)
-        self.assertEqual(len(re.findall(r'JSONObject f = written\(own, since\);\s*String state = f == null \? "" : f\.optString\("state"\);', s)), 2)
-        self.assertEqual(len(re.findall(r'if \(state\.equals\("done"\) \|\| state\.equals\("failed"\) \|\| state\.equals\("paused"\)\) o = f;', s)), 2)
-        self.assertNotIn('o.optString("state")', s)
-        written = s[s.index('    private static JSONObject written(String own, long since) {'):]
-        written = written[:written.index('\n    }\n')]
-        self.assertIn('since > 0 && f.optLong("updated", -1) == since ? null : f', written)
+        self.assertNotIn('updated(file)', s)
+
+    def test_a_state_a_message_alone_carries_still_counts(self):
+        # a state whose file write failed (a full disk: Job.save puts "updated" in memory first) reaches the build by the packer's message alone: reading the
+        # state from the file only left such a build to the stall rule (found in review)
+        s = PREPARE.read_text(encoding='utf-8')
+        self.assertNotIn('written(own', s)
+        self.assertEqual(s.count('if (fs != null && fromServiceAt > lastChange) json = fs;'), 2)
 
 
 class Notice(unittest.TestCase):

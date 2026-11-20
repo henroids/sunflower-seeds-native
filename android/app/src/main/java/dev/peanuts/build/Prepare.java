@@ -212,7 +212,7 @@ final class Prepare {
         // The translator calls at once (4 on a phone with 14 GB or more, 2 on an 8 GB one) are set by PackService from the phone's memory (BuildMemory), not by a line here:
         // a fixed 4 in env.txt ran an 8 GB phone out of memory (Fire Emblem Engage on a Thor Base, issue #10). A line env.txt has still applies, up to that count
         // 4. the service, as the panel starts it
-        long since = updated(file);   // job.json as this run starts the packer: its state is the job's from before until the packer writes the file (issue #120)
+        long since = updatedOf(job);   // the job's "updated" as this run last read or wrote it: its state until the packer saves it again is the job's from before (issue #120)
         ownJob = file.getPath();   // the service's messages of this job only (Link.onMessage)
         bind();
         try {
@@ -228,9 +228,9 @@ final class Prepare {
         String lastJson = null;
         while (!cancelled) {
             SystemClock.sleep(1000);
-            String json = read(file), own = json;   // own: the job's file, whose state alone counts (below)
+            String json = read(file);
             String fs = fromService;
-            if (fs != null && fromServiceAt > lastChange) json = fs;   // the progress between the file's writes
+            if (fs != null && fromServiceAt > lastChange) json = fs;
             if (json == null) {
                 if (SystemClock.elapsedRealtime() - lastReadable > 30000) throw new BuildListener.Failure("The job file went missing: " + file, BuildListener.OTHER);
                 continue;
@@ -239,13 +239,10 @@ final class Prepare {
             if (!json.equals(lastJson)) { lastJson = json; lastChange = lastReadable; }
             JSONObject o;
             try { o = new JSONObject(json); } catch (org.json.JSONException e) { continue; }
-            // the state from the job's file alone, once the packer has written it since this run started it (issue #120): every state change the packer makes
-            // is a forced save, and a message may be of a Job it still held from before (a done or failed run's, a late one after Try anyway's restart), whatever
-            // its "updated"; the file as this run left it is a paused or failed job's from before (resumed while the full check holds the packer, a slow start)
-            JSONObject f = written(own, since);
-            String state = f == null ? "" : f.optString("state");
-            if (state.equals("done") || state.equals("failed") || state.equals("paused")) o = f;   // what the branches below read (error, fix, reason) is the file's too
-            String reason = o.optString("reason"), step = o.optString("step");
+            String state = o.optString("state"), reason = o.optString("reason"), step = o.optString("step");
+            // a paused or failed job resumed (while the full check holds the packer, or its worker is slow to start): its state is not this run's until the
+            // packer saves it. A message counts as the file does: a state whose write failed (a full disk) reaches the build by it alone
+            if (since > 0 && o.optLong("updated", -1) == since) state = "";
             int si = Math.max(0, java.util.Arrays.asList(STEPS).indexOf(step));
             JSONObject st = o.optJSONObject("steps") != null ? o.optJSONObject("steps").optJSONObject(STEPS[si]) : null;
             long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
@@ -274,7 +271,7 @@ final class Prepare {
                     Object j = Upstream.jobRead(file);
                     Upstream.jobTryAnyway(j, true);
                     Upstream.jobSave(j);
-                    since = updated(file);   // the failed run's state, and a late message of it, are not the new run's
+                    since = updatedOf(j);   // the failed run's state is not the new run's
                     fromService = null;
                     lastJson = null;
                     lastChange = SystemClock.elapsedRealtime();
@@ -407,7 +404,7 @@ final class Prepare {
         File file = Upstream.jobFile(job);
         log("modded prepare: job " + file + " (" + (resumedMod ? "resumed, it was " + Upstream.jobState(job) : "new") + "), pack " + packDir);
         BuildLogShare.remember(c, id, workDir);
-        long since = updated(file);   // job.json as this run starts the packer: its state is the job's from before until the packer writes the file (issue #120)
+        long since = updatedOf(job);   // the job's "updated" as this run last read or wrote it: its state until the packer saves it again is the job's from before (issue #120)
         ownJob = file.getPath();   // the service's messages of this job only (Link.onMessage)
         bind();
         try {
@@ -421,9 +418,9 @@ final class Prepare {
         String lastJson = null;
         while (!cancelled) {
             SystemClock.sleep(1000);
-            String json = read(file), own = json;   // own: the job's file, whose state alone counts (below)
+            String json = read(file);
             String fs = fromService;
-            if (fs != null && fromServiceAt > lastChange) json = fs;   // the progress between the file's writes
+            if (fs != null && fromServiceAt > lastChange) json = fs;
             if (json == null) {
                 if (SystemClock.elapsedRealtime() - lastReadable > 30000) throw new BuildListener.Failure("The modded build's job file went missing: " + file, BuildListener.OTHER);
                 continue;
@@ -432,13 +429,10 @@ final class Prepare {
             if (!json.equals(lastJson)) { lastJson = json; lastChange = lastReadable; }
             JSONObject o;
             try { o = new JSONObject(json); } catch (org.json.JSONException e) { continue; }
-            // the state from the job's file alone, once the packer has written it since this run started it (issue #120): every state change the packer makes
-            // is a forced save, and a message may be of a Job it still held from before (a done or failed run's, a late one after Try anyway's restart), whatever
-            // its "updated"; the file as this run left it is a paused or failed job's from before (resumed while the full check holds the packer, a slow start)
-            JSONObject f = written(own, since);
-            String state = f == null ? "" : f.optString("state");
-            if (state.equals("done") || state.equals("failed") || state.equals("paused")) o = f;   // what the branches below read (error, fix, reason) is the file's too
-            String reason = o.optString("reason"), step = o.optString("step");
+            String state = o.optString("state"), reason = o.optString("reason"), step = o.optString("step");
+            // a paused or failed job resumed (while the full check holds the packer, or its worker is slow to start): its state is not this run's until the
+            // packer saves it. A message counts as the file does: a state whose write failed (a full disk) reaches the build by it alone
+            if (since > 0 && o.optLong("updated", -1) == since) state = "";
             int si = Math.max(0, java.util.Arrays.asList(STEPS).indexOf(step));
             JSONObject st = o.optJSONObject("steps") != null ? o.optJSONObject("steps").optJSONObject(STEPS[si]) : null;
             long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
@@ -496,20 +490,13 @@ final class Prepare {
         try { return c.getString(c.getApplicationInfo().labelRes); } catch (RuntimeException e) { return "the app"; }
     }
 
-    /** job.json's "updated" (Job.save writes it at every save), -1 when it cannot be read */
-    private static long updated(File f) {
-        String t = read(f);
-        if (t == null) return -1;
-        try { return new JSONObject(t).optLong("updated", -1); } catch (org.json.JSONException e) { return -1; }
-    }
-
-    /** The job's file (own: its text) as the packer wrote it since this run started it, null while it is as this run left it ("updated" since) or unreadable */
-    private static JSONObject written(String own, long since) {
-        if (own == null) return null;
-        try {
-            JSONObject f = new JSONObject(own);
-            return since > 0 && f.optLong("updated", -1) == since ? null : f;
-        } catch (org.json.JSONException e) { return null; }
+    /**
+     * The job's "updated" as this run last read or wrote it (Job.save writes it at every save), -1 when unknown. Not job.json read again at the start: a job the
+     * packer finished while the build got ready (one it ran on after a build was cancelled) would be taken for the state from before, and the packer writes
+     * nothing more for a done job
+     */
+    private static long updatedOf(Object job) {
+        try { return ((JSONObject) Upstream.get(job, "o")).optLong("updated", -1); } catch (ReflectiveOperationException | RuntimeException e) { return -1; }
     }
 
     private static String read(File f) {
