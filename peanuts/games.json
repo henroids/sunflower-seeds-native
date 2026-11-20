@@ -46,7 +46,8 @@
     "0100F43008C44000",
     "0100DAE01E4C8000",
     "01006AE02236C000",
-    "01007A2027548000"
+    "01007A2027548000",
+    "010035F022078000"
   ],
   "games": [
     {
@@ -223,6 +224,23 @@
       "companion": false,
       "profile": "dm/games/01006AE02236C000/game.tsv",
       "note": "dm/games/01006AE02236C000/README.md"
+    },
+    {
+      "title_id": "010035F022078000",
+      "name": "DRAGON BALL: Sparking! ZERO",
+      "profile_name": "DRAGON BALL: Sparking! ZERO",
+      "builds": [
+        {
+          "version": "v0",
+          "number": 0,
+          "display": "1.0.0"
+        }
+      ],
+      "readme_update": "1.0.0",
+      "package": "v0",
+      "companion": false,
+      "profile": "dm/games/010035F022078000/game.tsv",
+      "note": "dm/games/010035F022078000/README.md"
     },
     {
       "title_id": "01003E601E324000",
