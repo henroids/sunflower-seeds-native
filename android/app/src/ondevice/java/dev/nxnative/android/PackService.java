@@ -166,6 +166,15 @@ public final class PackService extends Service {
             try { Outputs.delete(new File(j.dir(), "split")); } catch (IOException e) { Log.w(TAG, "split: " + e.getMessage()); }   // kept for the check only
             Log.i(TAG, "check: " + j.titleId() + ": the app was updated since the build: its full check is dropped (the next build makes a library of this app)");
         }
+        if (checkAsked && !check && (worker == null || !worker.isAlive())) {
+            // a check's start that runs nothing: answered as upstream answers a start with nothing to do, but with no job. Its startForeground(j), refused
+            // (a start from the background, the dataSync limit), marked a job that is not done paused "refused": a build whose job.json that was just then
+            // (its own start right behind) stopped with "Preparing paused" (found in review)
+            startForeground((Job) null);
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf(startId);
+            return START_NOT_STICKY;
+        }
         // PEANUTS end
         // A sticky restart (no intent: the process was killed) resumes only a job that was running; a start resumes one that is not done
         boolean go = check || !checkAsked && j != null && (intent == null ? "running".equals(j.state()) : !"done".equals(j.state()) || j.apkChanged());   // PEANUTS: check ||, !checkAsked: a check's start never runs a job (an app update's job waits for the user)

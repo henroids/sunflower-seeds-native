@@ -83,6 +83,19 @@ class Due(unittest.TestCase):
         self.assertIn('return CheckDue.replacedText(reuseDir(noBackup, titleId), name, since);', s)
 
 
+class Starts(unittest.TestCase):
+    """onStartCommand with a check's start (ReuseCheck.EXTRA_CHECK)"""
+    def on_start(self):
+        s = PACK.read_text(encoding='utf-8')
+        return s[s.index('final boolean checkAsked'):s.index('boolean go = ')]
+
+    def test_a_checks_start_that_runs_nothing_marks_no_job(self):
+        # such a start went on to upstream's answer, startForeground(j): refused (a start from the background, Android's dataSync limit), it marks a job that
+        # is not done paused "refused", and a build whose job.json was that job just then (its own start right behind) stopped with "Preparing paused"
+        self.assertRegex(self.on_start(), r'if \(checkAsked && !check && \(worker == null \|\| !worker\.isAlive\(\)\)\) \{[^}]*startForeground\(\(Job\) null\);'
+                                          r'\s*stopForeground\(STOP_FOREGROUND_REMOVE\);\s*stopSelf\(startId\);\s*return START_NOT_STICKY;')
+
+
 class Stale(unittest.TestCase):
     """What the packer sends to a client that binds after the check, and what a build takes from it"""
     def test_the_checks_end_leaves_no_job_to_send(self):
