@@ -27,7 +27,7 @@
 #include "vka_texown.h"
 #include "vka_tbuf.h"   // PEANUTS: which GPU writes keep a texel buffer from being read through the CPU's copy
 #include "vka_wbfollow.h"
-#include "vka_block_linear_spv.h"
+#include "vka_block_linear_spv.h"   // PEANUTS: the block-linear write-back shader (block_linear.comp)
 #include "../nvn/nvn_tex.h"
 
 __attribute__((weak)) int dm_codec_is_video_mem(const void *mem, uint64_t size, uint32_t *stride) { (void)mem; (void)size; (void)stride; return 0; }
@@ -2442,6 +2442,7 @@ static int tiled_wb_pipeline(void) {
     rc = vk.vkCreateShaderModule(V.dev, &si, NULL, &module);
     if (rc) {
         vk.vkDestroyPipelineLayout(V.dev, g_tiled_wb_layout, NULL);
+        g_tiled_wb_layout = VK_NULL_HANDLE;
         return 0;
     }
     VkComputePipelineCreateInfo ci = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -2453,6 +2454,7 @@ static int tiled_wb_pipeline(void) {
     if (rc) {
         g_tiled_wb_pipe = VK_NULL_HANDLE;
         vk.vkDestroyPipelineLayout(V.dev, g_tiled_wb_layout, NULL);
+        g_tiled_wb_layout = VK_NULL_HANDLE;
     }
     return rc == VK_SUCCESS;
 }
@@ -2545,7 +2547,7 @@ void vka_img_written_at(vka_img *im, int color_level, const char *file, int line
     if (img_wb_kind(im)) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 32)   // which GPU writes a copied-back linear texture takes (the copy-back covers the whole image)
         VLOG("linear texture serial %llu %ux%u format %#x: GPU write at frame %llu (%s:%d)%s", (unsigned long long)im->serial, im->w, im->h, im->d.format,
              (unsigned long long)vka_frame(), file, line, im->wb_pending ? ", a copy-back already queued" : ""); }
-    if (img_wb_kind(im)) wb_queue_locked(im);
+    if (img_wb_kind(im)) wb_queue_locked(im);   // PEANUTS: a linear copy-back, or below the render-written mips of a block-linear texture
     else if (color_level >= 0 && color_level < 32 && V.push_desc
              && VKA_ENV("DM_VK_TILED_WB", 1) && tiled_wb_kind(im)) {
         wb_queue_locked(im);
@@ -2558,10 +2560,12 @@ void vka_tex_writeback(VkCommandBuffer cb) {
     int any = 0;
     for (int i = 0; i < g_nwb; i++) {
         vka_img *im = g_wb[i];
-        if (!im) continue;
+        if (!im) continue;   // PEANUTS: cancelled (wb_cancel_locked); block-linear mips are packed by tiled_wb_record
         im->wb_pending = 0;
         if (im->tiled_wb_levels) {
-            if (tiled_wb_record(cb, im, im->tiled_wb_levels)) any = 0;
+            if (tiled_wb_record(cb, im, im->tiled_wb_levels)) any = 0;   // its compute pass wrote guest storage: a later linear copy-back takes its own barrier
+            else VRED_ONCE("block-linear texture serial %llu %ux%u format %#x: rendered mips %#x not written back into its storage: the CPU reads what it held",
+                           (unsigned long long)im->serial, im->w, im->h, im->d.format, im->tiled_wb_levels);
             im->tiled_wb_levels = 0;
             unref_locked(im);
             continue;

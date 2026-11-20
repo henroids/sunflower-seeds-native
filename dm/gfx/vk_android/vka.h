@@ -380,7 +380,7 @@ vka_img *vka_tex_ref(vka_img *im);                  // one more reference to im 
 void vka_tex_drop_pool(const void *pool);            // drop all images belonging to a finalized memory pool
 // The GPU writes im (render target, clear, copy destination, storage image): its content is the GPU's from now on (no re-upload from storage), and a linear texture's level 0
 // is copied back into its storage when the submission ends (vka_tex_writeback), where the CPU reads it as it would on the Switch
-void vka_img_written_at(vka_img *im, int color_level, const char *file, int line);
+void vka_img_written_at(vka_img *im, int color_level, const char *file, int line);   // PEANUTS: color_level, the colour target mip written (-1: any other write)
 #define vka_img_written(im) vka_img_written_at(im, -1, __FILE_NAME__, __LINE__)   // (the site is logged for a large image's first write, DM_VK_BIGIMG_MB)
 #define vka_img_color_written(im, lv) vka_img_written_at(im, (int)(lv), __FILE_NAME__, __LINE__)
 // Before a write is recorded into im (an attachment, a clear, a copy destination, a storage image): a zero-shared image gets memory of its own, cleared (vka_tex.c img_own).
