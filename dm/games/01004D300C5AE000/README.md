@@ -86,7 +86,9 @@ The two runs below used `aspect 21:9` and `aspect 8:7` rows and the Aspect ratio
 
 **8:7 on the Thor's second screen (the same build and driver, Settings › Library › Swap screens on, Aspect ratio 8:7):** the log has `aspect plan: 1 words for the 1.1429 picture` and `swapchain 1080x1240`; the picture fills the 1240x1080 screen with no bars and the scenery and Kirby keep their proportions, 59 fps at the 60 limit with the GPU at 11.1 ms on the beach, 47 fps a minute later in the first stage with the GPU at 8.6 ms and the SoC at 90 °C (the top screen's 21:9 runs came just before it). No HUD element was on screen in the two captures, so whether the HUD stays inside the narrower picture is open.
 
-Not run yet: Screen shape, the HUD at 8:7, the menus and the movies at either shape, and a 16:9 capture of the same spot to measure how much the view changes.
+**Fill on the Thor's second screen (dev build 73e1d54e, Display › Fill the screen, Swap screens on):** the log has `aspect ratio: screen shape, window 1240x1080 -> 31:27` and `aspect plan: 1 words for the 1.1481 picture`, and the game runs at 60 fps on the title screen. **Known limit on a screen narrower than 16:9:** the title screen's game logo is cut at the picture's left edge (the game's own frame, `ctl` screenshot of frame 3325); the Nintendo and HAL marks in the corners and the file menu follow the shape. So the 3D view fills such a screen, and a 2D element the game places for 16:9 can fall outside it. Nothing of the kind was seen at 21:9.
+
+Not run yet: Fill on a screen wider than 16:9, the HUD at 8:7, the menus and the movies at either shape, and a 16:9 capture of the same spot to measure how much the view changes.
 <!-- PEANUTS end -->
 
 ## Audio
