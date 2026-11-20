@@ -1325,12 +1325,18 @@ NVN(nvnCommandBufferIsRecording, NVNboolean, const NVNcommandBuffer *c) { return
 // PEANUTS begin: CopyCommands copies, as in NVN. The game may record over the source's command memory as soon as the copy is made; a CALL into it, read a frame
 // later by the Android replay worker, found other records there (Unicorn Overlord: a record size of pixel data, then a jump into unmapped memory). Inline replay
 // read the CALL at submit time, before the game reused the memory. The source's records are copied into this buffer up to its END, across its JUMPs.
+// The largest record the host records: an uniform update of the NVN limit (64 KiB) and its header. A larger size is stale memory, never a record
+enum { CMD_COPY_REC_MAX = (64 << 10) + 64 };
 static void cmd_copy_list(cmd_t *o, const uint8_t *s) {
     for (unsigned n = 0; s && n < (1u << 22); n++) {
+        if (dm_guest_unmapped((uintptr_t)s, 16)) {   // a jump (or a stale handle) into a page the guest has not mapped: reading it would fault
+            static int once; if (!once++) LOG("[RED] CopyCommands: record %u of the source list at %p is in memory the guest has not mapped: the copy stops there", n, (const void *)s);
+            return;
+        }
         op_hdr h; memcpy(&h, s, sizeof h);
         if (h.op == OP_END) return;
         if (h.op == OP_JUMP && h.size >= 16) { memcpy(&s, s + 8, 8); continue; }
-        if (h.size < 8 || (h.size & 7) || h.op >= OP_COUNT_) {
+        if (h.size < 8 || (h.size & 7) || h.op >= OP_COUNT_ || h.size > CMD_COPY_REC_MAX || dm_guest_unmapped((uintptr_t)s, h.size)) {
             static int once; if (!once++) LOG("[RED] CopyCommands: record %u of the source list at %p is not a record (op %u, size %u): the copy stops there", n, (const void *)s, h.op, h.size);
             return;
         }
