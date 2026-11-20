@@ -748,23 +748,32 @@ def in_parallel(fn, jobs, phase=None):
 def in_forks(fn, jobs, phase=None):
     """in_parallel by os.fork where multiprocessing cannot run: WORKERS children, child i computing jobs i, i + n, i + 2n, ..., its results pickled back through a
     pipe; a progress line for phase as each child is done. A child that fails or ends without its results fails the call; any error here (a stop: the tool is
-    interrupted) kills the children first. Forked from the process's one Python thread: a child only computes, writes its pipe and leaves with os._exit (no
-    atexit, no flush of buffers it inherited, which were flushed before the fork)"""
-    import pickle, warnings
+    interrupted) kills the children first. Forked from the process's one Python thread: a child only computes, writes its pipe, flushes what it printed and
+    leaves with os._exit (no atexit; the buffers it inherited were flushed before the fork). The heap is frozen while the children run (gc.freeze): a collection
+    in a child walks every object it inherited and copies its pages, which a model of the phone's rewrite (1 GB of objects, two children) took from 1.06 to
+    2.4 GB. The children follow the worker's CPUs and nice (follow_parent_cpus: nxpack_worker's game-yield watch reaches only the worker's own threads)"""
+    import gc, pickle, warnings
     n = min(WORKERS, len(jobs)); kids = []
     sys.stdout.flush(); sys.stderr.flush()
+    gc.freeze()
     try:
         for i in range(n):
             r, w = os.pipe()
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', r'This process .* is multi-threaded', DeprecationWarning)   # a native helper thread (nxpack_worker's yield watch) holds no Python state
-                pid = os.fork()
+            try:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', r'This process .* is multi-threaded', DeprecationWarning)   # a native helper thread (nxpack_worker's yield watch) holds no Python state
+                    pid = os.fork()
+            except BaseException:   # no fork (no memory for another process): its pipe goes with it
+                os.close(r); os.close(w)
+                raise
             if pid == 0:
                 try:
                     os.close(r)
+                    follow_parent_cpus()
                     try: data = pickle.dumps((True, [(k, fn(*jobs[k])) for k in range(i, len(jobs), n)]))
                     except BaseException as e: data = pickle.dumps((False, f'{type(e).__name__}: {e}'))
                     with os.fdopen(w, 'wb') as f: f.write(data)
+                    sys.stdout.flush(); sys.stderr.flush()
                 finally: os._exit(0)
             os.close(w); kids.append([pid, r])
         out, bad = [None] * len(jobs), None
@@ -781,6 +790,7 @@ def in_forks(fn, jobs, phase=None):
         if bad: raise RuntimeError(f'a rewrite worker failed: {bad}')
         return out
     finally:
+        gc.unfreeze()
         for pid, r in kids:   # left only when something above failed
             if r is not None:
                 try: os.close(r)
@@ -788,6 +798,23 @@ def in_forks(fn, jobs, phase=None):
             if pid is not None:
                 try: os.kill(pid, signal.SIGKILL); os.waitpid(pid, 0)
                 except OSError: pass
+
+
+def follow_parent_cpus():
+    """In a child of in_forks: every 2 s, the CPUs and the nice value of its parent (nxpack_worker's game-yield watch, pack_worker.c yield_watch, moves the
+    worker's own threads to the slow cores and lowers their priority when a game starts; a child is a process of its own, which stayed on every core beside the
+    game: found in review). A nice value that cannot go down again stays, as pack_worker.c's own restore; the CPUs come back"""
+    if not hasattr(os, 'sched_setaffinity'): return
+    import threading, time
+
+    def watch(parent=os.getppid(), me=os.getpid()):   # (me: the child's main thread, which computes; 0 would be this thread alone on Linux)
+        while True:
+            try: os.sched_setaffinity(me, os.sched_getaffinity(parent))
+            except OSError: pass
+            try: os.setpriority(os.PRIO_PROCESS, me, os.getpriority(os.PRIO_PROCESS, parent))
+            except OSError: pass
+            time.sleep(2)
+    threading.Thread(target=watch, daemon=True).start()
 # PEANUTS end
 
 def find_x18_words():

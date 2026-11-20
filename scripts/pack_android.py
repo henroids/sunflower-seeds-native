@@ -574,13 +574,27 @@ def pn_rewrite_worker(script, args, env, log, progress=None):
         p = subprocess.Popen(cmd + ['-c', REWRITE_BOOT, str(script)] + [str(a) for a in args], env={**os.environ, **env, 'DM_REWRITE_J': str(j)},
                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='backslashreplace',
                              start_new_session=True)
+        # the pipe is read in a thread: a stop (an exception the packer raises in this thread, at its next bytecode) reached a read of it only with the
+        # worker's next line, and in_forks' parent prints one only as each child is done (ACNH's spin phase on two workers: about 30 s), past the 20 s
+        # after which PackService ends the process (found in review); a read that fails (the log's storage full) ends the worker here as before
+        import threading
+        failed = []
+
+        def pump():
+            try:
+                for line in p.stdout: tee.write(line)
+            except BaseException as e: failed.append(e)
+        reader = threading.Thread(target=pump, name='pn-rewrite-log', daemon=True)
         try:
-            for line in p.stdout: tee.write(line)
+            reader.start()
+            while reader.is_alive(): reader.join(0.5)
+            if failed: raise failed[0]
             return p.wait()
         except BaseException:
             try: os.killpg(p.pid, signal.SIGKILL)
             except OSError: pass
             p.wait()
+            reader.join(5)
             raise
 # PEANUTS end
 

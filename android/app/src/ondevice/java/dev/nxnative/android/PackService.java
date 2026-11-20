@@ -337,6 +337,7 @@ public final class PackService extends Service {
     /** PEANUTS: an env.txt value for a worker count, kept to the memory plan's counts */
     private String capped(String key, String value, BuildMemory.Plan mem) {
         if (key.equals("DMSH_VK_XLATE_J")) return BuildMemory.cap(value, mem.xlate);
+        if (key.equals("PN_REWRITE_J")) return BuildMemory.cap(value, mem.workers);   // PEANUTS: the rewrite's forks, as the split's workers (found in review)
         if (key.equals("J") || key.equals("DMSH_VK_WORKERS") || key.equals("DMSH_VK_PROCS")) return BuildMemory.cap(value, mem.workers);
         return value;
     }

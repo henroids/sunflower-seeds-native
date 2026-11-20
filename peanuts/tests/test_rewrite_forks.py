@@ -3,9 +3,15 @@ spin phases fork their workers themselves. The function is taken out of patch_ns
 with stand-ins for what it uses. The results must be in_serial's, in order; a child that fails, or ends without its results, fails the call, and leaves no child
 behind. Skipped where os.fork is missing (Windows). No game files."""
 import ast
+import ctypes
+import importlib.util
 import os
+import shutil
 import signal
 import sys
+import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -13,12 +19,12 @@ REPO = Path(__file__).resolve().parents[2]
 SRC = (REPO / 'dm/tools/patch_nso.py').read_text(encoding='utf-8')
 
 
-def borrowed(names, workers):
-    """in_serial and in_forks from patch_nso.py, with WORKERS and a progress that records its calls"""
+def borrowed(names, workers, os_=os):
+    """in_serial and in_forks from patch_nso.py (with the helpers in_forks calls), with WORKERS and a progress that records its calls"""
     tree = ast.parse(SRC)
-    fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+    fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in set(names) | {'follow_parent_cpus'}]
     calls = []
-    ns = {'os': os, 'sys': sys, 'signal': signal, 'WORKERS': workers, 'progress': lambda phase, done=0, total=1: calls.append((phase, done, total))}
+    ns = {'os': os_, 'sys': sys, 'signal': signal, 'WORKERS': workers, 'progress': lambda phase, done=0, total=1: calls.append((phase, done, total))}
     exec(compile(ast.Module(body=fns, type_ignores=[]), 'patch_nso.py', 'exec'), ns)
     return ns, calls
 
@@ -63,6 +69,127 @@ class Forks(unittest.TestCase):
         try: os.waitpid(-1, os.WNOHANG)
         except ChildProcessError: return []
         return ['a child is left']
+
+    @unittest.skipUnless(os.path.isdir('/proc/self/fd'), 'no /proc')
+    def test_a_fork_that_fails_leaves_no_descriptor(self):
+        class NoSecondFork:   # os, whose second fork fails (no memory for another process)
+            forks = 0
+            def __getattr__(self, name): return getattr(os, name)
+            def fork(self):
+                NoSecondFork.forks += 1
+                if NoSecondFork.forks == 2: raise OSError(12, 'Cannot allocate memory')
+                return os.fork()
+        ns, _ = borrowed({'in_forks'}, 3, NoSecondFork())
+        before = len(os.listdir('/proc/self/fd'))
+        with self.assertRaises(OSError): ns['in_forks'](square_plus, [(i, 1) for i in range(9)])
+        self.assertEqual(len(os.listdir('/proc/self/fd')), before)   # the failed fork's pipe closed too
+        self.assertEqual(self.children(), [])
+
+    def test_a_childs_own_output_is_kept(self):
+        # multiprocessing's workers flush their output when they end; a child of in_forks left with os._exit, and what it printed was lost
+        ns, _ = borrowed({'in_forks'}, 2)
+        with tempfile.TemporaryFile('w+') as out:
+            saved = sys.stdout
+            sys.stdout = out
+            try: ns['in_forks'](prints, [(i,) for i in range(4)])
+            finally: sys.stdout = saved
+            out.seek(0)
+            self.assertEqual(sorted(l for l in out.read().splitlines() if l.startswith('piece')), ['piece 0', 'piece 1', 'piece 2', 'piece 3'])
+
+    @unittest.skipUnless(hasattr(os, 'sched_getaffinity') and len(os.sched_getaffinity(0)) > 1, 'one CPU, or no affinity here')
+    def test_the_children_follow_the_workers_cpus(self):
+        # nxpack_worker's game-yield watch (pack_worker.c yield_watch) moves the worker's own threads to the slow cores when a game starts; the forks are
+        # processes of their own, and stayed on every core beside the game
+        ns, _ = borrowed({'in_forks'}, 2)
+        mine = os.sched_getaffinity(0)
+        one = {min(mine)}
+        moved = threading.Timer(0.5, lambda: os.sched_setaffinity(os.getpid(), one))   # the watch, from a thread of its own, as in the worker
+        moved.start()
+        try: got = ns['in_forks'](cpus_after, [(3.5,), (3.5,)])
+        finally: moved.cancel(); os.sched_setaffinity(os.getpid(), mine)
+        self.assertEqual(got, [sorted(one), sorted(one)])
+
+    def test_the_heap_is_frozen_while_the_children_run(self):
+        # a collection in a child walks the parent's objects and copies their pages (copy on write): a parent of 1 GB of objects and two children came to
+        # 2.4 GB of memory in a model of it; gc.freeze before the forks keeps them shared
+        body = SRC[SRC.index('def in_forks('):SRC.index('\ndef ', SRC.index('def in_forks(') + 1)]
+        self.assertIn('gc.freeze()', body)
+        self.assertIn('gc.unfreeze()', body)
+
+
+def prints(a):
+    print(f'piece {a}')
+    return a
+
+
+def cpus_after(seconds):
+    time.sleep(seconds)
+    return sorted(os.sched_getaffinity(0))
+
+
+def load_pack_android():
+    spec = importlib.util.spec_from_file_location('pack_android_for_test', REPO / 'scripts/pack_android.py')
+    m = importlib.util.module_from_spec(spec)
+    argv = sys.argv
+    try: spec.loader.exec_module(m)
+    finally: sys.argv = argv
+    return m
+
+
+@unittest.skipUnless(hasattr(os, 'killpg'), 'no process groups here')
+class Worker(unittest.TestCase):
+    """scripts/pack_android.py pn_rewrite_worker: the packer stops a tool by an exception in its thread (PackEngine: PyThreadState_SetAsyncExc), which Python raises
+    at that thread's next bytecode; blocked in a read of the worker's pipe it waited for the worker's next line, and in_forks' parent prints one only as each
+    child is done (ACNH's spin phase on two workers: about 30 s), past the 20 s after which PackService ends the process"""
+    def setUp(self):
+        self.pa = load_pack_android()
+        self.d = Path(tempfile.mkdtemp(prefix='pnworker_'))
+        self.addCleanup(lambda: shutil.rmtree(self.d, ignore_errors=True))
+        self.env = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(self.env)))
+        os.environ.update(DM_SPLIT_WORKER=sys.executable, PN_REWRITE_J='2')
+
+    def run_tool(self, script, stop_after=None, progress=None):
+        """pn_rewrite_worker on script in a thread of its own, stopped after stop_after s as the packer stops it → (how it ended, its seconds after the stop)"""
+        (self.d / 'tool.py').write_text(script)
+        got = {}
+
+        def tool():
+            try: got['end'] = self.pa.pn_rewrite_worker(self.d / 'tool.py', [], {}, self.d / 'tool.log', progress)
+            except BaseException as e: got['end'] = type(e).__name__
+            got['at'] = time.monotonic()
+        t = threading.Thread(target=tool); t.start()
+        if stop_after is not None:
+            time.sleep(stop_after)
+            asked = time.monotonic()
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(t.ident), ctypes.py_object(KeyboardInterrupt))
+        else: asked = time.monotonic()
+        t.join(30)
+        self.assertFalse(t.is_alive(), 'the tool did not end')
+        return got['end'], got['at'] - asked
+
+    def test_a_stop_reaches_it_while_the_worker_prints_nothing(self):
+        end, after = self.run_tool('import time\nprint("progress 1 2 spin", flush=True)\ntime.sleep(20)\n', stop_after=1.0)
+        self.assertEqual(end, 'KeyboardInterrupt')
+        self.assertLess(after, 3)
+
+    def test_its_output_and_exit_code(self):
+        end, _ = self.run_tool('import sys\nprint("progress 1 2 spin", flush=True)\nprint("done")\nsys.exit(3)\n', progress=(100, 200))
+        self.assertEqual(end, 3)
+        self.assertEqual((self.d / 'tool.log').read_text().splitlines(), ['progress 1 2 spin', 'done'])
+
+    def test_a_log_that_cannot_be_written_ends_the_worker(self):
+        # the pipe is read in a thread: one that fails must end the call and the worker, not leave the worker blocked on a full pipe and the call waiting
+        class Broken:
+            def write(self, s): raise OSError(28, 'No space left on device')
+            def flush(self): pass
+        saved = sys.stdout
+        sys.stdout = Broken()   # where ProgressTee passes the progress lines on
+        try: end, after = self.run_tool('import time\nprint("progress 1 2 spin", flush=True)\nfor i in range(200000): print("x" * 80)\ntime.sleep(30)\n',
+                                        progress=(0, 1000))
+        finally: sys.stdout = saved
+        self.assertEqual(end, 'OSError')
+        self.assertLess(after, 10)
 
 
 class Wiring(unittest.TestCase):
