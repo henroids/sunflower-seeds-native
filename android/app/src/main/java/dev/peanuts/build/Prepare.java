@@ -463,7 +463,7 @@ final class Prepare {
         switch (r) {
             case "user": return "by you";
             case "battery": return "battery below 20 %: plug in the charger to go on";
-            case "thermal": return "the phone is too hot: it goes on when it has cooled";
+            case "thermal": return "the phone is too hot: it goes on when it has cooled. If it is not hot, tap Go on anyway in the build notification (remembered for this device)";
             case "timeout": return "Android's daily limit for background work";
             case "refused": return "Android did not let it start in the background";
             case "apk": return "the app was updated";
