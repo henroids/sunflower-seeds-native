@@ -64,6 +64,7 @@
       "readme_update": "3.0.3",
       "package": "v2228224",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01006F8002326000/game.tsv",
       "note": "dm/games/01006F8002326000/README.md"
     },
@@ -81,6 +82,7 @@
       "readme_update": "1.0.1",
       "package": "v65536",
       "companion": false,
+      "since": null,
       "profile": "dm/games/01007300020FA000/game.tsv",
       "note": "dm/games/01007300020FA000/README.md"
     },
@@ -98,6 +100,7 @@
       "readme_update": "1.0.6",
       "package": "v327680",
       "companion": false,
+      "since": null,
       "profile": "dm/games/01009720213B0000/game.tsv",
       "note": "dm/games/01009720213B0000/README.md"
     },
@@ -115,6 +118,7 @@
       "readme_update": "1.1.0",
       "package": "v65536",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100BA4026E94000/game.tsv",
       "note": "dm/games/0100BA4026E94000/README.md"
     },
@@ -132,6 +136,7 @@
       "readme_update": "1.41",
       "package": "v1310720",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100C510166F0000/game.tsv",
       "note": "dm/games/0100C510166F0000/README.md"
     },
@@ -149,6 +154,7 @@
       "readme_update": "1.0.15",
       "package": "v983040",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100F9F00C696000/game.tsv",
       "note": "dm/games/0100F9F00C696000/README.md"
     },
@@ -166,6 +172,7 @@
       "readme_update": "1.0.6.1267",
       "package": "v3080192",
       "companion": true,
+      "since": null,
       "profile": "dm/games/010097F018538000/game.tsv",
       "note": "dm/games/010097F018538000/README.md"
     },
@@ -183,6 +190,7 @@
       "readme_update": "1.80",
       "package": "v917504",
       "companion": false,
+      "since": null,
       "profile": "dm/games/0100AD80208A8000/game.tsv",
       "note": "dm/games/0100AD80208A8000/README.md"
     },
@@ -200,6 +208,7 @@
       "readme_update": "2.7.7.92380",
       "package": "v1441792",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01001B300B9BE000/game.tsv",
       "note": "dm/games/01001B300B9BE000/README.md"
     },
@@ -222,6 +231,7 @@
       "readme_update": "1.0.0, N1.10",
       "package": "v65536",
       "companion": false,
+      "since": "0.1.6",
       "profile": "dm/games/01006AE02236C000/game.tsv",
       "note": "dm/games/01006AE02236C000/README.md"
     },
@@ -239,6 +249,7 @@
       "readme_update": "1.0.0",
       "package": "v0",
       "companion": false,
+      "since": "0.1.6",
       "profile": "dm/games/010035F022078000/game.tsv",
       "note": "dm/games/010035F022078000/README.md"
     },
@@ -256,6 +267,7 @@
       "readme_update": "1.1.2",
       "package": "v262144",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01003E601E324000/game.tsv",
       "note": "dm/games/01003E601E324000/README.md"
     },
@@ -278,6 +290,7 @@
       "readme_update": "1.8d.6523, 1.8d.f570",
       "package": "v524288",
       "companion": false,
+      "since": null,
       "profile": "dm/games/0100C49025D3E000/game.tsv",
       "note": "dm/games/0100C49025D3E000/README.md"
     },
@@ -295,6 +308,7 @@
       "readme_update": "1.0.1",
       "package": "v65536",
       "companion": false,
+      "since": null,
       "profile": "dm/games/0100606026F12000/game.tsv",
       "note": "dm/games/0100606026F12000/README.md"
     },
@@ -312,6 +326,7 @@
       "readme_update": "2.0.0",
       "package": "v327680",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100A6301214E000/game.tsv",
       "note": "dm/games/0100A6301214E000/README.md"
     },
@@ -329,6 +344,7 @@
       "readme_update": "1.2.0",
       "package": "v327680",
       "companion": true,
+      "since": null,
       "profile": "dm/games/010055D009F78000/game.tsv",
       "note": "dm/games/010055D009F78000/README.md"
     },
@@ -346,6 +362,7 @@
       "readme_update": "1.1.0",
       "package": "v65536",
       "companion": false,
+      "since": null,
       "profile": "dm/games/01004D300C5AE000/game.tsv",
       "note": "dm/games/01004D300C5AE000/README.md"
     },
@@ -363,6 +380,7 @@
       "readme_update": "1.0.0",
       "package": "v0",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01006B601380E000/game.tsv",
       "note": "dm/games/01006B601380E000/README.md"
     },
@@ -380,6 +398,7 @@
       "readme_update": "1.4.0",
       "package": "v327680",
       "companion": false,
+      "since": null,
       "profile": "dm/games/0100DCA0064A6000/game.tsv",
       "note": "dm/games/0100DCA0064A6000/README.md"
     },
@@ -402,6 +421,7 @@
       "readme_update": "4.0.0, 4.0.1",
       "package": "v1507328",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100152000022000/game.tsv",
       "note": "dm/games/0100152000022000/README.md"
     },
@@ -419,6 +439,7 @@
       "readme_update": "2.1.0",
       "package": "v327680",
       "companion": true,
+      "since": null,
       "profile": "dm/games/010093801237C000/game.tsv",
       "note": "dm/games/010093801237C000/README.md"
     },
@@ -436,6 +457,7 @@
       "readme_update": "2.1.0",
       "package": "v524288",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100A0F00DA68000/game.tsv",
       "note": "dm/games/0100A0F00DA68000/README.md"
     },
@@ -453,6 +475,7 @@
       "readme_update": "1.4.2.0",
       "package": "v851968",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100B63016916000/game.tsv",
       "note": "dm/games/0100B63016916000/README.md"
     },
@@ -470,6 +493,7 @@
       "readme_update": "1.0.5",
       "package": "v327680",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01005270232F2000/game.tsv",
       "note": "dm/games/01005270232F2000/README.md"
     },
@@ -487,6 +511,7 @@
       "readme_update": "1.0.2",
       "package": "v65536",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01005CA01580E000/game.tsv",
       "note": "dm/games/01005CA01580E000/README.md"
     },
@@ -504,6 +529,7 @@
       "readme_update": "1.3.0",
       "package": "v393216",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100000011D90000/game.tsv",
       "note": "dm/games/0100000011D90000/README.md"
     },
@@ -521,6 +547,7 @@
       "readme_update": "1.1.1",
       "package": "v262144",
       "companion": false,
+      "since": null,
       "profile": "dm/games/01001F5010DFA000/game.tsv",
       "note": "dm/games/01001F5010DFA000/README.md"
     },
@@ -538,6 +565,7 @@
       "readme_update": "2.0.2",
       "package": "v393216",
       "companion": false,
+      "since": "0.1.6",
       "profile": "dm/games/0100F43008C44000/game.tsv",
       "note": "dm/games/0100F43008C44000/README.md"
     },
@@ -555,6 +583,7 @@
       "readme_update": "1.3.2",
       "package": "v458752",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01008DB008C2C000/game.tsv",
       "note": "dm/games/01008DB008C2C000/README.md"
     },
@@ -572,6 +601,7 @@
       "readme_update": "1.3.0",
       "package": "v393216",
       "companion": true,
+      "since": null,
       "profile": "dm/games/010018E011D92000/game.tsv",
       "note": "dm/games/010018E011D92000/README.md"
     },
@@ -589,6 +619,7 @@
       "readme_update": "1.3.2",
       "package": "v458752",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100ABF008968000/game.tsv",
       "note": "dm/games/0100ABF008968000/README.md"
     },
@@ -606,6 +637,7 @@
       "readme_update": "131072",
       "package": "v131072",
       "companion": true,
+      "since": null,
       "profile": "dm/games/010099A00BC1E000/game.tsv",
       "note": "dm/games/010099A00BC1E000/README.md"
     },
@@ -623,6 +655,7 @@
       "readme_update": "v655360",
       "package": "v655360",
       "companion": false,
+      "since": "0.1.6",
       "profile": "dm/games/0100DAE01E4C8000/game.tsv",
       "note": "dm/games/0100DAE01E4C8000/README.md"
     },
@@ -640,6 +673,7 @@
       "readme_update": "1.2.2",
       "package": "v262144",
       "companion": false,
+      "since": null,
       "profile": "dm/games/010028600EBDA000/game.tsv",
       "note": "dm/games/010028600EBDA000/README.md"
     },
@@ -657,6 +691,7 @@
       "readme_update": "1.2.1",
       "package": "v327680",
       "companion": true,
+      "since": null,
       "profile": "dm/games/010015100B514000/game.tsv",
       "note": "dm/games/010015100B514000/README.md"
     },
@@ -674,6 +709,7 @@
       "readme_update": "1.4.1",
       "package": "v393216",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100000000010000/game.tsv",
       "note": "dm/games/0100000000010000/README.md"
     },
@@ -696,6 +732,7 @@
       "readme_update": "1.6.0, 1.9.0",
       "package": "v1114112",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01007EF00011E000/game.tsv",
       "note": "dm/games/01007EF00011E000/README.md"
     },
@@ -713,6 +750,7 @@
       "readme_update": "1.1.0",
       "package": "v196608",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01008CF01BAAC000/game.tsv",
       "note": "dm/games/01008CF01BAAC000/README.md"
     },
@@ -730,6 +768,7 @@
       "readme_update": "1.1.0",
       "package": "v131072",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01006BB00C6F0000/game.tsv",
       "note": "dm/games/01006BB00C6F0000/README.md"
     },
@@ -747,6 +786,7 @@
       "readme_update": "1.0.1",
       "package": "v65536",
       "companion": true,
+      "since": null,
       "profile": "dm/games/01002DA013484000/game.tsv",
       "note": "dm/games/01002DA013484000/README.md"
     },
@@ -764,6 +804,7 @@
       "readme_update": "1.4.3",
       "package": "v720896",
       "companion": false,
+      "since": null,
       "profile": "dm/games/0100F2C0115B6000/game.tsv",
       "note": "dm/games/0100F2C0115B6000/README.md"
     },
@@ -781,6 +822,7 @@
       "readme_update": "1.0.4",
       "package": "v262144",
       "companion": false,
+      "since": null,
       "profile": "dm/games/010051F0207B2000/game.tsv",
       "note": "dm/games/010051F0207B2000/README.md"
     },
@@ -798,6 +840,7 @@
       "readme_update": "1.0.3",
       "package": "v327680",
       "companion": false,
+      "since": "0.1.6",
       "profile": "dm/games/01007A2027548000/game.tsv",
       "note": "dm/games/01007A2027548000/README.md"
     },
@@ -815,6 +858,7 @@
       "readme_update": "1.05",
       "package": "v262144",
       "companion": false,
+      "since": null,
       "profile": "dm/games/010069401ADB8000/game.tsv",
       "note": "dm/games/010069401ADB8000/README.md"
     },
@@ -832,6 +876,7 @@
       "readme_update": "1.0.2",
       "package": "v131072",
       "companion": false,
+      "since": null,
       "profile": "dm/games/0100453019AA8000/game.tsv",
       "note": "dm/games/0100453019AA8000/README.md"
     },
@@ -849,6 +894,7 @@
       "readme_update": "Base game (v0)",
       "package": "v0",
       "companion": true,
+      "since": null,
       "profile": "dm/games/0100C2901153C000/game.tsv",
       "note": "dm/games/0100C2901153C000/README.md"
     }

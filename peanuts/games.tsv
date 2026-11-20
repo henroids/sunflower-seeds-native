@@ -7,6 +7,8 @@
 #   update     the Game update cell, only for a game whose profile has no display version ("?"); empty: the profile's versions
 #   companion  yes or no: whether eden-duo-companions has a release for it. games_catalog.py --refresh sets it from those releases, and adds
 #              a row (the profile's name, at the end) for a game that ships without one
+#   since      optional: the release a game first ships in ("0.1.6"); while peanuts/VERSION is older, the README counts it as coming
+#              in that release and marks its row. Empty: it shipped in an earlier release
 01006BB00C6F0000	The Legend of Zelda: Link's Awakening		yes
 01008CF01BAAC000	The Legend of Zelda: Echoes of Wisdom		yes
 010055D009F78000	Fire Emblem: Three Houses		yes
@@ -48,8 +50,8 @@
 010051F0207B2000	Tomodachi Life: Living the Dream		no
 010069401ADB8000	Unicorn Overlord		no
 0100DCA0064A6000	Luigi's Mansion 3		no
-0100F43008C44000	Pokémon Legends: Z-A		no
-0100DAE01E4C8000	STORY OF SEASONS: Grand Bazaar		no
-01006AE02236C000	Double Dragon Revive		no
-01007A2027548000	Trails in the Sky 2nd Chapter		no
-010035F022078000	DRAGON BALL: Sparking! ZERO		no
+0100F43008C44000	Pokémon Legends: Z-A		no	0.1.6
+0100DAE01E4C8000	STORY OF SEASONS: Grand Bazaar		no	0.1.6
+01006AE02236C000	Double Dragon Revive		no	0.1.6
+01007A2027548000	Trails in the Sky 2nd Chapter		no	0.1.6
+010035F022078000	DRAGON BALL: Sparking! ZERO		no	0.1.6

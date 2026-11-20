@@ -47,10 +47,11 @@ def game_rows(root=ROOT):
     for ln in (root / GAMES).read_text(encoding='utf-8').splitlines():
         if not ln.strip() or ln.startswith('#'):
             continue
-        cells = (ln.split('\t') + ['', '', ''])[:4]
+        cells = (ln.split('\t') + ['', '', '', ''])[:5]
         comp = cells[3].strip().casefold()
         rows[cells[0].strip()] = {'name': cells[1].strip(), 'update': cells[2].strip(),
-                                  'companion': True if comp == 'yes' else False if comp == 'no' else None}
+                                  'companion': True if comp == 'yes' else False if comp == 'no' else None,
+                                  'since': cells[4].strip()}   # the release a game first ships in; empty: an earlier one
     return rows
 
 
@@ -111,6 +112,7 @@ def build(root=ROOT, warn=print):
             'readme_update': cell or ', '.join(d if d != '?' else v for v, d in reversed(plays)),
             'package': p['package'],
             'companion': row['companion'] if row else None,
+            'since': row['since'] or None if row else None,
             'profile': f'dm/games/{t}/game.tsv',
             'note': f'dm/games/{t}/README.md' if note.is_file() else None,
         })
@@ -128,15 +130,33 @@ def render(catalog):
     return json.dumps(catalog, ensure_ascii=False, indent=2) + '\n'
 
 
+def vkey(v):
+    """A version as numbers for comparing (0.1.10 after 0.1.9)"""
+    return tuple(int(x) for x in re.findall(r'\d+', v or ''))
+
+
+def upcoming(g, version):
+    """Whether a game first ships in a release after this app version (games.tsv's since column)"""
+    return bool(g.get('since')) and vkey(g['since']) > vkey(version)
+
+
 def table(catalog):
-    """The text between the README's markers: the count sentence and the table, in games.tsv's order"""
+    """The text between the README's markers: the count sentence and the table, in games.tsv's order. A game whose since column names a
+    later release than peanuts/VERSION is not counted in this version and is marked with the release it comes in"""
     by_id = {g['title_id']: g for g in catalog['games']}
-    lines = [f'Peanuts Native {catalog["app_version"]} includes {len(by_id)} games. The Companion column shows whether a game appears in the '
+    ver = catalog['app_version']
+    later = [g for g in by_id.values() if upcoming(g, ver)]
+    head = f'Peanuts Native {ver} includes {len(by_id) - len(later)} games'
+    if later:
+        nxt = sorted({g['since'] for g in later}, key=vkey)
+        head += f', and {len(later)} more {"are" if len(later) > 1 else "is"} coming in {" and ".join(nxt)} (marked in the table)'
+    lines = [head + '. The Companion column shows whether a game appears in the '
              'Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.', '',
              '| Game | Title ID | Game update | Companion |', '|---|---|---|---|']
     for t in catalog['readme_order']:
         g = by_id[t]
-        lines.append(f'| {g["name"]} | `{t}` | {g["readme_update"]} | {"Yes" if g["companion"] else "No"} |')
+        name = f'{g["name"]} (coming in {g["since"]})' if upcoming(g, ver) else g['name']
+        lines.append(f'| {name} | `{t}` | {g["readme_update"]} | {"Yes" if g["companion"] else "No"} |')
     return '\n'.join(lines)
 
 
@@ -180,11 +200,11 @@ def refresh(root=ROOT, warn=print, fetch=companions):
     out, seen = [], set()
     for ln in text.splitlines():
         if ln.strip() and not ln.startswith('#'):
-            cells = (ln.split('\t') + ['', '', ''])[:4]
+            cells = (ln.split('\t') + ['', '', '', ''])[:5]
             seen.add(cells[0].strip())
             if live is not None:
                 cells[3] = 'yes' if cells[0].strip() in live else 'no'
-            ln = '\t'.join(cells)
+            ln = '\t'.join(cells).rstrip('\t')
         out.append(ln)
     for t in titles(root):
         p = profile(root, t)
