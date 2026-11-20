@@ -11,6 +11,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 PACK = REPO / 'android/app/src/ondevice/java/dev/nxnative/android/PackService.java'
 CHECK = REPO / 'android/app/src/main/java/dev/peanuts/build/ReuseCheck.java'
+PREPARE = REPO / 'android/app/src/main/java/dev/peanuts/build/Prepare.java'
 
 
 def check_kept():
@@ -80,6 +81,26 @@ class Due(unittest.TestCase):
     def test_the_notification_reads_whether_the_library_was_replaced(self):
         s = CHECK.read_text(encoding='utf-8')
         self.assertIn('return CheckDue.replacedText(reuseDir(noBackup, titleId), name, since);', s)
+
+
+class Stale(unittest.TestCase):
+    """What the packer sends to a client that binds after the check, and what a build takes from it"""
+    def test_the_checks_end_leaves_no_job_to_send(self):
+        # `job` stayed the check's done job after the check: a client that registered later was sent it (MSG_REGISTER publishes `job`), and the panel and a
+        # build waiting for its own job took it for theirs
+        body = check_kept()
+        end = body[body.index('main.post(() -> {'):]
+        self.assertRegex(end, r'if \(job == checkJob\) job = null;[^\n]*\n\s*checkJob = null;')
+
+    def test_a_build_takes_only_its_own_jobs_messages(self):
+        # Prepare took the newest job the packer sent, whatever its file: another job's "done" (the check's, one finished before) ended a build that had only
+        # started ("Pack finished", its game added with a pack still being made)
+        s = PREPARE.read_text(encoding='utf-8')
+        on = s[s.index('        boolean onMessage(Message m) {'):]
+        on = on[:on.index('\n        }\n')]
+        self.assertRegex(on, r'String own = ownJob;\s*if \(own == null \|\| !own\.equals\(d\.getString\("file"\)\)\) return true;')
+        self.assertLess(on.index('!own.equals('), on.index('fromService = j'))
+        self.assertEqual(len(re.findall(r'ownJob = file\.getPath\(\);[^\n]*\n\s*bind\(\);', s)), 2)   # set before each bind: the build and the modded build
 
 
 class Notice(unittest.TestCase):

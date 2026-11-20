@@ -559,6 +559,7 @@ public final class PackService extends Service {
                 Intent next = afterCheck;
                 afterCheck = null;
                 checkRunning = false;
+                if (job == checkJob) job = null;   // not the service's job: a client that binds later was sent it, and the panel and a waiting build took it (found in review)
                 checkJob = null;
                 worker = null;
                 if (next != null) {   // the job that started during the check: started again now, while this service is still in the foreground

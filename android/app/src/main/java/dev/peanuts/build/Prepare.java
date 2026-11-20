@@ -52,8 +52,9 @@ final class Prepare {
     private final Context c;
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean cancelled;
-    private volatile String fromService;   // the newest job JSON the service sent over the Messenger
+    private volatile String fromService;   // the newest job JSON the service sent over the Messenger, of this build's job only
     private volatile long fromServiceAt;
+    private volatile String ownJob;   // this build's job file (its path, as the service sends it): the packer sends every client whatever job it holds (issue #120 review)
     private Link link;
     private volatile String logId;   // the game whose build log (BuildLog) this run's lines go to
 
@@ -211,6 +212,7 @@ final class Prepare {
         // The translator calls at once (4 on a phone with 14 GB or more, 2 on an 8 GB one) are set by PackService from the phone's memory (BuildMemory), not by a line here:
         // a fixed 4 in env.txt ran an 8 GB phone out of memory (Fire Emblem Engage on a Thor Base, issue #10). A line env.txt has still applies, up to that count
         // 4. the service, as the panel starts it
+        ownJob = file.getPath();   // the service's messages of this job only (Link.onMessage)
         bind();
         try {
             c.startForegroundService(Upstream.packStart(c, file));
@@ -397,6 +399,7 @@ final class Prepare {
         File file = Upstream.jobFile(job);
         log("modded prepare: job " + file + " (" + (resumedMod ? "resumed, it was " + Upstream.jobState(job) : "new") + "), pack " + packDir);
         BuildLogShare.remember(c, id, workDir);
+        ownJob = file.getPath();   // the service's messages of this job only (Link.onMessage)
         bind();
         try {
             c.startForegroundService(Upstream.packStart(c, file));
@@ -526,6 +529,8 @@ final class Prepare {
         boolean onMessage(Message m) {
             if (m.what != Upstream.MSG_STATE) return false;
             Bundle d = m.getData();
+            String own = ownJob;
+            if (own == null || !own.equals(d.getString("file"))) return true;   // another job's (a done one the packer still held, the full check's): never this build's state
             String j = d.getString("job");
             if (j != null) { fromService = j; fromServiceAt = SystemClock.elapsedRealtime(); }
             alive = d.getBoolean("alive");
