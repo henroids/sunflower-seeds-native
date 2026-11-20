@@ -28,7 +28,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.5 includes 39 games, and 12 more are coming in 0.1.6 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.5 includes 39 games, and 13 more are coming in 0.1.6 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion |
 |---|---|---|---|
@@ -83,6 +83,7 @@ Peanuts Native 0.1.5 includes 39 games, and 12 more are coming in 0.1.6 (marked 
 | DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET (coming in 0.1.6) | `010051C0134F8000` | 1.70 | No |
 | STEINS;GATE RE:BOOT (coming in 0.1.6) | `01008BC024FDE000` | 1.0.3, 1.0.4 | No |
 | NieR:Automata The End of YoRHa Edition (Asian release) (coming in 0.1.6) | `0100B8E016F76000` | 1.0.3 | No |
+| Hyrule Warriors: Age of Calamity (coming in 0.1.6) | `01002B00111A2000` | 1.3.0 | No |
 
 <!-- PEANUTS end: the Supported games table -->
 
