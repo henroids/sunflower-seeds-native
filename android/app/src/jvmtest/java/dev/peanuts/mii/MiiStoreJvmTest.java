@@ -45,6 +45,12 @@ public final class MiiStoreJvmTest {
         List<MiiStore.Mii> back = MiiStore.load(dir);
         check(back.size() == 2 && back.get(0).name.equals("Ana") && back.get(0).get("hair_type") == 77, "round trip");
         check(java.util.Arrays.equals(back.get(1).createId, list.get(1).createId), "create IDs survive");
+        File tsv = new File(MiiStore.database(dir).getParentFile(), "miis.tsv");
+        String ok1 = Files.readAllLines(tsv.toPath()).get(0), ok2 = Files.readAllLines(tsv.toPath()).get(1);
+        String bad = "zz" + ok1.substring(2, 32) + "\tBad\thair_type=1";
+        Files.write(tsv.toPath(), (ok1 + "\n" + bad + "\n" + ok2 + "\n").getBytes("UTF-8"));
+        check(MiiStore.load(dir).size() == 2, "one bad line in the middle still loads the others");
+        check(MiiStore.cleanName("A\rB").equals("A B"), "a CR in a name is cleaned");
         System.out.println(fails == 0 ? "PASS" : fails + " failures");
         System.exit(fails == 0 ? 0 : 1);
     }

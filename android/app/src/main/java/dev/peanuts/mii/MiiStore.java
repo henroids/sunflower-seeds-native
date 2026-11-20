@@ -132,7 +132,7 @@ public final class MiiStore {
 
     /** At most 10 characters, not empty (CharInfo's nickname: UTF-16, NUL-terminated, the first character not NUL) */
     public static String cleanName(String s) {
-        String t = s == null ? "" : s.replace('\t', ' ').replace('\n', ' ').trim();
+        String t = s == null ? "" : s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ').trim();
         if (t.isEmpty()) t = "Mii";
         return t.length() > NAME_MAX ? t.substring(0, NAME_MAX) : t;
     }
@@ -167,13 +167,15 @@ public final class MiiStore {
             for (String line : Files.readAllLines(f.toPath(), StandardCharsets.UTF_8)) {
                 String[] c = line.split("\t", -1);
                 if (c.length < 3 || c[0].length() != 32) continue;
-                byte[] id = new byte[16];
-                for (int i = 0; i < 16; i++) id[i] = (byte) Integer.parseInt(c[0].substring(2 * i, 2 * i + 2), 16);
-                Mii m = new Mii(cleanName(c[1]), id);
-                int[] d = DEFAULTS[0];
-                for (int i = 0; i < FIELDS.size(); i++) m.set(FIELDS.get(i).key, d[i]);   // a field the file lacks keeps the default's value
-                for (String kv : c[2].split(",")) { int e = kv.indexOf('='); if (e > 0) try { m.set(kv.substring(0, e), Integer.parseInt(kv.substring(e + 1))); } catch (NumberFormatException ignored) { } }
-                out.add(m);
+                try {
+                    byte[] id = new byte[16];
+                    for (int i = 0; i < 16; i++) id[i] = (byte) Integer.parseInt(c[0].substring(2 * i, 2 * i + 2), 16);
+                    Mii m = new Mii(cleanName(c[1]), id);
+                    int[] d = DEFAULTS[0];
+                    for (int i = 0; i < FIELDS.size(); i++) m.set(FIELDS.get(i).key, d[i]);   // a field the file lacks keeps the default's value
+                    for (String kv : c[2].split(",")) { int e = kv.indexOf('='); if (e > 0) try { m.set(kv.substring(0, e), Integer.parseInt(kv.substring(e + 1))); } catch (NumberFormatException ignored) { } }
+                    out.add(m);
+                } catch (NumberFormatException e) { continue; }   // one bad create ID skips only its line
                 if (out.size() == MAX_MIIS) break;
             }
         } catch (IOException | RuntimeException e) { /* an unreadable file is an empty list */ }

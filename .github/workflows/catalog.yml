@@ -12,6 +12,7 @@ on:
       - peanuts/VERSION
       - peanuts/games.tsv
       - 'dm/games/*/game.tsv'
+      - 'dm/games/*/README.md'   # PEANUTS: the catalog's note field
       - peanuts/scripts/games_catalog.py
       - peanuts/scripts/issue_forms.py
   schedule:
