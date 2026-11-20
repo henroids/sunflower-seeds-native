@@ -433,6 +433,7 @@ static VkShaderModule spv_module(const vka_shlib *L, const dmsh_vk_entry *e, con
     if (r) { snprintf(err, errn, "vkCreateShaderModule %d (variant %u of %016llx)", r, m->variant, (unsigned long long)key); *why = err; return VK_NULL_HANDLE; }
     return mod;
 }
+// PEANUTS (PR #164): spv_module takes the variant itself now (above), so the one-line wrapper over spv_module_ is gone
 // An instanced variant (vka_draw.c's instanced runs): the base module with the uniform block at `binding` read at data[i + d] (vka_spv_instance), made from the
 // library's SPIR-V; the caller caches it. VK_NULL_HANDLE (the reason logged a few times) when the shader cannot take it
 VkShaderModule vka_shader_inst_module(vka_shader *s, uint32_t binding, uint32_t loc) {
