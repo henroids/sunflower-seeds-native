@@ -86,7 +86,8 @@ translation (`ondevice/logs/check.log`).
 - When: at the end of a build (`dev.peanuts.build.BuildService`, after graphics setup and the companion), and from the launcher's 30 s timer while the app
   runs (`dev.peanuts.ui.Library`, at most every two minutes), each only while the phone is plugged in with 40 % or more and no game runs
   (`dev.peanuts.build.ReuseCheck`; plugged in, not "charging": with a charge limit or bypass charging Android says the phone is not charging). The
-  notification says "Checking <game>'s shaders". A check's start never runs a job (a job an app update left waits for the user).
+  notification says "Checking <game>'s shaders"; it is one of its own, so a build's notification from before (one that failed, one that is ready) stays. A
+  check's start never runs a job (a job an app update left waits for the user).
 - It changes nothing of the job's state: its `job.json` is neither written nor sent to the launcher (a build that binds meanwhile must not read "done" for
   its own job), its progress goes under a step of its own, and a timeout or a pause leaves it done. Its lines go to the job's logs (`check.log`, and the
   packer's own lines to `pack.log`), and the shaders step's `absent-shaders.tsv` in the job's folder is written again. The game plays as usual: the library is only read. The job's

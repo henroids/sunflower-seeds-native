@@ -67,6 +67,7 @@ public final class PackService extends Service {
     private static final int NOTE = 1;
     /** Starts of one step the process may not live through before the job fails (Job.start) */
     private static final int MAX_STARTS = 3;   // PEANUTS: was 2; the later starts run with fewer workers (Job.memLevel, BuildMemory)
+    private static final int NOTE_CHECK = NOTE + 8;   // PEANUTS: the full check's own (checkKept): under NOTE it took a failed or finished build's notification and removed it
     private static final Pattern PROGRESS = Pattern.compile("^progress:? (\\d+)(?: |/)(\\d+)(?: (\\S+))?");
     /** PEANUTS: vk_android_build.py's summary, "shaders <all>: ok <built>, <failure> <n>, ..." (Job.shadersFailed) */
     private static final Pattern BUILT = Pattern.compile("^shaders (\\d+): ok (\\d+)\\b");
@@ -272,7 +273,8 @@ public final class PackService extends Service {
 
     private boolean startForeground(Job j) {
         try {
-            startForeground(NOTE, note(j), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            startForeground(checking ? NOTE_CHECK : NOTE, note(j), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);   // PEANUTS: checking: the check's own notification
+            if (!checking) nm.cancel(NOTE_CHECK);   // PEANUTS: a job that took the service from the check: the check's goes (ongoing, it would stay)
             return true;
         } catch (RuntimeException e) {   // ForegroundServiceStartNotAllowedException, or the type's time limit used up
             Log.w(TAG, "startForeground refused: " + e);
@@ -1280,7 +1282,7 @@ public final class PackService extends Service {
         String name = j == null ? "a game" : j.name();
         String sim = engine.simulated() ? " (simulated)" : "";
         if (j == null) return b.setContentTitle("Preparing " + name + sim).setContentText("Starting…").build();
-        if (checking) return b.setContentTitle("Checking " + name + "'s shaders").setContentText(dev.peanuts.build.ReuseCheck.NOTE).setOngoing(true).build();   // PEANUTS: checkKept
+        if (checking && j == job) return b.setContentTitle("Checking " + name + "'s shaders").setContentText(dev.peanuts.build.ReuseCheck.NOTE).setOngoing(true).build();   // PEANUTS: checkKept
         String state = j.state();
         int pct = (int) Math.round(j.overall() * 100);
         int i = j.current();

@@ -134,6 +134,23 @@ class Notice(unittest.TestCase):
         t = t[:t.index('\n    }\n')]
         self.assertRegex(t, r'if \(j != null && j == checkJob\) \{[^\n]*\n[^\n]*requestStop\("timeout"\);\s*stopForeground\(STOP_FOREGROUND_REMOVE\);\s*stopSelf\(\);\s*return;')
 
+    def test_the_check_has_a_notification_of_its_own(self):
+        # it took the job notification's id (NOTE): a build that had failed or finished before lost its notification to "Checking ...", which the check's end
+        # then removed (STOP_FOREGROUND_REMOVE)
+        s = PACK.read_text(encoding='utf-8')
+        self.assertRegex(s, r'private static final int NOTE_CHECK = NOTE \+ 8;')
+        fg = s[s.index('    private boolean startForeground(Job j) {'):]
+        fg = fg[:fg.index('\n    }\n')]
+        self.assertIn('startForeground(checking ? NOTE_CHECK : NOTE, note(j), ', fg)
+        self.assertIn('if (!checking) nm.cancel(NOTE_CHECK);', fg)   # a job that waited takes the service over: no "Checking ..." stays
+
+    def test_only_the_checks_job_is_shown_as_the_check(self):
+        # note() said "Checking <job>'s shaders" (ongoing) for any job while the check ran: a job's own notification posted then (a job that waited and was
+        # paused) would have read so, and stayed
+        s = PACK.read_text(encoding='utf-8')
+        note = s[s.index('    private Notification note(Job j) {'):]
+        self.assertIn('if (checking && j == job) return b.setContentTitle("Checking "', note)
+
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
 class Jvm(unittest.TestCase):
