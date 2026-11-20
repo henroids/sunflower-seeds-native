@@ -53,6 +53,14 @@ class Due(unittest.TestCase):
         self.assertIn('dev.peanuts.build.CheckDue.ended(', end)
         self.assertLess(end.index('dev.peanuts.build.CheckDue.ended('), end.index('ReuseCheck.due(nb, j.titleId())'))   # before the split goes or stays
 
+    def test_a_check_whose_process_ended_counts_at_the_next_start(self):
+        # the finally block of checkKept does not run when the process ends (a low-memory kill, the 20 s end of a stop): such a check was asked again every
+        # two minutes for good. Its mark (CheckDue.begin, before the tool) is counted at the next start (CheckDue.died)
+        body = check_kept()
+        self.assertIn('dev.peanuts.build.CheckDue.died(', body)
+        self.assertLess(body.index('dev.peanuts.build.CheckDue.died('), body.index('dev.peanuts.build.CheckDue.begin('))
+        self.assertLess(body.index('dev.peanuts.build.CheckDue.begin('), body.index('step(j, Job.SHADERS)'))
+
     def test_a_library_that_differed_is_the_checks_end_not_a_failure(self):
         s = PACK.read_text(encoding='utf-8')
         self.assertRegex(s, r'if \(checking && code == 3\)')   # shader_reuse.py full_check's DIFFER: it replaced the library itself

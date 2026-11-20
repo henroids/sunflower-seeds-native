@@ -507,8 +507,12 @@ public final class PackService extends Service {
         long since = System.currentTimeMillis();
         String what = "ended";
         String fixed = null;
+        File rd = new File(getNoBackupFilesDir(), "reuse/" + j.titleId());
         try {
-            if (autoReason != null) what = "waits (" + autoReason + "; " + readings() + ")";
+            String died = dev.peanuts.build.CheckDue.died(rd);   // an earlier check whose process ended while it ran: a try (its own end never ran)
+            if (died != null) dev.peanuts.build.ReuseCheck.log(new File(j.dir(), "logs"), "check: the one before ended with the packer's process; " + died);
+            if (!dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId())) what = "not due (dropped)";
+            else if (autoReason != null) what = "waits (" + autoReason + "; " + readings() + ")";
             else if (dev.peanuts.build.ReuseCheck.gameRunning(this)) what = "waits (a game runs)";
             else {
                 Thread watch = new Thread(() -> {   // a game that starts stops the tool; before the tool runs, step() looks itself
@@ -527,6 +531,7 @@ public final class PackService extends Service {
                 }, "nxpack-check-game");
                 watch.setDaemon(true);
                 watch.start();
+                dev.peanuts.build.CheckDue.begin(rd);
                 String fail = step(j, Job.SHADERS);
                 what = fail == null ? "done" : fail;
             }

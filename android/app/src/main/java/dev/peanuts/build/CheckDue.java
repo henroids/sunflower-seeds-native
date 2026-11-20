@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 public final class CheckDue {
     private CheckDue() {}
 
-    static final String TODO = "check.todo", JOB = "check.job", FAILED = "check.failed", TRIES = "check.tries", DIR = "check";
+    static final String TODO = "check.todo", JOB = "check.job", FAILED = "check.failed", TRIES = "check.tries", DIR = "check", RUNNING = "check.running";
     /** A check that failed this many times (not stopped: the tool ended with an error) is dropped: it was started again every two minutes for good (found in review) */
     public static final int MAX_TRIES = 3;
 
@@ -29,7 +29,7 @@ public final class CheckDue {
 
     /** The check is due no more: check.todo, check.job, the count of its tries and its own results go (the job's split goes with the packer's next look) */
     public static void drop(File reuseDir) {
-        for (String n : new String[] {TODO, JOB, TRIES}) new File(reuseDir, n).delete();
+        for (String n : new String[] {TODO, JOB, TRIES, RUNNING}) new File(reuseDir, n).delete();
         deleteTree(new File(reuseDir, DIR));
     }
 
@@ -39,6 +39,7 @@ public final class CheckDue {
      * MAX_TRIES-th drops it. The count is check.todo's library's: the next build's check starts it over
      */
     public static String ended(File reuseDir, String what) {
+        new File(reuseDir, RUNNING).delete();
         if (what == null || what.equals("done") || what.equals("interrupted") || what.startsWith("waits")) return null;
         String lib = library(reuseDir);
         if (lib == null) return null;   // not due (the check ended it, or a build since)
@@ -59,6 +60,22 @@ public final class CheckDue {
         }
         write(f, lib + "\t" + n + "\n");
         return "the check failed (" + n + " of " + MAX_TRIES + " tries)";
+    }
+
+    /** Before the check's tool runs: its mark, which every end takes with it (ended) and only an end of the process leaves (died) */
+    public static void begin(File reuseDir) {
+        String lib = library(reuseDir);
+        if (lib != null) write(new File(reuseDir, RUNNING), lib + "\n");
+    }
+
+    /**
+     * At a check's start: a mark an earlier check left, whose process ended while it ran (a low-memory kill, the 20 s end of a stop, a crash: its own end never
+     * ran, and it was asked again every two minutes for good, found in review), counts as a try of its own (ended); null when there is none
+     */
+    public static String died(File reuseDir) {
+        if (!new File(reuseDir, RUNNING).isFile()) return null;
+        String r = ended(reuseDir, "the packer's process ended during the check");
+        return r != null ? r : "";
     }
 
     /**

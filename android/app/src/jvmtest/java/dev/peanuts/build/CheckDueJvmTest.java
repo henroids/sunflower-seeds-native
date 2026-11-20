@@ -53,6 +53,20 @@ public final class CheckDueJvmTest {
         due(d, OTHER);
         check(CheckDue.ended(d, fail).contains("1 of 3"), "another library starts over");
 
+        // a check whose process ended (a low-memory kill, the 20 s end of a stop, a crash) runs no end of its own: the next start counts it (found in review)
+        due(d, LIB);
+        check(CheckDue.died(d) == null, "no check ran before");
+        CheckDue.begin(d);
+        check(CheckDue.ended(d, "done") == null && CheckDue.died(d) == null, "a check that ended takes its mark with it");
+        CheckDue.begin(d);
+        check(CheckDue.ended(d, "interrupted") == null && CheckDue.died(d) == null, "a stopped one too");
+        CheckDue.begin(d);
+        String died = CheckDue.died(d);
+        check(died != null && died.contains("1 of 3") && !gone(d), "a check whose process ended counts a try: " + died);
+        check(CheckDue.died(d) == null, "once");
+        CheckDue.begin(d); CheckDue.died(d); CheckDue.begin(d);
+        check(CheckDue.died(d).contains("dropped") && gone(d), "the third drops it");
+
         // not due (the check ended it): nothing counted
         CheckDue.drop(d);
         check(CheckDue.ended(d, fail) == null && !new File(d, CheckDue.TRIES).exists(), "not due");

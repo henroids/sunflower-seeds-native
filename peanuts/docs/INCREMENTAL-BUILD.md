@@ -95,8 +95,8 @@ translation (`ondevice/logs/check.log`).
   (the job goes first: the packer starts it once the check has stopped). The stop is sent again every 3 s while the tool runs (one sent before its run began
   is lost), and a game that still runs beside it 20 s later ends the packer's process. It goes on another time from the results it kept.
 - A check is asked only with a done job (one not done yet starts it at its end). One that this job can never make is dropped: its split gone, a split of
-  another selection, an app update since the build. One that fails (the tool ended with an error, storage full) is tried again, at most three times
-  (`check.tries`), then dropped. Before, such a check was asked again every two minutes for good and held every other game's check. A build with code mods
+  another selection, an app update since the build. One that fails (the tool ended with an error, storage full, or the packer's process ended while it ran:
+  `check.running`, counted at the next start) is tried again, at most three times (`check.tries`), then dropped. Before, such a check was asked again every two minutes for good and held every other game's check. A build with code mods
   is never the check's job.
 - All the same: `checked.tsv` says so, and the check's files and the split go. One that differs (or a shader only one of them has): the full translation is what
   the game should have. The records and the kept copy go first, then it takes the library's place in the pack (a `.partial`, flushed to storage, then a
