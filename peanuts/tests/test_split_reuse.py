@@ -125,6 +125,27 @@ class SplitReuse(unittest.TestCase):
         self.assertEqual(keys[0], keys[1])   # b.bin is not a.data's
         self.assertNotEqual(keys[0], keys[2])   # a.dict is
 
+    def test_a_folder_of_its_stem_counts_too(self):
+        # shader_split.py scan_file_in reads a .data file as empty when stem + '.dict' exists (os.path.exists: a folder too, found in review)
+        keys = []
+        for dirs in ((), ('Data/a.dict',)):
+            dump = self.tmp / f'dump-dir{len(dirs)}'
+            for rel, data in {'Data/a.data': b'data', 'Data/b.bin': b'other'}.items():
+                p = dump / 'base' / 'romfs' / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(data)
+            for rel in dirs:
+                (dump / 'base' / 'romfs' / rel).mkdir(parents=True)
+                (dump / 'base' / 'romfs' / rel / 'x').write_bytes(b'x')   # (a folder with a file in it)
+            main = dump / 'base' / 'exefs' / 'main'; main.parent.mkdir(parents=True, exist_ok=True)
+            main.write_bytes(b'NSO0' + bytes(0x3c) + BUILD + bytes(0x100 - 0x50))
+            nup = self.tmp / f'dir{len(dirs)}.nup'
+            r = subprocess.run([sys.executable, REPO / 'dm/tools/nup_pack.py', dump, nup, '--raw'], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            os.environ['PN_REUSE_DIR'] = str(self.reuse)
+            try: keys.append(split_reuse.Context(None, {}, None, None, [], pickle.Unpickler).key((f'{nup}:base/romfs/Data/a.data', 'Data/a.data')))
+            finally: del os.environ['PN_REUSE_DIR']
+        self.assertIsNotNone(keys[0])
+        self.assertNotEqual(keys[0], keys[1])
+
     def test_the_files_scanned_to_check_change_from_split_to_split(self):
         # the split has no full check later: a sample that took the same files on every split would never meet a kept result that went stale elsewhere
         nup = self.nup(self.files)

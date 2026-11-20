@@ -107,7 +107,7 @@ class Context:
         return n, k
 
     def _siblings(self, path):
-        """The digest of the files beside path whose name starts with its stem (the name without its last extension): what a reader may open besides the file
+        """The digest of the files and folders beside path whose name starts with its stem (the name without its last extension): what a reader may open besides the file
         (shader_split.py: stem + '.dict', stem + '.patch', Next Level Games' stem + each name its index lists), path itself among them; None when one has no hash"""
         p = path.replace('\\', '/')
         parent, stem = posixpath.dirname(p), posixpath.splitext(posixpath.basename(p))[0]
@@ -115,7 +115,8 @@ class Context:
             try:
                 file, rest = self.nup.split(parent)
                 n = self.nup.open_nup(file); k = n.node(rest)
-                self.dirs[parent] = sorted((name, n.record(c)[3]) for name, c in n.children(k) if not n.is_dir(c))
+                # a folder too: a reader's os.path.exists(stem + '.dict') is true for one (found in review); a folder's mark is never a file's hash
+                self.dirs[parent] = sorted((name, b'folder' if n.is_dir(c) else n.record(c)[3]) for name, c in n.children(k))
             except Exception: self.dirs[parent] = None
         files = self.dirs[parent]
         if files is None: return None
