@@ -178,6 +178,7 @@ int vka_texstats_on(void) {
 // DM_VK_TEX_STATS: 1 = this draw's fragment shader is one, its first draw this frame, and lines are left (the caller ends the pass and calls vka_nan_inputs)
 int vka_texstats_probe(uint64_t fs) {
     if (!vka_texstats_on() || vka_enc_on() || atomic_load(&g_ts_lines) >= VKA_ENV("DM_VK_TEX_STATS_LINES", 200)) return 0;
+    { int ev = VKA_ENV("DM_VK_TEX_STATS_EVERY", 1); if (ev > 1 && vka_frame() % (uint64_t)ev) return 0; }   // PEANUTS: only every n-th frame, so a long session is sampled throughout
     static uint32_t ndr[NKEY];   // DM_VK_TEX_STATS_DRAWS (live, default 1): draws of this fragment shader scanned this frame so far
     for (int i = 0; i < g_ts_n; i++) if (g_ts_keys[i] == fs) {
         if (g_ts_last[i] != vka_frame()) { g_ts_last[i] = vka_frame(); ndr[i] = 0; }
