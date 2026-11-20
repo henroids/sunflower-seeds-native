@@ -239,7 +239,8 @@ public final class PackService extends Service {
         // PEANUTS begin: the check runs the done job's shaders step again with --check and changes nothing of the job (checkKept)
         if (check) {
             stopReason = null;
-            heatOverride = false;
+            heatOverride = !heatTrusted();   // the device's Go on anyway (#93), as a job's run takes it: with the pause in place, a phone whose SEVERE is not real never ran it
+            policy();   // the pause with that override: checkKept looks at it once, at its start
             final Job cj = j;
             checkJob = j;
             checkRunning = true;

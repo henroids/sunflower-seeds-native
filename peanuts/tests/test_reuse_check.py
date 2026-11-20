@@ -135,6 +135,17 @@ class Starts(unittest.TestCase):
         self.assertRegex(br, r'boolean ending = worker != null;')
         self.assertRegex(br, r'if \(!ending\) \{ stopForeground\(STOP_FOREGROUND_REMOVE\); stopSelf\(startId\); \}')
 
+    def test_a_check_takes_the_devices_go_on_anyway_as_a_jobs_run_does(self):
+        # Go on anyway, remembered for the device (#93): a job's run starts with the heat pause lifted, the check started with it in place (heatOverride =
+        # false) and so, on a phone whose thermal HAL says SEVERE at ordinary temperatures, ended at each start ("waits (thermal)") and never ran. checkKept
+        # looks at the pause once, at its start, so the policy is worked out again with the override first
+        s = PACK.read_text(encoding='utf-8')
+        start = s[s.index('        if (check) {\n            stopReason = null;'):]
+        start = start[:start.index('worker.start();')]
+        self.assertNotIn('heatOverride = false;', start)
+        self.assertRegex(start, r'heatOverride = !heatTrusted\(\);[^\n]*\n(?:\s*//[^\n]*\n)*\s*policy\(\);')
+        self.assertLess(start.index('policy();'), start.index('worker = new Thread(() -> checkKept(cj)'))
+
     def test_a_check_starts_only_once_the_last_workers_end_has_run(self):
         # a check's start between the last worker's end (its thread gone) and that end's post (worker = null, checkJob = null, stopSelf) started a second
         # worker the post then forgot: save and publish took the check's done job again, a job's start ran beside it, the service stopped under it
