@@ -1414,7 +1414,7 @@ Digimon Story Cyber Sleuth: Complete Edition (Media.Vision's MVGL engine, SDK 6.
 
 ### PurpleVK T30 undercounts GPU time on Adreno 650
 
-On the Retroid Pocket Flip 2, PurpleVK T30 (`git-62ac221a33`) reports a 33.11 ns timestamp period, but its queries advance at 19.2 MHz (52.08 ns/tick) against `CLOCK_MONOTONIC`. The Vulkan replay corrects the period only for that driver, GPU and reported value. This calibrates GPU timings; it does not change the measured display cadence.
+On the Retroid Pocket Flip 2, PurpleVK T30 (`git-62ac221a33`) reports a 33.11 ns timestamp period, but its queries advance at 19.2 MHz (52.08 ns/tick) against `CLOCK_MONOTONIC`. The Vulkan replay corrects the period only for that driver, GPU and reported value. This calibrates GPU timings; it does not change the measured display cadence. <!-- PEANUTS -->
 
 ### Turnip hangs in the first 3D frame of a cold run
 

@@ -553,7 +553,7 @@ def site_window(seg):
         w = struct.unpack('<I', x.bytes)[0]
         if has18(x): w = subst(x, S)
         m = x.mnemonic
-        if m in branches or m.startswith('b.'):
+        if m in branches or m.startswith('b.'):  # PEANUTS (PR #164)
             tgt = x.operands[-1].imm
             if lo <= tgt < hi: newt = copy0 + (tgt - lo)
             else: ex_targets.append(tgt); newt = exits + 16 * (len(ex_targets) - 1)
@@ -568,7 +568,7 @@ def site_window(seg):
             dd = dis(w, pc); assert dd.operands[-1].imm == newt and dd.mnemonic == m
         elif m == 'adrp': w = window_adrp(x, S, copy0 + 4 * k)
         else:
-            assert m not in ('adr', 'bl', 'br', 'blr', 'ret') and not (m == 'ldr' and '[' not in x.op_str), hex(x.address)
+            assert m not in ('adr', 'bl', 'br', 'blr', 'ret') and not (m == 'ldr' and '[' not in x.op_str), hex(x.address)  # PEANUTS (PR #164)
         words.append(w)
     for w in words: emit(w)
     for t in [hi] + ex_targets:   # fall-through first
@@ -1353,7 +1353,7 @@ for n_fn, (fa, fb) in enumerate(funcs):
                 assert tgt, f'jump table {ins.address:x}'
                 tabjumps[ins.address] = tgt; continue
             jumps[ins.address] = (base, width)
-    # No branch from outside may enter the middle of a window, except an out-of-line retry onto its store-exclusive (retry_block).
+    # No branch from outside may enter the middle of a window, except an out-of-line retry onto its store-exclusive (retry_block).  # PEANUTS (PR #164)
     inwin = {x.address for wseg in ws for x in wseg}; heads = {wseg[0].address for wseg in ws}
     rmid = set()
     for k, x in enumerate(insl):

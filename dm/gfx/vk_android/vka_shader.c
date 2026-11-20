@@ -394,7 +394,7 @@ static uint32_t *lib_words(const vka_shlib *L, const dmsh_vk_entry *e, const dms
     }
     return w;
 }
-// Turnip/A740 intermittently interpolates the Trails SC terrain normal sideways across 16-pixel squares.
+// Turnip/A740 intermittently interpolates the Trails SC terrain normal sideways across 16-pixel squares. // PEANUTS (PR #164)
 // In a single-sample pass centroid still uses the pixel's only covered sample. Keep the output at the same location untouched.
 static int terrain_normal_centroid(uint32_t **words, size_t *bytes) {
     enum { Decorate = 71, Location = 30, Centroid = 16, Variable = 59, Input = 1, Function = 54 };
@@ -422,7 +422,7 @@ static int terrain_normal_centroid(uint32_t **words, size_t *bytes) {
 static VkShaderModule spv_module(const vka_shlib *L, const dmsh_vk_entry *e, const dmsh_vk_module *m, uint64_t key, const char **why, char *err, size_t errn, uint8_t *fcomp, int variant) {
     size_t nb = 0; uint32_t *w = lib_words(L, e, m, &nb, err, errn);
     if (!w) { *why = err; return VK_NULL_HANDLE; }
-    if (variant == VKA_MOD_TERRAIN_NORMAL && !terrain_normal_centroid(&w, &nb)) {
+    if (variant == VKA_MOD_TERRAIN_NORMAL && !terrain_normal_centroid(&w, &nb)) { // PEANUTS (PR #164)
         free(w); *why = "terrain normal centroid variant could not be made"; return VK_NULL_HANDLE;
     }
     if (fcomp && vka_spv_fout_comps(w, nb / 4, fcomp)) memset(fcomp, 0xf, 8);   // a pixel shader's output components (the colour write mask: vka_draw.c)
@@ -481,17 +481,17 @@ vka_shader *vka_shader_remap(vka_shader *s, uint64_t map) {
     return v;
 }
 VkShaderModule vka_shader_module(vka_shader *s, int variant) {
-    if (variant < 0 || variant > VKA_MOD_TERRAIN_NORMAL) return VK_NULL_HANDLE;
+    if (variant < 0 || variant > VKA_MOD_TERRAIN_NORMAL) return VK_NULL_HANDLE; // PEANUTS (PR #164)
     if (s->mods[variant]) return s->mods[variant];
-    const dmsh_vk_module *m = vka_shlib_module(s->lib, s->e, variant == VKA_MOD_TERRAIN_NORMAL ? DMSH_VK_MOD_UINT_MIXED : variant);
+    const dmsh_vk_module *m = vka_shlib_module(s->lib, s->e, variant == VKA_MOD_TERRAIN_NORMAL ? DMSH_VK_MOD_UINT_MIXED : variant); // PEANUTS (PR #164)
     if (!m) return VK_NULL_HANDLE;
     const char *why = NULL; char err[256];
-    VkShaderModule mod = spv_module(s->lib, s->e, m, s->key, &why, err, sizeof err, NULL, variant);
+    VkShaderModule mod = spv_module(s->lib, s->e, m, s->key, &why, err, sizeof err, NULL, variant); // PEANUTS (PR #164)
     if (!mod) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 8) VRED("shader %016llx variant %d: %s", (unsigned long long)s->key, variant, why); return VK_NULL_HANDLE; }
     pthread_mutex_lock(&g_mu);
     if (s->mods[variant]) { pthread_mutex_unlock(&g_mu); vk.vkDestroyShaderModule(V.dev, mod, NULL); return s->mods[variant]; }
     s->mods[variant] = mod;
-    if (variant == VKA_MOD_TERRAIN_NORMAL) VLOG("single-sample terrain normal: centroid input on %s", V.props.deviceName);
+    if (variant == VKA_MOD_TERRAIN_NORMAL) VLOG("single-sample terrain normal: centroid input on %s", V.props.deviceName); // PEANUTS (PR #164)
     pthread_mutex_unlock(&g_mu);
     return mod;
 }
@@ -747,7 +747,7 @@ vka_shader *vka_shader_make(const vka_shlib *L, uint64_t key) {
         if (!why && !m) why = "no base module";
         memset(s->fcomp, 0xf, sizeof s->fcomp);
         if (m && V.memu && (e->stage == DMSH_VK_STAGE_TS || e->stage == DMSH_VK_STAGE_MS)) {}   // drawn through compute: its converted modules are made at its first draw (vka_memu.c)
-        else if (m) s->mods[DMSH_VK_MOD_BASE] = spv_module(L, e, m, key, &why, err, sizeof err, e->stage == DMSH_VK_STAGE_FS && VKA_ENV("DM_VK_FOUT_COMPS", 1) ? s->fcomp : NULL, DMSH_VK_MOD_BASE);
+        else if (m) s->mods[DMSH_VK_MOD_BASE] = spv_module(L, e, m, key, &why, err, sizeof err, e->stage == DMSH_VK_STAGE_FS && VKA_ENV("DM_VK_FOUT_COMPS", 1) ? s->fcomp : NULL, DMSH_VK_MOD_BASE); // PEANUTS (PR #164)
         if (m && !why && vka_rs_on() && s->mods[DMSH_VK_MOD_BASE]) rs_scan(s, L, e, m);   // PEANUTS: DM_RES_SCALE: its use of the translator's scale code (above)
         if (!why && e->stage == DMSH_VK_STAGE_GS && VKA_ENV("DM_VK_GS_CLAIM", 1)) {   // memory writes: made once per primitive (vka_spv_gs_claim)
             char e2[256] = ""; s->gs_fx = gs_words(s, NULL, NULL, e2, sizeof e2);
