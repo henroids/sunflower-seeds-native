@@ -84,9 +84,25 @@ class Catalog(unittest.TestCase):
         self.assertEqual(order[:len([t for t in rows if t in order])], [t for t in rows if t in order])
         table = catalog_mod.table(self.catalog).splitlines()
         self.assertEqual(len([ln for ln in table if ln.startswith('| ') and '`' in ln]), len(order))
-        self.assertIn(f'Peanuts Native {self.catalog["app_version"]} includes {len(order)} games.', table[0])
+        ver = self.catalog['app_version']
+        later = [g for g in self.catalog['games'] if catalog_mod.upcoming(g, ver)]   # games.tsv's since column: coming in a later release
+        self.assertIn(f'Peanuts Native {ver} includes {len(order) - len(later)} games' + ('.' if not later else ','), table[0])
+        for g in later:   # counted apart and marked in their row
+            self.assertTrue(any(ln.startswith(f'| {g["name"]} (coming in {g["since"]}) |') for ln in table), g['name'])
         for g in self.catalog['games']:
             self.assertTrue(g['readme_update'] and '?' not in g['readme_update'], g['name'])
+
+    def test_a_game_since_a_later_release_is_counted_apart(self):
+        c = {'app_version': '0.1.5', 'readme_order': ['A', 'B'], 'games': [
+            {'title_id': 'A', 'name': 'Old', 'readme_update': '1.0.0', 'companion': False, 'since': None},
+            {'title_id': 'B', 'name': 'New', 'readme_update': '1.0.0', 'companion': False, 'since': '0.1.6'}]}
+        t = catalog_mod.table(c).splitlines()
+        self.assertTrue(t[0].startswith('Peanuts Native 0.1.5 includes 1 games, and 1 more is coming in 0.1.6'), t[0])
+        self.assertIn('| New (coming in 0.1.6) | `B` |', '\n'.join(t))
+        c['app_version'] = '0.1.6'
+        self.assertTrue(catalog_mod.table(c).startswith('Peanuts Native 0.1.6 includes 2 games.'))
+        c['app_version'] = '0.1.10'   # numbers, not text: 0.1.10 is after 0.1.6
+        self.assertNotIn('coming in', catalog_mod.table(c))
 
     def test_only_the_table_is_written(self):
         b, e = catalog_mod.TABLE_BEGIN, catalog_mod.TABLE_END
