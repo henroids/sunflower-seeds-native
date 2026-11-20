@@ -1405,6 +1405,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (hasFocus) getWindow().getDecorView().requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK);
     }
 
+    @Override public void onTopResumedActivityChanged(boolean top) { super.onTopResumedActivityChanged(top); if (top) dev.peanuts.Companion.gameOnTop(this); }   // PEANUTS: back in front (Recents may have moved it to another display): the game goes back to its display, the companion where it belongs (#183)
     @Override protected void onStart() {
         super.onStart();
         if (!started) return;

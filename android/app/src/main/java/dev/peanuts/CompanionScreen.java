@@ -4,7 +4,9 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
@@ -25,12 +27,15 @@ import android.view.WindowManager;
  * <li>The page is a panel above it (a sub-window) that never takes the focus. Touches arrive there, and a tap does not move the focus to this display, so the
  *     controller stays with the game.</li>
  * </ul>
+ * A phone without per-display focus (Companion.perDisplayFocus; the AYN Thor has it) keeps a focused window only on its top display. There this display stays
+ * on top (Companion.screenTouched), so Back from its navigation bar finds this window, and the controller's keys and sticks reach this window, which hands
+ * them to the game.
  */
 public final class CompanionScreen extends Activity {
     static CompanionScreen current;
     private CompanionPage page;
     private Dialog panel;
-    private boolean started, running;
+    private boolean started, running, resumed, top;
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -48,7 +53,12 @@ public final class CompanionScreen extends Activity {
             bars.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             bars.hide(WindowInsets.Type.systemBars());
         }
-        panel = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+        panel = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen) {
+            @Override public boolean dispatchTouchEvent(MotionEvent e) {
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN) Companion.screenTouched();   // this display back on top where only the top one has a focused window
+                return super.dispatchTouchEvent(e);
+            }
+        };
         Window p = panel.getWindow();
         p.setType(WindowManager.LayoutParams.TYPE_APPLICATION_PANEL);   // a sub-window: never the window that decides the bars, and over this one
         p.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
@@ -81,7 +91,10 @@ public final class CompanionScreen extends Activity {
     }
 
     @Override protected void onStart() { super.onStart(); started = true; run(true); }
-    @Override protected void onResume() { super.onResume(); getWindow().getDecorView().post(Companion::refocusGame); }
+    @Override protected void onResume() { super.onResume(); resumed = true; getWindow().getDecorView().post(Companion::refocusGame); }
+    @Override protected void onPause() { resumed = false; super.onPause(); }
+    /** The top resumed activity: its display is the top one, where keys and the controller go */
+    @Override public void onTopResumedActivityChanged(boolean isTop) { super.onTopResumedActivityChanged(isTop); top = isTop; }
     @Override protected void onStop() { started = false; run(false); super.onStop(); }
     @Override protected void onDestroy() {
         run(false);
@@ -100,9 +113,27 @@ public final class CompanionScreen extends Activity {
         return super.dispatchKeyEvent(e);
     }
 
+    /** A controller's sticks and triggers (joystick motion goes to the focused window, as keys do): the game's */
+    @Override public boolean dispatchGenericMotionEvent(MotionEvent e) {
+        if (ScreenKeys.joystick(e.getSource()) && Companion.gameMotion(e)) return true;
+        return super.dispatchGenericMotionEvent(e);
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // As GameActivity's window: joystick motion unbatched, each event handed on as it arrives instead of at this window's next frame
+        if (hasFocus) getWindow().getDecorView().requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK);
+    }
+
     /** Never finishes this activity: Companion does (a key the game did not take can still end up here) */
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() { Companion.gameBack(); }
+
+    /** Up and resumed: the front activity of its display (each display has a resumed one), not paused behind Recents, Home or another app */
+    static boolean inFront() { CompanionScreen s = current; return s != null && s.resumed && !s.isFinishing(); }
+
+    /** Its display is the top one (see onTopResumedActivityChanged) */
+    static boolean onTop() { CompanionScreen s = current; return s != null && s.top; }
 
     static void close() {
         CompanionScreen s = current;

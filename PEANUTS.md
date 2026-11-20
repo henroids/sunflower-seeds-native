@@ -194,6 +194,9 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` (`startWithDriver`), `FrontendLaunch.java` — (2026-11-18, Swap screens, GitHub issue #131)
      `dev.peanuts.Screens.startGame(...)` starts the game on the external display when Swap screens is on. It falls back to the current display if the external one is unavailable. A game on another display (so also the app started there) leaves the built-in display to its
      companion (`CompanionScreen`, an activity: Android takes no Presentation on the default display). `AndroidManifest.xml`: the `CompanionScreen` activity (process `:game`). `peanuts/UPSTREAM-EDITS.md` Round 23.
+   - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` (`onTopResumedActivityChanged`) — (2026-11-20, GitHub issue #183)
+     `dev.peanuts.Companion.gameOnTop(this)` each time the game is the top activity again: a game that Recents moved to another display goes back to its
+     own, and the companion opens again where it belongs (`ScreenPlace`). `peanuts/UPSTREAM-EDITS.md` Round 31.
 - 2026-11-18 (Share build log, issue #124's "no log attached"): one `.zip` per game with everything its build left. `dev.peanuts.build.BuildLog` is the
   game's own build log, `<app files>/build-logs/<title ID>.log` (to `.1.log` at 2 MB), which `BuildService`, `ModBuildService` and `Prepare` write as
   they go: the inputs with sizes, the folders and free space, the memory, the import's milestones, Prepare's choice of job, the progress every 5 % and

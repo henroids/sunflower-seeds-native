@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Display;
 
@@ -43,6 +44,8 @@ public final class Companion {
     /** Peanuts' page on the second display meanwhile (GameScreen.LOADING / PLAYING), -1 none */
     private static int wanted = -1;
     private static final long LOADING_MAX_MS = 60000;
+    /** After a display went away, the time Android takes to move its tasks to the built-in display */
+    private static final long DISPLAY_SETTLE_MS = 700;
 
     private Companion() {}
 
@@ -135,15 +138,104 @@ public final class Companion {
         if (stopped) return;
         tellPage(game, "free");
         if (wanted >= 0) { if (GameScreen.mode() < 0) openPage(game); else GameScreen.back(); }
-        if (shown != null) {
-            try { shown.show(); try { Bridge.present(true); } catch (UnsatisfiedLinkError ignored) {} return; } catch (RuntimeException e) { Log.w(TAG, "companion not shown again: " + e); shown = null; }   // its display went away meanwhile
+        place(game);   // the game may come back on another display (Recents): it goes home first, the companion is shown after that
+    }
+
+    /** The game is the top activity again (GameActivity.onTopResumedActivityChanged): back from Recents, or a tap on its display. See {@link #place} */
+    public static void gameOnTop(Activity game) {
+        if (game != decidingGame || stopped || away) return;
+        place(game);
+    }
+
+    /** The game's display: Android moves the game's task without telling the activity (Recents starts it on the display Recents runs on) */
+    private static int displayOf(Activity game) {
+        Display d = game.getDisplay();
+        return d != null ? d.getDisplayId() : Display.DEFAULT_DISPLAY;
+    }
+
+    /** The game back on its home display, and the companion where it belongs (ScreenPlace): after the background, on each return to the front, and when a
+     *  display goes away. Before, a game that Recents had moved to the companion's display stayed there, and the companion was gone or on the other screen (#183) */
+    private static void place(Activity game) {
+        DisplayManager dm = listenerDm;
+        if (dm == null || stopped || away || game.isFinishing() || game.isDestroyed()) return;
+        int g = displayOf(game);
+        if (home != Display.INVALID_DISPLAY) { Display h = dm.getDisplay(home); if (h == null || !h.isValid()) home = Display.INVALID_DISPLAY; }
+        boolean tried = false;
+        if (movedHomeAt != 0) {   // the game was sent home: it got there, it is still on its way (wait for the check below), or Android refused
+            if (home == Display.INVALID_DISPLAY || g == home) movedHomeAt = 0;
+            else if (SystemClock.uptimeMillis() - movedHomeAt < MOVE_HOME_MS) return;
+            else tried = true;
         }
-        if (allowed && listenerDm != null) show(game, decidingGameName, listenerDm);
+        Display sd = shown != null ? shown.getDisplay() : null;
+        int on = sd != null ? sd.getDisplayId() : Display.INVALID_DISPLAY;
+        switch (ScreenPlace.decide(g, home, tried, game.isTaskRoot(), allowed, screenUp, on)) {
+            case ScreenPlace.MOVE_BACK:
+                movedHomeAt = SystemClock.uptimeMillis();
+                if (moveHome(game, home)) {
+                    Log.i(TAG, "the game came to the front on display " + g + ", not on display " + home + " where it was started: it goes back there");
+                    ui.postDelayed(() -> { if (decidingGame == game) place(game); }, MOVE_HOME_MS + 100);   // a move Android ignored: the companion follows then
+                    return;
+                }
+                // fall through: refused
+            case ScreenPlace.FOLLOW:
+                Log.i(TAG, "the game stays on display " + g + " (display " + home + " refused it or is gone, or the game shares Home's task): the companion takes the other display");
+                home = Display.INVALID_DISPLAY;
+                movedHomeAt = 0;
+                if (allowed) { closeWindows(); show(game, decidingGameName, dm); }
+                return;
+            case ScreenPlace.RESHOW:
+                Log.i(TAG, "the companion was on the game's display " + g + ": it moves to the other one");
+                closeWindows();
+                show(game, decidingGameName, dm);
+                return;
+            case ScreenPlace.SHOW:
+                if (shown != null) {
+                    if (shown.isShowing()) return;
+                    try { shown.show(); try { Bridge.present(true); } catch (UnsatisfiedLinkError ignored) {} return; }
+                    catch (RuntimeException e) { Log.w(TAG, "companion not shown again: " + e); shown = null; }   // its display went away meanwhile
+                }
+                if (!screenUp) show(game, decidingGameName, dm);   // nothing up: back from the background, or Android closed CompanionScreen (Recents, Home)
+                else if (!CompanionScreen.inFront() && SystemClock.uptimeMillis() - screenOpenedAt > SCREEN_OPENING_MS) { Log.i(TAG, "the companion's screen was behind another one on its display: it comes to the front"); screenToFront(); }   // the AYN Thor's Recents and Home can leave it paused behind them
+                return;
+            default:
+        }
+    }
+
+    /** Starts the game's activity on display id: singleTask, so Android moves its task there and brings it to the front (an intent with no title ID is a
+     *  no-op in GameActivity.onNewIntent; GameReturn goes this way too) */
+    private static boolean moveHome(Activity game, int id) {
+        try {
+            game.startActivity(new android.content.Intent(game, game.getClass()).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            | android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
+                    android.app.ActivityOptions.makeBasic().setLaunchDisplayId(id).toBundle());
+            return true;
+        } catch (RuntimeException e) { Log.w(TAG, "the game could not go back to display " + id + ": " + e); return false; }
+    }
+
+    /** The companion's windows closed, to be shown again on another display */
+    private static void closeWindows() {
+        if (screenUp) { screenUp = false; CompanionScreen.close(); }
+        if (shown != null) {
+            try { shown.dismiss(); } catch (RuntimeException ignored) {}
+            shown = null;
+            try { Bridge.present(false); } catch (UnsatisfiedLinkError ignored) {}
+        }
     }
 
     /** Whether the built-in display's companion activity (CompanionScreen, Swap screens) should be up now */
     static boolean screenWanted() { return screenUp && !stopped && !away; }
     private static boolean screenUp;
+    /** The display the game was started on (ScreenPlace), INVALID_DISPLAY once it is gone or refused the game */
+    private static int home = Display.INVALID_DISPLAY;
+    /** When the game was last sent home (uptime), 0: not in this round */
+    private static long movedHomeAt;
+    /** How long the game may take to get home after it was sent there: still elsewhere then, Android refused the move */
+    private static final long MOVE_HOME_MS = 3000;
+    /** When CompanionScreen was last started (uptime): until it is resumed it is not in front yet, and needs no second start */
+    private static long screenOpenedAt;
+    private static final long SCREEN_OPENING_MS = 1500;
+    /** Each display keeps a focused window of its own (perDisplayFocus), read at the start */
+    private static boolean perDisplay = true;
 
     /** When this run started (SystemClock.elapsedRealtime): the stats page's run clock (GameScreen) */
     public static long startedAt() { return startedAt; }
@@ -155,7 +247,7 @@ public final class Companion {
     static void refocusGame() {
         Activity game = decidingGame;
         Display d = game != null ? game.getDisplay() : null;
-        if (game == null || d == null || stopped || away || game.isFinishing()) return;
+        if (!perDisplay || game == null || d == null || stopped || away || game.isFinishing()) return;   // without per-display focus the built-in display stays on top (screenTouched)
         try {
             game.startActivity(new android.content.Intent(game, game.getClass()).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                             | android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
@@ -175,6 +267,34 @@ public final class Companion {
     static boolean gameKey(android.view.KeyEvent e) {
         Activity game = decidingGame;
         return game != null && !stopped && !game.isFinishing() && game.dispatchKeyEvent(e);
+    }
+
+    /** A controller's stick or trigger that reached CompanionScreen: the game's, as {@link #gameKey} */
+    static boolean gameMotion(android.view.MotionEvent e) {
+        Activity game = decidingGame;
+        return game != null && !stopped && !game.isFinishing() && game.dispatchGenericMotionEvent(e);
+    }
+
+    /** A touch on the companion's page on the built-in display. Without per-display focus only the top display has a focused window, and Android hands Back
+     *  from the built-in display's navigation bar to that display's focused window: with the game's display on top there is none, and Back waited 5 s and
+     *  ended in "isn't responding" (the AYN Thor keeps a focused window per display, a phone may not). A tap on the game's screen puts its display on top;
+     *  a touch here (the edge swipe that shows the navigation bar starts here too) puts the built-in one back on top before Back can come. The controller
+     *  then reaches CompanionScreen, which hands it to the game (gameKey, gameMotion) */
+    static void screenTouched() {
+        CompanionScreen s = CompanionScreen.current;
+        if (perDisplay || !screenWanted() || s == null || CompanionScreen.onTop() || s.isFinishing()) return;
+        screenToFront();
+    }
+
+    /** CompanionScreen to the front of the built-in display, and that display to the top (singleInstance: the activity there is brought forward) */
+    private static void screenToFront() {
+        CompanionScreen s = CompanionScreen.current;
+        if (s == null || s.isFinishing()) return;
+        try {
+            s.startActivity(new android.content.Intent(s, CompanionScreen.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            | android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
+                    android.app.ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY).toBundle());
+        } catch (RuntimeException e) { Log.w(TAG, "the built-in display did not come to the top: " + e); }
     }
 
     /** Back on CompanionScreen's display (its navigation bar): what Back does in the game, the in-game panel */
@@ -205,10 +325,18 @@ public final class Companion {
         allowed = false;
         away = false;
         screenUp = false;
+        home = displayOf(game);
+        movedHomeAt = 0;
+        perDisplay = perDisplayFocus();
         DisplayManager dm = (DisplayManager) game.getSystemService(Activity.DISPLAY_SERVICE);
         listener = new DisplayManager.DisplayListener() {
             @Override public void onDisplayAdded(int id) { if (allowed) show(game, gameName, dm); else if (!away) openPage(game); }
-            @Override public void onDisplayRemoved(int id) { if (allowed && shown != null && shown.getDisplay().getDisplayId() == id) { shown = null; show(game, gameName, dm); } if (!allowed) { GameScreen.close(); if (!away) openPage(game); } }
+            @Override public void onDisplayRemoved(int id) {
+                if (id == home) home = Display.INVALID_DISPLAY;   // the clip-on screen came off: the game stays where Android puts it (the built-in display)
+                if (allowed && shown != null && shown.getDisplay().getDisplayId() == id) { shown = null; show(game, gameName, dm); }
+                if (!allowed) { GameScreen.close(); if (!away) openPage(game); }
+                ui.postDelayed(() -> { if (decidingGame == game) place(game); }, DISPLAY_SETTLE_MS);   // Android moves the game's task off that display: CompanionScreen must not stay under it
+            }
             @Override public void onDisplayChanged(int id) {}
         };
         dm.registerDisplayListener(listener, null);
@@ -271,10 +399,11 @@ public final class Companion {
         if (d.getDisplayId() == Display.DEFAULT_DISPLAY) {   // Swap screens: Android takes no Presentation there, the page gets an activity (CompanionScreen)
             try {
                 screenUp = true;
+                screenOpenedAt = SystemClock.uptimeMillis();
                 game.startActivity(new android.content.Intent(game, CompanionScreen.class).putExtra("name", gameName)
                                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION),
                         android.app.ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY).toBundle());
-                Log.i(TAG, "companion on the built-in display (the game is on another one; per-display focus " + (perDisplayFocus() ? "on" : "off") + ")");
+                Log.i(TAG, "companion on the built-in display (the game is on another one; per-display focus " + (perDisplay ? "on" : "off: this display stays on top, the controller goes to the game through it") + ")");
                 wanted = -1;
                 GameScreen.close();
                 tell(game, "shown");

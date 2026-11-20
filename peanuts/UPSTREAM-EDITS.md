@@ -1332,6 +1332,21 @@ as the game's Back; the page is a panel above it that never takes the focus, so 
 Its start still makes the built-in display the top one, which would hand it the controller, so `Companion.refocusGame` starts the game's activity again on its display (singleTask: brought to
 the front; an intent with no title ID is a no-op in `GameActivity.onNewIntent`). No upstream-candidate general fix: the lines call Peanuts-owned code.
 
+### Round 31, the game back on its own display (2026-11-20, GitHub issue #183)
+
+A phone's Recents starts the task it is given on the display Recents runs on. With Swap screens on the Retroid Pocket 5, Recents on the bottom screen and
+back into the game moved the game to the bottom and the companion to the top. Recents and Home also closed `CompanionScreen`, which came back only after
+the game had been in the background. `GameActivity` now tells `Companion` each time it becomes the top activity again. `Companion.place` (rule in
+`ScreenPlace`) sends the game back to the display it was started on when it has a task of its own (Swap screens), or lets the companion follow it (the game in Home's task, a refused move, a display that is
+gone), and opens the companion again. The same round makes the built-in display stay on top on a phone without per-display focus, where Back from its
+navigation bar otherwise found no focused window (`Companion.screenTouched`, all in Peanuts' own files).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 1 | `onTopResumedActivityChanged(boolean)`, new: `if (top) dev.peanuts.Companion.gameOnTop(this)` | trailing `// PEANUTS: ...` |
+
+Tests: `peanuts/tests/test_companion_screen.py` (`ScreenPlaceJvmTest`, `ScreenKeysJvmTest`). Upstream candidate: no (it calls Peanuts' companion).
+
 ### Round 24, Share build log (2026-11-18)
 
 A failed, stopped or interrupted build could not be reported: Share log sends game runs only, and the import wrote no log at all (issue #124 had none).
