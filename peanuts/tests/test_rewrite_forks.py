@@ -29,6 +29,21 @@ def borrowed(names, workers, os_=os):
     return ns, calls
 
 
+def without_forks(src):
+    """patch_nso.py's text without its PEANUTS(upstream-candidate) spans that hold in_forks (a top-level one with the blank line before it): the file as
+    upstream has it"""
+    lines, out, i = src.split('\n'), [], 0
+    while i < len(lines):
+        if 'PEANUTS(upstream-candidate) begin' in lines[i]:
+            j = next(k for k in range(i, len(lines)) if 'PEANUTS end' in lines[k])
+            if any('in_forks' in l for l in lines[i:j + 1]):
+                if not lines[i].startswith(' ') and out and out[-1] == '': out.pop()
+                i = j + 1
+                continue
+        out.append(lines[i]); i += 1
+    return '\n'.join(out)
+
+
 def square_plus(a, b): return [a * a + b] * 3
 
 
@@ -197,10 +212,16 @@ class Wiring(unittest.TestCase):
         self.assertIn('except ImportError: return in_forks(fn, jobs, phase)', SRC)
 
     def test_the_file_before_it_counts_as_the_same_rewriter(self):
-        equiv = REPO / 'dm/tools/rewriter_equiv/patch_nso.py.6bc30f06074b'
+        # the equivalent (scripts/pack_android.py EQUIV: a pack whose key was made with it counts as up to date) is the current file without the forks, and
+        # nothing else: only then does a rewrite with it come out the same. main's PR #164 changed the rewriter under this branch (2026-11-20), and the file
+        # kept here was still the one before #164: every pack rewritten before #164 would have counted as up to date, where main rewrites them
+        name = 'patch_nso.py.eaf706b807d5'
+        equiv = REPO / 'dm/tools/rewriter_equiv' / name
         self.assertTrue(equiv.is_file())
-        self.assertNotIn('def in_forks', equiv.read_text(encoding='utf-8'))
-        self.assertIn('dm/tools/rewriter_equiv/patch_nso.py.6bc30f06074b\t', (REPO / 'peanuts/upstream-unmarked.txt').read_text(encoding='utf-8'))
+        self.assertFalse((REPO / 'dm/tools/rewriter_equiv/patch_nso.py.6bc30f06074b').exists())   # the file before #164
+        self.assertEqual(without_forks(SRC), equiv.read_text(encoding='utf-8'), f'{name} is not patch_nso.py without in_forks: '
+                         'main changed the rewriter; the equivalent is then main\'s file (git show <its last commit>:dm/tools/patch_nso.py)')
+        self.assertIn(f'dm/tools/rewriter_equiv/{name}\t', (REPO / 'peanuts/upstream-unmarked.txt').read_text(encoding='utf-8'))
 
     def test_the_pack_script_runs_it_in_the_worker(self):
         pack = (REPO / 'scripts/pack_android.py').read_text(encoding='utf-8')
