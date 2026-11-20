@@ -331,7 +331,9 @@ DM_PROBE_LIVE	developer	Diagnostics			text			both
 DM_PROBE_POLL	developer	Diagnostics			text			both						
 DM_PROBE_WATCH	developer	Diagnostics			text			both						
 DM_PROBE_X2	developer	Diagnostics			text			both						
+DM_PROFILE_PAIRS	developer	Diagnostics			text			both						
 DM_PROFILE_PATH	developer	Diagnostics			text			both						
+DM_PROFILE_PROGRAMS	developer	Diagnostics			text			both						
 DM_PROFILE_SEED	developer	Diagnostics			text			both						
 DM_PROGRAM_ID	developer	Memory			text			both						
 DM_PSO_ARCHIVE	internal	Diagnostics			text			both						Mac or iOS only
@@ -665,7 +667,12 @@ DM_VK_PROF	developer	Diagnostics			text			both
 DM_VK_PRUNE_MS	developer	Graphics			text			both						
 DM_VK_PSO_ASYNC	advanced	Performance	Background pipelines		toggle			game		Game settings > Background pipelines				
 DM_VK_PSO_FAIR_MS	developer	Performance			text			both						
+DM_VK_PSO_LINK_NOW	developer	Performance			text			both						
 DM_VK_PSO_ORDER	developer	Performance			text			both						
+DM_VK_PSO_PREFETCH	developer	Performance			text			both						
+DM_VK_PSO_PREP	developer	Performance			text			both						
+DM_VK_PSO_PREP_MEM_MB	developer	Memory			text			both						
+DM_VK_PSO_PREP_THREADS	developer	Performance			text			both						
 DM_VK_PSO_SLOTS	developer	Performance			text		1 with Turnip, 4 with other drivers	both						
 DM_VK_PUSH_DEDUP	developer	Graphics			text			both						
 DM_VK_PUSH_DELTA	developer	Diagnostics			text			both						
