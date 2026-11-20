@@ -40,7 +40,9 @@
     "01007300020FA000",
     "01001B300B9BE000",
     "0100C49025D3E000",
-    "010051F0207B2000"
+    "010051F0207B2000",
+    "010069401ADB8000",
+    "0100DCA0064A6000"
   ],
   "games": [
     {
@@ -314,6 +316,23 @@
       "companion": true,
       "profile": "dm/games/01006B601380E000/game.tsv",
       "note": "dm/games/01006B601380E000/README.md"
+    },
+    {
+      "title_id": "0100DCA0064A6000",
+      "name": "Luigi's Mansion 3",
+      "profile_name": "Luigi's Mansion 3",
+      "builds": [
+        {
+          "version": "v327680",
+          "number": 327680,
+          "display": "1.4.0"
+        }
+      ],
+      "readme_update": "1.4.0",
+      "package": "v327680",
+      "companion": false,
+      "profile": "dm/games/0100DCA0064A6000/game.tsv",
+      "note": "dm/games/0100DCA0064A6000/README.md"
     },
     {
       "title_id": "0100152000022000",
@@ -681,6 +700,23 @@
       "companion": false,
       "profile": "dm/games/010051F0207B2000/game.tsv",
       "note": "dm/games/010051F0207B2000/README.md"
+    },
+    {
+      "title_id": "010069401ADB8000",
+      "name": "Unicorn Overlord",
+      "profile_name": "Unicorn Overlord",
+      "builds": [
+        {
+          "version": "v262144",
+          "number": 262144,
+          "display": "1.05"
+        }
+      ],
+      "readme_update": "1.05",
+      "package": "v262144",
+      "companion": false,
+      "profile": "dm/games/010069401ADB8000/game.tsv",
+      "note": "dm/games/010069401ADB8000/README.md"
     },
     {
       "title_id": "0100453019AA8000",
