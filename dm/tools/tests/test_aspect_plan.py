@@ -59,6 +59,15 @@ int main(void) {
  assert(asp_plan_apply(&p,image,sizeof image,asp_shape("8:7"))==3 && get(0x300)==1282 && get(0x304)==1122);
  assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,nop,m0x100,08f080d2",bid,&p)==-1);           // only a BL becomes a NOP
  assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,nop,m0x101,bb611394",bid,&p)==-1);           // code is word aligned
+ // Breath of the Wild 1.6.0's sites: fdiv s0,s0,s1 and ldr s0,[x0,#0xb0] become fmov s0,#imm8. 4:3 gives the word of the community's 4:3 patch (1.3125)
+ const char *b="a6ce40dc3aedb1becacd2f1ff4515307,ratio_fmov,m0x100,0018211e;a6ce40dc3aedb1becacd2f1ff4515307,ratio_fmov,m0x104,00b040bd";
+ assert(asp_plan_parse(b,bid,&p)==2);
+ memset(image,0,sizeof image);put(0x100,0x1e211800);put(0x104,0xbd40b000);
+ assert(asp_plan_apply(&p,image,sizeof image,asp_shape("4:3"))==2 && get(0x100)==0x1e2eb000 && get(0x104)==0x1e2eb000);
+ assert(asp_fmov_value(0x75)==1.3125 && asp_fmov_value(0x70)==1.0 && asp_fmov_value(0x00)==2.0 && asp_fmov_value(0x60)==0.5);
+ for (double s=0.4;s<4.0;s+=0.01) { double v=asp_fmov_value(asp_fmov_imm8(s));assert(fabs(v/s-1)<0.032); }   // every shape has a value within 3.2 %
+ assert(asp_fmov_value(asp_fmov_imm8(21.0/9))==2.375 && asp_fmov_value(asp_fmov_imm8(31.0/27))==1.125);
+ assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,ratio_fmov,m0x100,08f080d2",bid,&p)==-1);    // a MOVZ leaves no ratio in a float register
  return 0;
 }'''
         with tempfile.TemporaryDirectory() as d:
@@ -76,7 +85,7 @@ int main(void) {
             text=tsv.read_text(encoding='utf-8')
             for r in rows:
                 self.assertEqual(len(r),5,f'{tsv}: {r}')
-                self.assertRegex(r[1],r'^[0-9a-f]{32}$');self.assertIn(r[2],('ratio_f32','width_movz','width_u32','area_width_u32','area_height_u32','nop'))
+                self.assertRegex(r[1],r'^[0-9a-f]{32}$');self.assertIn(r[2],('ratio_f32','width_movz','width_u32','area_width_u32','area_height_u32','nop','ratio_fmov'))
                 self.assertRegex(r[3],r'^m0x[0-9a-f]+$');self.assertRegex(r[4],r'^[0-9a-f]{8}$')
                 self.assertIn(f'main={r[1]}',text,f'{tsv}: {r[1]} is not one of the profile\'s main builds')
         self.assertGreater(seen,0)

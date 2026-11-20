@@ -4,7 +4,8 @@
 // Spec (DM_ASPECT_PLAN): "<main build, 32 hex>,<kind>,m0x<offset in main>,<expected word, 8 hex as in the file>" rows, ';' between.
 // Kinds: ratio_f32 (a float 16/9 becomes the shape), width_movz (a MOVZ's imm16 width for 16:9 becomes the width for the shape),
 // width_u32 (the same for a 32-bit width in data), area_width_u32 and area_height_u32 (a 16:9 width and height that change together,
-// the pixel count about kept), nop (a BL the shape makes needless). All rows are checked before any is written.
+// the pixel count about kept), nop (a BL the shape makes needless), ratio_fmov (an FDIV or LDR that leaves the ratio in a float
+// register becomes FMOV #imm8: the nearest value that instruction holds, within 3.2 % of the shape). All rows are checked before any is written.
 #ifndef DM_ASPECT_PLAN_H
 #define DM_ASPECT_PLAN_H
 #include "fpslocker_plan.h"
@@ -14,7 +15,7 @@
 #define ASP_TEXT 4096
 #define ASP_K169 (16.0 / 9.0)
 struct asp_row {
-  char kind;   // 'r' ratio_f32, 'w' width_movz, 'u' width_u32, 'a' area_width_u32, 'h' area_height_u32, 'n' nop
+  char kind;   // 'r' ratio_f32, 'w' width_movz, 'u' width_u32, 'a' area_width_u32, 'h' area_height_u32, 'n' nop, 'f' ratio_fmov
   uint64_t off;
   uint32_t expected;
 };
@@ -34,6 +35,21 @@ static inline double asp_shape(const char *e) {
 // A 16:9 width for the shape: even, as render sizes are
 static inline uint32_t asp_width(uint32_t w169, double shape) {
   return (uint32_t)(lround(w169 * shape / ASP_K169 / 2.0) * 2);
+}
+// FMOV's 8-bit immediate nearest a shape, and its value: (16 + m) / 16 * 2^e, m 0..15, e -3..4. Between 0.4 and 4 a shape is within 3.2 % of one.
+static inline double asp_fmov_value(unsigned imm8) {
+  int r = ((imm8 & 0x40) ? 0 : 4) | ((imm8 >> 4) & 3);   // NOT(b):c:d
+  return ldexp((16 + (imm8 & 15)) / 16.0, r - 3);
+}
+static inline unsigned asp_fmov_imm8(double shape) {
+  unsigned best = 0x70;   // 1.0
+  for (unsigned r = 0; r < 8; r++)
+    for (unsigned m = 0; m < 16; m++) {
+      unsigned imm8 = ((r & 4) ? 0 : 0x40) | ((r & 3) << 4) | m;
+      if (fabs(asp_fmov_value(imm8) - shape) < fabs(asp_fmov_value(best) - shape))
+        best = imm8;
+    }
+  return best;
 }
 // The word a row writes for the shape, from the word it expects; 0 when the expected word is not what the kind takes
 static inline int asp_word(const struct asp_row *r, double shape, uint32_t *out) {
@@ -68,6 +84,12 @@ static inline int asp_word(const struct asp_row *r, double shape, uint32_t *out)
     if (r->expected < 64 || r->expected > 16384 || v < 64 || v > 65535)
       return 0;
     *out = v;
+    return 1;
+  }
+  if (r->kind == 'f') {   // an instruction that leaves the 16:9 ratio in a float register (FDIV Sd,Sn,Sm or LDR St,[Xn,#imm]) becomes FMOV Sd,#imm8
+    if ((r->expected & 0xffe0fc00u) != 0x1e201800u && (r->expected & 0xffc00000u) != 0xbd400000u)
+      return 0;
+    *out = 0x1e201000u | ((uint32_t)asp_fmov_imm8(shape) << 13) | (r->expected & 0x1f);
     return 1;
   }
   if (r->kind == 'n') {   // a call the shape makes needless (a BL), made a NOP
@@ -110,10 +132,10 @@ static inline int asp_plan_parse(const char *spec, const char *build, struct asp
         return -1;
     struct asp_row r = {0};
     r.kind = !strcmp(f[1], "ratio_f32") ? 'r' : !strcmp(f[1], "width_movz") ? 'w' : !strcmp(f[1], "width_u32") ? 'u'
-             : !strcmp(f[1], "area_width_u32") ? 'a' : !strcmp(f[1], "area_height_u32") ? 'h' : !strcmp(f[1], "nop") ? 'n' : 0;
+             : !strcmp(f[1], "area_width_u32") ? 'a' : !strcmp(f[1], "area_height_u32") ? 'h' : !strcmp(f[1], "nop") ? 'n' : !strcmp(f[1], "ratio_fmov") ? 'f' : 0;
     if (!r.kind || f[2][0] != 'm' || !fpw_plan_hex(f[2] + 1, &r.off) || !fpw_plan_word(f[3], &r.expected))
       return -1;
-    if ((r.kind == 'w' || r.kind == 'n') && (r.off & 3))
+    if ((r.kind == 'w' || r.kind == 'n' || r.kind == 'f') && (r.off & 3))
       return -1;
     uint32_t probe;
     if (!asp_word(&r, 21.0 / 9.0, &probe))   // the expected word must be one the kind takes, whatever the build
