@@ -160,6 +160,13 @@ class SplitReuse(unittest.TestCase):
             seen |= set(names)
         self.assertGreater(len(seen), 2)
 
+    def test_a_split_that_kept_nothing_names_no_files_scanned_to_check(self):
+        # a phone's first build logged "0 of them scanned to check (the same: )", an empty list (seen on the Thor)
+        nup = self.nup(self.files)
+        _, line, _ = self.split(nup, 'first')
+        self.assertIn('0 of them scanned to check,', line)
+        self.assertNotIn('the same', line)
+
     def test_a_damaged_kept_file_is_scanned_again_not_the_reuse_turned_off(self):
         nup = self.nup(self.files)
         ref, _, _ = self.split(nup, 'ref', reuse=False)

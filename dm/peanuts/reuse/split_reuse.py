@@ -235,8 +235,9 @@ class Context:
                 self.empty.update(empty)
         except Exception as e: self._stop(e)
         cached = sum(1 for k in self.keys if k is not None)
-        print(f'split reuse: {len(self.filled)} of {len(jobs)} files kept (unchanged since a split before), {len(self.expect)} of them scanned to check '
-              f'(the same: {", ".join(jobs[i][1] for i in sorted(self.expect)[:8])}), {len(jobs) - cached} not keyed (archives, files without a hash)', flush=True)
+        same = f' (the same: {", ".join(jobs[i][1] for i in sorted(self.expect)[:8])})' if self.expect else ''   # none scanned: no empty list
+        print(f'split reuse: {len(self.filled)} of {len(jobs)} files kept (unchanged since a split before), {len(self.expect)} of them scanned to check{same}, '
+              f'{len(jobs) - cached} not keyed (archives, files without a hash)', flush=True)
 
     def forget(self, cache):
         """What fill() put into the ScanCache taken out again: those files are scanned. cache None: the split keeps no ScanCache (no DM_SPLIT_RESUME), and the
