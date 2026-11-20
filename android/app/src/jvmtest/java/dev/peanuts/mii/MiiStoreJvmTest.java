@@ -45,7 +45,7 @@ public final class MiiStoreJvmTest {
         List<MiiStore.Mii> back = MiiStore.load(dir);
         check(back.size() == 2 && back.get(0).name.equals("Ana") && back.get(0).get("hair_type") == 77, "round trip");
         check(java.util.Arrays.equals(back.get(1).createId, list.get(1).createId), "create IDs survive");
-        File tsv = new File(MiiStore.database(dir).getParentFile(), "miis.tsv");
+        File tsv = new File(MiiStore.database(dir).getParentFile(), "miis.tsv"); // PEANUTS (review fix)
         String ok1 = Files.readAllLines(tsv.toPath()).get(0), ok2 = Files.readAllLines(tsv.toPath()).get(1);
         String bad = "zz" + ok1.substring(2, 32) + "\tBad\thair_type=1";
         Files.write(tsv.toPath(), (ok1 + "\n" + bad + "\n" + ok2 + "\n").getBytes("UTF-8"));

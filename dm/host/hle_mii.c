@@ -51,6 +51,7 @@ static void mii_default(mii_charinfo *c, int gender, int index) {
     uint64_t a = index >= 0 ? 0x4d49494e44454641ull + (uint64_t)index : dm_entropy64(), b = index >= 0 ? 0x554c54444d484f53ull : dm_entropy64();
     memcpy(c->create_id, &a, 8); memcpy(c->create_id + 8, &b, 8);
     c->create_id[6] = (uint8_t)((c->create_id[6] & 0x0f) | 0x40); c->create_id[8] = (uint8_t)((c->create_id[8] & 0x3f) | 0x80);
+    // PEANUTS: the favourite colour comes from mii_defs below (the index-based colour that was set here was always overwritten)
     static const char name[] = "no name";
     for (size_t i = 0; i < sizeof name - 1; i++) c->nickname[i] = (uint16_t)name[i];
     if (index >= 0 && index < 6) {   // PEANUTS: a default Mii from the console's table (mii_defs)
@@ -104,7 +105,7 @@ static int mii_ok(const mii_charinfo *c) {
     if (c->eyebrow_y < 3 || c->eyebrow_y - 3 > 15 || !c->nickname[0]) return 0;
     return 1;
 }
-// PEANUTS begin: load once under pthread_once (the array is complete before the count is published) and only from the big-stack take-overs
+// PEANUTS: loaded once under pthread_once (the array is complete before the count is published), only from the big-stack take-overs
 static pthread_once_t g_mii_once = PTHREAD_ONCE_INIT;
 static void mii_db_load(void) {
     int n_ok = 0;
@@ -123,7 +124,6 @@ static void mii_db_load(void) {
     g_mii_db_n = n_ok;   // published last
 }
 static int mii_db(void) { pthread_once(&g_mii_once, mii_db_load); return g_mii_db_n; }
-// PEANUTS end
 static int mii_db_find(const void *info) {
     for (int i = 0; info && i < mii_db(); i++) if (!memcmp(g_mii_db[i].create_id, info, 16)) return i;
     return -1;
