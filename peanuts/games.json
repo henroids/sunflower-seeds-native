@@ -51,7 +51,8 @@
     "0100A3D008C5C000",
     "01008F6008C5E000",
     "010051C0134F8000",
-    "01008BC024FDE000"
+    "01008BC024FDE000",
+    "0100B8E016F76000"
   ],
   "games": [
     {
@@ -500,6 +501,24 @@
       "since": null,
       "profile": "dm/games/0100B63016916000/game.tsv",
       "note": "dm/games/0100B63016916000/README.md"
+    },
+    {
+      "title_id": "0100B8E016F76000",
+      "name": "NieR:Automata The End of YoRHa Edition (Asian release)",
+      "profile_name": "NieR:Automata The End of YoRHa Edition",
+      "builds": [
+        {
+          "version": "v131072",
+          "number": 131072,
+          "display": "1.0.3"
+        }
+      ],
+      "readme_update": "1.0.3",
+      "package": "v131072",
+      "companion": false,
+      "since": "0.1.6",
+      "profile": "dm/games/0100B8E016F76000/game.tsv",
+      "note": "dm/games/0100B8E016F76000/README.md"
     },
     {
       "title_id": "01005270232F2000",

@@ -1389,3 +1389,10 @@ Tests: `ncz_test` (ctest; also under ASan, UBSan and TSan), `nsp_test`, `font_te
 | `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `paceCap`: Game owned before the profile's limit | `PEANUTS` |
 | `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 1 | the Default row reads "Default (Game owned)" | `PEANUTS` |
 | `dm/games/README.md`, `dm/tools/docs_patches.py` | 1 each | the key's row and its documentation entry | `PEANUTS` |
+
+### Pokémon Legends: Z-A, update 2.0.2
+
+The Trinity reader in `dm/gfx/tools/shader_split.py` narrows a recognized build to packs of the resource types in its shader map and uses the existing table comparison and full-scan fallback. The profile’s frame timing plan redirects the period table for the verified main build. Measurements are in the [game note](../dm/games/0100F43008C44000/README.md#peanuts-native-on-android).
+| `dm/games/0100B8E016F76000/game.tsv`, `dm/games/0100B8E016F76000/README.md` | 2, 1 | NieR:Automata (Asian release) on Android: `depth_mode zero` as the global profile; frame limits 30 to 60 measured on an AYN Thor; the note's Android section | `PEANUTS` |
+| `dm/games/0100B8E016F76000/vk_prewarm.bin` | new | its Turnip prewarm seed (225 keys) | allow-listed in `peanuts/upstream-unmarked.txt` |
+| `README.md`, `peanuts/docs/README.github.md` | 1 + 1 each | the game's table row and its paragraph under Upcoming in 0.1.6 | inside the files' `PEANUTS` sections |
