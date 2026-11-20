@@ -2098,7 +2098,7 @@ vka_img *vka_tex_get(const tex_t *t, VkCommandBuffer cb) {
             im->vmin = vmin;
             live_add(im);
             if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_created_locked(im);   // PEANUTS: texture readback: nothing of it is copied out before this batch is on the queue (vka_readback.inc)
-            if (compressed(&im->f) && im->mem) {
+            if (compressed(&im->f) && im->mem) { // PEANUTS (PR #167)
                 int lk_bc; for (vka_img *o = live_first(im->mem, &lk_bc); o; o = live_next(o, im->mem, &lk_bc))
                     if (o->gpu_owned && bc_alias_match(o, im)) bc_sync_queue_locked(o);
             }
@@ -2568,7 +2568,7 @@ void vka_img_written_at(vka_img *im, int color_level, const char *file, int line
              im->w, im->h, im->layers, im->d.format, im->m.size / 1048576.0, (unsigned long long)vka_frame(), file, line, im->nsamp, im->novl); }
     im->gpu_owned = 1;
     im->last_fence = vka_fence_last();
-    bc_sync_queue_locked(im);
+    bc_sync_queue_locked(im); // PEANUTS (PR #167)
     if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_written_locked(im);   // PEANUTS: texture readback: the write, its batch and (from the site's vka_rb_color) a colour target's use are noted, once a companion has asked for a texture
     if (img_wb_kind(im)) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 32)   // which GPU writes a copied-back linear texture takes (the copy-back covers the whole image)
         VLOG("linear texture serial %llu %ux%u format %#x: GPU write at frame %llu (%s:%d)%s", (unsigned long long)im->serial, im->w, im->h, im->d.format,
