@@ -14,12 +14,17 @@ sys.path.insert(0, str(REPO / 'dm/tools'))
 import romfs   # noqa: E402
 
 
-def old_walk(top, topdown=True):
-    """The walk before: scandir, then each entry's is_dir (a stat of its path)"""
+def old_walk(top, topdown=True, onerror=None):
+    """The walk before: scandir, then each entry's is_dir (a stat of its path); its top resolved first, outside onerror"""
+    romfs._resolve(top)
     def visit(path):
         dirs, files = [], []
-        with romfs.scandir(path) as entries:
-            for e in entries: (dirs if e.is_dir() else files).append(e.name)
+        try:
+            with romfs.scandir(path) as entries:
+                for e in entries: (dirs if e.is_dir() else files).append(e.name)
+        except OSError as error:
+            if onerror: onerror(error)
+            return
         if topdown: yield str(path), dirs, files
         for name in dirs: yield from visit(os.path.join(path, name))
         if not topdown: yield str(path), dirs, files
@@ -59,6 +64,20 @@ class Walk(unittest.TestCase):
             seen += [os.path.join(path, f).replace('\\', '/') for f in files]
         self.assertFalse(any('/B/' in p for p in seen))
         self.assertTrue(any(p.endswith('/E/F/f.bin') for p in seen))
+
+    def test_names_a_caller_adds_are_walked_as_before(self):
+        # os.walk walks a name a caller puts into dirs, and the walk before found each by its whole path: a nested one is walked, a missing one or a file's
+        # name goes to onerror. The walk by nodes skipped them (found in review)
+        def rows(walk):
+            out, errors = [], []
+            for path, dirs, files in walk(self.top, onerror=lambda e: errors.append(type(e).__name__)):
+                if path == self.top: dirs += ['B/C', 'nothing', 'a.bin']
+                out.append((path.replace('\\', '/'), list(dirs), files))
+            return out, errors
+        new, old = rows(romfs.walk), rows(old_walk)
+        self.assertEqual(new, old)
+        self.assertTrue(any(p.endswith('B/C/D') for p, _, _ in new[0]))   # the nested one, walked
+        self.assertEqual(len(new[1]), 2)   # the missing one and the file's name
 
     def test_a_missing_top_raises_as_before(self):   # _resolve of the top raised before the walk began, and still does
         with self.assertRaises(FileNotFoundError): list(old_walk(f'{self.nup}:base/romfs/nothing'))

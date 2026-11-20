@@ -236,7 +236,7 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
     except OSError as error:
         if onerror: onerror(error)
         return
-    def visit(path, k):
+    def visit(path, k, rel):
         try: kids = image.children(k)
         except OSError as error:
             if onerror: onerror(error)
@@ -247,9 +247,15 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
             else: dirs.append(name); nodes[name] = c
         if topdown: yield str(path), dirs, files
         for name in dirs:
-            if name in nodes: yield from visit(_os.path.join(path, name), nodes[name])
+            sub = f'{rel}/{name}' if rel else name
+            if name in nodes: yield from visit(_os.path.join(path, name), nodes[name], sub); continue
+            try: c = image.find(sub)   # a name the caller put into dirs: found from the top, as the walk before found each by its path (os.walk walks it too)
+            except OSError as error:
+                if onerror: onerror(error)
+                continue
+            yield from visit(_os.path.join(path, name), c, sub)
         if not topdown: yield str(path), dirs, files
-    yield from visit(top, top_node)
+    yield from visit(top, top_node, relative)
     # PEANUTS end
 
 
