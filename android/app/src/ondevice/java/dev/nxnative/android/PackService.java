@@ -91,6 +91,7 @@ public final class PackService extends Service {
     private volatile boolean checkRunning;   // PEANUTS: its worker is alive (until its end is posted)
     private volatile Intent afterCheck;   // PEANUTS: a job's start that came during the check: it runs once the check has stopped
     private volatile Job checkJob;   // PEANUTS: the done job the check runs with: save and publish write and send nothing of it (a build that binds meanwhile must not take it for its own)
+    private volatile Job pausedWaiting;   // PEANUTS: a job paused while it waited for the check (ACTION_PAUSE): told to the clients and the notification at the check's end
     private PrepareText.Failure failure;   // what the last step that failed said for the card (step() sets it with its reason; the worker thread only)
     private volatile boolean heatOverride;   // Go on anyway: the heat pause is lifted while this service runs the job
     private int batteryPct = 100, thermal;
@@ -155,7 +156,9 @@ public final class PackService extends Service {
                 logPause(w, (from != null ? from : "an intent without \"from\"") + ", a job that waited for the full check");
                 if (w != null && !"done".equals(w.state())) {
                     w.state("paused", "user", null);
-                    save(w, true);
+                    try { w.save(); } catch (IOException e) { Log.e(TAG, "job.json: " + e); }   // its file at once: a build that waits for it (Prepare) stops
+                    pausedWaiting = w;   // the clients and its notification once the check's worker has ended (checkKept's post): with a worker alive, publish and
+                                         // note take a paused job for one the policy holds ("Waiting", ongoing, alive), which nothing removed then
                 }
                 return START_STICKY;
             }
@@ -591,6 +594,9 @@ public final class PackService extends Service {
                 if (job == checkJob) job = null;   // not the service's job: a client that binds later was sent it, and the panel and a waiting build took it (found in review)
                 checkJob = null;
                 worker = null;
+                Job pw = pausedWaiting;
+                pausedWaiting = null;
+                if (pw != null) { publish(pw, true); nm.notify(NOTE, note(pw)); }   // now that no worker runs: "Paused" with Resume, not alive (a job that came since takes NOTE after)
                 if (next != null) {   // the job that started during the check: started again now, while this service is still in the foreground
                     try { startForegroundService(next); } catch (RuntimeException e) { Log.w(TAG, "check: the job that waited could not start: " + e); }
                 } else stopForeground(STOP_FOREGROUND_REMOVE);

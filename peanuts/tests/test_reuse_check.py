@@ -42,8 +42,16 @@ class Pause(unittest.TestCase):
         p = s[s.index('        if (ACTION_PAUSE.equals(action)) {'):]
         p = p[:p.index('requestStop("user")')]
         self.assertRegex(p, r'Intent waiting = afterCheck;\s*if \(waiting != null\) \{\s*afterCheck = null;')
-        self.assertRegex(p, r'w\.state\("paused", "user", null\);\s*save\(w, true\);')
+        self.assertRegex(p, r'w\.state\("paused", "user", null\);\s*try \{ w\.save\(\); \}')   # its file at once: a build that waits for it stops
         self.assertRegex(p, r'return START_STICKY;\s*\}\s*// PEANUTS end')
+        # not save(w, true) while the check's worker runs: publish then posted note(w) with a worker alive, a paused job's "Waiting: ..." (the policy's pause),
+        # ongoing, with Pause and no Resume, which the check's end (it removes only its own) left for good; and it told the panel the job was alive
+        self.assertNotIn('save(w, true)', p)
+        self.assertIn('pausedWaiting = w;', p)
+        end = check_kept()
+        end = end[end.index('main.post(() -> {'):]
+        self.assertRegex(end, r'worker = null;\s*Job pw = pausedWaiting;\s*pausedWaiting = null;\s*if \(pw != null\) \{ publish\(pw, true\); nm\.notify\(NOTE, note\(pw\)\); \}')
+        self.assertLess(end.index('publish(pw, true)'), end.index('if (next != null)'))   # before a job that came since takes NOTE
 
 
 class Due(unittest.TestCase):
