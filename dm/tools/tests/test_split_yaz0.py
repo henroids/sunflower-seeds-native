@@ -149,6 +149,26 @@ class Same(unittest.TestCase):
         s = b'Yaz0' + (4096).to_bytes(4, 'big') + bytes(8) + b'\x80A' + bytes([0, 0, 0xff]) * 7 + b'\x00' + bytes([0, 0, 0xff]) * 8   # 1 + 15 references of 0x111
         self.assertEqual(self.check(s, 'two groups of the longest references'), b'A' * 4096)
 
+    def test_a_buffer_that_is_not_one_run_of_bytes(self):   # a strided memoryview: None (it raised BufferError), and yaz0 gives the loop's bytes
+        b = b'vec4 uniform ' * 200; s = compress(b)
+        v = memoryview(bytes(x for c in s for x in (c, 0xee)))[::2]
+        self.assertIsNone(self.mod.decode(v))
+        with mock.patch.object(ss, '_nxyaz0', self.mod): self.assertEqual(ss.yaz0(v), b)
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'RLIMIT_AS')
+    def test_a_size_with_no_memory_for_it(self):   # a damaged size a long stream lets through (47 MiB of it: up to 0xffffffff) and no memory for it: None
+        import resource                           # (it raised MemoryError), and the loop names the reference before the start
+        s = b'Yaz0\xff\xff\xff\xff' + bytes(8) + b'\x00\x00\x00' + bytes(49_164_000)
+        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        with open('/proc/self/statm') as f: vm = int(f.read().split()[0]) * resource.getpagesize()
+        resource.setrlimit(resource.RLIMIT_AS, (vm + (1 << 30), hard))
+        try:
+            self.assertIsNone(self.mod.decode(s))
+            with mock.patch.object(ss, '_nxyaz0', self.mod):
+                with self.assertRaises(SystemExit) as e: ss.yaz0(s)
+            self.assertIn('before the start', str(e.exception))
+        finally: resource.setrlimit(resource.RLIMIT_AS, (soft, hard))
+
 
 class Hook(unittest.TestCase):
     def test_used_when_there(self):   # shader_split takes the module when its Python has it (the phone's lib-dynload), and the loop's result when it says None

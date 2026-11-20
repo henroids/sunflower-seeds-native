@@ -2156,7 +2156,8 @@ Nearly all of a Nintendo game's shaders are in Yaz0 files (`.szs`, and `.bfres` 
 (`yaz0`). For Mario Kart 8 Deluxe 4.0.1 that loop was nearly all of the split: the 1,359 files that hold shaders are 752 Yaz0 streams, 5.5 GB that expand to
 10.7 GB. `_nxyaz0` (`dm/peanuts/pack_worker/nxyaz0.c`, new) is the same loop in C, as a module of the Python home's `lib-dynload` like `_nxaes`. `yaz0` takes
 its bytes when the module is there. The module returns None for every stream the loop stops on (the stream ends early, a back-reference reaches before the
-start, a size the stream cannot reach), and `yaz0` then runs its loop on that stream, so a damaged file names the same error as before. Without the module
+start, a size the stream cannot reach), and also for a buffer that is not one run of bytes or a size there is no memory for (a review found both raised an
+error instead), and `yaz0` then runs its loop on that stream, so a damaged file names the same error as before. Without the module
 (a Mac, Windows, a Python without it) nothing changes.
 
 The module is built by `dm/peanuts/pack_worker/build.sh` into the stage (`peanuts/scripts/ondevice-stage.sh <work dir> zbic` adds it to an existing stage),
@@ -2182,6 +2183,6 @@ both ways, gave the same bytes; the Thor's two splits too. In the direct split, 
 | `android/app/build.gradle` | 1 | the stage must have `lib-dynload/_nxyaz0.cpython-314-aarch64-linux-android.so` (`need`) | `// PEANUTS: ...` |
 | `dm/peanuts/pack_worker/nxyaz0.c`, `build.sh`; `peanuts/scripts/peanuts_build.py`; `peanuts/docs/BUILDER.md` (Peanuts-owned) | | the module, its stage build, its PC build | |
 | `dm/games/0100152000022000/README.md` | 1 | the note's line on the split's Yaz0 decoding, resolved | `<!-- PEANUTS -->` |
-| `dm/tools/tests/test_split_yaz0.py` (new) | 1 | the module built with this machine's compiler against the loop: a corpus of runs, repeats at every distance, text and random bytes; a size that ends inside an operation; trailing bytes; every cut of a stream and references before the start (None, and the loop's error); 3,000 random streams; a size the stream cannot reach; bytes, bytearray and memoryview; the hook with and without the module | `PEANUTS` docstring |
+| `dm/tools/tests/test_split_yaz0.py` (new) | 1 | the module built with this machine's compiler against the loop: a corpus of runs, repeats at every distance, text and random bytes; a size that ends inside an operation; trailing bytes; every cut of a stream and references before the start (None, and the loop's error); 3,000 random streams; a size the stream cannot reach; bytes, bytearray and memoryview; a buffer that is not one run of bytes, and a size with no memory for it (None, not an error); the hook with and without the module | `PEANUTS` docstring |
 
-Tests: `test_split_yaz0.py` (8; 6 skipped without a C compiler or Python's headers), every `test_split_*.py` with and without the module, `peanuts/tests/test_peanuts_build.py`.
+Tests: `test_split_yaz0.py` (10; 8 skipped without a C compiler or Python's headers), every `test_split_*.py` with and without the module, `peanuts/tests/test_peanuts_build.py`.

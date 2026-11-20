@@ -5,7 +5,8 @@
 // decode does exactly what yaz0's Python loop does and returns the same bytes. Where that loop stops with an error (the stream ends early, a back-reference
 // reaches before the start), decode returns None, and yaz0 runs its Python loop on the same stream, which then names the error as before: a damaged file reads
 // the same with and without this module. Also None for a size the stream cannot reach (more than 2,184 bytes for each 25 bytes of it: 8 back-references of
-// 0x111 bytes, a group's most), so a damaged header does not make decode allocate gigabytes first.
+// 0x111 bytes, a group's most), so a damaged header of a stream under about 47 MiB does not make decode allocate gigabytes first; a size the allocation
+// cannot have (no memory), and a buffer that is not one run of bytes, give None too, and the loop decides.
 // The format: big-endian size at +4, the data at +16 in groups of a header byte and 8 operations, high bit first: 1 = one literal byte; 0 = a back-reference
 // of 2 bytes {length high nibble, 12-bit distance} (distance + 1); length 0 reads one more byte + 0x12, else + 2. A copy that overlaps itself repeats its
 // period. The last operation may reach past the size: what lies past it is not kept.
@@ -53,13 +54,19 @@ static int yaz0(const uint8_t *s, size_t len, uint8_t *out, size_t n) {
 static PyObject *decode(PyObject *self, PyObject *arg) {
     (void)self;
     Py_buffer in;
-    if (PyObject_GetBuffer(arg, &in, PyBUF_SIMPLE) < 0) return NULL;
+    if (PyObject_GetBuffer(arg, &in, PyBUF_SIMPLE) < 0) {   // not one run of bytes (a strided memoryview): the Python loop reads it
+        if (!PyErr_ExceptionMatches(PyExc_BufferError)) return NULL;
+        PyErr_Clear(); Py_RETURN_NONE;
+    }
     const uint8_t *s = in.buf; size_t len = (size_t)in.len;
     uint64_t n = 0;
     for (size_t i = 4; i < 8 && i < len; i++) n = n << 8 | s[i];   // int.from_bytes(s[4:8], 'big'), of fewer bytes when the stream is shorter
     PyObject *res = NULL;
     if (n > (uint64_t)len / 25 * 2184 + 2184 || n > PY_SSIZE_T_MAX) { Py_INCREF(Py_None); res = Py_None; }   // more than the stream can reach
-    else if ((res = PyBytes_FromStringAndSize(NULL, (Py_ssize_t)n))) {
+    else if (!(res = PyBytes_FromStringAndSize(NULL, (Py_ssize_t)n))) {   // no memory for the size up front: the loop, which grows as it decodes, decides
+        if (PyErr_ExceptionMatches(PyExc_MemoryError)) { PyErr_Clear(); Py_INCREF(Py_None); res = Py_None; }
+    }
+    else {
         int r;
         Py_BEGIN_ALLOW_THREADS
         r = yaz0(s, len, (uint8_t *)PyBytes_AS_STRING(res), (size_t)n);
