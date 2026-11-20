@@ -35,7 +35,7 @@
 # (<PN_REUSE_DIR>/library/v-<V>/, keep_library): it is there when the pack's is not (the build deleted, another Build folder, a build that stopped after the
 # pack's library went), at most KEEP_TOTAL_MB for every title together, the titles built longest ago going first.
 #
-# Environment: PN_REUSE_DIR (the app's no_backup/reuse/<title ID>; unset: no record or copy is kept and only "same inputs" applies), PN_REUSE=0 (env.txt: off, the
+# Environment: PN_REUSE_DIR (the app's no_backup/reuse/<title ID>; unset: no record or copy is kept, and nothing is kept from an older library), PN_REUSE=0 (env.txt: off, the
 # tool runs as before), PN_REUSE_KEEP_MB (the copies' size for every title together). The profile's own manifest, when it is of this build, wins: the step is
 # then upstream's delta update as it was.
 import collections
@@ -466,7 +466,7 @@ def drop_unchecked(res):
     say(f'reuse: {len(keys or [])} shaders kept, or padded with kept ones, by a run that did not pass its check: deleted (kept again or translated now)')
 
 
-TAGS = '.pn-reuse-deps'   # in the results folder: {key: the part of the profile its result was made with (result_tag)}
+TAGS = '.pn-reuse-deps'   # in the results folder: the run's output, what it kept, and {key: the part of the profile its result was made with (result_tag)}
 
 
 def result_tag(deps, wanted, k):
@@ -476,28 +476,55 @@ def result_tag(deps, wanted, k):
     return deps.digest(k) + (':' + ','.join(p for p in ps if wanted is None or p in wanted) if ps else '')
 
 
-def drop_stale(res, deps, wanted):
+def read_tags(res):
+    """TAGS → {'out': the run's output folder, 'kept': {key: entry hash}, 'tags': {key: result_tag}}, empty parts when it is missing or does not read"""
+    try: t = json.loads(Path(res, TAGS).read_text(encoding='utf-8'))
+    except (OSError, ValueError): t = None
+    if not isinstance(t, dict) or not isinstance(t.get('tags'), dict) or not isinstance(t.get('kept'), dict): t = {'out': None, 'kept': {}, 'tags': {}}
+    return t
+
+
+def drop_stale(res, deps, wanted, out, kept):
     """The results folder is the title's (PackService Outputs.results) and stays until a job is done: a job that did not finish leaves its results to the next
     job of the title, which may have other split pairs or absences (an add-on imported since), and the tool would take them (a review found this before it
-    was published; Leftover in peanuts/tests/test_shader_reuse.py). Before the tool runs, each result whose tag (result_tag) is not this build's, or is not
-    known (TAGS missing: an earlier app's run), is deleted; then this build's tags are written, so a run stopped after them leaves results with the right tags"""
-    p = os.path.join(res, TAGS)
-    try: old = json.loads(Path(p).read_text(encoding='utf-8'))
-    except (OSError, ValueError): old = {}
-    if not isinstance(old, dict): old = {}
+    was published; Leftover in peanuts/tests/test_shader_reuse.py). Before the tool runs (kept this run's, out its output folder), deleted:
+    - every result, unless this run is a Resume of the run that wrote the tags (the same output folder: the same job) with the same translator (its sources
+      are not in vk_android_build.py's result key, nor in DMSH_VK_CHAIN): another job's translations are not this one's to take, the sample's least, which
+      the check must translate now (TAGS missing: an earlier app's run, or one that did not go by these rules);
+    - each result whose tag (result_tag) is not this build's;
+    - each entry the earlier run kept that this one does not keep with the same hash (vk_android_build.py's delta path writes a kept entry as a result: taken
+      as a translation, it would reach the library unchecked, and a build that kept nothing would leave no full check for it).
+    Then this run's tags are written, so a run stopped after them leaves results with the right tags, and a Resume of it keeps its translations, the sample's
+    too (found in review: the sample was translated again at every pause)"""
+    old, tree = read_tags(res), translator_tree()
+    fresh = old['out'] != out or old.get('tree') != tree or tree is None
+    drop = {k for k, h in old['kept'].items() if kept.get(k) != h}
     try: names = os.listdir(res)
     except OSError: names = []
     gone = 0
     for f in names:
         k = f[:-2]
-        if f.endswith('.r') and KEY.fullmatch(k) and (k not in deps.stage or old.get(k) != result_tag(deps, wanted, k)):
+        if f.endswith('.r') and KEY.fullmatch(k) and (fresh or k not in deps.stage or old['tags'].get(k) != result_tag(deps, wanted, k) or k in drop):
             try: os.unlink(os.path.join(res, f)); gone += 1
             except OSError: pass
-    if gone: say(f'reuse: {gone} results of an earlier run made with another part of the profile (pairs, absences): deleted (translated again)')
+    if gone: say(f'reuse: {gone} results of an earlier run that this one cannot take ({"another job, or another translator" if fresh else "another part of the profile, or entries that run kept"}): deleted')
     os.makedirs(res, exist_ok=True)
-    tmp = p + '.tmp'
-    Path(tmp).write_text(json.dumps({k: result_tag(deps, wanted, k) for k in deps.stage if wanted is None or k in wanted}), encoding='utf-8')
-    os.replace(tmp, p)
+    tmp = os.path.join(res, TAGS + '.tmp')
+    Path(tmp).write_text(json.dumps({'out': out, 'tree': tree, 'kept': kept,
+                                     'tags': {k: result_tag(deps, wanted, k) for k in deps.stage if wanted is None or k in wanted}}), encoding='utf-8')
+    os.replace(tmp, os.path.join(res, TAGS))
+
+
+def forget_tags(res):
+    """A run that does not go by these rules (PN_REUSE=0, the profile's own manifest): the entries an earlier run kept go (no translation of this one), and
+    the tags too, so the next run takes none of this run's results by tags it did not write (found in review)"""
+    old = read_tags(res)
+    for k in old['kept']:
+        if KEY.fullmatch(k):
+            try: os.unlink(os.path.join(res, k + '.r'))
+            except OSError: pass
+    try: os.unlink(os.path.join(res, TAGS))
+    except OSError: pass
 
 
 TODO = 'check.todo'   # <PN_REUSE_DIR>/check.todo: the library a build wrote with kept shaders, for the full check (full_check)
@@ -609,9 +636,10 @@ def full_check(argv):
             shutil.copyfile(new_dir / 'dmsh_vk.lib', tmp)
             with open(tmp, 'rb+') as f: os.fsync(f.fileno())   # whole on storage before it takes the library's name (#82: shared storage can keep a rename before the data)
             os.replace(tmp, dst)
-        except OSError as e:   # storage full: the pack keeps its library; check.todo and the check's results stay, and the next check replaces it
+        except BaseException as e:   # storage full, or a stop (a game started): the pack keeps its library; check.todo and the check's results stay
             try: tmp.unlink()
             except OSError: pass
+            if not isinstance(e, OSError): raise
             say(f'[RED] reuse full check: the full translation cannot take the library\'s place ({e}): the pack keeps the library it has; the check is still due')
             return 1
         say(f'reuse full check: the full translation is the game\'s library now ({dst})')
@@ -641,7 +669,9 @@ def reuse(argv):
     if os.environ.get('PN_REUSE') == '0' or len(argv) < 4 or argv[:2] != ['--target', 'vulkan']:
         if os.environ.get('PN_REUSE') == '0':
             say('reuse: off (PN_REUSE=0)')
-            if len(argv) >= 4: drop_unchecked(results_dir(os.path.join(argv[3], 'v-' + vk_version())))
+            if len(argv) >= 4:
+                drop_unchecked(results_dir(os.path.join(argv[3], 'v-' + vk_version())))
+                forget_tags(results_dir(os.path.join(argv[3], 'v-' + vk_version())))
         return run_build(argv, {})
     game, dmsh_chain, delta = load_modules()
     g = game.load()
@@ -656,6 +686,7 @@ def reuse(argv):
     kept, sample = {}, {}
     if m and (m['version'], m['game'], m['inputs']) == (version, g.id, inputs):
         say('reuse: the profile\'s own manifest is of this build: upstream\'s delta update')
+        forget_tags(res)
         code = run_build(argv, {})
     else:
         if reuse_dir:   # the kept copy beside the pack's libraries, for this tool and for vk_android_build.py's delta path, which takes the kept entries from it;
@@ -669,7 +700,6 @@ def reuse(argv):
         finally:
             for L in libs: L.close()
         for l in lines: say(l)
-        drop_stale(res, deps, wanted)
         prof = None
         if kept and reuse_dir:
             try:
@@ -678,11 +708,8 @@ def reuse(argv):
             except (OSError, ValueError) as e: say(f'[RED] reuse: cannot write the profile copy ({e}): none kept'); prof = None
         elif kept: say('reuse: no PN_REUSE_DIR for the profile copy: none kept')
         if prof is None: kept, sample = {}, {}
+        drop_stale(res, deps, wanted, os.path.realpath(out_dir), kept)
         if kept:
-            os.makedirs(res, exist_ok=True)
-            for k in sample:   # translated by this run, never a result an earlier run left: the check compares a translation of now with the older library
-                try: os.unlink(os.path.join(res, k + '.r'))
-                except OSError: pass
             # unchecked with the kept shaders: each vertex shader paired with a kept pixel shader, which this run translates padded with the kept entry's inputs
             # (vk_android_build.py translate_keys reads them from it); its result is keyed without them, so a failed check or a stop before it would leave it
             # for the run after (a review found this before it was published; Padding in peanuts/tests/test_shader_reuse.py)

@@ -439,6 +439,66 @@ class Leftover(Base):
         self.assertEqual((code, len(runs)), (0, 2))   # so it failed, and the full run after it
         self.assertEqual(lib, self.full())
 
+    def test_a_resume_after_the_check_translates_nothing_again(self):
+        # a pause after the check (heat, battery: the packer runs the step again) kept the sample's translations; they were deleted at every run that kept shaders
+        self.profile(); self.build(); self.into_pack()
+        saved = sr.note_check
+
+        def stopped(*a, **k): raise KeyboardInterrupt('a pause after the check, before the step ended')
+        sr.note_check = stopped
+        try:
+            with self.assertRaises(KeyboardInterrupt): self.build()
+        finally: sr.note_check = saved
+        code, runs, lib = self.build()   # the same job again
+        self.assertEqual((code, runs), (0, [[]]))
+        self.assertEqual(lib, self.full())
+
+    def test_an_off_run_between_jobs_leaves_no_tags_of_another_build(self):
+        # job A without the add-on, then job B with it and PN_REUSE=0 (its vertex shaders padded with the add-on's pixel shaders), then job C without it: the tags
+        # B left were A's, so C took B's vertex shaders (found in review)
+        self.profile()
+        sr.BUILD.write_text(FAKE_PAD.format(tools=str(REPO / 'dm/gfx/tools'), games=str(REPO / 'dm/games'), reuse=str(REPO / 'dm/peanuts/reuse'),
+                                            tests=str(Path(__file__).parent)))
+        absent = self.d / 'absent.txt'; absent.write_text(f'{self.ps[3]}\n{self.ps[4]}\n')
+        os.environ['DMSH_VK_ABSENT_FILE'] = str(absent)
+        self.build()   # A, not finished
+        (self.res / f'{self.vs[3]}.r').unlink()   # (stopped before it got to vs[3])
+        del os.environ['DMSH_VK_ABSENT_FILE']
+        os.environ['PN_REUSE'] = '0'
+        self.build()   # B with the add-on, off, not finished
+        del os.environ['PN_REUSE']
+        os.environ['DMSH_VK_ABSENT_FILE'] = str(absent)
+        code, runs, lib = self.build()   # C
+        self.assertEqual(code, 0)
+        game = sr.load_modules()[0]
+        g, done = game.load(), {}
+        for k in self.ps + self.vs:
+            if k not in (self.ps[3], self.ps[4]): done[k] = translate_padded(g, str(self.pkg), k, done)
+        self.assertEqual(lib, done)
+
+    def test_entries_an_earlier_job_kept_are_no_translation_for_another(self):
+        # job A kept shaders and checked them, and did not finish: its results folder holds the older library's entries it kept. Job B (another Build folder)
+        # keeps nothing: it took them as translations, unchecked, and its build left no full check (found in review)
+        self.profile(); self.build(); self.into_pack()
+        self.build()   # A keeps, checks, does not finish
+        shutil.rmtree(self.pack.parent); shutil.rmtree(self.reuse / sr.KEEP_DIR)   # nothing for B to keep from
+        self.profile(unseen='a change the rule and the result key do not see\n')
+        self.out = self.d / 'lib-b'
+        code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(lib, self.full())
+
+    def test_another_translator_takes_no_result_of_before(self):
+        # the translator's sources are in neither vk_android_build.py's result key nor DMSH_VK_CHAIN: an app update that brings another translator library
+        # must not take an unfinished job's translations
+        self.profile(); self.build()
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)
+        saved = sr.translator_tree
+        sr.translator_tree = lambda: 'f' * 16
+        try: code, runs, lib = self.build()   # the same job, after the app update
+        finally: sr.translator_tree = saved
+        self.assertEqual((code, len(runs[0])), (0, 400))
+
     def test_the_same_job_goes_on_from_its_results(self):
         self.profile(); self.build()   # a job's shaders step, the job not done
         shutil.rmtree(self.reuse / sr.KEEP_DIR)   # no older library: only the results can spare a translation
@@ -718,6 +778,21 @@ class FullCheck(Base):
         self.assertEqual(self.library(lib_path), self.full())
         failed = json.loads((self.reuse / sr.FAILED).read_text())
         self.assertEqual((failed['replaced'], failed['differ_count'], failed['differ']), (True, 1, [wrong]))
+
+    def test_a_stop_while_the_full_translation_takes_the_librarys_place(self):
+        # the stop (a game that starts: an exception in the tool's thread, sent again every 3 s) can land in the copy: its .partial must not stay in the pack
+        lib_path, wrong = self.kept_wrong()
+        saved = sr.shutil.copyfile
+
+        def stopped(src, dst):
+            if not str(dst).endswith('.partial'): return saved(src, dst)
+            Path(dst).write_bytes(b'part of it'); raise KeyboardInterrupt('a game started')
+        sr.shutil.copyfile = stopped
+        try:
+            with self.assertRaises(KeyboardInterrupt): self.check()
+        finally: sr.shutil.copyfile = saved
+        self.assertEqual(list(self.pack.rglob('*.partial')), [])
+        self.assertIsNotNone(self.todo())
 
     def test_a_stop_after_the_library_is_replaced_leaves_no_wrong_copy(self):
         lib_path, wrong = self.kept_wrong()

@@ -60,11 +60,20 @@ folder is the title's (`no_backup/xlate/<title ID>`) until a job is done:
 
 - A vertex shader translated in a run that kept its pixel shaders is padded with the kept entries' inputs, so `.pn-reuse-unchecked` lists it with the kept
   shaders: a failed check or a stop before it translates it again.
-- `.pn-reuse-deps` beside the results records what each was made with (its part of the profile and, for a vertex shader, the pixel shaders the build made).
-  Before the tool runs, a result made with another part (a job that did not finish, then an add-on imported) or with none recorded is deleted. A Resume of
-  the same job keeps every result.
-- The sample's results are deleted before the run, so the check compares a translation of now with the older library. The checks that were there stay: the library's
-own check, the split against the profile, every module through spirv-val.
+- `.pn-reuse-deps` beside the results records the run's output folder, the translator's sources, the entries it kept and what each result was made with
+  (its part of the profile and, for a vertex shader, the pixel shaders the build made). Before the tool runs:
+  - every result goes unless the run is a Resume of the same job (the same output folder) with the same translator: another job's translations, the sample's
+    least, are not this one's to take (the check must compare a translation of now with the older library), and the translator's sources are in neither the
+    result's key nor `DMSH_VK_CHAIN`;
+  - a result made with another part goes (a job that did not finish, then an add-on imported);
+  - an entry an earlier run kept goes unless this run keeps it with the same hash: the tool writes a kept entry as a result, which a later run would take as
+    a translation, unchecked.
+
+  A Resume of the same job keeps its translations, the sample's too. A run with `PN_REUSE=0` (or the profile's own manifest) deletes the entries an earlier
+  run kept and the tags, so the next run takes none of its results by tags it did not write.
+
+The checks that were there stay: the library's own check, the split against the profile, every module translated now through spirv-val (a kept one went
+through it when it was made).
 
 ## The full check, later
 
