@@ -971,7 +971,7 @@ static uint64_t gate_hold(int tok, uint64_t key) {
 typedef struct opt_job { struct opt_job *next; gval *g; vka_shader *sh[VKA_NSTAGE]; vka_layout lay; vka_gkey k; } opt_job;
 static opt_job *g_opt_head, **g_opt_tail = &g_opt_head; static pthread_mutex_t g_opt_mu = PTHREAD_MUTEX_INITIALIZER; static pthread_cond_t g_opt_cv = PTHREAD_COND_INITIALIZER;
 static uint64_t g_opt_waiting;
-static _Atomic int g_as_depth_pub;   // PEANUTS: the asynchronous queue's depth (g_as_depth, defined below), for opt_main
+static _Atomic int g_as_depth;   // PEANUTS: the asynchronous queue's depth (defined with the queue, below), for opt_main
 static void *opt_main(void *a) {
     (void)a; pthread_setname_np(pthread_self(), "vk-psopt"); vka_fp_host("vk-psopt");
     // Under the game's threads, as the prewarm and asynchronous threads: nothing waits for an optimized pipeline (its linked one draws meanwhile). Before 2026-11-10 it kept
@@ -986,7 +986,7 @@ static void *opt_main(void *a) {
         pthread_mutex_unlock(&g_opt_mu);
         const vka_shader *pre = j->sh[7] ? j->sh[7] : j->sh[0];
         uint64_t key = pre ? pre->key : (j->sh[1] ? j->sh[1]->key : 0);
-        while (atomic_load(&g_as_depth_pub) > 0) { usleep(2000); pause_point(); }   // PEANUTS: not while a draw waits for its pipeline (Turnip compiles one at a time)
+        while (atomic_load(&g_as_depth) > 0) { usleep(2000); pause_point(); }   // PEANUTS: not while a draw waits for its pipeline (Turnip compiles one at a time)
         int tok = gate_enter(0, gate_heavy(pre, j->sh[1]));   // speculative: its linked pipeline draws meanwhile
         gate_hold(tok, key);
         pstate *P = malloc(sizeof *P);
@@ -1349,7 +1349,8 @@ static _Atomic uint64_t g_as_queued, g_as_made, g_as_skips, g_as_ns, g_as_lat_ma
 // driver's refusals, and the "Preparing graphics" notice says while they happen (vka_warmnote.h)
 static int g_last_pending;
 int vka_pso_last_pending(void) { return g_last_pending; }
-int vka_pso_waiting(void) { int d = atomic_load_explicit(&g_as_depth, memory_order_relaxed); return d > 0 ? d : 0; }
+// (a draw may also be skipped for a pipeline a prewarm thread is making, which is in no queue: counted as one while those threads run, so the notice stays up)
+int vka_pso_waiting(void) { int d = atomic_load_explicit(&g_as_depth, memory_order_relaxed); if (d < 0) d = 0; return d + (atomic_load_explicit(&g_pw_running, memory_order_relaxed) > 0 && !d ? 1 : 0); }
 // PEANUTS end
 // The queue's order (vka_psogate.h vkpg_take_oldest): the job of least predicted cost first, the oldest in its turn. DM_VK_PSO_ORDER=0 (restart): arrival order, as
 // before 2026-11-11. DM_VK_PSO_FAIR_MS (restart, 2000; 0 never): how long the oldest job waits before it takes turns with the cheapest. Under g_as_mu: g_as_credit (ns)
@@ -1403,7 +1404,7 @@ static void *as_main(void *a) {
         if (oldest) { g_as_credit -= (int64_t)(t1 - t0); g_as_old_n++; g_as_lat_old_ns += lat; } else { g_as_credit += (int64_t)(t1 - t0); g_as_cheap_n++; g_as_lat_cheap_ns += lat; }
         if (g_as_credit > (int64_t)g_as_fair_ns) g_as_credit = (int64_t)g_as_fair_ns;   // (cheap time saved up while nothing was old does not buy a run of oldest picks later)
         pthread_mutex_unlock(&g_as_mu);
-        atomic_fetch_add(&g_as_ns, t1 - t0); atomic_fetch_add(&g_as_made, 1); (atomic_fetch_sub(&g_as_depth_pub, 1), atomic_fetch_sub(&g_as_depth, 1));
+        atomic_fetch_add(&g_as_ns, t1 - t0); atomic_fetch_add(&g_as_made, 1); atomic_fetch_sub(&g_as_depth, 1);
         free(j);
     }
     return NULL;
@@ -1420,7 +1421,7 @@ static void as_queue(gval *g, size_t len, vka_shader *const sh[VKA_NSTAGE], cons
     as_job *j = malloc(sizeof *j);
     if (!j) { gfx_build(g, len, sh, lay, k, 0, 0, t0); return; }
     j->next = NULL; j->g = g; j->len = len; memcpy(j->sh, sh, sizeof j->sh); j->lay = *lay; j->k = *k; j->t0 = t0; j->cost = as_cost(sh); j->cs = 0;
-    int d = (atomic_fetch_add(&g_as_depth_pub, 1), atomic_fetch_add(&g_as_depth, 1)) + 1, m = atomic_load(&g_as_depth_max);
+    int d = atomic_fetch_add(&g_as_depth, 1) + 1, m = atomic_load(&g_as_depth_max);
     while (d > m && !atomic_compare_exchange_weak(&g_as_depth_max, &m, d)) {}
     atomic_fetch_add(&g_as_queued, 1);
     pthread_mutex_lock(&g_as_mu); *g_as_tail = j; g_as_tail = &j->next; pthread_cond_signal(&g_as_cv); pthread_mutex_unlock(&g_as_mu);
@@ -1933,7 +1934,7 @@ VkPipeline vka_gfx_pipeline_now(vka_shader *const sh[VKA_NSTAGE], int why, long 
     as_job *j = *pp;
     if (j) { *pp = j->next; if (g_as_tail == &j->next) g_as_tail = pp; }
     pthread_mutex_unlock(&g_as_mu);
-    if (j) { (atomic_fetch_sub(&g_as_depth_pub, 1), atomic_fetch_sub(&g_as_depth, 1)); gfx_build(g, j->len, j->sh, &j->lay, &j->k, 0, 0, j->t0); free(j); }
+    if (j) { atomic_fetch_sub(&g_as_depth, 1); gfx_build(g, j->len, j->sh, &j->lay, &j->k, 0, 0, j->t0); free(j); }
     else {
         pthread_mutex_lock(&g_mu);
         if (g->busy) {
@@ -1974,7 +1975,7 @@ static void cs_queue(gval *g, vka_shader *cs, const vka_layout *lay) {
     as_job *j = calloc(1, sizeof *j);
     if (!j) { cs_build(g, cs, lay, vka_shader_cs_module(cs), 0, 0, 0, 0); return; }
     j->g = g; j->sh[5] = cs; j->lay = *lay; j->t0 = now_ns(); j->cost = as_cost(j->sh); j->cs = 1;
-    int d = (atomic_fetch_add(&g_as_depth_pub, 1), atomic_fetch_add(&g_as_depth, 1)) + 1, m = atomic_load(&g_as_depth_max);
+    int d = atomic_fetch_add(&g_as_depth, 1) + 1, m = atomic_load(&g_as_depth_max);
     while (d > m && !atomic_compare_exchange_weak(&g_as_depth_max, &m, d)) {}
     atomic_fetch_add(&g_as_queued, 1);
     pthread_mutex_lock(&g_as_mu); *g_as_tail = j; g_as_tail = &j->next; pthread_cond_signal(&g_as_cv); pthread_mutex_unlock(&g_as_mu);
