@@ -159,7 +159,8 @@ public final class PackService extends Service {
         // PEANUTS begin: dev.peanuts.build.ReuseCheck's start: the full check of the shaders the done job's last build kept (shader_reuse.py --check), only while it is due
         final boolean checkAsked = intent != null && intent.getBooleanExtra(dev.peanuts.build.ReuseCheck.EXTRA_CHECK, false);
         final boolean check = checkAsked && j != null && "done".equals(j.state())
-                && !j.apkChanged() && !engine.simulated() && dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId()) && (worker == null || !worker.isAlive());
+                && !j.apkChanged() && !engine.simulated() && dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId())
+                && worker == null;   // not only a thread that ended: its end's post (finished, checkKept's) clears worker and checkJob, and a check started before it was forgotten (found in review)
         if (check) checking = true;   // the notification says so from the start (note)
         if (checkAsked && !check && j != null && "done".equals(j.state()) && j.apkChanged() && dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId())) {
             dev.peanuts.build.CheckDue.drop(new File(getNoBackupFilesDir(), "reuse/" + j.titleId()));   // an app update since the build: this app can never check it, and it was asked again every two minutes (found in review)

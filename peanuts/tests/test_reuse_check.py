@@ -95,6 +95,15 @@ class Starts(unittest.TestCase):
         self.assertRegex(self.on_start(), r'if \(checkAsked && !check && \(worker == null \|\| !worker\.isAlive\(\)\)\) \{[^}]*startForeground\(\(Job\) null\);'
                                           r'\s*stopForeground\(STOP_FOREGROUND_REMOVE\);\s*stopSelf\(startId\);\s*return START_NOT_STICKY;')
 
+    def test_a_check_starts_only_once_the_last_workers_end_has_run(self):
+        # a check's start between the last worker's end (its thread gone) and that end's post (worker = null, checkJob = null, stopSelf) started a second
+        # worker the post then forgot: save and publish took the check's done job again, a job's start ran beside it, the service stopped under it
+        on = self.on_start()
+        check = on[on.index('final boolean check = checkAsked'):]
+        check = check[:check.index(';')]
+        self.assertIn('worker == null', check)
+        self.assertNotIn('isAlive', check)
+
 
 class Stale(unittest.TestCase):
     """What the packer sends to a client that binds after the check, and what a build takes from it"""
