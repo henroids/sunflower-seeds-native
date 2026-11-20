@@ -3,7 +3,8 @@
 // code of its own: the loader checks the word the row expects and writes the value for the chosen shape, before code is sealed.
 // Spec (DM_ASPECT_PLAN): "<main build, 32 hex>,<kind>,m0x<offset in main>,<expected word, 8 hex as in the file>" rows, ';' between.
 // Kinds: ratio_f32 (a float 16/9 becomes the shape), width_movz (a MOVZ's imm16 width for 16:9 becomes the width for the shape),
-// width_u32 (the same for a 32-bit width in data). All rows are checked before any is written.
+// width_u32 (the same for a 32-bit width in data), area_width_u32 and area_height_u32 (a 16:9 width and height that change together,
+// the pixel count about kept), nop (a BL the shape makes needless). All rows are checked before any is written.
 #ifndef DM_ASPECT_PLAN_H
 #define DM_ASPECT_PLAN_H
 #include "fpslocker_plan.h"
@@ -13,7 +14,7 @@
 #define ASP_TEXT 4096
 #define ASP_K169 (16.0 / 9.0)
 struct asp_row {
-  char kind;   // 'r' ratio_f32, 'w' width_movz, 'u' width_u32
+  char kind;   // 'r' ratio_f32, 'w' width_movz, 'u' width_u32, 'a' area_width_u32, 'h' area_height_u32, 'n' nop
   uint64_t off;
   uint32_t expected;
 };
@@ -61,6 +62,20 @@ static inline int asp_word(const struct asp_row *r, double shape, uint32_t *out)
     *out = w;
     return 1;
   }
+  if (r->kind == 'a' || r->kind == 'h') {   // a width and a height kept beside each other: the shape with about the 16:9 size's pixel count
+    double q = sqrt(shape / ASP_K169);
+    uint32_t v = (uint32_t)(lround(r->expected * (r->kind == 'a' ? q : 1.0 / q) / 2.0) * 2);
+    if (r->expected < 64 || r->expected > 16384 || v < 64 || v > 65535)
+      return 0;
+    *out = v;
+    return 1;
+  }
+  if (r->kind == 'n') {   // a call the shape makes needless (a BL), made a NOP
+    if ((r->expected >> 26) != 0x25)
+      return 0;
+    *out = 0xd503201fu;
+    return 1;
+  }
   return 0;
 }
 // The rows of `build` (their count), or -1 on a malformed spec. A row of another build is checked for form and left out.
@@ -94,10 +109,11 @@ static inline int asp_plan_parse(const char *spec, const char *build, struct asp
       if (!strchr("0123456789abcdef", f[0][i]))
         return -1;
     struct asp_row r = {0};
-    r.kind = !strcmp(f[1], "ratio_f32") ? 'r' : !strcmp(f[1], "width_movz") ? 'w' : !strcmp(f[1], "width_u32") ? 'u' : 0;
+    r.kind = !strcmp(f[1], "ratio_f32") ? 'r' : !strcmp(f[1], "width_movz") ? 'w' : !strcmp(f[1], "width_u32") ? 'u'
+             : !strcmp(f[1], "area_width_u32") ? 'a' : !strcmp(f[1], "area_height_u32") ? 'h' : !strcmp(f[1], "nop") ? 'n' : 0;
     if (!r.kind || f[2][0] != 'm' || !fpw_plan_hex(f[2] + 1, &r.off) || !fpw_plan_word(f[3], &r.expected))
       return -1;
-    if (r.kind == 'w' && (r.off & 3))
+    if ((r.kind == 'w' || r.kind == 'n') && (r.off & 3))
       return -1;
     uint32_t probe;
     if (!asp_word(&r, 21.0 / 9.0, &probe))   // the expected word must be one the kind takes, whatever the build

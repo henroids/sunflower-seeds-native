@@ -614,6 +614,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         // PEANUTS: aspect_plan rows (aspect_plan.h) are exact-build: pass them, and a shape, only for a main build they name
         boolean aspectPlanOk = prof == null || prof.aspectPlanMatches(BuildCheck.builds(pack).get("main"));
         if (prof != null && aspectPlanOk && !prof.aspectPlan.isEmpty()) env.add("DM_ASPECT_PLAN=" + prof.aspectPlan);
+        runFill = aspectPlanOk && variant == null && ScreenShape.CHOICE.equals(aspect) && GameSettings.fillable(Profile.of(id));   // PEANUTS: Display > Fill at this start
         if (variant != null) {   // Game settings › Aspect ratio: the pack's native-aspect modules (<pack>/<variant>/, loader.c) and the picture shown at that aspect
             env.add("DM_PATCH_VARIANT=" + variant);
             env.add("DM_VK_PICTURE_ASPECT=" + aspect);
@@ -1003,6 +1004,8 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     /** Whether the running game takes live switches (DM_CTL): the in-game panel says "applies at the next start" otherwise */
     boolean live() { return hostRunning && runCtl != null; }
     boolean runStretch() { return runStretch; }
+    private static boolean runFill;   // PEANUTS: this run started with Display > Fill (the screen's own shape asked of the game), for the in-game panel's restart line
+    boolean runFill() { return runFill; }   // PEANUTS
     int runPictureSize() { return runPictureSize; }
 
     /**

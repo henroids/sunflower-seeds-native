@@ -49,6 +49,16 @@ int main(void) {
  assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,width_u32,m0x300,10000000",bid,&p)==-1);     // 16 is not a width
  assert(asp_plan_parse("A6CE40DC3AEDB1BECACD2F1FF4515307,width_u32,m0x300,80070000",bid,&p)==-1);     // build IDs are lower case
  assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,width_u32,c0x300,80070000",bid,&p)==-1);     // main only
+ // Metroid Dread 2.1.0's pair (1600x900): the shape with about the same pixel count; Fire Emblem: Three Houses 1.2.0's two calls made NOPs
+ const char *d="a6ce40dc3aedb1becacd2f1ff4515307,area_width_u32,m0x300,40060000;a6ce40dc3aedb1becacd2f1ff4515307,area_height_u32,m0x304,84030000;"
+ "a6ce40dc3aedb1becacd2f1ff4515307,nop,m0x100,bb611394";
+ assert(asp_plan_parse(d,bid,&p)==3);
+ memset(image,0,sizeof image);put(0x300,1600);put(0x304,900);put(0x100,0x941361bb);
+ assert(asp_plan_apply(&p,image,sizeof image,asp_shape("21:9"))==3 && get(0x300)==1834 && get(0x304)==786 && get(0x100)==0xd503201f);
+ memset(image,0,sizeof image);put(0x300,1600);put(0x304,900);put(0x100,0x941361bb);
+ assert(asp_plan_apply(&p,image,sizeof image,asp_shape("8:7"))==3 && get(0x300)==1282 && get(0x304)==1122);
+ assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,nop,m0x100,08f080d2",bid,&p)==-1);           // only a BL becomes a NOP
+ assert(asp_plan_parse("a6ce40dc3aedb1becacd2f1ff4515307,nop,m0x101,bb611394",bid,&p)==-1);           // code is word aligned
  return 0;
 }'''
         with tempfile.TemporaryDirectory() as d:
@@ -66,7 +76,7 @@ int main(void) {
             text=tsv.read_text(encoding='utf-8')
             for r in rows:
                 self.assertEqual(len(r),5,f'{tsv}: {r}')
-                self.assertRegex(r[1],r'^[0-9a-f]{32}$');self.assertIn(r[2],('ratio_f32','width_movz','width_u32'))
+                self.assertRegex(r[1],r'^[0-9a-f]{32}$');self.assertIn(r[2],('ratio_f32','width_movz','width_u32','area_width_u32','area_height_u32','nop'))
                 self.assertRegex(r[3],r'^m0x[0-9a-f]+$');self.assertRegex(r[4],r'^[0-9a-f]{8}$')
                 self.assertIn(f'main={r[1]}',text,f'{tsv}: {r[1]} is not one of the profile\'s main builds')
         self.assertGreater(seen,0)

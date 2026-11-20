@@ -290,7 +290,7 @@ def linkPlayOf = { String game -> tsvRows(game, 'link_play').any { it.size() > 1
 // shapes under Aspect ratio are its aspect rows, if it has any (aspectsOf)
 def aspectPlanOf = { String game ->
     tsvRows(game, 'aspect_plan').collect { c ->
-        if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['ratio_f32', 'width_movz', 'width_u32']) || !(c[3] ==~ /m0x[0-9a-f]+/) || !(c[4] ==~ /[0-9a-f]{8}/))
+        if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['ratio_f32', 'width_movz', 'width_u32', 'area_width_u32', 'area_height_u32', 'nop']) || !(c[3] ==~ /m0x[0-9a-f]+/) || !(c[4] ==~ /[0-9a-f]{8}/))
             throw new GradleException("$game: invalid aspect_plan row")
         c[1..4].join(',')
     }.join(';')
