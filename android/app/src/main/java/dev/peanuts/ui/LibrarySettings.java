@@ -111,6 +111,9 @@ public final class LibrarySettings {
         companionsRow = new PUi.Setting(a, "🖥️", "Companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
                 .chevron(a);
         card.addView(companionsRow.view);
+        // Your own Miis, which games list as the console's (dev.peanuts.mii.MiiActivity, DM_MII_DB)
+        card.addView(new PUi.Setting(a, "🙂", "Miis", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.mii.MiiActivity"))))
+                .value("Make your own Miis for games").chevron(a).view);
         // Developer-only, no row of its own (PeanutsPrefs.developerReadout): a long press flips whether a title with no companion package shows the raw
         // chains/scan readout on the second display instead of leaving it free for Android's own launcher. The row's own value says so when it's on, so
         // it can't be left on by accident when the device is handed back.
