@@ -34,6 +34,18 @@ class Stop(unittest.TestCase):
         self.assertRegex(watch, r'engine\.interrupt\(\)')
 
 
+class Pause(unittest.TestCase):
+    def test_a_pause_while_a_job_waits_for_the_check_pauses_that_job(self):
+        # the card's Pause of a build that waited for the check to stop (afterCheck) stopped the check instead, and the build started once the check had
+        # stopped: the player's pause did nothing
+        s = PACK.read_text(encoding='utf-8')
+        p = s[s.index('        if (ACTION_PAUSE.equals(action)) {'):]
+        p = p[:p.index('requestStop("user")')]
+        self.assertRegex(p, r'Intent waiting = afterCheck;\s*if \(waiting != null\) \{\s*afterCheck = null;')
+        self.assertRegex(p, r'w\.state\("paused", "user", null\);\s*save\(w, true\);')
+        self.assertRegex(p, r'return START_STICKY;\s*\}\s*// PEANUTS end')
+
+
 class Due(unittest.TestCase):
     """A due check the packer could never run was started again every two minutes for good, and held the checks of every other game (ReuseCheck.startAny
     takes one game at a time), and its job's split stayed"""

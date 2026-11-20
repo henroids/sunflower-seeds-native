@@ -93,7 +93,7 @@ translation (`ondevice/logs/check.log`).
   packer's own lines to `pack.log`), and the shaders step's `absent-shaders.tsv` in the job's folder is written again. The game plays as usual: the library is only read. The job's
   `split/` stays until the check is done.
 - It stops when a game starts (checked every 3 s, and once more before the tool runs), when the packer's policy pauses (battery, heat), or when a job starts
-  (the job goes first: the packer starts it once the check has stopped). The stop is sent again every 3 s while the tool runs (one sent before its run began
+  (the job goes first: the packer starts it once the check has stopped; a Pause while it waits pauses that job). The stop is sent again every 3 s while the tool runs (one sent before its run began
   is lost), and a game that still runs beside it 20 s later ends the packer's process. It goes on another time from the results it kept.
 - A check is asked only with a done job (one not done yet starts it at its end). One that this job can never make is dropped: its split gone, a split of
   another selection, an app update since the build. One that fails (the tool ended with an error, storage full, or the packer's process ended while it ran:

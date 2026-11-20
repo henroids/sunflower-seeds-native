@@ -143,6 +143,23 @@ public final class PackService extends Service {
         }
         if (ACTION_PAUSE.equals(action)) {
             String from = intent.getStringExtra(EXTRA_FROM);
+            // PEANUTS begin: a job that waits for the full check to stop (afterCheck): the pause is that job's. It stopped the check instead, and the job started
+            // once the check had stopped (found in review). The check was asked to stop for the job already; it goes on another time, or now if it had not yet
+            Intent waiting = afterCheck;
+            if (waiting != null) {
+                afterCheck = null;
+                String wp = waiting.getStringExtra(EXTRA_JOB);
+                File wf = wp != null ? new File(wp) : Job.remembered(this);
+                Job w = null;
+                try { if (wf != null) w = Job.read(wf); } catch (IOException e) { Log.w(TAG, "job: " + e.getMessage()); }
+                logPause(w, (from != null ? from : "an intent without \"from\"") + ", a job that waited for the full check");
+                if (w != null && !"done".equals(w.state())) {
+                    w.state("paused", "user", null);
+                    save(w, true);
+                }
+                return START_STICKY;
+            }
+            // PEANUTS end
             boolean running = worker != null && worker.isAlive();
             logPause(job, (from != null ? from : "an intent without \"from\"") + (running ? "" : ", nothing running"));
             if (running) requestStop("user");
