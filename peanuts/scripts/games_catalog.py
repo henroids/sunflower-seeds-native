@@ -194,7 +194,7 @@ def refresh(root=ROOT, warn=print, fetch=companions):
     text = path.read_text(encoding='utf-8')
     try:
         live = fetch(os.environ.get('GITHUB_TOKEN'))
-    except Exception as e:   # the network or GitHub: the column stays as it is
+    except (OSError, ValueError) as e:   # the network or GitHub (URLError is an OSError): the column stays as it is
         warn(f'catalog: companion releases not read ({e}); the companion column is left as it is')
         live = None
     out, seen = [], set()
@@ -209,7 +209,7 @@ def refresh(root=ROOT, warn=print, fetch=companions):
     for t in titles(root):
         p = profile(root, t)
         if t not in seen and p is not None:
-            out.append('\t'.join([t, p['name'] or t, '', 'yes' if live and t in live else 'no']))
+            out.append('\t'.join([t, p['name'] or t, '', '' if live is None else 'yes' if t in live else 'no']).rstrip('\t'))
             warn(f'catalog: {GAMES}: a row for {t} ({p["name"]}) added at the end; give it the name players know if the profile\'s is not')
     path.write_text('\n'.join(out) + '\n', encoding='utf-8', newline='\n')
 
