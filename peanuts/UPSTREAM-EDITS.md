@@ -1360,3 +1360,15 @@ real hashes and sizes), `android/app/src/main/java/dev/peanuts/` (`build/Compres
 
 Tests: `ncz_test` (ctest; also under ASan, UBSan and TSan), `nsp_test`, `font_test`, `peanuts/tests/test_compressed.py`, `test_peanuts_build.py`,
 `test_reimport.py`. Upstream candidate: no (Banana Native takes dump folders and `.nup` files only).
+
+### Game owned by default for a profile (2026-11-20, GitHub issue #153)
+
+`fps_owned_default 1` in a game's profile starts it Game owned until the player picks a frame rate, while the limits from `fps_limit` and `fps_limit_max` stay offered. Kirby and the Forgotten Land uses it: its elapsed-time plan collapsed to 4 fps in the overworld on a Snapdragon 8+ Gen 1, where the game's own pacing held 30.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/build.gradle` | 1 | the profile's column 38 (`fps_owned_default`) | `PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/Profile.java` | 2 | `ownedByDefault` and its column | `PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `paceCap`: Game owned before the profile's limit | `PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 1 | the Default row reads "Default (Game owned)" | `PEANUTS` |
+| `dm/games/README.md`, `dm/tools/docs_patches.py` | 1 each | the key's row and its documentation entry | `PEANUTS` |

@@ -33,7 +33,8 @@ final class Profile {
     String presets = "";   // game.tsv res_preset rows with their windows' scene_output rows (build.gradle presetsOf): "id|label|window|mode|height|outW|outH|measured", ';' between them; Game settings › Resolution (ResPresets)
     boolean steps;   // game.tsv has fps_steps rows (build.gradle stepsOf): a framework of whole fixed steps a frame, which Hold 60 fps keeps at one (Prefs.steps)
     boolean presentOnly;   // game.tsv fps_limit_present 1 (build.gradle presentOnlyOf): the frame limit only paces the presents, the game's own logic is not known to follow it (Prefs.presentOnly)
-    boolean elapsedFrameStep; // PEANUTS: Android hooks derive game time from elapsed time.
+    boolean elapsedFrameStep;
+    boolean ownedByDefault;   // PEANUTS: game.tsv fps_owned_default 1: Game owned until the player picks a rate; the frame limits stay offered (Prefs.paceCap)
     int fpsLimit;   // game.tsv fps_limit (build.gradle fpsLimitOf): the host's frame limit by default, frames a second (0 = none); the launcher offers a frame limit for it (Prefs.limited)
     String fpsLockerPlan = "";
     String fpsModes = "";   // explicit supported numeric rates; Game owned is always available
@@ -51,7 +52,7 @@ final class Profile {
     String cameraAspects = "";   // game.tsv aspect rows (build.gradle aspectsOf): "21:9,4:3", ',' between them; picture shapes the host's own 3D camera patch follows, with no module variant (Game settings › Aspect ratio)
     String variants = "";   // game.tsv variant rows (build.gradle variantsOf): "<name>=<label>", ',' between them; a native 4:3 mod is "43=4:3" (Game settings › Aspect ratio)
 
-    boolean optInPresentRate() { return presentOnly && fpsLimit == 0 && fpsLimitMax > 60 && !decoupled; } // PEANUTS: Leave present-only high rates opt-in.
+    boolean optInPresentRate() { return presentOnly && fpsLimit == 0 && fpsLimitMax > 60 && !decoupled; }
 
     int[] fpsModeCaps() {
         if (fpsModes.isEmpty()) return new int[0];
@@ -583,7 +584,8 @@ final class Profile {
             p.fpsLimitMin = c.length > 34 && "30".equals(c[34]) ? 30 : 20;
             p.fpsModes = c.length > 35 ? c[35] : "";
             p.fpsPlan120 = c.length > 36 ? c[36] : "";
-            p.elapsedFrameStep = c.length > 37 && c[37].equals("1"); // PEANUTS: Optional trailing field for older profile tables.
+            p.elapsedFrameStep = c.length > 37 && c[37].equals("1");
+            p.ownedByDefault = c.length > 38 && c[38].equals("1");   // PEANUTS: fps_owned_default
             out.add(p);
         }
         return Collections.unmodifiableList(out);
