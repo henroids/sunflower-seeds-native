@@ -43,7 +43,10 @@
     "010051F0207B2000",
     "010069401ADB8000",
     "0100DCA0064A6000",
-    "0100F43008C44000"
+    "0100F43008C44000",
+    "0100DAE01E4C8000",
+    "01006AE02236C000",
+    "01007A2027548000"
   ],
   "games": [
     {
@@ -198,6 +201,28 @@
       "companion": true,
       "profile": "dm/games/01001B300B9BE000/game.tsv",
       "note": "dm/games/01001B300B9BE000/README.md"
+    },
+    {
+      "title_id": "01006AE02236C000",
+      "name": "Double Dragon Revive",
+      "profile_name": "Double Dragon Revive",
+      "builds": [
+        {
+          "version": "v65536",
+          "number": 65536,
+          "display": "N1.10"
+        },
+        {
+          "version": "v0",
+          "number": 0,
+          "display": "1.0.0"
+        }
+      ],
+      "readme_update": "1.0.0, N1.10",
+      "package": "v65536",
+      "companion": false,
+      "profile": "dm/games/01006AE02236C000/game.tsv",
+      "note": "dm/games/01006AE02236C000/README.md"
     },
     {
       "title_id": "01003E601E324000",
@@ -567,6 +592,23 @@
       "note": "dm/games/010099A00BC1E000/README.md"
     },
     {
+      "title_id": "0100DAE01E4C8000",
+      "name": "STORY OF SEASONS: Grand Bazaar",
+      "profile_name": "STORY OF SEASONS: Grand Bazaar",
+      "builds": [
+        {
+          "version": "v655360",
+          "number": 655360,
+          "display": null
+        }
+      ],
+      "readme_update": "v655360",
+      "package": "v655360",
+      "companion": false,
+      "profile": "dm/games/0100DAE01E4C8000/game.tsv",
+      "note": "dm/games/0100DAE01E4C8000/README.md"
+    },
+    {
       "title_id": "010028600EBDA000",
       "name": "Super Mario 3D World + Bowser's Fury",
       "profile_name": "Super Mario 3D World + Bowser's Fury",
@@ -723,6 +765,23 @@
       "companion": false,
       "profile": "dm/games/010051F0207B2000/game.tsv",
       "note": "dm/games/010051F0207B2000/README.md"
+    },
+    {
+      "title_id": "01007A2027548000",
+      "name": "Trails in the Sky 2nd Chapter",
+      "profile_name": "Trails in the Sky 2nd Chapter",
+      "builds": [
+        {
+          "version": "v327680",
+          "number": 327680,
+          "display": "1.0.3"
+        }
+      ],
+      "readme_update": "1.0.3",
+      "package": "v327680",
+      "companion": false,
+      "profile": "dm/games/01007A2027548000/game.tsv",
+      "note": "dm/games/01007A2027548000/README.md"
     },
     {
       "title_id": "010069401ADB8000",
