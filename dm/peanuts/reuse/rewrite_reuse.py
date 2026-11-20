@@ -83,6 +83,13 @@ def part(name, src_bytes, g, rewriter_files):
     if not registered:
         ids = sorted({dict(x.split('=', 1) for x in r[2:] if '=' in x).get(name, '') for r in g.values('build')} - {''})
         h.update(b'builds\0' + ','.join(ids).encode() + b'\0')
+        # <module>.match.tsv names each other build row's build of the module with its cut count (patch_nso.py `known`), from the CUTS every patch file has
+        # for it: a fix of another build's cuts changes that table (found in review)
+        counts = []
+        for p in patch_files() + ([own] if own.is_file() else []):
+            c = tables(p)['CUTS']
+            counts += [f'{Path(p).parent.name}/{Path(p).name}:{i}={len(c[i])}' for i in ids if i != bid and c.get(i)]
+        h.update(b'known\0' + ','.join(sorted(counts)).encode() + b'\0')
         h.update(b'displays\0' + ','.join(sorted(f'{r[1]}={dict(x.split("=", 1) for x in r[2:] if "=" in x).get(name, "")}' for r in g.values('build') if len(r) > 1
                                                      and dict(x.split('=', 1) for x in r[2:] if '=' in x).get(name) not in (None, bid))).encode() + b'\0')
     if name == 'main': h.update(b'fps_decouple\0' + repr(sorted(g.values('fps_decouple'))).encode() + b'\0')
@@ -113,16 +120,27 @@ def _read(rp):
     return rec, files
 
 
-def _files(name, out):
-    """The module's own files in the pack (<module>.*, as patch_nso.py names them, less its key, which is written last) and the shared one"""
-    own = [f for f in Path(out).iterdir() if f.is_file() and f.name.startswith(name + '.') and f.name != f'{name}.android.key' and not f.name.endswith('.tmp')]
+def _files(name, out, registered=False):
+    """The module's own files in the pack (<module>.*, as patch_nso.py names them, less its key, which is written last) and the shared one. Never a cross-module
+    table (<module>.xmod.tsv: cross_module writes it after the rewrites, for a build with code mods, whose modules are never recorded), nor for a registered
+    build a match table (patch_nso.py writes none for it: one in the pack is an earlier build's). A file a rewrite does not make must not reach another pack
+    (found in review)"""
+    skip = {f'{name}.android.key', f'{name}.xmod.tsv'} | ({f'{name}.match.tsv'} if registered else set())
+    own = [f for f in Path(out).iterdir() if f.is_file() and f.name.startswith(name + '.') and f.name not in skip and not f.name.endswith('.tmp')]
     return sorted(own + ([Path(out) / SHARED] if (Path(out) / SHARED).is_file() else []))
 
 
-def _copy(rp, name, out, before):
+def _registered(src_bytes, g):
+    """Whether a patch file (or the game profile's own) registers the module's build (its CUTS): patch_nso.py then writes no <module>.match.tsv"""
+    bid, own = build_id(src_bytes), Path(g.dir) / 'patches.py'
+    try: return bid is not None and any(bid in tables(p)['CUTS'] for p in patch_files() + ([own] if own.is_file() else []))
+    except Exception: return False
+
+
+def _copy(rp, name, out, before, registered=False):
     """The module's files into <record>.files/ (by a .tmp folder, then a rename) → {file: SHA-256}; the copy there when it holds these files already; {} for none"""
     keep = rp.with_suffix('.files')
-    files = {f.name: _sha(f) for f in _files(name, out)}
+    files = {f.name: _sha(f) for f in _files(name, out, registered)}
     if f'{name}.patched.bin' not in files: return {}
     if files == before and keep.is_dir() and all((keep / f).is_file() and (keep / f).stat().st_size == (Path(out) / f).stat().st_size for f in files): return files
     shutil.rmtree(keep, ignore_errors=True)
@@ -144,10 +162,11 @@ def record(name, src, out, g, rewriter_files):
     kf, pb = Path(out) / f'{name}.android.key', Path(out) / f'{name}.patched.bin'
     if rp is None or not kf.is_file() or not pb.is_file(): return
     try:
-        pt = part(name, src.read_bytes(), g, rewriter_files)
+        b = src.read_bytes()
+        pt = part(name, b, g, rewriter_files)
         if pt is None: return
         rp.parent.mkdir(parents=True, exist_ok=True)
-        files = _copy(rp, name, out, _read(rp)[1])
+        files = _copy(rp, name, out, _read(rp)[1], _registered(b, g))
         tmp = rp.with_suffix('.tmp')
         tmp.write_text(f'format\t{FORMAT}\nkey\t{kf.read_text().strip()}\npart\t{pt}\nbin\t{_sha(pb)}\n' + ''.join(f'file\t{f}\t{h}\n' for f, h in sorted(files.items())))
         os.replace(tmp, rp)

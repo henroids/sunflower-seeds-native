@@ -206,5 +206,37 @@ class Restore(Rewrite):
         self.assertTrue(self.keeps('main', main, g))   # the record still keeps it in place
 
 
+class Tables(Rewrite):
+    """The module's tables besides patched.bin: a kept or restored module must have the ones a rewrite from nothing makes (found in review)"""
+    def test_the_cut_count_of_another_build_of_the_module(self):
+        # main's build MAIN_B is in no build row and no patch file: patch_nso.py writes, for each build row's main build with CUTS (MAIN_A), its cut count
+        # into main.match.tsv. A fix to MAIN_A's cuts changes that file but not main's own rows
+        src = self.src('main', module(MAIN_B))
+        cut = '(0x100, "00000000", "1f2003d5", "a fix")'
+        self.built('main', src, self.profile([('v1', '1.0.0', MAIN_A, SDK)], f'CUTS = {{{MAIN_A!r}: [{cut}]}}\n'))
+        self.assertFalse(self.keeps('main', src, self.profile([('v1', '1.0.0', MAIN_A, SDK)], f'CUTS = {{{MAIN_A!r}: [{cut}, {cut.replace("0x100", "0x104")}]}}\n')))
+
+    def test_a_cross_module_table_is_never_copied(self):
+        # cross_module writes <module>.xmod.tsv after the rewrites, for a build with code mods (whose modules are never recorded); one left in the pack must not
+        # reach another pack, where the loader would apply it to a module rewritten without it
+        src = self.src('main', module(MAIN_A))
+        g = self.profile([('v1', '1.0.0', MAIN_A, SDK)], f'CUTS = {{{MAIN_A!r}: []}}\n')
+        (self.out / 'main.xmod.tsv').write_text('left by a build with mods\n')
+        self.built('main', src, g)
+        other = self.d / 'other-build-folder'; other.mkdir()
+        self.assertTrue(rr.restore('main', src, other, g, 'key-2', REWRITER))
+        self.assertFalse((other / 'main.xmod.tsv').exists())
+
+    def test_a_match_table_of_an_earlier_build_is_not_copied(self):
+        # a registered build gets no main.match.tsv from patch_nso.py: one in the pack is an earlier, unregistered build's
+        src = self.src('main', module(MAIN_A))
+        g = self.profile([('v1', '1.0.0', MAIN_A, SDK)], f'CUTS = {{{MAIN_A!r}: []}}\n')
+        (self.out / 'main.match.tsv').write_text(f'# main {MAIN_B}: not a registered build\n')
+        self.built('main', src, g)
+        other = self.d / 'other-build-folder'; other.mkdir()
+        self.assertTrue(rr.restore('main', src, other, g, 'key-2', REWRITER))
+        self.assertFalse((other / 'main.match.tsv').exists())
+
+
 if __name__ == '__main__':
     unittest.main()
