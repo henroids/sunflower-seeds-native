@@ -232,6 +232,7 @@ public final class PackService extends Service {
         if (!startForeground(j)) {
             // Android refused a foreground service here (a start from the background): the job stays as it is, the launcher's Resume starts it
             checking = false;   // PEANUTS: the check waits for its next start (ReuseCheck)
+            if (check) job = null;   // PEANUTS: nor is its done job the service's job, which a client that binds is sent (found in review)
             stopSelf(startId);
             return START_NOT_STICKY;
         }

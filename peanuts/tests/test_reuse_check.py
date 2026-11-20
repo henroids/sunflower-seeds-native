@@ -154,6 +154,13 @@ class Stale(unittest.TestCase):
         end = body[body.index('main.post(() -> {'):]
         self.assertRegex(end, r'if \(job == checkJob\) job = null;[^\n]*\n\s*checkJob = null;')
 
+    def test_a_refused_check_start_leaves_no_job_to_send(self):
+        # `job = j` comes before startForeground; refused, the check's done job stayed the service's job, and a client that binds is sent it (as after a check)
+        s = PACK.read_text(encoding='utf-8')
+        refused = s[s.index('        if (!startForeground(j)) {'):]
+        refused = refused[:refused.index('return START_NOT_STICKY;')]
+        self.assertRegex(refused, r'if \(check\) job = null;')
+
     def test_a_build_takes_only_its_own_jobs_messages(self):
         # Prepare took the newest job the packer sent, whatever its file: another job's "done" (the check's, one finished before) ended a build that had only
         # started ("Pack finished", its game added with a pack still being made)
