@@ -91,7 +91,7 @@ Peanuts Native 0.1.6 includes 52 games. The Companion column shows whether a gam
 
 <!-- PEANUTS end: the Supported games table -->
 
-The 0.1.6 release candidate installed over 0.1.5 on an AYN Thor with its saves kept. Each of the 13 new games reached early gameplay on an AYN Thor with Turnip, among them the Hyrule Field battle in Hyrule Warriors: Age of Calamity and Lumiose Station in Pokémon Legends: Z-A.
+The 0.1.6 release candidate installed over 0.1.5 on an AYN Thor with its saves kept. Nine of the 13 new games reached early gameplay on an AYN Thor with Turnip, among them the Hyrule Field battle in Hyrule Warriors: Age of Calamity and Lumiose Station in Pokémon Legends: Z-A. The other four were checked on other Android devices.
 
 ## What you need
 
