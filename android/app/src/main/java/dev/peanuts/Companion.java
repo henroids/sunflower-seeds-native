@@ -75,6 +75,23 @@ public final class Companion {
     }
 
     /** No companion after all: the game's cover if Settings keep one, else the display goes back to Android */
+    /**
+     * The start page's limit (LOADING_MAX_MS). It counts from the end of the preparing step: while the host prepares shaders before the game starts
+     * (GameActivity.prewarmTick, minutes for a large game) no companion can come up, and the page closed a minute in, the second screen dark for the rest.
+     */
+    private static final Runnable loadingLimit = new Runnable() {
+        @Override public void run() {
+            if (allowed || stopped || decidingGame == null) return;
+            boolean preparing = Companion.preparing;
+            if (preparing) ui.postDelayed(this, 1000); else if (!preparedSeen) settle(decidingGame); else { preparedSeen = false; ui.postDelayed(this, LOADING_MAX_MS); }
+            if (preparing) preparedSeen = true;
+        }
+    };
+    private static boolean preparedSeen;
+    private static volatile boolean preparing;
+    /** GameActivity.prewarmTick: the host is preparing shaders before the game starts (or has not said yet) */
+    public static void preparing(boolean on) { preparing = on; }
+
     private static void settle(Activity game) {
         wanted = PeanutsPrefs.bottomScreen(game) && PeanutsPrefs.bottomScreenInGames(game) ? GameScreen.PLAYING : -1;
         if (wanted < 0) GameScreen.close(); else if (!away) openPage(game);
@@ -194,7 +211,7 @@ public final class Companion {
         wanted = firstPage(game);
         openPage(game);
         tellPage(game, "free");
-        if (wanted == GameScreen.LOADING) ui.postDelayed(() -> { if (!allowed && !stopped && decidingGame != null) settle(decidingGame); }, LOADING_MAX_MS);
+        if (wanted == GameScreen.LOADING) ui.postDelayed(loadingLimit, LOADING_MAX_MS);
         decide(dm);
         GameHold.start(game, gameName);
         held = game.getApplicationContext();

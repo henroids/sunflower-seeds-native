@@ -255,43 +255,26 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     // PEANUTS: show the cold pipeline build while the native host waits to start the game.
     private final Runnable prewarmPoll = this::prewarmTick;
-    private LinearLayout prewarmCover;
-    private ProgressBar prewarmBar;
-    private TextView prewarmText;
+    private dev.peanuts.ui.PrepareCover prewarmCover;   // PEANUTS: the home screen's background, the game's cover, a peanut cracking open, the count (dev.peanuts.ui.PrepareCover)
 
     private void prewarmTick() {
         ui.removeCallbacks(prewarmPoll);
         long progress = Native.prewarmProgress();
+        dev.peanuts.Companion.preparing(progress != 0);   // PEANUTS: the second screen's start page stays up meanwhile
         if (progress == 0) {
             if (prewarmCover != null) {
                 rootView.removeView(prewarmCover);
                 prewarmCover = null;
-                prewarmBar = null;
-                prewarmText = null;
             }
             return;
         }
         if (progress > 0) {
             int total = (int) (progress >>> 32), done = (int) progress;
             if (prewarmCover == null) {
-                prewarmCover = new LinearLayout(this);
-                prewarmCover.setOrientation(LinearLayout.VERTICAL);
-                prewarmCover.setGravity(Gravity.CENTER);
-                prewarmCover.setBackgroundColor(0xff101714);
-                prewarmCover.setClickable(true);
-                prewarmText = new TextView(this);
-                prewarmText.setTextColor(Color.WHITE);
-                prewarmText.setTextSize(20);
-                prewarmText.setGravity(Gravity.CENTER);
-                prewarmCover.addView(prewarmText);
-                prewarmBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-                int width = Math.round(280 * getResources().getDisplayMetrics().density);
-                prewarmCover.addView(prewarmBar, new LinearLayout.LayoutParams(width, LinearLayout.LayoutParams.WRAP_CONTENT));
+                prewarmCover = new dev.peanuts.ui.PrepareCover(this, titleId(), getIntent().getStringExtra("name"));
                 rootView.addView(prewarmCover, rootView.indexOfChild(pausedView), new FrameLayout.LayoutParams(-1, -1));
             }
-            prewarmText.setText("Preparing shaders · " + done + " of " + total);
-            prewarmBar.setMax(total);
-            prewarmBar.setProgress(done);
+            prewarmCover.set(done, total);
         }
         ui.postDelayed(prewarmPoll, 150);
     }
