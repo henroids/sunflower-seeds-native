@@ -151,6 +151,7 @@ DM_MEM_FILEBACK_KINDS	developer	Memory			text			both
 DM_MEM_FILEBACK_MB	developer	Memory			text			both						
 DM_METAL_CAPTURE	internal	Diagnostics			text			both						Mac or iOS only
 DM_METAL_HUD	internal	Game			text			both						Mac or iOS only
+DM_MII_MODEL	developer	Diagnostics			text			both						
 DM_MODULE_ARENA	developer	Game			text			both						
 DM_MOD_INIT_ARRAY	developer	Diagnostics			text			both						
 DM_MOTION	developer	Input			text			both						

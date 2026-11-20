@@ -418,7 +418,8 @@ public final class LibrarySettings {
         triedMoreFonts = true;
         File d = PeanutsPrefs.fontsDir(a);
         String src = PeanutsPrefs.firmwareDir(a);
-        if (src == null || !new File(d, "standard.ttf").isFile() || new File(d, "cjk_sc.ttf").isFile() || !src.startsWith("/") || !new File(src).exists()) return;
+        boolean haveAll = new File(d, "cjk_sc.ttf").isFile() && new File(PeanutsPrefs.miiModelDir(a), "ShapeHigh.dat").isFile();   // PEANUTS: MiiModel too (the importer writes it beside the fonts)
+        if (src == null || !new File(d, "standard.ttf").isFile() || haveAll || !src.startsWith("/") || !new File(src).exists()) return;
         extractFonts(a, src, null);
     }
 

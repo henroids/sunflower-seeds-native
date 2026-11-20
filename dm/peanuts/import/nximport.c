@@ -631,12 +631,13 @@ typedef struct FontJob {
     int got_std, got_ext; int found_ncas; int got_cjk[4];
     uint8_t *data[6]; size_t size[6];   // decode first; an invalid import must not replace any installed font
     char why[2][256];   // required font's read/decryption failure, not a missing archive (issue #22)
+    int got_mii, nmii; char mii_name[16][64]; uint8_t *mii_data[16]; size_t mii_size[16];   // PEANUTS: MiiModel 0100000000000802's files (optional)
 } FontJob;   // got_cjk: cjk_sc, cjk_sc_ext, cjk_tc, cjk_kr (optional)
 // The firmware's Chinese and Korean shared fonts, written beside the two the app needs: a game set to one of those languages asks the console for them (types 1 to 4 of
 // the shared font service) and drew most characters as "?" with the standard font (Pokemon Shield with a Chinese save). FontKorean 0100000000000812 (one file),
 // FontChineseTraditional 0100000000000813 (one file), FontChineseSimple 0100000000000814 (the base file and an "ext" one). Not required: a firmware without them still gives the two
 static int read_bfttf(const NxNode *f, uint8_t **data, size_t *size);
-static int font_all(const FontJob *fj) { return fj->got_std && fj->got_ext && fj->got_cjk[0] && fj->got_cjk[1] && fj->got_cjk[2] && fj->got_cjk[3]; }   // nothing left to look for
+static int font_all(const FontJob *fj) { return fj->got_std && fj->got_ext && fj->got_cjk[0] && fj->got_cjk[1] && fj->got_cjk[2] && fj->got_cjk[3] && fj->got_mii; }   // nothing left to look for
 static void font_try_cjk(FontJob *fj, NxNca *n) {
     int base = n->title_id == 0x0100000000000814ull ? 0 : n->title_id == 0x0100000000000813ull ? 2 : n->title_id == 0x0100000000000812ull ? 3 : -1;
     if (base < 0) return;
@@ -652,6 +653,46 @@ static void font_try_cjk(FontJob *fj, NxNca *n) {
     nx_node_free(root);
 }
 
+// PEANUTS begin: the console's MiiModel system data (0100000000000802), written beside the fonts for the host's MountSystemData (hle_mii.c). A game that
+// builds Mii heads from it (Mario Kart 8 Deluxe) drew none with the host's empty stand-in; the firmware the player gives the app has the real one. Optional:
+// a firmware without it still gives the fonts. Its RomFS holds the files at the root (NXTexture*.dat, Shape*.dat)
+static void font_try_mii(FontJob *fj, NxNca *n) {
+    if (fj->got_mii || n->title_id != 0x0100000000000802ull) return;
+    int s = nx_nca_find_section(n, NX_FS_ROMFS); NxNode *root = s >= 0 ? nx_romfs_tree(n, s) : NULL;
+    if (!root) return;
+    int ok = 1, k = 0;
+    for (int i = 0; i < root->nkids && ok; i++) {
+        NxNode *f = root->kids[i];
+        if (f->is_dir || strlen(f->name) >= sizeof fj->mii_name[0]) continue;
+        if (k == 16 || nx_node_read_whole(f, &fj->mii_data[k], 64u << 20)) { ok = 0; break; }
+        snprintf(fj->mii_name[k], sizeof fj->mii_name[k], "%s", f->name); fj->mii_size[k] = (size_t)f->size; k++;
+    }
+    nx_node_free(root);
+    if (ok && k) { fj->nmii = k; fj->got_mii = 1; return; }
+    for (int i = 0; i < k; i++) { free(fj->mii_data[i]); fj->mii_data[i] = NULL; }
+}
+// <fonts dir>/../miimodel, through miimodel.tmp: the old folder is replaced only by a complete one
+static void font_write_mii(FontJob *fj, const char *out_dir) {
+    if (!fj->got_mii) return;
+    char parent[1100], dir[1200], tmp[1200]; snprintf(parent, sizeof parent, "%s", out_dir);
+    char *sl = strrchr(parent, '/'); if (sl) *sl = 0; else snprintf(parent, sizeof parent, ".");
+    snprintf(dir, sizeof dir, "%s/miimodel", parent); snprintf(tmp, sizeof tmp, "%s/miimodel.tmp", parent);
+    if (nx_mkdir(tmp, 0755) && errno != EEXIST) return;
+    int ok = 1;
+    for (int i = 0; i < fj->nmii && ok; i++) {
+        char p[1300]; snprintf(p, sizeof p, "%s/%s", tmp, fj->mii_name[i]);
+        FILE *o = fopen(p, "wb"); if (!o) { ok = 0; break; }
+        ok = fwrite(fj->mii_data[i], 1, fj->mii_size[i], o) == fj->mii_size[i]; if (fclose(o)) ok = 0;
+    }
+    if (ok) {
+        DIR *d = opendir(dir); struct dirent *e;
+        if (d) { while ((e = readdir(d))) if (e->d_name[0] != '.') { char p[1300]; snprintf(p, sizeof p, "%s/%s", dir, e->d_name); remove(p); } closedir(d); rmdir(dir); }
+        if (rename(tmp, dir)) ok = 0;
+    }
+    if (!ok) { DIR *d = opendir(tmp); struct dirent *e;
+        if (d) { while ((e = readdir(d))) if (e->d_name[0] != '.') { char p[1300]; snprintf(p, sizeof p, "%s/%s", tmp, e->d_name); remove(p); } closedir(d); rmdir(tmp); } }
+}
+// PEANUTS end
 static int read_bfttf(const NxNode *f, uint8_t **data, size_t *size) {
     uint8_t *b = NULL; int rc = -1;
     if (f->size < 8 || nx_node_read_whole(f, &b, 64u << 20)) goto out;
@@ -674,6 +715,7 @@ static int font_try_nca_fd(FontJob *fj, int fd, uint64_t off, uint64_t size) {
     if (nx_nca_open(&n, &c, &e)) return 0;   // header didn't decrypt to NCA3/NCA2, or too small: not a readable NCA, skip quietly
     int rc = 0;
     if (n.key_ok) font_try_cjk(fj, &n);
+    if (n.key_ok) font_try_mii(fj, &n);   // PEANUTS: MiiModel
     if (n.title_id == 0x0100000000000810ull || n.title_id == 0x0100000000000811ull) {
         int std = n.title_id == 0x0100000000000811ull;
         int s = nx_nca_find_section(&n, NX_FS_ROMFS);
@@ -802,8 +844,10 @@ int nximport_firmware_fonts(const char *firmware_dir, const char *out_dir) {
         if (rc) { remove(tmp); continue; }
         if (rename(tmp, path)) { nx_err("cannot replace %s: %s", path, strerror(errno)); remove(tmp); rc = -1; }
     }
+    if (!rc) font_write_mii(&fj, out_dir);   // PEANUTS: MiiModel beside the fonts, when the firmware has it
 done:
     for (int i = 0; i < 6; i++) free(fj.data[i]);
+    for (int i = 0; i < fj.nmii; i++) free(fj.mii_data[i]);   // PEANUTS
     return rc;
 }
 
