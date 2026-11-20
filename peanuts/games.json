@@ -47,7 +47,11 @@
     "0100DAE01E4C8000",
     "01006AE02236C000",
     "01007A2027548000",
-    "010035F022078000"
+    "010035F022078000",
+    "0100A3D008C5C000",
+    "01008F6008C5E000",
+    "010051C0134F8000",
+    "01008BC024FDE000"
   ],
   "games": [
     {
@@ -236,6 +240,24 @@
       "note": "dm/games/01006AE02236C000/README.md"
     },
     {
+      "title_id": "010051C0134F8000",
+      "name": "DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET",
+      "profile_name": "DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET",
+      "builds": [
+        {
+          "version": "v1048576",
+          "number": 1048576,
+          "display": "1.70"
+        }
+      ],
+      "readme_update": "1.70",
+      "package": "v1048576",
+      "companion": false,
+      "since": "0.1.6",
+      "profile": "dm/games/010051C0134F8000/game.tsv",
+      "note": "dm/games/010051C0134F8000/README.md"
+    },
+    {
       "title_id": "010035F022078000",
       "name": "DRAGON BALL: Sparking! ZERO",
       "profile_name": "DRAGON BALL: Sparking! ZERO",
@@ -398,7 +420,7 @@
       "readme_update": "1.4.0",
       "package": "v327680",
       "companion": false,
-      "since": null,
+      "since": "0.1.6",
       "profile": "dm/games/0100DCA0064A6000/game.tsv",
       "note": "dm/games/0100DCA0064A6000/README.md"
     },
@@ -570,6 +592,24 @@
       "note": "dm/games/0100F43008C44000/README.md"
     },
     {
+      "title_id": "0100A3D008C5C000",
+      "name": "Pokémon Scarlet",
+      "profile_name": "Pokémon Scarlet",
+      "builds": [
+        {
+          "version": "v786432",
+          "number": 786432,
+          "display": "4.0.0"
+        }
+      ],
+      "readme_update": "4.0.0",
+      "package": "v786432",
+      "companion": false,
+      "since": "0.1.6",
+      "profile": "dm/games/0100A3D008C5C000/game.tsv",
+      "note": "dm/games/0100A3D008C5C000/README.md"
+    },
+    {
       "title_id": "01008DB008C2C000",
       "name": "Pokémon Shield",
       "profile_name": "Pokémon Shield",
@@ -624,6 +664,24 @@
       "note": "dm/games/0100ABF008968000/README.md"
     },
     {
+      "title_id": "01008F6008C5E000",
+      "name": "Pokémon Violet",
+      "profile_name": "Pokémon Violet",
+      "builds": [
+        {
+          "version": "v786432",
+          "number": 786432,
+          "display": "4.0.0"
+        }
+      ],
+      "readme_update": "4.0.0",
+      "package": "v786432",
+      "companion": false,
+      "since": "0.1.6",
+      "profile": "dm/games/01008F6008C5E000/game.tsv",
+      "note": "dm/games/01008F6008C5E000/README.md"
+    },
+    {
       "title_id": "010099A00BC1E000",
       "name": "Resident Evil 4",
       "profile_name": "Resident Evil 4",
@@ -640,6 +698,29 @@
       "since": null,
       "profile": "dm/games/010099A00BC1E000/game.tsv",
       "note": "dm/games/010099A00BC1E000/README.md"
+    },
+    {
+      "title_id": "01008BC024FDE000",
+      "name": "STEINS;GATE RE:BOOT",
+      "profile_name": "STEINS;GATE RE:BOOT",
+      "builds": [
+        {
+          "version": "v196608",
+          "number": 196608,
+          "display": "1.0.4"
+        },
+        {
+          "version": "v131072",
+          "number": 131072,
+          "display": "1.0.3"
+        }
+      ],
+      "readme_update": "1.0.3, 1.0.4",
+      "package": "v196608",
+      "companion": false,
+      "since": "0.1.6",
+      "profile": "dm/games/01008BC024FDE000/game.tsv",
+      "note": "dm/games/01008BC024FDE000/README.md"
     },
     {
       "title_id": "0100DAE01E4C8000",
@@ -858,7 +939,7 @@
       "readme_update": "1.05",
       "package": "v262144",
       "companion": false,
-      "since": null,
+      "since": "0.1.6",
       "profile": "dm/games/010069401ADB8000/game.tsv",
       "note": "dm/games/010069401ADB8000/README.md"
     },
