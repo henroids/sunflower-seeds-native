@@ -1701,6 +1701,9 @@ void vka_tex_soft_copy(vka_img *im, int dst_level, VkCommandBuffer cb) {
 
 static vka_img *g_bc_sync[64];
 static int g_nbc_sync;
+static void bc_cancel_locked(vka_img *im) {   // PEANUTS: caller holds g_tmu: the forced free in vka_tex_drop_pool drops the queue's reference
+    for (int i = 0; i < g_nbc_sync; i++) if (g_bc_sync[i] == im) g_bc_sync[i] = NULL;   // PEANUTS
+}
 static int bc_alias_match(const vka_img *src, const vka_img *dst) {
     if (!src || !dst || src == dst || !src->mem || src->mem != dst->mem) return 0;
     if (compressed(&src->f) || !compressed(&dst->f) || src->f.bpb != dst->f.bpb) return 0;
@@ -2154,6 +2157,7 @@ void vka_tex_drop_pool(const void *pool) {
             ndrop++;
             wb_cancel_locked(im);
             rw_cancel_locked(im);   // PEANUTS: its queued region writes go with it: the count forced below would leave them holding a freed image
+            bc_cancel_locked(im);   // PEANUTS: and its bc alias sync entry (the forced count below consumes the queue's reference)
             map_del_im(im);
             im->refs = 1;
             unref_locked(im);
@@ -3709,6 +3713,7 @@ void vka_tex_prepare(VkCommandBuffer cb) {
         int any_bc = 0;
         for (int i = 0; i < g_nbc_sync; i++) {
             vka_img *src = g_bc_sync[i];
+            if (!src) continue;   // PEANUTS: cancelled by bc_cancel_locked (its pool was dropped)
             if (src->inited && !img_pool_dead(src) && src->mem) {
                 int lk_bc; for (vka_img *dst = live_first(src->mem, &lk_bc); dst; dst = live_next(dst, src->mem, &lk_bc)) {
                     if (!dst->inited || img_pool_dead(dst) || !bc_alias_match(src, dst)) continue;
