@@ -36,7 +36,10 @@ public final class PrepareCover extends FrameLayout {
     private final TextView count;
     private final BananaBackgroundView back;
 
-    public PrepareCover(Activity a, String titleId, String name) {
+    private boolean skipped;
+
+    /** driver: the GPU driver's name as the settings show it; playAnyway: the step stops and the game starts; close: the game is left */
+    public PrepareCover(Activity a, String titleId, String name, String driver, Runnable playAnyway, Runnable close) {
         super(a);
         setClickable(true);   // nothing under it takes a touch
         setBackgroundColor(PUi.col(a, R.color.bn_bg));
@@ -90,6 +93,11 @@ public final class PrepareCover extends FrameLayout {
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
         cp.topMargin = PUi.dp(a, 10);
         col.addView(count, cp);
+        TextView drv = PUi.text(a, "For the graphics driver " + driver, 14, R.color.bn_text_2, 500);
+        drv.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(-2, -2);
+        dp.topMargin = PUi.dp(a, 6);
+        col.addView(drv, dp);
         TextView once = PUi.small(a, "This happens once for each graphics driver. After that the game starts right away.");
         once.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams op = new LinearLayout.LayoutParams(-2, -2);
@@ -97,11 +105,31 @@ public final class PrepareCover extends FrameLayout {
         col.addView(once, op);
 
         addView(col, new LayoutParams(-2, -2, Gravity.CENTER));
+
+        // Top right, as Home's header: Play anyway (what is prepared so far is kept, the rest at the next start) and Close
+        LinearLayout actions = new LinearLayout(a);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        final View[] play = new View[1];
+        play[0] = Library.headerAction(a, R.drawable.ic_play, "Play anyway", "Play anyway: start the game now and prepare the rest next time", null, v -> {
+            if (skipped) return;
+            skipped = true;
+            play[0].setAlpha(0.4f);
+            count.setText("Finishing the shader in progress, then the game starts");   // (a large one can take most of a minute)
+            playAnyway.run();
+        });
+        actions.addView(play[0], PUi.wrap());
+        View shut = Library.headerAction(a, R.drawable.ic_close, "Close", "Close: leave the game, the shaders prepared so far are kept", null, v -> close.run());
+        LinearLayout.LayoutParams sp = PUi.wrap();
+        sp.leftMargin = PUi.dp(a, 14);
+        actions.addView(shut, sp);
+        LayoutParams ap = new LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        ap.topMargin = PUi.dp(a, 16); ap.rightMargin = PUi.dp(a, 20);
+        addView(actions, ap);
     }
 
     /** done of total, from the host (Native.prewarmProgress) */
     public void set(int done, int total) {
-        if (total <= 0) return;
+        if (total <= 0 || skipped) return;
         if (done > total) done = total;
         bar.setMax(total);
         bar.setProgress(done);

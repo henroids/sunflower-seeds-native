@@ -271,7 +271,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (progress > 0) {
             int total = (int) (progress >>> 32), done = (int) progress;
             if (prewarmCover == null) {
-                prewarmCover = new dev.peanuts.ui.PrepareCover(this, titleId(), getIntent().getStringExtra("name"));
+                GpuDriver.Info drv = GpuDriver.selected(this, titleId());
+                prewarmCover = new dev.peanuts.ui.PrepareCover(this, titleId(), getIntent().getStringExtra("name"), drv == null ? "the system's driver" : drv.label(),
+                        Native::prewarmSkip, this::end);
                 rootView.addView(prewarmCover, rootView.indexOfChild(pausedView), new FrameLayout.LayoutParams(-1, -1));
             }
             prewarmCover.set(done, total);

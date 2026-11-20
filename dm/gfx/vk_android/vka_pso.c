@@ -171,6 +171,7 @@ static _Atomic int g_pw_start_total = -1;   // -1 before the startup phase is de
 static _Atomic uint32_t g_pw_processed;
 static pthread_t g_pw_workers[4];
 static int g_pw_threads;
+static _Atomic int g_pp_skip;   // PEANUTS: Play anyway (nxhost_prewarm_skip): the startup prewarm and the preparing step stop where they are
 static _Atomic int g_pw_running;   // PEANUTS: prewarm threads not yet returned (pp_prepare waits for them before it drops the shader modules)
 static pthread_mutex_t g_pw_start_mu = PTHREAD_MUTEX_INITIALIZER;
 
@@ -349,6 +350,9 @@ void vka_pso_prepare_launch(void) {
     pp_prepare();   // PEANUTS: the shader parts of the profile's programs, before the game starts (below)
     atomic_store(&g_pw_start_total, 0);
 }
+
+// PEANUTS: the launcher's Play anyway on the Preparing shaders screen: what is prepared so far is kept, the rest is prepared at the next start
+void nxhost_prewarm_skip(void) { atomic_store(&g_pp_skip, 1); }
 
 int64_t nxhost_prewarm_progress(void) {
     int total = atomic_load(&g_pw_start_total);
@@ -1213,7 +1217,7 @@ static void *pw_main(void *a) {
                                 if (t0) atomic_fetch_add(&g_pw_memwait_ns, now_ns() - t0); }
         uint32_t i = me == 0 ? atomic_fetch_add(&g_pw_next_mesh, 1) : nm;   // the mesh thread: the next mesh record while there is one
         if (i >= nm) { uint32_t q = atomic_fetch_add(&g_pw_next, 1); i = nm + q; }
-        if (i >= limit) break;   // PEANUTS: match the startup progress total
+        if (i >= limit || atomic_load(&g_pp_skip)) break;   // PEANUTS: match the startup progress total; Play anyway
         pwrec r; memcpy(&r, g_pw_load + offs[i], sizeof r);
         const uint8_t *kb = g_pw_load + offs[i] + sizeof r;
         vka_shader *sh[VKA_NSTAGE]; memset(sh, 0, sizeof sh); int bad = !vka_pw_rec_ok(&r, kb);
@@ -1624,6 +1628,7 @@ static int prog_parts(const prec *r) {
 // launcher shows nxhost_prewarm_progress. Every 30 s what is finished so far is saved (a step that is stopped goes on from there)
 #define PP_MAXT 8
 static _Atomic uint32_t g_pp_next; static uint32_t g_pp_total, g_pp_base_pairs, g_pp_base_learn; static _Atomic uint32_t g_pp_cur[PP_MAXT];
+static _Atomic uint32_t g_pp_left = UINT32_MAX;   // the first program a thread left unmade when the step was skipped (those before it are all made)
 static const prec *pp_rec(uint32_t i) {   // the i-th program to prepare: the pairs left, then the learned ones left
     uint32_t np = (uint32_t)g_npairs - g_pp_base_pairs;
     return i < np ? &g_pairs[g_pp_base_pairs + i] : &g_learn[g_pp_base_learn + (i - np)];
@@ -1632,6 +1637,7 @@ static void *pp_main(void *a) {
     int me = (int)(intptr_t)a; char nm[16]; snprintf(nm, sizeof nm, "vk-psoprep%d", me); pthread_setname_np(pthread_self(), nm); vka_fp_host("vk-psoprep");
     for (;;) {
         uint32_t i = atomic_fetch_add(&g_pp_next, 1);
+        if (i < g_pp_total && atomic_load(&g_pp_skip)) { uint32_t l = atomic_load(&g_pp_left); while (i < l && !atomic_compare_exchange_weak(&g_pp_left, &l, i)) {} i = g_pp_total; }
         if (i >= g_pp_total) { atomic_store(&g_pp_cur[me], UINT32_MAX); break; }
         atomic_store(&g_pp_cur[me], i);
         uint64_t t0 = now_ns();
@@ -1660,12 +1666,15 @@ static void pp_prepare(void) {
     atomic_store(&g_pw_processed, 0); atomic_store(&g_pp_next, 0); atomic_store(&g_pw_start_total, (int)g_pp_total);
     pthread_t th[PP_MAXT]; int up = 0;
     for (int i = 0; i < nt; i++) { atomic_store(&g_pp_cur[i], 0); if (!pthread_create(&th[up], NULL, pp_main, (void *)(intptr_t)i)) up++; else atomic_store(&g_pp_cur[i], UINT32_MAX); }
+    // Play anyway (g_pp_skip): a thread ends once the program it is at is made, and the step waits for that: a single large shader takes 40 s of it in Super
+    // Mario Odyssey. Leaving that thread to finish beside the game's start was tried (2026-11-20): the game crashed in its own code in one of two starts
     while (up) {
         usleep(200000);
         uint32_t low = atomic_load(&g_pp_next); int live = 0;
         if (low > g_pp_total) low = g_pp_total;
         for (int i = 0; i < nt; i++) { uint32_t c = atomic_load(&g_pp_cur[i]); if (c != UINT32_MAX) { live = 1; if (c < low) low = c; } }
         if (!live) break;
+        if (atomic_load(&g_pp_skip)) continue;   // (no more saves: the threads are ending)
         if (now_ns() - last > 30000000000ull) {
             last = now_ns(); pp_mark(low);
             pthread_mutex_lock(&g_save_mu); pcl_save(1); pthread_mutex_unlock(&g_save_mu);
@@ -1673,7 +1682,9 @@ static void pp_prepare(void) {
         }
     }
     for (int i = 0; i < up; i++) pthread_join(th[i], NULL);
-    pp_mark(g_pp_total);
+    uint32_t made_to = atomic_load(&g_pp_left) < g_pp_total ? atomic_load(&g_pp_left) : g_pp_total;
+    pp_mark(made_to);
+    if (made_to < g_pp_total) VLOG("preparing shaders: stopped at %u of %u programs (Play anyway): the rest is prepared at the next start", made_to, g_pp_total);
     pthread_mutex_lock(&g_save_mu); pcl_save(1); pthread_mutex_unlock(&g_save_mu);
     // The modules of every program were made for it: dropped, once the prewarm threads (which use modules too) are done and while no library is kept by module
     while (atomic_load(&g_pw_running) > 0) usleep(20000);
