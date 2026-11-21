@@ -7,6 +7,7 @@
 // PEANUTS: transform feedback from the vertex stage is captured (vka_tf.c); from a geometry stage, or of an indirect draw, it is not (logged once)
 #if defined(__ANDROID__)
 #include "vka.h"
+static void fbl_pass_begin(void);   // PEANUTS: feedback loops (below, beside DY)
 #include "vka_skipwarn.h"
 #include "vka_gmem.h"
 #include "../nvn/nvn_mtl.h"
@@ -677,6 +678,7 @@ static int rp_begin(const p_set_rt *rt, int has_rt, const p_scissor *sc, int has
     #undef INAREA
     #undef WHOLE
     vka_tex_feedback(fb_im, fb_lv, nfb);
+    fbl_pass_begin();   // PEANUTS: the feedback loop state set again at the pass's first draw: Turnip takes a pass out of tile memory when the state is set inside it
     VkRenderingInfo ri = {VK_STRUCTURE_TYPE_RENDERING_INFO, .renderArea = R.area, .layerCount = layers, .colorAttachmentCount = (uint32_t)n, .pColorAttachments = ca,
                           .pDepthAttachment = dp, .pStencilAttachment = sp};
     if (vka_gp_active) {   // DM_VK_GPUPROF: what the pass is, for the step it ends
@@ -2054,7 +2056,7 @@ static uint32_t *read_indices(uint64_t addr, int itype, uint32_t count) {
 // The dynamic state the command buffer holds: each draw sets only what changed (the draw path set some 25 states a draw). Valid from the first draw of a submission until
 // something else binds a graphics pipeline with static state (the masked stencil clear: vka_dyn_invalidate) or the submission ends; every graphics pipeline of the draws has
 // the same dynamic states (vka_pso.c), so binding one keeps them, except a mesh pipeline, which has no topology or primitive restart (vka_draw resets DY.topo / DY.pr after one)
-static struct { int valid; VkPipeline pipe; VkViewport vp; VkRect2D sc; uint32_t cull, ff, topo, dt, dw, dc, dbt, stt, dbe, rd, pr, sop[8], smask[6]; float db[3], bc[4]; } DY;
+static struct { int valid; VkPipeline pipe; VkViewport vp; VkRect2D sc; uint32_t cull, ff, topo, dt, dw, dc, dbt, stt, dbe, rd, pr, sop[8], smask[6], fbl; float db[3], bc[4]; } DY;   // PEANUTS: fbl: the feedback loop aspects (V.fb_loop)
 #define DY_SET(f, val, call) do { if (!DY.valid || !g_dyn_filter || memcmp(&DY.f, &(val), sizeof DY.f)) { memcpy(&DY.f, &(val), sizeof DY.f); call; } } while (0)
 #define DY_SET1(f, val, call) do { uint32_t v_ = (val); if (!DY.valid || !g_dyn_filter || DY.f != v_) { DY.f = v_; call; } } while (0)
 // The index buffer the command buffer holds: bound again only when it changes (DM_VK_VB_FILTER), forgotten with the dynamic state
@@ -2064,6 +2066,7 @@ static void ib_bind(VkBuffer b, VkDeviceSize o, VkIndexType t) {
     vk.vkCmdBindIndexBuffer(g_cb, b, o, t); IB.valid = 1; IB.b = b; IB.o = o; IB.t = t;
 }
 static void inst_reset(void);
+static void fbl_pass_begin(void) { DY.fbl = ~0u; }   // PEANUTS: feedback loops: emitted again at the pass's first draw
 void vka_dyn_invalidate(void) { DY.valid = 0; VB.valid = 0; VBC.valid = 0; IB.valid = 0; g_pd[0].n = g_pd[1].n = 0; inst_reset(); }
 #define PT(i) do { if (g_prof) { uint64_t t_ = cntvct(); if ((i) > 0 && g_pt_ph == (i) - 1) g_pt[(i) > 0 ? (i) - 1 : 0] += t_ - g_pt_last; g_pt_last = t_; g_pt_ph = (i); } } while (0)
 // ---------- Instanced runs (DM_VK_INSTANCE) ----------
@@ -2815,6 +2818,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     if (vka_nan_on()) vka_nan_draw(mesh ? sh[7]->key : sh[0]->key, fs ? fs->key : 0);
     PT(5);
     int istart = 0; uint32_t i_wv = 0, i_wp = 0; int64_t i_d = 0; vka_span i_ta = {0}, i_aa = {0};
+    if (V.fb_loop) vka_tex_fb_loop_take();   // PEANUTS: feedback loops: from this draw's views only
     if (ijoin || (icand && g_ia.valid)) {
         g_sets_dry = 1; int ok = bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_GRAPHICS, NULL); g_sets_dry = 0;
         if (!ok) { if (ijoin) inst_close(); g_skipped++; return; }
@@ -2851,6 +2855,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
         }
     } else if (!bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_GRAPHICS, NULL)) { g_skipped++; return; }
     PT(6);
+    uint32_t fbl_seen = V.fb_loop ? vka_tex_fb_loop_take() : 0;   // PEANUTS: the aspects this draw samples at an attached level of its own pass (vka_tex.c view_of)
     if (!mesh && !ijoin) {
         if (istart) {   // the run's table as an instance-rate input at INST_LOC
             VI.b[VI.nb++] = (VkVertexInputBindingDescription2EXT){VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT, NULL, INST_BIND, 4, VK_VERTEX_INPUT_RATE_INSTANCE, 1};
@@ -2917,6 +2922,20 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     int restart = di && d->restart.on;
     if (restart) { uint32_t all = di->itype == 0 ? 0xff : di->itype == 1 ? 0xffff : 0xffffffffu; if (d->restart.index != all) VRED_ONCE("primitive restart index %#x is not the all-ones index Vulkan restarts at", d->restart.index); }
     if (!mesh) DY_SET1(pr, (uint32_t)(restart), vk.vkCmdSetPrimitiveRestartEnable(g_cb, DY.pr));
+    // PEANUTS: a draw that samples a level its own pass draws into (decals reading the G-buffer they write, soft particles reading the depth they test against while writing
+    // it) announces the feedback loop (VK_EXT_attachment_feedback_loop_dynamic_state): the colour aspect whenever a colour attachment is sampled, depth only when the draw writes
+    // depth. A tiling driver (Turnip) then renders that pass in system memory, where the reads see the pass's own writes, and flushes between overlapping primitives; in tile
+    // memory they read what the image held before the pass (TU_DEBUG=sysmem did the same for every pass of every game). Each fragment shader that does it is logged once
+    if (V.fb_loop) {
+        uint32_t fm = (fbl_seen & VK_IMAGE_ASPECT_COLOR_BIT) | ((fbl_seen & VK_IMAGE_ASPECT_DEPTH_BIT) && DY.dw ? VK_IMAGE_ASPECT_DEPTH_BIT : 0);
+        if (fm) {
+            static uint64_t seen[16]; static int ns; uint64_t key = sh[1] ? sh[1]->key : 0; int k = 0;
+            while (k < ns && seen[k] != key) k++;
+            if (k == ns && ns < 16) { seen[ns++] = key; VLOG("feedback loop: fragment %016llx samples its pass's own %s attachment (%u x %u): the pass is announced as a feedback loop (%d shaders so far; a tiling driver renders it in system memory)",
+                                                          (unsigned long long)key, fm & VK_IMAGE_ASPECT_COLOR_BIT ? (fm & VK_IMAGE_ASPECT_DEPTH_BIT ? "colour and depth" : "colour") : "depth", R.area.extent.width, R.area.extent.height, ns); }
+        }
+        DY_SET1(fbl, fm, vk.vkCmdSetAttachmentFeedbackLoopEnableEXT(g_cb, DY.fbl));
+    }
     DY.valid = 1;
     if (g_rtl_pass && rtl_room()) {   // DM_VK_RT_LOG: the draw's state
         char cm[200]; size_t cn = 0;
@@ -3544,7 +3563,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
     for (int i = 0; i < g_wk.n[5]; i++) if (g_wk.r[5][i].what == VKA_R_TEX && g_wk.r[5][i].tid && g_wk.r[5][i].desc != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && vka_tex_id_is_buffer(g_wk.r[5][i].tid)
                                             && tbuf_img_gpu(g_wk.r[5][i].tid, g_wk.r[5][i].dim))   // PEANUTS: only where the choice is upstream's copy (tbuf_img_gpu)
         tbuf_img_make(g_wk.r[5][i].tid, g_wk.r[5][i].dim, 0);   // buffer textures read as images: their copies (vka_tbuf.c; no pass is open)   // PEANUTS: tbuf_img_make (upstream: vka_tbuf_refresh when vka_tbuf_pending)
-    { g_tbuf_disp = 1; int ok = bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_COMPUTE, &c0); g_tbuf_disp = 0; tbuf_gcopy_end();   // PEANUTS: + the barrier after the texel buffer copies the GPU makes for this dispatch (tbuf_view), whether it is recorded or not
+    { g_tbuf_disp = 1; int ok = bind_sets(d, sh, &lay, VK_PIPELINE_BIND_POINT_COMPUTE, &c0); g_tbuf_disp = 0; tbuf_gcopy_end(); if (V.fb_loop) vka_tex_fb_loop_take();   // PEANUTS: + the barrier after the texel buffer copies the GPU makes for this dispatch (tbuf_view), whether it is recorded or not
       if (!ok) { g_skipped++; return; } }
     if (dp->ind && c0.buf) {   // the group counts the GPU wrote, into c0's dispatch words before the dispatch reads them (nvn_mtl.m g_c0_dim_buf); NVN2 reads them at c0 + 4 too
         vka_disp_settle(g_cb);   // (a copy: after the dispatches before it, as before; "Dispatch order")

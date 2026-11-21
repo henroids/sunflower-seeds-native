@@ -3102,6 +3102,11 @@ static int fb_pin_of(int sid) {
     return pin;
 }
 // PEANUTS(upstream-candidate) end
+// PEANUTS: a sampled view that still holds an attached level of the open pass after the cuts below (a single-level view of that level, a view starting at it) is a real
+// feedback loop, which the draw announces (vka_draw.c, VK_EXT_attachment_feedback_loop_dynamic_state) so that a tiling driver renders the pass in system memory.
+// The aspects of such views since the last vka_tex_fb_loop_take, on the recording thread (views of a pass's own target are never memoized: view_of runs at each draw)
+static _Thread_local uint32_t t_fb_loop;
+uint32_t vka_tex_fb_loop_take(void) { uint32_t m = t_fb_loop; t_fb_loop = 0; return m; }
 static VkImageView view_of(const treg_ent *e, vka_img *im, int vt_want, int storage, VkFormat ovr) {
     vka_fmt f; const view_t *v = e->has_v ? &e->v : NULL;
     if (!vka_fmt_of(v && v->set_format ? v->format : e->t.d.format, &f)) f = im->f;
@@ -3125,6 +3130,7 @@ static VkImageView view_of(const treg_ent *e, vka_img *im, int vt_want, int stor
         int how = fb_view_levels(&l0, &nl, g_fb_lv[i], pin);
         if (how == 1) { static _Atomic int n; if (!atomic_exchange(&n, 1)) VLOG("a pass samples the texture it renders (serial %llu level %u) through levels %u+%u, its sampler pinned to level %u: sampled through that level alone", (unsigned long long)im->serial, g_fb_lv[i], ol0, onl, l0); }
         if (how == 2) { static _Atomic int n; if (!atomic_exchange(&n, 1)) VLOG("a pass samples the texture it renders (serial %llu level %u) through levels %u+%u: sampled through the levels below it", (unsigned long long)im->serial, g_fb_lv[i], ol0, onl); }
+        if (g_fb_lv[i] >= l0 && g_fb_lv[i] - l0 < nl) t_fb_loop |= im->f.kind >= 3 ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;   // PEANUTS: a feedback loop (above)
     }
     // PEANUTS(upstream-candidate) end
     int tgt = v && v->set_target ? v->target : e->t.d.target;

@@ -49,7 +49,7 @@ static inline int vka_red_repeat(void) { static int n = -1; if (n < 0) { const c
     X(vkCmdBindPipeline) X(vkCmdBindDescriptorSets) X(vkCmdBindVertexBuffers2) X(vkCmdBindIndexBuffer) \
     X(vkCmdDraw) X(vkCmdDrawIndexed) X(vkCmdDrawIndirect) X(vkCmdDrawIndexedIndirect) X(vkCmdDispatch) X(vkCmdDispatchIndirect) X(vkCmdDispatchBase) \
     X(vkCmdSetViewport) X(vkCmdSetScissor) X(vkCmdSetCullMode) X(vkCmdSetFrontFace) X(vkCmdSetPrimitiveTopology) \
-    X(vkCmdSetDepthTestEnable) X(vkCmdSetDepthWriteEnable) X(vkCmdSetDepthCompareOp) X(vkCmdSetDepthBoundsTestEnable) X(vkCmdSetStencilTestEnable) X(vkCmdSetStencilOp) \
+    X(vkCmdSetAttachmentFeedbackLoopEnableEXT) X(vkCmdSetDepthTestEnable) X(vkCmdSetDepthWriteEnable) X(vkCmdSetDepthCompareOp) X(vkCmdSetDepthBoundsTestEnable) X(vkCmdSetStencilTestEnable) X(vkCmdSetStencilOp) \
     X(vkCmdSetStencilCompareMask) X(vkCmdSetStencilWriteMask) X(vkCmdSetStencilReference) X(vkCmdSetDepthBias) X(vkCmdSetDepthBiasEnable) \
     X(vkCmdSetRasterizerDiscardEnable) X(vkCmdSetPrimitiveRestartEnable) X(vkCmdSetBlendConstants) X(vkCmdSetLineWidth) \
     X(vkCmdPushDescriptorSetKHR) X(vkCmdSetVertexInputEXT) X(vkCmdPushConstants) X(vkCmdDrawMeshTasksEXT) X(vkCmdDrawMeshTasksIndirectEXT) \
@@ -105,6 +105,7 @@ typedef struct {
     // memu: NVN2 task and mesh draws drawn through compute (vka_memu.c): by default where the device lacks meshShader or taskShader, DM_VK_MESH_EMU=1 on any device, =0
     // never (restart). cs_groups: maxComputeWorkGroupCount[0]
     int memu; uint32_t cs_groups;
+    int fb_loop;                                    // PEANUTS: VK_EXT_attachment_feedback_loop_layout + _dynamic_state are on (DM_VK_FB_LOOP=0 leaves them off): a draw sampling its own attachment says so (vka_draw.c)
     int xfb;                                        // PEANUTS: VK_EXT_transform_feedback is on (DM_VK_XFB=0 leaves it off): NVN transform feedback is captured (vka_tf.c)
     int cache_ctl;                                  // pipelineCreationCacheControl (core 1.3): a pipeline may be asked for with FAIL_ON_PIPELINE_COMPILE_REQUIRED (vka_pso.c cs_obtain's cache-only try)
     int gpl;                                        // graphics pipeline libraries with fast linking (VK_EXT_graphics_pipeline_library): a pipeline the cache lacks is linked from stage libraries at once, the optimized one made in the background (vka_pso.c)
@@ -458,6 +459,7 @@ VkImageView vka_tex_id_view(int id, VkCommandBuffer cb, uint8_t dim, int storage
 // (storage: 0 sampled, else VKA_VIEW_* of vka_wbfollow.h: VKA_VIEW_STORAGE a storage view the GPU writes, with VKA_VIEW_RO one the shader only reads)
 void vka_tex_id_desc(int id, char *b, size_t n);   // texture ID id described for a [RED] line
 void vka_tex_id_peek(int id, char *b, size_t n);   // the same with its storage address and its image's (DM_VK_TEX_PEEK)
+uint32_t vka_tex_fb_loop_take(void);   // PEANUTS: the attachment aspects (VkImageAspectFlags: colour, depth) the views made since the last call sample at an attached level of the open pass, then cleared (recording thread)
 void vka_tex_feedback(vka_img *const *ims, const uint32_t *levels, int n);   // the open pass's attachments and their levels (n 0: none), for vka_tex_id_view
 int vka_tex_id_in_pass(int id);   // texture ID id's image is an attachment of the open pass (1 = colour, 2 = depth / stencil, 0 = neither)
 int vka_tex_id_in_pass_rec(int id, uint8_t dim);
