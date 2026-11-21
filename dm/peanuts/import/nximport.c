@@ -317,6 +317,8 @@ typedef struct Pipe {
 
 static int nx_threads_setting;   // nximport_set_threads
 void nximport_set_threads(int n) { nx_threads_setting = n; }
+static int nx_keep_base;   // nximport_set_keep_base
+void nximport_set_keep_base(int on) { nx_keep_base = on != 0; }
 static int thread_count(void) {
     int n = nx_threads_setting;
     if (n <= 0) { const char *e = getenv("NXIMPORT_THREADS"); if (e && *e) n = atoi(e); }
@@ -608,7 +610,23 @@ int nximport_write_nup(const char *out_nup, const char **inputs, int n_inputs, c
         }
     }
     if (!j->npk) NX_FAIL("nothing for %s in the inputs (no base, update or add-on with that application id)", base_title_id);
-    { int app = 0; for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 0) { app = p; break; }   // the base carries the application's records, else the first package
+    // PEANUTS: leave the base package out when the newest update carries the whole game (nximport_set_keep_base). Its dump stays open: the update's
+    // BKTR RomFS reads through it, and with no base package write_nup has no base files to share, so every update file is written from the patched image
+    if (!nx_keep_base) {
+        int b = -1, nw = -1;
+        for (int p = 0; p < j->npk; p++) { if (j->pk[p].kind == 0) b = p; else if (j->pk[p].kind == 1 && (nw < 0 || j->pk[p].ver > j->pk[nw].ver)) nw = p; }
+        NxNode *main = nw >= 0 ? nx_node_find(j->pk[nw].root, "exefs/main") : NULL, *npdm = nw >= 0 ? nx_node_find(j->pk[nw].root, "exefs/main.npdm") : NULL,
+               *rom = nw >= 0 ? nx_node_find(j->pk[nw].root, "romfs") : NULL;
+        if (b >= 0 && main && !main->is_dir && npdm && !npdm->is_dir && rom && rom->is_dir && rom->nkids) {
+            nx_node_free(j->pk[b].root);
+            memmove(&j->pk[b], &j->pk[b + 1], (size_t)(j->npk - b - 1) * sizeof *j->pk); j->npk--;
+            for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 1) j->pk[p].flags = 1;
+        }
+    }
+    { int app = -1;   // the base carries the application's records, else the newest update (where dev.peanuts.ui.NupIcon looks next), else the first package
+      for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 0) { app = p; break; }
+      if (app < 0) for (int p = 0; p < j->npk; p++) if (j->pk[p].kind == 1 && (app < 0 || j->pk[p].ver > j->pk[app].ver)) app = p;
+      if (app < 0) app = 0;
       for (int p = 0; p < j->npk; p++) if (pkg_meta(&j->pk[p], p == app)) goto out; }
     for (int p = 0; p < j->npk; p++) sum_sizes(j, j->pk[p].root);
     rc = write_nup(j, out_nup);
