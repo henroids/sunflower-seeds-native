@@ -580,7 +580,11 @@ void vka_rp_sub_begin(void) {
                  vka_barrier(g_cb); }   // the re-uploads of CPU-written textures before the submission's draws read them
     vka_draw_sub_begin(g_cb, k);
     { void vka_pso_pause(int on); vka_pso_pause(0); }   // the game submits: resumed (mtl_drain paused the pipeline threads)
-    g_chunk_draws = VKA_ENV("DM_VK_CHUNK", 600);   // live: from the next submission
+    // PEANUTS: 150 (was 600; with DM_VK_CHUNK_PASS 150): the GPU waits for the first part while the rest is recorded, and a game that submits frame N+1 only after frame
+    // N's GPU work (Breath of the Wild) leaves it idle that long every frame; the GPU then also ran under the clock governor's step-up (81 % busy at 550-615 MHz). Breath of
+    // the Wild's field on the Thor (Turnip): 47.2 -> 52.5 fps, head 3.4 -> 1.9 ms, GPU clock 615 -> 680 MHz; 64 for the in-pass split was worse (39 fps), 100 and 250 a
+    // little worse than 150 (2026-11-21)
+    g_chunk_draws = VKA_ENV("DM_VK_CHUNK", 150);   // live: from the next submission
     g_nx = 0; g_chunk_d0 = g_stat_draws;
     g_t_begin += now_ns() - tb0;
 }
@@ -665,7 +669,7 @@ static inline void chunk_check(void) {
     if (!g_cb || g_nx >= NCHUNK) return;   // no part left: chunk() would do nothing and leave the draw count, so every later draw would end its pass
     uint64_t in = g_stat_draws - g_chunk_d0;
     if (g_chunk_draws > 0 && in >= (uint64_t)g_chunk_draws && vka_rp_split_ok(&S.rt, S.has_rt)) { vka_rp_end(); chunk(); return; }
-    int cp = VKA_ENV("DM_VK_CHUNK_PASS", 600);
+    int cp = VKA_ENV("DM_VK_CHUNK_PASS", 150);   // PEANUTS: 150 (was 600), see DM_VK_CHUNK
     if (cp > 0 && in >= (uint64_t)cp && vka_rp_open_for(&S.rt, S.has_rt)) {
         uint32_t w = 0, h = 0; int dep = vka_rp_depth(&w, &h);
         if ((uint64_t)w * h >= (16ull << 20)) return;   // a 6400x6400 ink map costs ~400 MB to store and load on a tiler: never split it mid-pass for chunking
