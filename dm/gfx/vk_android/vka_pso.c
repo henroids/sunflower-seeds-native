@@ -1253,7 +1253,7 @@ static void *pw_main(void *a) {
         }
         int made = 0;
         if (bad) { atomic_fetch_add(&g_pw_bad, 1); pw_mark_bad(offs[i]); }
-        else if (r.kind == VKA_PW_CS) { cs_obtain(sh[5], &lay, 1, &made, 0, 0, 0); }
+        else if (r.kind == VKA_PW_CS) { uint64_t m2[2] = {0, 0}; if (r.klen == 16) memcpy(m2, kb, 16); cs_obtain(sh[5], &lay, 1, &made, m2[0], m2[1], 0); }   // PEANUTS: the retyped variant's masks
         else {
             vka_gkey k; memset(&k, 0, sizeof k); memcpy(&k, kb, r.klen < sizeof k ? r.klen : sizeof k);
             if (k.vin_static != (uint32_t)!V.vin_dyn) {
@@ -1522,6 +1522,17 @@ static void *pl_slurp(const char *path, size_t *n) {
     return d;
 }
 // The shader parts' cache, the profile's pairs and the learned programs, read once (pc_open_once, after the pipelines' cache)
+// PEANUTS: the depth mode the profile's seed was made in (its graphics keys' gl_depth, the majority; 1 = near = 0), -1 without a seed or graphics keys. Before a first
+// start's stamp says it, the parts were prepared for near = -w and pf_main threw them away when the game set near = 0: 18 of the 24 seeds of 2026-11-21 are near = 0
+// (Hyrule Warriors: Age of Calamity: 3,441 programs prepared in 77 s for nothing, 1,182 compiled again in the session), Super Mario Odyssey's is near = -w
+static int prep_depth_seed(void) {
+    size_t o = 0; uint32_t n = 0; long zero = 0, gl = 0;
+    if (!dm_vk_prewarm_seed_len || vka_pw_header(dm_vk_prewarm_seed, dm_vk_prewarm_seed_len, &o, &n) != VKA_PW_OK) return -1;
+    pwrec r; const uint8_t *kb; int ok;
+    while (vka_pw_next(dm_vk_prewarm_seed, dm_vk_prewarm_seed_len, &o, &r, &kb, &ok))
+        if (ok && r.kind != VKA_PW_CS && r.klen > offsetof(vka_gkey, gl_depth)) { if (kb[offsetof(vka_gkey, gl_depth)]) gl++; else zero++; }
+    return zero + gl ? zero > gl : -1;
+}
 static void pcl_open(void) {
     if (!V.gpl) return;
     if (g_pc_path[0]) snprintf(g_pcl_path, sizeof g_pcl_path, "%s.parts", g_pc_path);
@@ -1562,6 +1573,11 @@ static void pcl_open(void) {
         else n = 0;   // another library's or another list's parts: started empty
     } else n = 0;
     free(st);
+    if (atomic_load(&g_prep_depth_zero) < 0) {   // PEANUTS: a first start: the depth mode from the profile's seed, so the parts are not prepared for the other one (prep_depth_seed)
+        int dz = VKA_ENV("DM_VK_PSO_PREP_DEPTH0", -1); const char *src = "DM_VK_PSO_PREP_DEPTH0";
+        if (dz < 0) { dz = prep_depth_seed(); src = "the profile's seed"; }
+        if (dz >= 0) { atomic_store(&g_prep_depth_zero, dz ? 1 : 0); VLOG("shader parts: prepared for depth mode %s (%s)", dz ? "near = 0" : "near = -w", src); }
+    }
     if (pdone > g_npairs) pdone = (uint32_t)g_npairs;
     if (ldone > g_nlearn) ldone = (uint32_t)g_nlearn;
     atomic_store(&g_pairs_done, pdone); atomic_store(&g_learn_done, ldone);
@@ -2070,6 +2086,9 @@ static void cs_build(gval *g, vka_shader *cs, const vka_layout *lay, VkShaderMod
     { double ms_ = (now_ns() - t0) / 1e6; static _Atomic int n; if (!r && ms_ > 50 && atomic_fetch_add(&n, 1) < 200) VLOG("compute pipeline %016llx took %.0f ms%s", (unsigned long long)cs->key, ms_, prewarm ? " (prewarm)" : async ? " in the background (asynchronous)" : "");
       // (noted before the save, so the save that follows a long one has its key: until 2026-11-15 the save came first and the key waited for the next one)
       if (!prewarm && !over && !(umask | smask)) { vka_shader *s5[5] = {cs, NULL, NULL, NULL, NULL}; pw_note(VKA_PW_CS, s5, "", 0); }   // (one not made stays out of the prewarm list)
+      // PEANUTS: a retyped variant (integer images bound) as a record with its masks: before, it never reached the list, so no seed made it ahead and every first start built it
+      // on the frame path (Hyrule Warriors: Age of Calamity: 7 programs, 0.8-3.9 s each, ~15 s of frozen frames at its first battle) while the prewarm made the base variant no draw used
+      if (!prewarm && !over && (umask | smask) && !r) { vka_shader *s5[5] = {cs, NULL, NULL, NULL, NULL}; uint64_t m2[2] = {umask, smask}; pw_note(VKA_PW_CS, s5, m2, 16); }
       if (!prewarm && !r && ms_ > 1000) vka_pso_save(2); }
 }
 VkPipeline vka_cs_pipeline(vka_shader *cs, const vka_layout *lay) { int made; return cs_obtain(cs, lay, 0, &made, 0, 0, 0); }

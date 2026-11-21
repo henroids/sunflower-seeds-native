@@ -1399,3 +1399,14 @@ The Trinity reader in `dm/gfx/tools/shader_split.py` narrows a recognized build 
 | `README.md`, `peanuts/docs/README.github.md` | 1 + 1 each | the game's table row and its paragraph under Upcoming in 0.1.6 | inside the files' `PEANUTS` sections |
 | `dm/games/01002B00111A2000/game.tsv`, `dm/games/01002B00111A2000/README.md` | 1, 1 | Hyrule Warriors: Age of Calamity on Android: frame limits Game owned, 30 and 60 (the frame step's targets), measured on an AYN Thor; the note's Android section | `PEANUTS` |
 | `dm/games/01002B00111A2000/vk_prewarm.bin` | new | its Turnip prewarm seed (242 keys) | allow-listed in `peanuts/upstream-unmarked.txt` |
+
+### First launch: shader parts for the game's depth mode, retyped compute in the prewarm list (2026-11-21)
+
+A first start prepared every program's shader parts for near = -w, the default before a run's stamp says otherwise; a game in near = 0 threw them all away at its first program and compiled them again while it played (Hyrule Warriors: Age of Calamity: 3,441 programs prepared in 77 s for nothing). 18 of the 24 seeds are near = 0. The depth mode now comes from the profile's seed (its graphics keys' `gl_depth`), `DM_VK_PSO_PREP_DEPTH0=0/1` overriding. A compute program bound to integer images runs as a retyped variant (`umask`, `smask`), built on the frame path and never written to the prewarm list, so no seed made it ahead (Age of Calamity: ~10 s of frozen frames at its first battle); it is now a compute record with `klen` 16 holding the two masks, which the prewarm builds. An older host skips such a record (`vka_pw_rec_ok`).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_pso.c` | 4 | `prep_depth_seed` and its use in `pcl_open`; `cs_build` notes a retyped variant with its masks; the prewarm passes them to `cs_obtain` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_pwlist.h` | 1 | a compute record is `klen` 0 or 16 | `PEANUTS` |
+| `dm/host/tests/t_android_pwlist.c` | 1 | the 16-byte compute record accepted, 8 refused | `PEANUTS` |
+| `dm/games/01002B00111A2000/vk_prewarm.bin` | seed | 242 -> 267 keys: 13 retyped compute records from a Turnip run | allow-listed in `peanuts/upstream-unmarked.txt` |
