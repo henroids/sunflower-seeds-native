@@ -5,8 +5,8 @@ this app version ships, from the sources the repository keeps:
 - peanuts/release-titles.txt: which games ship (the release's title IDs);
 - dm/games/<title ID>/game.tsv: the profile's name, its builds (build rows: the update's version number and display version), the builds
   Android plays (android_builds; all build rows without it) and the package's version;
-- peanuts/games.tsv: the table's order, the name players know, the Game update cell where a profile has no display version ("?"), and
-  whether a companion exists.
+- peanuts/games.tsv: the table's order, the name players know, the Game update cell where a profile has no display version ("?"),
+  whether a companion exists, and the GitHub accounts of the game's contributors (the Contributor column's badges).
 
     python3 peanuts/scripts/games_catalog.py            # write peanuts/games.json and the two tables
     python3 peanuts/scripts/games_catalog.py --refresh  # first: add a row to games.tsv for a game that ships without one, and set the
@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -48,11 +49,12 @@ def game_rows(root=ROOT):
     for ln in (root / GAMES).read_text(encoding='utf-8').splitlines():
         if not ln.strip() or ln.startswith('#'):
             continue
-        cells = (ln.split('\t') + ['', '', '', ''])[:5]
+        cells = (ln.split('\t') + [''] * 5)[:6]
         comp = cells[3].strip().casefold()
         rows[cells[0].strip()] = {'name': cells[1].strip(), 'update': cells[2].strip(),
                                   'companion': True if comp == 'yes' else False if comp == 'no' else None,
-                                  'since': cells[4].strip()}   # the release a game first ships in; empty: an earlier one
+                                  'since': cells[4].strip(),   # the release a game first ships in; empty: an earlier one
+                                  'contributors': [c.strip() for c in cells[5].split(',') if c.strip()]}   # GitHub accounts
     return rows
 
 
@@ -114,6 +116,7 @@ def build(root=ROOT, warn=print):
             'package': p['package'],
             'companion': row['companion'] if row else None,
             'since': row['since'] or None if row else None,
+            'contributors': row['contributors'] if row else [],
             'profile': f'dm/games/{t}/game.tsv',
             'note': f'dm/games/{t}/README.md' if note.is_file() else None,
         })
@@ -141,6 +144,19 @@ def upcoming(g, version):
     return bool(g.get('since')) and vkey(g['since']) > vkey(version)
 
 
+def badge(login):
+    """A contributor's GitHub badge (shields.io, as in the Eden Duo README): their name, linked to their GitHub page"""
+    label = urllib.parse.quote(login.replace('-', '--').replace('_', '__'), safe='')
+    return (f'<a href="https://github.com/{login}"><img src="https://img.shields.io/badge/{label}-181717?style=flat-square&logo=github&logoColor=white" '
+            f'style="vertical-align: middle;" alt="{login}"></a>')
+
+
+def contributor_cell(g):
+    """The Contributor cell: a star over the badges of the game's contributors; empty for a game with none listed"""
+    people = g.get('contributors') or []
+    return '⭐<br>' + '<br>'.join(badge(c) for c in people) if people else ''
+
+
 def table(catalog):
     """The text between the README's markers: the count sentence and the table, in games.tsv's order. A game whose since column names a
     later release than peanuts/VERSION is not counted in this version and is marked with the release it comes in"""
@@ -152,12 +168,13 @@ def table(catalog):
         nxt = sorted({g['since'] for g in later}, key=vkey)
         head += f', and {len(later)} more {"are" if len(later) > 1 else "is"} coming in {" and ".join(nxt)} (marked in the table)'
     lines = [head + '. The Companion column shows whether a game appears in the '
-             'Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.', '',
-             '| Game | Title ID | Game update | Companion |', '|---|---|---|---|']
+             'Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. '
+             'Updates are shown as version numbers or numeric update IDs.', '',
+             '| Game | Title ID | Game update | Companion | Contributor |', '|---|---|---|---|---|']
     for t in catalog['readme_order']:
         g = by_id[t]
         name = f'{g["name"]} (coming in {g["since"]})' if upcoming(g, ver) else g['name']
-        lines.append(f'| {name} | `{t}` | {g["readme_update"]} | {"Yes" if g["companion"] else "No"} |')
+        lines.append(f'| {name} | `{t}` | {g["readme_update"]} | {"Yes" if g["companion"] else "No"} | {contributor_cell(g)} |')
     return '\n'.join(lines)
 
 
@@ -201,7 +218,7 @@ def refresh(root=ROOT, warn=print, fetch=companions):
     out, seen = [], set()
     for ln in text.splitlines():
         if ln.strip() and not ln.startswith('#'):
-            cells = (ln.split('\t') + ['', '', '', ''])[:5]
+            cells = (ln.split('\t') + [''] * 5)[:6]
             seen.add(cells[0].strip())
             if live is not None:
                 cells[3] = 'yes' if cells[0].strip() in live else 'no'

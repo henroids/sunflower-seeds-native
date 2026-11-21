@@ -32,62 +32,62 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.6 includes 52 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.6 includes 52 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
-| Game | Title ID | Game update | Companion |
-|---|---|---|---|
-| The Legend of Zelda: Link's Awakening | `01006BB00C6F0000` | 1.1.0 | Yes |
-| The Legend of Zelda: Echoes of Wisdom | `01008CF01BAAC000` | 1.1.0 | Yes |
-| Fire Emblem: Three Houses | `010055D009F78000` | 1.2.0 | Yes |
-| Fire Emblem Engage | `0100A6301214E000` | 2.0.0 | Yes |
-| Metroid Dread | `010093801237C000` | 2.1.0 | Yes |
-| Super Mario Odyssey | `0100000000010000` | 1.4.1 | Yes |
-| Mario Kart 8 Deluxe | `0100152000022000` | 4.0.0, 4.0.1 | Yes |
-| Animal Crossing: New Horizons | `01006F8002326000` | 3.0.3 | Yes |
-| Persona 5 Royal | `01005CA01580E000` | 1.0.2 | Yes |
-| Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes |
-| OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes |
-| Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes |
-| Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Yes |
-| Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes |
-| Pokémon Shield | `01008DB008C2C000` | 1.3.2 | Yes |
-| The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.6.0, 1.9.0 | Yes |
-| The Legend of Zelda: Tears of the Kingdom | `0100F2C0115B6000` | 1.4.3 | No |
-| FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No |
-| The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Yes |
-| Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No |
-| Resident Evil 4 | `010099A00BC1E000` | 131072 | Yes |
-| Kirby and the Forgotten Land | `01004D300C5AE000` | 1.1.0 | No |
-| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 | Yes |
-| Super Mario 3D World + Bowser's Fury | `010028600EBDA000` | 1.2.2 | No |
-| Super Mario Bros. Wonder | `010015100B514000` | 1.2.1 | Yes |
-| DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 | Yes |
-| Chained Echoes | `0100C510166F0000` | 1.41 | Yes |
-| Yoru, Tomosu | `0100C2901153C000` | Base game (v0) | Yes |
-| Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes |
-| Captain Tsubasa 2: World Fighters | `01009720213B0000` | 1.0.6 | No |
-| DAVE THE DIVER | `010097F018538000` | 1.0.6.1267 | Yes |
-| Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2 | `0100AD80208A8000` | 1.80 | No |
-| Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 | No |
-| My Time at Sandrock | `0100B63016916000` | 1.4.2.0 | Yes |
-| Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Yes |
-| Astral Chain | `01007300020FA000` | 1.0.1 | No |
-| Diablo III: Eternal Collection | `01001B300B9BE000` | 2.7.7.92380 | Yes |
-| EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523, 1.8d.f570 | No |
-| Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No |
-| Unicorn Overlord | `010069401ADB8000` | 1.05 | No |
-| Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | No |
-| Pokémon Legends: Z-A | `0100F43008C44000` | 2.0.2 | No |
-| STORY OF SEASONS: Grand Bazaar | `0100DAE01E4C8000` | v655360 | No |
-| Double Dragon Revive | `01006AE02236C000` | 1.0.0, N1.10 | No |
-| Trails in the Sky 2nd Chapter | `01007A2027548000` | 1.0.3 | No |
-| DRAGON BALL: Sparking! ZERO | `010035F022078000` | 1.0.0 | No |
-| Pokémon Scarlet | `0100A3D008C5C000` | 4.0.0 | No |
-| Pokémon Violet | `01008F6008C5E000` | 4.0.0 | No |
-| DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET | `010051C0134F8000` | 1.70 | No |
-| STEINS;GATE RE:BOOT | `01008BC024FDE000` | 1.0.3, 1.0.4 | No |
-| NieR:Automata The End of YoRHa Edition (Asian release) | `0100B8E016F76000` | 1.0.3 | No |
-| Hyrule Warriors: Age of Calamity | `01002B00111A2000` | 1.3.0 | No |
+| Game | Title ID | Game update | Companion | Contributor |
+|---|---|---|---|---|
+| The Legend of Zelda: Link's Awakening | `01006BB00C6F0000` | 1.1.0 | Yes |  |
+| The Legend of Zelda: Echoes of Wisdom | `01008CF01BAAC000` | 1.1.0 | Yes |  |
+| Fire Emblem: Three Houses | `010055D009F78000` | 1.2.0 | Yes |  |
+| Fire Emblem Engage | `0100A6301214E000` | 2.0.0 | Yes |  |
+| Metroid Dread | `010093801237C000` | 2.1.0 | Yes |  |
+| Super Mario Odyssey | `0100000000010000` | 1.4.1 | Yes |  |
+| Mario Kart 8 Deluxe | `0100152000022000` | 4.0.0, 4.0.1 | Yes | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Animal Crossing: New Horizons | `01006F8002326000` | 3.0.3 | Yes |  |
+| Persona 5 Royal | `01005CA01580E000` | 1.0.2 | Yes |  |
+| Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes |  |
+| OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes |  |
+| Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes |  |
+| Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Yes |  |
+| Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes |  |
+| Pokémon Shield | `01008DB008C2C000` | 1.3.2 | Yes |  |
+| The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.6.0, 1.9.0 | Yes |  |
+| The Legend of Zelda: Tears of the Kingdom | `0100F2C0115B6000` | 1.4.3 | No |  |
+| FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No |  |
+| The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Yes |  |
+| Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No |  |
+| Resident Evil 4 | `010099A00BC1E000` | 131072 | Yes |  |
+| Kirby and the Forgotten Land | `01004D300C5AE000` | 1.1.0 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 | Yes | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Super Mario 3D World + Bowser's Fury | `010028600EBDA000` | 1.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Super Mario Bros. Wonder | `010015100B514000` | 1.2.1 | Yes |  |
+| DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 | Yes |  |
+| Chained Echoes | `0100C510166F0000` | 1.41 | Yes |  |
+| Yoru, Tomosu | `0100C2901153C000` | Base game (v0) | Yes |  |
+| Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes |  |
+| Captain Tsubasa 2: World Fighters | `01009720213B0000` | 1.0.6 | No |  |
+| DAVE THE DIVER | `010097F018538000` | 1.0.6.1267 | Yes |  |
+| Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2 | `0100AD80208A8000` | 1.80 | No |  |
+| Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 | No |  |
+| My Time at Sandrock | `0100B63016916000` | 1.4.2.0 | Yes |  |
+| Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Yes |  |
+| Astral Chain | `01007300020FA000` | 1.0.1 | No |  |
+| Diablo III: Eternal Collection | `01001B300B9BE000` | 2.7.7.92380 | Yes |  |
+| EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523, 1.8d.f570 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Unicorn Overlord | `010069401ADB8000` | 1.05 | No |  |
+| Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | No |  |
+| Pokémon Legends: Z-A | `0100F43008C44000` | 2.0.2 | No |  |
+| STORY OF SEASONS: Grand Bazaar | `0100DAE01E4C8000` | v655360 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Double Dragon Revive | `01006AE02236C000` | 1.0.0, N1.10 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
+| Trails in the Sky 2nd Chapter | `01007A2027548000` | 1.0.3 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
+| DRAGON BALL: Sparking! ZERO | `010035F022078000` | 1.0.0 | No | ⭐<br><a href="https://github.com/dnyan007"><img src="https://img.shields.io/badge/dnyan007-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="dnyan007"></a> |
+| Pokémon Scarlet | `0100A3D008C5C000` | 4.0.0 | No |  |
+| Pokémon Violet | `01008F6008C5E000` | 4.0.0 | No |  |
+| DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET | `010051C0134F8000` | 1.70 | No |  |
+| STEINS;GATE RE:BOOT | `01008BC024FDE000` | 1.0.3, 1.0.4 | No | ⭐<br><a href="https://github.com/skyhong2002"><img src="https://img.shields.io/badge/skyhong2002-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="skyhong2002"></a> |
+| NieR:Automata The End of YoRHa Edition (Asian release) | `0100B8E016F76000` | 1.0.3 | No |  |
+| Hyrule Warriors: Age of Calamity | `01002B00111A2000` | 1.3.0 | No |  |
 
 <!-- PEANUTS end: the Supported games table -->
 
