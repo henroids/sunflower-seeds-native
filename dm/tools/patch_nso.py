@@ -1833,6 +1833,8 @@ if FAR:   # patch area before the base: file = text + ro + data (padded to 16K) 
     if BIG_TEXT and len(patch) > FRONT - 0x4000 and 'DM_PATCH_FRONT' not in os.environ:
         need = (len(patch) + 0x4000 + 0xFFFF) & ~0xFFFF
         print(f'{NAME}: patch area of {len(patch):#x} bytes does not fit in {FRONT:#x} before the base; rewriting again with {need:#x}', flush=True)
+        if os.environ.get('DM_IN_PROCESS'):   # run inside the app's process (pack_android.run_in_process): no exec there; it runs this again with the variable, after this run is undone
+            sys.exit({'rerun_env': {'DM_PATCH_FRONT': hex(need)}})
         if os.name == 'nt':   # Windows has no exec: os.execve starts a new process and ends this one, and the caller would take this one's exit as the rewrite's
             import subprocess; sys.exit(subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, DM_PATCH_FRONT=hex(need))))
         os.execve(sys.executable, [sys.executable] + sys.argv, dict(os.environ, DM_PATCH_FRONT=hex(need)))
