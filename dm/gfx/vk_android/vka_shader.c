@@ -798,6 +798,14 @@ vka_shader *vka_shader_by_key(uint64_t key) {
     if (ok && V.memu && !vka_shlib_find(&g_lib, key)) { vka_shader *d = vka_memu_by_key(key); if (d) return d; }   // a task / mesh shader's compute or vertex form (the prewarm list's)
     return ok ? vka_shader_make(&g_lib, key) : NULL;
 }
+// PEANUTS: the keys of the library's entries of one stage (DMSH_VK_STAGE_*), at most max of them in out, in key order: how many the library has (more than max: only
+// max written), -1 = no library. For the compute warm-up (vka_pso.c cw_main)
+int vka_shader_lib_stage_keys(int stage, uint64_t *out, int max) {
+    pthread_mutex_lock(&g_mu); int ok = lib_load(), n = 0;
+    if (ok) for (uint32_t i = 0; i < g_lib.h->entry_count; i++) if (g_lib.ent[i].stage == stage) { if (n < max) out[n] = g_lib.ent[i].key; n++; }
+    pthread_mutex_unlock(&g_mu);
+    return ok ? n : -1;
+}
 int vka_shader_lib_has(uint64_t key) { pthread_mutex_lock(&g_mu); int ok = lib_load(); pthread_mutex_unlock(&g_mu); return ok && vka_shlib_find(&g_lib, key) != NULL; }
 int vka_shader_memu_key(uint64_t key) {
     pthread_mutex_lock(&g_mu); int ok = lib_load(); pthread_mutex_unlock(&g_mu);

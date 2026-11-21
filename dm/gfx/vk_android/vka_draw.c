@@ -3104,7 +3104,7 @@ static VkPipeline img_retype(vka_shader *cs, const vka_layout *lay, VkPipeline p
     uint64_t mixed = (um & sm) | ((um | sm) & fm); um &= ~mixed; sm &= ~mixed;   // (an array binding with elements of more than one class keeps its float type)
     if (!(um | sm)) return p;
     VkPipeline q = vka_cs_pipeline_img(cs, lay, um, sm);
-    if (!q) return p;
+    if (!q) return vka_pso_last_pending() ? VK_NULL_HANDLE : p;   // PEANUTS: being made in the background (DM_VK_CS_ASYNC_RETYPE): no pipeline, the dispatch skipped
     for (int i = 0; i < g_wk.n[5]; i++) if ((r[i].what == VKA_R_IMG || r[i].what == VKA_R_TEX || r[i].what == VKA_R_TBUF) && r[i].binding < 64 && ((um | sm) >> r[i].binding & 1)) r[i].dim |= um >> r[i].binding & 1 ? DMSH_VK_DIM_UINT : DMSH_VK_DIM_SINT;   // PEANUTS: + texel buffers
     return q;
 }
@@ -3460,6 +3460,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
     if (vka_rs_on()) rs_fetch_fix(sh, d);   // PEANUTS: DM_RES_SCALE: a shader that fetches by pixel sees its 2D textures at one scale
     if (g_do_nk || g_do_all) dobj_note(sh[5]->key, g_wk.r[5], g_wk.n[5]);   // DM_VK_DISP_OBJ (g_do_nk -1: not read yet)
     p = img_retype(sh[5], &lay, p);
+    if (!p) { g_skipped++; g_skip_warm++; return; }   // PEANUTS: its retyped variant is being made in the background
     {   // DM_VK_BIND_LOG=<hex key>[,…]: the binding records of those compute shaders' dispatches (the first 12 in all) (what each binding is bound to), to follow a pass's inputs and outputs
         const char *bl = getenv("DM_VK_BIND_LOG"); static _Atomic int nb; int hit = 0;
         for (const char *q = bl; q && *q && !hit;) { char *e; unsigned long long k = strtoull(q, &e, 16); if (e == q) break; hit = k == sh[5]->key; q = *e == ',' ? e + 1 : e; }
