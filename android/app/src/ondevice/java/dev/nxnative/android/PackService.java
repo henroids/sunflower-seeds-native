@@ -442,6 +442,7 @@ public final class PackService extends Service {
 
     private void work() {
         Job j = job;
+        StorageScan.ReuseLock caches = StorageScan.reuseLock(getNoBackupFilesDir(), j.titleId(), true);   // PEANUTS: the game's build caches are this job's while it runs: Settings › Storage deletes them only before or after (issue #120)
         wake.acquire(7 * 3600_000L);
         try {
             // A job of a game this app version does not include (a job.json an APK with its profile made: the launcher remembers it across installs): its steps would
@@ -522,6 +523,7 @@ public final class PackService extends Service {
             j.fail(PrepareText.crashed(Job.STEP_TEXT[j.current()], String.valueOf(e)));
             save(j, true);
         } finally {
+            if (caches != null) caches.close();   // PEANUTS
             if (wake.isHeld()) wake.release();
             Thread self = Thread.currentThread();   // PEANUTS: the post names the worker that ended (finished)
             main.post(() -> finished(self));
@@ -546,6 +548,7 @@ public final class PackService extends Service {
      * of the job; its lines go to ondevice/logs/check.log. The split it reads goes once nothing is due. A replaced library gets a notification of its own
      */
     private void checkKept(Job j) {
+        StorageScan.ReuseLock caches = StorageScan.reuseLock(getNoBackupFilesDir(), j.titleId(), true);   // the game's build caches are the check's while it runs (StorageScan.reuseLock)
         wake.acquire(7 * 3600_000L);
         long since = System.currentTimeMillis();
         String what = "ended";
@@ -583,6 +586,7 @@ public final class PackService extends Service {
             what = String.valueOf(e);
         } finally {
             checking = false;
+            if (caches != null) caches.close();
             if (wake.isHeld()) wake.release();
             try {
                 File nb = getNoBackupFilesDir();

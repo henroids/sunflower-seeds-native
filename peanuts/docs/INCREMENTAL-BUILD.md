@@ -47,7 +47,8 @@ Where the older library comes from: the pack's `shaders/`, and a copy of the las
 So a game whose pack's library is gone keeps its shaders all the same: the build deleted (Settings › Storage, Remove game data), another Build folder, a pack
 that was moved. Only this version's copy is kept, at most 4 GB for every game's copies together, the modules' and the split's kept results too, and none
 that would leave less than 2 GB free (`shader_reuse.py room`): the room under the cap comes first from this game's split results (a scan of a few seconds
-makes them again), then from the games built longest ago; that is decided before any other copy goes. The pack's library and the copy count once (the same library). Settings › Storage lists each game's cache under Build caches (not ticked).
+makes them again), then from the games built longest ago; that is decided before any other copy goes. The pack's library and the copy count once (the same library). Settings › Storage lists each game's cache under Build caches (not ticked), and deletes one only while no build or full check of the game runs: they hold
+a lock beside the folder (`no_backup/reuse/<title ID>.lock`, `StorageScan.reuseLock`), which works across the app's processes.
 
 ## The check, and what happens when it fails
 
@@ -321,4 +322,5 @@ build's library equals a full build's. `peanuts/tests/test_rewrite_reuse.py`: a 
 the build (in the profile or in another profile's `patches.py`) and `MATCH_CUTS` of the module rewrite it, its bytes, its `patched.bin` and the `fps_decouple`
 rows count, no record, another key, `PN_REUSE=0` (nor a record or a copy written), a copy under the cap of every game's copies, a record other keep rules
 wrote. `peanuts/tests/test_split_reuse.py`: past the cap this game's kept results go. `peanuts/tests/test_rewrite_forks.py` `Worker`: a tool that asks
-for a rerun (#177's second pass) runs again with its variables, one that asks again for the same fails.
+for a rerun (#177's second pass) runs again with its variables, one that asks again for the same fails. `StorageScanJvmTest`: a game's build caches are
+not deleted while a build holds their lock.

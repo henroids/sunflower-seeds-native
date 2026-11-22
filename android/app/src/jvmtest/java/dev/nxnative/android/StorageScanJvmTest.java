@@ -143,8 +143,16 @@ public final class StorageScanJvmTest {
         all.addAll(ga);
         all.add(new StorageScan.Item(StorageScan.Kind.OLD_LOGS, saveA, "forged", 4));
         all.add(new StorageScan.Item(StorageScan.Kind.OLD_LOGS, new File(ext, "custom"), "forged", 4));
+        StorageScan.ReuseLock building = StorageScan.reuseLock(nb, A, false);   // PEANUTS: a build of A runs (PackService holds the lock on its build caches)
+        check(building != null && StorageScan.reuseLock(nb, A, false) == null, "the build caches' lock has one holder");   // PEANUTS
         StorageScan.Result res = StorageScan.delete(r, StorageScan.distinct(all));
-        check(res.problems.size() == 2, "two refused: " + res.problems);
+        check(res.problems.size() == 3 && reuseA.isDirectory(), "three refused, A's build caches among them: " + res.problems);   // PEANUTS: was two
+        building.close();   // PEANUTS begin: the build ended: they go
+        List<StorageScan.Item> caches = new ArrayList<>();
+        for (StorageScan.Item i : l) if (i.kind == StorageScan.Kind.BUILD_CACHES) caches.add(i);
+        StorageScan.Result after = StorageScan.delete(r, caches);
+        check(after.problems.isEmpty() && !reuseA.exists() && new File(nb, "reuse/" + A + ".lock").isFile(), "build caches removed once no build holds them; the lock file stays: " + after.problems);
+        // PEANUTS end
         check(!packA.exists() && !oldLib.exists() && !packB.exists() && !fb.exists() && !log1.exists() && !aocA.exists() && !Files.exists(new File(aocA, "dlc.nca").toPath()), "removed");
         check(new File(saveA, "save.bin").isFile() && new File(ext, "saves/" + A + "_device/d.bin").isFile() && new File(ext, "save-backups/" + A + "/20260101-000000/main/save.bin").isFile()
                 && new File(files, "save/" + A + "/save.bin").isFile() && new File(pickedInTemp, "s.bin").isFile() && new File(picked, "s.bin").isFile()

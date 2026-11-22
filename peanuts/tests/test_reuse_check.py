@@ -299,6 +299,23 @@ class WorkerEnd(unittest.TestCase):
         self.assertNotRegex(s, r'finished\(\)')   # no other caller takes the end of a worker it did not name
 
 
+class CachesInUse(unittest.TestCase):
+    def test_a_build_and_a_check_hold_the_games_build_caches(self):
+        # Settings › Storage could delete no_backup/reuse/<title ID> while a build used it (igawa6's review of #150): the full check starts by itself while the
+        # phone charges, between the dialog's look at the running processes and its deletion. A job and a check hold StorageScan.reuseLock for their whole run
+        # (taken before anything of it, released in their finally), and StorageScan.delete takes it before it deletes a game's build caches
+        s = PACK.read_text(encoding='utf-8')
+        for start in ('    private void work() {', '    private void checkKept(Job j) {'):
+            body = s[s.index(start):s.index('\n    }\n', s.index(start))]
+            take = body.index('StorageScan.reuseLock(getNoBackupFilesDir(), j.titleId(), true)')
+            self.assertLess(take, body.index('wake.acquire('), start)
+            fin = body.rindex('} finally {')
+            self.assertIn('if (caches != null) caches.close();', body[fin:], start)
+        scan = (REPO / 'android/app/src/main/java/dev/nxnative/android/StorageScan.java').read_text(encoding='utf-8')
+        delete = scan[scan.index('    static Result delete('):scan.index('\n    }\n', scan.index('    static Result delete('))]
+        self.assertLess(delete.index('reuseLock(r.noBackup, it.file.getName(), false)'), delete.index('deleteTree('))
+
+
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
 class Jvm(unittest.TestCase):
     def test_jvm(self):

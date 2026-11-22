@@ -158,15 +158,61 @@ final class StorageScan {
         for (Item it : items) {
             String why = refuse(r, it.file);
             if (why != null) { res.problems.add("not removed (" + why + ")"); continue; }
+            ReuseLock held = it.kind == Kind.BUILD_CACHES ? reuseLock(r.noBackup, it.file.getName(), false) : null;   // PEANUTS: never under a build of the game (issue #120)
+            if (it.kind == Kind.BUILD_CACHES && held == null) { res.problems.add("not removed (a build of the game uses them now, or they cannot be locked): " + it.label); continue; }   // PEANUTS
             try {
                 deleteTree(it.file.toPath());
                 res.freed += it.bytes;
             } catch (IOException | SecurityException e) {
                 res.problems.add("not all of " + it.label + " could be removed: " + e.getMessage());
-            }
+            } finally {   // PEANUTS
+                if (held != null) held.close();   // PEANUTS
+            }   // PEANUTS
         }
         return res;
     }
+
+    // PEANUTS begin: a game's build caches in use (issue #120, peanuts/docs/INCREMENTAL-BUILD.md)
+    /**
+     * The lock on a game's build caches (no_backup/reuse/&lt;title ID&gt;): a build or a full check of the game holds it while it runs (PackService), a deletion here
+     * while it deletes them, so that neither takes them from under the other (found in review: Settings › Storage could delete them while a build used them, as
+     * the full check starts by itself while the phone charges). A file lock beside the folder, &lt;title ID&gt;.lock, never inside it (the deletion takes that, and
+     * the file stays so that every process locks the same one); it holds across the app's processes (the packer's :pack and the app's own) and goes with the
+     * process that held it.
+     */
+    static final class ReuseLock implements java.io.Closeable {
+        private final java.nio.channels.FileChannel ch;
+        private final java.nio.channels.FileLock lock;
+
+        private ReuseLock(java.nio.channels.FileChannel ch, java.nio.channels.FileLock lock) { this.ch = ch; this.lock = lock; }
+
+        @Override public void close() {
+            try { lock.release(); } catch (IOException ignored) { /* the channel's close releases it */ }
+            try { ch.close(); } catch (IOException ignored) { /* nothing left to do */ }
+        }
+    }
+
+    /**
+     * The lock on titleId's build caches. wait: until it is free (a deletion takes some seconds); else null when another holds it. Null too when it cannot be
+     * had at all (no storage, or this process holds it already): a deletion then deletes nothing, a build goes on without it.
+     */
+    static ReuseLock reuseLock(File noBackup, String titleId, boolean wait) {
+        if (noBackup == null || titleId == null || !titleId.matches(TITLE)) return null;
+        java.nio.channels.FileChannel ch = null;
+        try {
+            File f = new File(new File(noBackup, "reuse"), titleId + ".lock");
+            File dir = f.getParentFile();
+            if (!dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) return null;
+            ch = java.nio.channels.FileChannel.open(f.toPath(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE);
+            java.nio.channels.FileLock l = wait ? ch.lock() : ch.tryLock();
+            if (l != null) return new ReuseLock(ch, l);
+        } catch (IOException | java.nio.channels.OverlappingFileLockException | SecurityException e) {
+            // no lock: null below
+        }
+        if (ch != null) try { ch.close(); } catch (IOException ignored) { /* nothing left to do */ }
+        return null;
+    }
+    // PEANUTS end
 
     // ---- The scan ----
 
