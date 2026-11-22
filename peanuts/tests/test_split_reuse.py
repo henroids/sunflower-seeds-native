@@ -88,6 +88,21 @@ class SplitReuse(unittest.TestCase):
         self.same(after, ref)
         self.assertGreaterEqual(self.kept(line), MODELS - 16 - 1)   # the unchanged files of the Model folder (less a batch scanned to check them and m05)
 
+    def test_past_the_cap_this_games_kept_results_go(self):
+        # the kept results count in the cap of every title's kept copies (igawa6's review of #150: they were outside it), and they never take another copy's place
+        other = self.tmp / '0100000000CC0000' / 'library' / 'v-aaaaaaaaaaaa' / 'dmsh_vk.lib'
+        other.parent.mkdir(parents=True); other.write_bytes(b'\0' * (1 << 20))
+        nup = self.nup(self.files)
+        _, _, out = self.split(nup, 'first', PN_REUSE_KEEP_MB='1')
+        self.assertIn('split reuse: this game\'s kept results deleted', out)
+        self.assertFalse((self.reuse / 'split').exists())
+        self.assertTrue(other.is_file())
+        _, line, _ = self.split(nup, 'again', PN_REUSE_KEEP_MB='1')
+        self.assertEqual(self.kept(line), 0)
+        _, _, out = self.split(nup, 'roomy')   # under the cap: kept
+        self.assertNotIn('kept results deleted', out)
+        self.assertGreater(self.kept(self.split(nup, 'kept')[1]), MODELS // 2)
+
     def test_off(self):
         nup = self.nup(self.files)
         self.split(nup, 'first')

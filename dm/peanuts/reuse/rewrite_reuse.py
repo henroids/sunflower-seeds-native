@@ -13,12 +13,12 @@
 # and the SHA-256 of its patched.bin are recorded in <PN_REUSE_DIR>/rewrite/<module>.tsv. A later rewrite whose key differs keeps the module when its part is the
 # recorded one and patched.bin is the recorded file: it writes the current key (as upgrade_keys does for an equivalent rewriter, EQUIV) and rewrites nothing. Any
 # doubt (no record, another part, another patched.bin, a mod's cross-module layout, no PN_REUSE_DIR) rewrites the module as before; PN_REUSE=0 (the job's env.txt)
-# turns it off.
+# turns it off and writes no record or copy. The part covers this file too (RULES): a record that other rules wrote is not trusted.
 #
 # The record also keeps a copy of the module's files (<module>.* and build_src.sha256, each by its SHA-256, in <PN_REUSE_DIR>/rewrite/<module>.files/): a pack that
 # has no rewrite of the module (another Build folder, a build deleted) gets them back when its part is the recorded one and every file is the recorded one (restore),
-# instead of a rewrite (ACNH's main: 2 to 3 minutes on an AYN Thor, Octopath Traveler 0's: 25). No copy that would leave less than KEEP_FREE_MB free; the copies
-# count in the cap of the kept copies of every game (dm/peanuts/reuse/shader_reuse.py keep_library).
+# instead of a rewrite (ACNH's main: 2 to 3 minutes on an AYN Thor, Octopath Traveler 0's: 25). Each copy goes under the cap of the kept copies of every game
+# when it is made (dm/peanuts/reuse/shader_reuse.py room), and none that would leave less than KEEP_FREE_MB free.
 import hashlib
 import importlib.util
 import os
@@ -29,6 +29,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 TABLES = ('CUTS', 'OBS', 'FRAME_STEP', 'CAPABILITIES')
 FORMAT = 'pn-rewrite-part 1'
+RULES = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:32]   # this file, the keep rules, in every part: a record another file wrote is not trusted, as
+# split_reuse.py's key covers its own source (found in review: a later app with other rules would have kept by what the earlier rules wrote)
 _LOADED = {}
 SHARED = 'build_src.sha256'   # written by every module's rewrite, the same for each (patch_nso.py): copied with each, put back when the pack has none
 KEEP_FREE_MB = 2048   # as shader_reuse.py's
@@ -74,7 +76,7 @@ def part(name, src_bytes, g, rewriter_files):
         if any(bid in t[k] for k in TABLES) or any(bid in bs for bs in t['VARIANT_CUTS'].values()):   # the tables patch_nso.py merges by build ID from every file
             touching[os.path.realpath(p)] = p
     if own.is_file() and not registered and tables(own)['MATCH_CUTS'].get(name): touching[os.path.realpath(own)] = own   # the selected profile's own MATCH_CUTS
-    h = hashlib.sha256(FORMAT.encode() + b'\0')
+    h = hashlib.sha256(FORMAT.encode() + b'\0' + RULES.encode() + b'\0')
     for f in rewriter_files: h.update(f'{f}\0'.encode() + (REPO / 'dm/tools' / f).read_bytes() + b'\0')
     h.update(b'module\0' + name.encode() + b'\0' + hashlib.sha256(src_bytes).digest())
     for p in sorted(touching.values(), key=lambda p: (Path(p).parent.name, Path(p).name)):   # named by folder and file, not by path: the tools' folder moves with an app update
@@ -94,6 +96,16 @@ def part(name, src_bytes, g, rewriter_files):
                                                      and dict(x.split('=', 1) for x in r[2:] if '=' in x).get(name) not in (None, bid))).encode() + b'\0')
     if name == 'main': h.update(b'fps_decouple\0' + repr(sorted(g.values('fps_decouple'))).encode() + b'\0')
     return h.hexdigest()
+
+
+_SHADER_REUSE = []
+
+
+def shader_reuse():   # its room(): the cap that every title's kept copies share (the library's, the modules', the split's results)
+    if not _SHADER_REUSE:
+        spec = importlib.util.spec_from_file_location('pn_shader_reuse', Path(__file__).with_name('shader_reuse.py'))
+        m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); _SHADER_REUSE.append(m)
+    return _SHADER_REUSE[0]
 
 
 def _record_path(name):
@@ -145,8 +157,12 @@ def _copy(rp, name, out, before, registered=False):
     if files == before and keep.is_dir() and all((keep / f).is_file() and (keep / f).stat().st_size == (Path(out) / f).stat().st_size for f in files): return files
     shutil.rmtree(keep, ignore_errors=True)
     size = sum((Path(out) / f).stat().st_size for f in files)
-    if shutil.disk_usage(rp.parent).free - size < KEEP_FREE_MB << 20:
-        print(f'  {name}: no copy of its rewrite kept ({size >> 20} MB): less than {KEEP_FREE_MB} MB would be free', flush=True); return {}
+    # under the cap of every title's kept copies when it is made, as the library's (found in review: it checked only the free space, so it could go past the
+    # cap keep_library counts it in)
+    why, drop, gone = shader_reuse().room(rp.parent.parent, size, free_mb=KEEP_FREE_MB)
+    if why: print(f'  {name}: no copy of its rewrite kept ({size >> 20} MB): {why}', flush=True); return {}
+    for d in drop: shutil.rmtree(d, ignore_errors=True)
+    if gone: print(f'  {name}: the kept copies of {", ".join(gone)} deleted to make room for its copy', flush=True)
     tmp = rp.with_suffix('.files.tmp'); shutil.rmtree(tmp, ignore_errors=True); tmp.mkdir()
     try:
         for f in files: shutil.copyfile(Path(out) / f, tmp / f)
@@ -157,7 +173,9 @@ def _copy(rp, name, out, before, registered=False):
 
 
 def record(name, src, out, g, rewriter_files):
-    """After a rewrite, or a module kept with its current key: what it was made from, for the next build, and a copy of its files (restore)"""
+    """After a rewrite, or a module kept with its current key: what it was made from, for the next build, and a copy of its files (restore). With PN_REUSE=0
+    nothing (found in review: the records and copies were still written)"""
+    if os.environ.get('PN_REUSE') == '0': return
     rp = _record_path(name)
     kf, pb = Path(out) / f'{name}.android.key', Path(out) / f'{name}.patched.bin'
     if rp is None or not kf.is_file() or not pb.is_file(): return
@@ -200,7 +218,7 @@ def restore(name, src, out, g, key, rewriter_files):
 
 def keep(name, src, out, g, key, rewriter_files):
     """True when the pack's module (whose key file is not the current key) is the rewrite the current inputs make: its current key is then written. Else False"""
-    if os.environ.get('PN_REUSE') == '0': return False   # env.txt PN_REUSE=0: off, as for the shaders (records are still written)
+    if os.environ.get('PN_REUSE') == '0': return False   # env.txt PN_REUSE=0: off, as for the shaders (and no record or copy is written)
     rp = _record_path(name)
     kf, pb = Path(out) / f'{name}.android.key', Path(out) / f'{name}.patched.bin'
     if rp is None or not rp.is_file() or not kf.is_file() or not pb.is_file(): return False

@@ -568,6 +568,17 @@ class Kept(Base):
         self.assertFalse(oldest.parent.parent.exists())   # the title built longest ago went
         self.assertTrue(newer.is_file())
 
+    def test_this_games_split_results_make_room_first(self):
+        # the split's kept results count in the cap too (igawa6's review of #150), and they go before another title's copies: a scan of a few seconds makes them
+        split = self.reuse / sr.SPLIT_DIR / 'part' / 'ab' / 'x.pkl'
+        split.parent.mkdir(parents=True); split.write_bytes(b'\0' * (1 << 20))
+        other = self.other_title('0100000000BB0000', 1.5, 3600)
+        os.environ['PN_REUSE_KEEP_MB'] = '2'
+        self.profile(); self.build()
+        self.assertTrue(self.copy().is_file())
+        self.assertFalse(split.exists())
+        self.assertTrue(other.is_file())
+
     def test_a_library_larger_than_the_cap_is_not_kept(self):
         self.profile(); self.build()
         os.environ['PN_REUSE_KEEP_MB'] = '0'
@@ -865,6 +876,20 @@ class Records(Base):
         sr.translator_tree = lambda: 'f' * 16   # an app update: the translator library built from other sources, the version the same
         try: code, runs, lib = self.build()
         finally: sr.translator_tree = saved
+        self.assertEqual((code, len(runs[0])), (0, 400))
+        self.assertEqual(lib, self.full())
+
+    def test_other_keep_rules_keep_nothing(self):
+        # the record and each shader's part cover this file (RULES), as split_reuse.py's key covers its own: a later app whose keep rules differ trusts nothing
+        # the earlier rules wrote (igawa6's review of #150)
+        self.profile()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i]}\n' for i in range(50)))   # "same inputs" too
+        self.build(); self.into_pack()
+        self.assertIn(f'rules\t{sr.RULES}\n', next((self.reuse / 'shaders').glob('*.tsv')).read_text())
+        saved = sr.RULES
+        sr.RULES = 'f' * 32
+        try: code, runs, lib = self.build()
+        finally: sr.RULES = saved
         self.assertEqual((code, len(runs[0])), (0, 400))
         self.assertEqual(lib, self.full())
 

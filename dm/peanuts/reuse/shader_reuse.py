@@ -53,11 +53,14 @@ REPO = Path(__file__).resolve().parents[3]
 TOOLS = REPO / 'dm/gfx/tools'
 BUILD = TOOLS / 'vk_android_build.py'
 FORMAT = 'pn-shader-deps 2'   # 2: the translator's source tree (translator_tree) and each entry's hash
+RULES = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:32]   # this file, the keep rules: a record (and each shader's part) another file wrote is not
+# trusted, as split_reuse.py's key covers its own source (found in review: a later app with other rules would have kept by what the earlier rules wrote)
 SAMPLE_SHARE, SAMPLE_MIN, SAMPLE_MAX = 50, 16, 1000   # one key in SAMPLE_SHARE, within these bounds
 SAMPLE_CLASS_MIN = 4   # and at least this many of each class of shader (sample_class), so a rule that misses one class is checked on it too
 KEY = re.compile(r'[0-9a-f]{16}')
 KEEP_DIR = 'library'   # <PN_REUSE_DIR>/library/v-<V>/dmsh_vk.lib: the copy of the last library of this title (keep_library)
-KEEP_TOTAL_MB = 4096   # every title's copy together, at most (PN_REUSE_KEEP_MB)
+SPLIT_DIR = 'split'    # <PN_REUSE_DIR>/split/: the split's kept results (split_reuse.py), the first to go when a copy needs room (room)
+KEEP_TOTAL_MB = 4096   # every title's copies together (the library's, the modules', the split's results), at most (PN_REUSE_KEEP_MB)
 KEEP_FREE_MB = 2048    # and no copy that would leave less than this free
 
 
@@ -154,7 +157,8 @@ class Deps:
                 ks = set(KEY.findall(l))
                 for k in ks: self.named[k].append(f'{t}\0{l}')
                 if not ks: glob.update(f'{t}\0{l}\n'.encode())   # a row that names no key counts for every shader
-        self.common = hashlib.sha256(b'%s\0%s\0profile\0%s\0rows\0%s' % (FORMAT.encode(), version.encode(), profile_rows, glob.hexdigest().encode())).hexdigest()
+        self.common = hashlib.sha256(b'%s\0%s\0%s\0profile\0%s\0rows\0%s' % (FORMAT.encode(), RULES.encode(), version.encode(), profile_rows,
+                                                                          glob.hexdigest().encode())).hexdigest()
         self._plain, self._dep = {}, {}
 
     def fact_row(self, k):
@@ -202,9 +206,9 @@ def read_record(d, lib_id):
     for l in text.split('\n'):
         c = l.split('\t')
         if l.startswith('#'): continue
-        if len(c) == 2 and c[0] in ('format', 'version', 'game', 'inputs', 'tree'): out[c[0]] = c[1]
+        if len(c) == 2 and c[0] in ('format', 'rules', 'version', 'game', 'inputs', 'tree'): out[c[0]] = c[1]
         elif len(c) == 3 and KEY.fullmatch(c[0]) and re.fullmatch(r'[0-9a-f]{32}', c[1]) and re.fullmatch(r'[0-9a-f]{16}', c[2]): out['deps'][c[0]] = (c[1], c[2])
-    return out if out.get('format') == FORMAT and all(x in out for x in ('version', 'game', 'inputs', 'tree')) else None
+    return out if out.get('format') == FORMAT and out.get('rules') == RULES and all(x in out for x in ('version', 'game', 'inputs', 'tree')) else None
 
 
 def write_record(d, lib_id, version, game, inputs, tree, deps):
@@ -212,7 +216,7 @@ def write_record(d, lib_id, version, game, inputs, tree, deps):
     p = record_path(d, lib_id); p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix('.tmp')
     tmp.write_text(f'# what each shader of a library was built from (dm/peanuts/reuse/shader_reuse.py): the next build keeps the shaders whose part is the same\n'
-                   f'format\t{FORMAT}\nversion\t{version}\ngame\t{game}\ninputs\t{inputs}\ntree\t{tree}\n'
+                   f'format\t{FORMAT}\nrules\t{RULES}\nversion\t{version}\ngame\t{game}\ninputs\t{inputs}\ntree\t{tree}\n'
                    + ''.join(f'{k}\t{deps[k][0]}\t{deps[k][1]}\n' for k in sorted(deps)))
     os.replace(tmp, p)
 
@@ -355,10 +359,20 @@ def older_libraries(delta, out_lib_dir, game_id):
     return libs
 
 
+def dir_size(d):
+    """The bytes of the files under d (0 when there is none)"""
+    size = 0
+    for r, _, names in os.walk(d):
+        for n in names:
+            try: size += os.stat(os.path.join(r, n)).st_size
+            except OSError: pass
+    return size
+
+
 def copies(t):
-    """A title's kept copies → (the time of its newest file, their size, their folders): its library's (KEEP_DIR) and its modules' (rewrite_reuse.py,
-    rewrite/<module>.files)"""
-    dirs = [d for d in [t / KEEP_DIR, *sorted((t / 'rewrite').glob('*.files'))] if d.is_dir()]
+    """A title's kept copies → (the time of its newest file, their size, their folders): its library's (KEEP_DIR), its modules' (rewrite_reuse.py,
+    rewrite/<module>.files) and the split's kept results (split_reuse.py, SPLIT_DIR)"""
+    dirs = [d for d in [t / KEEP_DIR, *sorted((t / 'rewrite').glob('*.files')), t / SPLIT_DIR] if d.is_dir()]
     newest, size = 0.0, 0
     for d in dirs:
         for r, _, names in os.walk(d):
@@ -369,32 +383,51 @@ def copies(t):
     return newest, size, dirs
 
 
+def cap_bytes():
+    """Every title's kept copies together, at most (PN_REUSE_KEEP_MB, else KEEP_TOTAL_MB)"""
+    try: return int(os.environ.get('PN_REUSE_KEEP_MB') or KEEP_TOTAL_MB) << 20
+    except ValueError: return KEEP_TOTAL_MB << 20
+
+
+def room(reuse_dir, size, replaced=(), free_mb=None):
+    """Whether a copy of size bytes fits among the kept copies, for the title of reuse_dir and in place of its folders in replaced: every title's copies together
+    at most cap_bytes(), the room under it made first by this title's split results (SPLIT_DIR: a few seconds of a scan to make again, so they never take another
+    copy's place), then by the copies of the titles built longest ago; and none that would leave less than free_mb (KEEP_FREE_MB) free. Decided before anything is
+    deleted, so a copy that is not made takes no other's place. The library's copy (keep_library), each module's (rewrite_reuse.py) and the split's results
+    (split_reuse.py, size 0 once they are written) all ask here. → (None, [the folders to delete before it is made], [the titles whose copies go]) or (why not, [], [])"""
+    me, cap = Path(reuse_dir), cap_bytes()
+    free_mb = KEEP_FREE_MB if free_mb is None else free_mb
+    if size > cap: return f'it is larger than the kept copies may be ({cap >> 20} MB, PN_REUSE_KEEP_MB)', [], []
+    replaced = [Path(d) for d in replaced]
+    _, mine, _ = copies(me)
+    have = sum(dir_size(d) for d in replaced)
+    split = me / SPLIT_DIR
+    spare = dir_size(split) if split not in replaced else 0
+    others = sorted((copies(t) + (t.name,) for t in me.parent.iterdir() if t.is_dir() and t.name != me.name), key=lambda o: o[0]) if me.parent.is_dir() else []
+    others = [o for o in others if o[1]]
+    total, drop, gone, freed = size + mine - have + sum(o[1] for o in others), [], [], have
+    if total > cap and spare: drop.append(split); total -= spare; freed += spare
+    while total > cap and others:
+        o = others.pop(0); drop += o[2]; gone.append(o[3]); total -= o[1]; freed += o[1]
+    if total > cap: return f'with this game\'s other copies it is more than {cap >> 20} MB (PN_REUSE_KEEP_MB)', [], []
+    if shutil.disk_usage(me.parent if me.parent.is_dir() else me).free + freed - size < free_mb << 20: return f'less than {free_mb} MB would be free', [], []
+    return None, drop, gone
+
+
 def keep_library(reuse_dir, out_dir, version):
     """A copy of the library this step wrote in <PN_REUSE_DIR>/library/v-<V>/ (the pack may be on shared storage or a card, so no link): the next build of this title
-    keeps from it when the pack's library is gone. Only this version's (no build of this app keeps from another's). At most KEEP_TOTAL_MB for every title's copies
-    together, its modules' too (PN_REUSE_KEEP_MB): the copies of the titles built longest ago go first; none that would leave less than KEEP_FREE_MB free. Decided
-    before anything is deleted: a copy that is not made takes no other's place. → a line for the log"""
+    keeps from it when the pack's library is gone. Only this version's (no build of this app keeps from another's). Under the cap of every title's copies (room):
+    a copy that is not made takes no other's place. → a line for the log"""
     src = os.path.join(out_dir, 'dmsh_vk.lib')
     me, root = Path(reuse_dir), Path(reuse_dir) / KEEP_DIR
     dst = root / ('v-' + version) / 'dmsh_vk.lib'
-    try: cap = int(os.environ.get('PN_REUSE_KEEP_MB') or KEEP_TOTAL_MB) << 20
-    except ValueError: cap = KEEP_TOTAL_MB << 20
     size = os.path.getsize(src)
-    if size > cap:
-        shutil.rmtree(root, ignore_errors=True)
-        return f'reuse: this library ({size >> 20} MB) is larger than the kept copies may be ({cap >> 20} MB, PN_REUSE_KEEP_MB): not kept'
-    _, mine, _ = copies(me)
-    have = sum(os.path.getsize(os.path.join(r, n)) for r, _, names in os.walk(root) for n in names) if root.is_dir() else 0   # this title's libraries: replaced
-    others = sorted((copies(t) + (t.name,) for t in me.parent.iterdir() if t.is_dir() and t.name != me.name), key=lambda o: o[0])
-    others = [o for o in others if o[1]]
-    total, evict = size + mine - have + sum(o[1] for o in others), []
-    while total > cap and others:
-        o = others.pop(0); evict.append(o); total -= o[1]
-    if total > cap: return f'reuse: this library ({size >> 20} MB) not kept: with this game\'s modules\' copies it is more than {cap >> 20} MB (PN_REUSE_KEEP_MB)'
-    if shutil.disk_usage(me.parent).free + have + sum(o[1] for o in evict) - size < KEEP_FREE_MB << 20:
-        return f'reuse: this library ({size >> 20} MB) not kept: less than {KEEP_FREE_MB} MB would be free'
-    for o in evict:
-        for d in o[2]: shutil.rmtree(d, ignore_errors=True)
+    if size > cap_bytes():
+        shutil.rmtree(root, ignore_errors=True)   # nor an older copy, which would no longer be this build's
+        return f'reuse: this library ({size >> 20} MB) is larger than the kept copies may be ({cap_bytes() >> 20} MB, PN_REUSE_KEEP_MB): not kept'
+    why, drop, gone = room(me, size, [root])   # this title's libraries: replaced
+    if why: return f'reuse: this library ({size >> 20} MB) not kept: {why}'
+    for d in drop: shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(root, ignore_errors=True)   # the copies before (another version's, or the last library: this one takes its place)
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix('.tmp')
@@ -403,7 +436,8 @@ def keep_library(reuse_dir, out_dir, version):
         shutil.rmtree(dst.parent, ignore_errors=True)   # never a cut copy (storage full after all): the next build keeps from the pack's library
         raise
     return (f'reuse: this library kept for the next build of this game ({size >> 20} MB)'
-            + (f'; the kept copies of {", ".join(o[3] for o in evict)} deleted (at most {cap >> 20} MB together)' if evict else ''))
+            + (f'; the kept copies of {", ".join(gone)} deleted (at most {cap_bytes() >> 20} MB together)' if gone else '')
+            + ('; this game\'s kept split results deleted to make room' if me / SPLIT_DIR in drop else ''))
 
 
 def wanted_keys(argv, deps, delta):

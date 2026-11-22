@@ -8,6 +8,10 @@ shaders, pack 8 s; a profile of 60,000 to 80,000 shaders takes 15 to 25 minutes 
 Upstream already keeps an older library's entries, but only with a manifest of the build in the game's profile (`vk_delta.tsv`, from a full Mac build:
 [android/SHADERS.md, Delta updates](../../android/SHADERS.md#delta-updates)). 7 of 160 profiles have one, all of them Switch 2 titles.
 
+On a computer (the builder, `scripts/pack_android.py` without the app) none of this keeps anything: there is no `PN_REUSE_DIR`, so every build makes
+every part again as before. The builder gets two parts of this all the same, as they make every build faster with the same outputs: the walk of a `.nup` by
+its nodes and, on Linux, the split's Yaz0 in C ([BUILDER.md, Yaz0](BUILDER.md#yaz0)).
+
 ## What is kept
 
 The shaders step runs [`dm/peanuts/reuse/shader_reuse.py`](../../dm/peanuts/reuse/shader_reuse.py) with `vk_android_build.py`'s arguments. It looks at each
@@ -41,8 +45,9 @@ chain changes, so the library version does not move.
 Where the older library comes from: the pack's `shaders/`, and a copy of the last library this game's shaders step wrote, kept in the app's own storage
 (`no_backup/reuse/<title ID>/library/v-<V>/`, `keep_library`), which `shader_reuse.py` adds to `DMSH_VK_DELTA_FROM` for itself and for `vk_android_build.py`.
 So a game whose pack's library is gone keeps its shaders all the same: the build deleted (Settings › Storage, Remove game data), another Build folder, a pack
-that was moved. Only this version's copy is kept, at most 4 GB for every game's copies together, the modules' too (the games built longest ago go first), and
-none that would leave less than 2 GB free; that is decided before any other copy goes. The pack's library and the copy count once (the same library). Settings › Storage lists each game's cache under Build caches (not ticked).
+that was moved. Only this version's copy is kept, at most 4 GB for every game's copies together, the modules' and the split's kept results too, and none
+that would leave less than 2 GB free (`shader_reuse.py room`): the room under the cap comes first from this game's split results (a scan of a few seconds
+makes them again), then from the games built longest ago; that is decided before any other copy goes. The pack's library and the copy count once (the same library). Settings › Storage lists each game's cache under Build caches (not ticked).
 
 ## The check, and what happens when it fails
 
@@ -128,9 +133,11 @@ found", and its Build made a pack byte for byte the full build's in about a minu
 
 ## Switches and the log
 
-- `PN_REUSE=0` in the job's `ondevice/env.txt`: off, the shaders step is `vk_android_build.py` as before and the rewrite keeps no module whose key moved.
+- `PN_REUSE=0` in the job's `ondevice/env.txt`: off, the shaders step is `vk_android_build.py` as before, the rewrite keeps no module whose key moved, and
+  nothing is written for a later build (no record, no copy of the library or of a module, no split result).
 - A profile whose own manifest is of the build: upstream's delta update runs as it was.
-- `PN_REUSE_KEEP_MB=<n>` in `env.txt`: the kept copies of every game together (libraries and modules), at most n MB (4096 by default; 0 keeps no library).
+- `PN_REUSE_KEEP_MB=<n>` in `env.txt`: the kept copies of every game together (libraries, modules and the split's results), at most n MB (4096 by default;
+  0 keeps none).
 - `shaders.log` lines: `reuse: <library>: N shaders kept (...), M translated to check them`, then `reuse check: M of M shaders translated to check are the
   older library's byte for byte; N shaders kept`, and `reuse: this library kept for the next build of this game (S MB)` (or why not). The card shows
   "Translating M new shaders (the other N are reused)" from the tool's own count.
@@ -158,8 +165,12 @@ The record also keeps a copy of the module's files (`<module>.*` as the rewriter
 `no_backup/reuse/<title ID>/rewrite/<module>.files/`), made again only when they changed. A pack that has no rewrite of the module (another Build folder, a build
 deleted) gets the copy back when the module's part is the recorded one and every file is the recorded one: the files are copied in, the shared
 `build_src.sha256` only where the pack has none, and the current key last (`<module>: kept from the app's copy of its last rewrite ...`). Otherwise, or with a copy
-that changed, the module is rewritten; a copy cut short leaves files without a key, which the rewrite replaces. No copy that would leave less than 2 GB free; the
-copies count in the 4 GB of every game's kept copies (`shader_reuse.py keep_library`).
+that changed, the module is rewritten; a copy cut short leaves files without a key, which the rewrite replaces. Each copy goes under the 4 GB of every game's
+kept copies when it is made, as the library's (`shader_reuse.py room`), and none that would leave less than 2 GB free.
+
+Each record covers the source of the rules that wrote it, as the split's key covers `split_reuse.py`: `shader_reuse.py`'s record and each shader's part
+hash `shader_reuse.py` (`RULES`), each module's part hashes `rewrite_reuse.py`. A later app whose keep rules differ keeps nothing at its first build, instead
+of trusting what the earlier rules wrote.
 
 ## The rewrite on the fast cores
 
@@ -230,9 +241,9 @@ of 58 s.
 - One full check a game: `check.todo` and `check.job` are one each in `no_backup/reuse/<title ID>/`. A build of the game in another Build folder replaces
   the first folder's due check with its own (or ends it, when it kept nothing), so the first folder's library keeps what only its sample checked until a later
   build there. One check for each Build folder needs a Java side that keeps one job for each.
-- The split's kept results are outside the 4 GB of the kept copies and are never pruned within one common part (the files an update replaced stay, and
-  every split loads the list of empty results whole). A game of 100,000 files keeps some tens of MB; one with many shader files without
-  `DM_SPLIT_SELECTED` keeps their scan results, which can be more.
+- The split's kept results are never pruned within one common part (the files an update replaced stay, and every split loads the list of empty results
+  whole). They count in the 4 GB of the kept copies, though, and go first when a copy needs room. A game of 100,000 files keeps some tens of MB; one with
+  many shader files without `DM_SPLIT_SELECTED` keeps their scan results, which can be more.
 
 ## Measured (AYN Thor, ACNH 3.0.3 with its DLC, 2026-11-18 and 19)
 
@@ -305,6 +316,9 @@ and a new pair (exactly those and the vertex shaders they pad are translated), p
 inputs), an add-on's pixel shaders built after a build without them (they and the vertex shaders they pad are translated), the same inputs without a record (nothing kept unless the profile has its own `pso_pairs.tsv`), a change the rule does not see (caught by the check,
 then a full translation), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; the kept copy (a build keeps one and puts the environment back, a build
 whose pack's library is gone keeps from it, it and the pack's count once, a damaged one is skipped, only this version's, every game's under the cap with the
-oldest going first, none above the cap or when storage is low); each build's library equals a full build's. `peanuts/tests/test_rewrite_reuse.py`: a new version row keeps an unchanged `sdk`, a new main build rewrites `main`, patches for
+oldest going first, this game's split results before them, none above the cap or when storage is low); a record other keep rules wrote keeps nothing; each
+build's library equals a full build's. `peanuts/tests/test_rewrite_reuse.py`: a new version row keeps an unchanged `sdk`, a new main build rewrites `main`, patches for
 the build (in the profile or in another profile's `patches.py`) and `MATCH_CUTS` of the module rewrite it, its bytes, its `patched.bin` and the `fps_decouple`
-rows count, no record, another key, `PN_REUSE=0`.
+rows count, no record, another key, `PN_REUSE=0` (nor a record or a copy written), a copy under the cap of every game's copies, a record other keep rules
+wrote. `peanuts/tests/test_split_reuse.py`: past the cap this game's kept results go. `peanuts/tests/test_rewrite_forks.py` `Worker`: a tool that asks
+for a rerun (#177's second pass) runs again with its variables, one that asks again for the same fails.

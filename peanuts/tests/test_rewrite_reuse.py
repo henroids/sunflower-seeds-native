@@ -206,6 +206,66 @@ class Restore(Rewrite):
         self.assertTrue(self.keeps('main', main, g))   # the record still keeps it in place
 
 
+class Review(Rewrite):
+    """igawa6's review of #150 (2026-11-22): PN_REUSE=0 writes nothing, the copies go under the cap when they are made, and a record other rules wrote is not
+    trusted"""
+    FILES, made, new_pack = Restore.FILES, Restore.made, Restore.new_pack
+
+    def other_title(self, title, mb, age):
+        """Another title's kept copy of mb MB, age seconds old (only its size and time count)"""
+        f = self.d / 'reuse' / '..' / title / 'library' / 'v-aaaaaaaaaaaa' / 'dmsh_vk.lib'
+        f = f.resolve(); f.parent.mkdir(parents=True); f.write_bytes(b'\0' * int(mb * (1 << 20)))
+        t = os.stat(f).st_mtime - age; os.utime(f, (t, t))
+        return f
+
+    def test_reuse_off_writes_no_record_and_no_copy(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        os.environ['PN_REUSE'] = '0'
+        self.made(g, main)
+        self.assertFalse((self.d / 'reuse').exists())
+
+    def test_the_copy_goes_under_the_cap_of_every_titles_copies(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        (self.d / 'reuse').mkdir()
+        oldest, newer = self.other_title('0100000000CC0000', 1.5, 3600), self.other_title('0100000000DD0000', 1.5, 60)
+        os.environ['PN_REUSE_KEEP_MB'] = '2'
+        self.made(g, main)
+        self.assertTrue((self.d / 'reuse' / 'rewrite' / 'main.files' / 'main.patched.bin').is_file())
+        self.assertFalse(oldest.exists())   # the title built longest ago made room
+        self.assertTrue(newer.is_file())
+
+    def test_a_copy_larger_than_the_cap_is_not_made(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        (self.d / 'reuse').mkdir()
+        other = self.other_title('0100000000CC0000', 0.5, 3600)
+        os.environ['PN_REUSE_KEEP_MB'] = '0'
+        self.made(g, main)
+        self.assertFalse((self.d / 'reuse' / 'rewrite' / 'main.files').exists())
+        self.assertTrue(other.is_file())   # a copy that is not made takes no other's place
+        self.assertFalse(rr.restore('main', main, self.new_pack(), g, 'key-2', REWRITER))
+        self.assertTrue(self.keeps('main', main, g))   # the record still keeps it in place
+
+    def test_this_games_split_results_make_room_first(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        split = self.d / 'reuse' / 'split' / 'part' / 'ab' / 'x.pkl'; split.parent.mkdir(parents=True); split.write_bytes(b'\0' * (1 << 20))
+        other = self.other_title('0100000000CC0000', 1.5, 3600)
+        os.environ['PN_REUSE_KEEP_MB'] = '2'
+        self.made(g, main)
+        self.assertTrue((self.d / 'reuse' / 'rewrite' / 'main.files' / 'main.patched.bin').is_file())
+        self.assertFalse(split.exists())
+        self.assertTrue(other.is_file())
+
+    def test_a_record_other_rules_wrote_is_not_trusted(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        saved = rr.RULES; rr.RULES = 'another app\'s keep rules'
+        try:
+            self.assertFalse(self.keeps('main', main, g))
+            self.assertFalse(rr.restore('main', main, self.new_pack(), g, 'key-2', REWRITER))
+        finally: rr.RULES = saved
+        self.assertTrue(self.keeps('main', main, g))
+
+
 class Tables(Rewrite):
     """The module's tables besides patched.bin: a kept or restored module must have the ones a rewrite from nothing makes (found in review)"""
     def test_the_cut_count_of_another_build_of_the_module(self):

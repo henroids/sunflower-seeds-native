@@ -14,6 +14,7 @@
 # (shader_split.py digest_sources), Unity's common strings from main (COMMON), the zstd dictionaries (ZDICTS), DM_SPLIT_SELECTED (KEEP), the split's environment
 # and Python's version. Archive ranges (several files, ranges planned over the whole archive), a plaintext NSP or a folder dump (no hashes) and the Unity second
 # pass are scanned as before. A result with no shader goes into a list file, one with shaders into a file of its own (<PN_REUSE_DIR>/split/<common part>/).
+# They count in the cap of every title's kept copies (dm/peanuts/reuse/shader_reuse.py room) and never take another copy's place: past it they go first.
 #
 # The check: whole batches that could be kept, one in SAMPLE_SHARE (at least SAMPLE_MIN, picked by a hash of their keys and a salt drawn at each split, so
 # that the split, which has no full check after it, meets every kept file over its builds), are scanned anyway, and each of their
@@ -34,6 +35,17 @@ FORMAT = 'pn-split 1'
 SAMPLE_SHARE, SAMPLE_MIN, CHECK_FROM = 50, 1, 3   # batches: one in SAMPLE_SHARE checked, at least SAMPLE_MIN, when at least CHECK_FROM could be kept
 REPO = Path(__file__).resolve().parents[3]
 ENV = ('DM_GAME', 'DM_GLSLC_CAPTURE', 'DM_UE_SHADERS', 'DM_NRO_DIR', 'DM_PACKER_COMMIT')
+
+
+_SHADER_REUSE = []
+
+
+def shader_reuse():   # its room(): the cap that every title's kept copies share (the library's, the modules', the split's results)
+    if not _SHADER_REUSE:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('pn_shader_reuse', Path(__file__).with_name('shader_reuse.py'))
+        m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); _SHADER_REUSE.append(m)
+    return _SHADER_REUSE[0]
 
 
 class Stale(Exception):
@@ -233,11 +245,20 @@ class Context:
                 check_pickle(data, self.unpickler)
                 self._write(f'empty-{int(time.time() * 1000)}-{os.getpid()}.pkl', data)
                 self.empty.update(empty)
+            self._cap()
         except Exception as e: self._stop(e)
         cached = sum(1 for k in self.keys if k is not None)
         same = f' (the same: {", ".join(jobs[i][1] for i in sorted(self.expect)[:8])})' if self.expect else ''   # none scanned: no empty list
         print(f'split reuse: {len(self.filled)} of {len(jobs)} files kept (unchanged since a split before), {len(self.expect)} of them scanned to check{same}, '
               f'{len(jobs) - cached} not keyed (archives, files without a hash)', flush=True)
+
+    def _cap(self):
+        """The kept results under the cap of every title's kept copies (shader_reuse.py room), now that they are written (found in review: they were outside it).
+        They never take another copy's place: past the cap, or with too little free, this game's kept split results go (a scan of a few seconds makes them again)"""
+        why, drop, _ = shader_reuse().room(self.root.parent.parent, 0)
+        if why or drop:
+            shutil.rmtree(self.root.parent, ignore_errors=True)
+            print(f'split reuse: this game\'s kept results deleted: {why or "with them the kept copies are past their cap (PN_REUSE_KEEP_MB)"}', flush=True)
 
     def forget(self, cache):
         """What fill() put into the ScanCache taken out again: those files are scanned. cache None: the split keeps no ScanCache (no DM_SPLIT_RESUME), and the
