@@ -74,4 +74,41 @@ final class LibraryWalk {
         }
         return verDir;
     }
+
+    // ---- A dump folder's version from its code (GitHub issue #370) ----
+
+    /**
+     * The build ID of the main of a dump folder's base, base/exefs/main (at its package, {@link #root}), else of one version's folder, exefs/main: the 32 bytes at
+     * 0x40 of its NSO header, in lower-case hex. null when there is none or it is not an NSO
+     */
+    static String mainBuildId(File dump) {
+        File main = new File(root(new File(dump, "base")), "exefs/main");
+        if (!main.isFile()) main = new File(dump, "exefs/main");
+        byte[] h = new byte[0x60];
+        try (java.io.FileInputStream in = new java.io.FileInputStream(main)) {
+            int n = 0;
+            for (int r; n < h.length && (r = in.read(h, n, h.length - n)) > 0; ) n += r;
+            if (n < h.length || h[0] != 'N' || h[1] != 'S' || h[2] != 'O' || h[3] != '0') return null;
+        } catch (java.io.IOException e) {
+            return null;
+        }
+        StringBuilder s = new StringBuilder();
+        for (int i = 0x40; i < 0x60; i++) s.append(String.format(Locale.ROOT, "%02x", h[i] & 0xff));
+        return s.toString();
+    }
+
+    /**
+     * The version a main of this build ID is, by the game's builds (game.tsv build rows: version, module to its build ID, 16 bytes or more in hex): the row
+     * whose main the ID starts with; -1 when none is or there is no ID. A dump folder has a version number only in updates/&lt;version&gt;/, so a base or one
+     * version's folder that holds an update's whole code (a dump updated on a PC, as in the issue: Breath of the Wild 1.9.0) was taken for the base game's
+     * version, and the sheet said Wrong version. Upstream's Prepare takes such a dump as that build too (DumpLayout.find: by the build IDs)
+     */
+    static long versionOf(String mainId, java.util.Map<Long, ? extends java.util.Map<String, String>> builds) {
+        if (mainId == null || builds == null) return -1;
+        for (java.util.Map.Entry<Long, ? extends java.util.Map<String, String>> b : builds.entrySet()) {
+            String m = b.getValue() == null ? null : b.getValue().get("main");
+            if (m != null && m.length() >= 32 && mainId.startsWith(m.toLowerCase(Locale.ROOT))) return b.getKey();
+        }
+        return -1;
+    }
 }

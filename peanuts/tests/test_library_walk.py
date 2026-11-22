@@ -17,17 +17,34 @@ SRC = [UI / 'LibraryWalk.java']
 
 RUNNER = r'''package dev.peanuts.ui;
 import java.io.File;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 public final class LibraryWalkTest {
     public static void main(String[] a) {
         File root = new File(a[0]);
+        Map<Long, Map<String, String>> builds = new LinkedHashMap<>();   // the game's builds: <version>=<main's build ID> arguments
+        for (int i = 1; i < a.length; i++) { String[] kv = a[i].split("=", 2); builds.put(Long.parseLong(kv[0]), Collections.singletonMap("main", kv[1])); }
         int cut = root.getPath().length() + 1;
         LibraryWalk.walk(root, 0, new LibraryWalk.Sink() {
-            public void dump(File d) { System.out.println("dump " + d.getPath().substring(cut).replace('\\', '/')); }
+            public void dump(File d) { System.out.println("dump " + LibraryWalk.versionOf(LibraryWalk.mainBuildId(d), builds) + " " + d.getPath().substring(cut).replace('\\', '/')); }
             public void file(File f) { System.out.println("file " + f.getPath().substring(cut).replace('\\', '/')); }
         });
     }
 }
 '''
+
+# Main's build ID in a dump (GitHub issue #370): game.tsv keeps its first 16 bytes; the NSO header has 32 at 0x40
+V190, V0, OTHER = '0123456789abcdef0123456789abcdef', 'fedcba9876543210fedcba9876543210', '00112233445566778899aabbccddeeff'
+BUILDS = {1114112: V190.upper(), 0: V0}   # as game.tsv may write them; the walk compares in lower case
+
+
+def nso(build):
+    h = bytearray(0x100)
+    h[:4] = b'NSO0'
+    h[0x40:0x50] = bytes.fromhex(build)
+    h[0x50:0x60] = bytes(range(16))
+    return bytes(h)
 
 BOTW = 'The Legend of Zelda Breath of the Wild [01007EF00011E000][v0].nsp'
 BOTW_UPDATE = 'Updates/The Legend of Zelda_ Breath of the Wild 1.9.0 [01007EF00011E800][v1114112][UPD].nsp'
@@ -91,6 +108,11 @@ TREE = [
 
 DUMPS = ['Kart', 'One Version', 'Ounce', 'Ounce Data', 'Update Only']
 
+# The mains with an NSO header (the others are empty files): the issue's layout, one version's folder updated to 1.9.0 on a PC; an OunceCake base of the
+# base game; a base of a build the game's profile does not list
+MAINS = {'One Version/exefs/main': V190, 'Ounce/base/program/0/exefs/main': V0, 'Ounce Data/base/program/0/program/exefs/main': OTHER}
+VERSIONS = {'One Version': 1114112, 'Ounce': 0, 'Ounce Data': -1, 'Kart': -1, 'Update Only': -1}
+
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
 class Walk(unittest.TestCase):
@@ -107,11 +129,12 @@ class Walk(unittest.TestCase):
         for p in TREE:
             f = cls.root / p
             f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_bytes(b'')
-        r = subprocess.run(['java', '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', str(cls.classes), 'dev.peanuts.ui.LibraryWalkTest', str(cls.root)],
-                           capture_output=True, text=True, encoding='utf-8', check=True)
+            f.write_bytes(nso(MAINS[p]) if p in MAINS else b'')
+        r = subprocess.run(['java', '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', str(cls.classes), 'dev.peanuts.ui.LibraryWalkTest', str(cls.root),
+                            *(f'{v}={m}' for v, m in BUILDS.items())], capture_output=True, text=True, encoding='utf-8', check=True)
         lines = r.stdout.splitlines()
-        cls.dumps = [l[5:] for l in lines if l.startswith('dump ')]
+        cls.versions = {l.split(' ', 2)[2]: int(l.split(' ', 2)[1]) for l in lines if l.startswith('dump ')}
+        cls.dumps = list(cls.versions)
         cls.files = [l[5:] for l in lines if l.startswith('file ')]
 
     @classmethod
@@ -120,6 +143,11 @@ class Walk(unittest.TestCase):
 
     def test_mods_are_no_dumps(self):
         self.assertEqual(sorted(self.dumps), DUMPS, 'only the real dump folders, each once, as the dump and not one of its versions')
+
+    def test_the_version_from_main(self):
+        """A dump folder without an updates/<version> folder takes the version of its main's build (GitHub issue #370: one version's folder updated to 1.9.0
+        was the base game's version, and the sheet said Wrong version); a main of no listed build, an empty file or none: -1, the base's version stays"""
+        self.assertEqual(self.versions, VERSIONS)
 
     def test_nothing_from_a_mods_folder(self):
         self.assertEqual([f for f in self.files if f.lower().startswith(('mods/', 'atmosphere/'))], [])
@@ -160,6 +188,10 @@ class Source(unittest.TestCase):
         self.assertIn('LibraryWalk.walk(root, 0,', s)
         self.assertNotIn('boolean isDump(File', s, 'one dump rule, LibraryWalk\'s')
         self.assertNotIn('listFiles();', s.split('LibraryWalk.walk(')[0].split('// ---- The walk ----')[-1], 'no walk of its own')
+        # a dump folder with no updates/<version> takes its main's build's version (GitHub issue #370)
+        self.assertIn('if (v == 0) v = Math.max(0, LibraryWalk.versionOf(LibraryWalk.mainBuildId(d), profileBuilds(id)));', s)
+        self.assertIn('Method buildMap = profileClass.getDeclaredMethod("buildMap");', s)
+        self.assertIn('Map<Long, Map<String, String>> buildMap() {', (REPO / 'android/app/src/main/java/dev/nxnative/android/Profile.java').read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':
