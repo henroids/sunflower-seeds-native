@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 
 /**
  * The library: every game in the roots (the game folder, then the update and DLC folders; each walked two levels deep) as *.nsp, *.xci, *.nsz, *.xcz, *.nup or a dump folder
- * (base/exefs/main or exefs/main present; mods left out, LibraryWalk), grouped by the base game's title ID, with a status per title.
+ * (a version with exefs/main in a layout upstream's DumpLayout reads; mods left out: LibraryWalk), grouped by the base game's title ID, with a status per title.
  * <p>
  * An NSP/XCI's titles come from the importer's probe (ImporterPort.probe: title id, application id, kind, version, name), kept in files/library-cache.json by
  * path+size+mtime so a scan reads each file once; without the importer the title ID is taken from a [16 hex digits] in the file name (common dump naming) and the kind

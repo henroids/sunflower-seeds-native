@@ -1,7 +1,10 @@
 """The library's walk with mods beside the games (issue #46): a game folder that also holds the update and DLC folders and a Mods folder, the way Eden is
 set up. A mod for Eden is a folder with exefs/ (patches, sometimes its own main.npdm) and romfs/; the walk took one as a dump folder, and a dump wins over
 an NSP of the same title, so Breath of the Wild's base became "!!!BOTW Optimizer, dump folder". dev.peanuts.ui.LibraryWalk runs here on the JVM (javac/java
-only, the pattern of test_compressed.py) over a made-up tree: empty files with game-like names, no game data. The source check says the scanner walks with it."""
+only, the pattern of test_compressed.py) over a made-up tree: empty files with game-like names, no game data. The source check says the scanner walks with it.
+
+The dump folders are found in every layout upstream's DumpLayout reads (igawa6's review of #249): the dump tools' base/ and updates/<version>/, the console's
+as OunceCake serves it (base/program/0/), an update alone, and one version's folder (exefs/ at its top)."""
 import shutil
 import subprocess
 import tempfile
@@ -58,7 +61,23 @@ TREE = [
     'One Version/exefs/main',
     'One Version/exefs/main.npdm',
     'One Version/romfs/data.bin',
+    # the console's layout as OunceCake serves it: each version's package at program/0/ (the walk did not see it before)
+    'Ounce/base/program/0/exefs/main',
+    'Ounce/base/program/0/exefs/main.npdm',
+    'Ounce/base/program/0/romfs/data.bin',
+    'Ounce/updates/65536/program/0/exefs/main',
+    'Ounce/updates/65536/program/0/control/control.nacp',
+    # the same with a data content at the program's index: the program's package one level down
+    'Ounce Data/base/program/0/program/exefs/main',
+    'Ounce Data/base/program/0/program/romfs/data.bin',
+    'Ounce Data/base/program/0/data/romfs/x.bin',
+    # an update alone that carries the whole game (it was listed as its version's folder, Update Only/updates/196608)
+    'Update Only/updates/196608/exefs/main',
+    'Update Only/updates/196608/exefs/main.npdm',
+    'Update Only/updates/196608/romfs/data.bin',
 ]
+
+DUMPS = ['Kart', 'One Version', 'Ounce', 'Ounce Data', 'Update Only']
 
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
@@ -88,7 +107,7 @@ class Walk(unittest.TestCase):
         cls.tmp.cleanup()
 
     def test_mods_are_no_dumps(self):
-        self.assertEqual(self.dumps, ['Kart', 'One Version'], 'only the real dump folders')
+        self.assertEqual(sorted(self.dumps), DUMPS, 'only the real dump folders, each once, as the dump and not one of its versions')
 
     def test_nothing_from_a_mods_folder(self):
         self.assertEqual([f for f in self.files if f.lower().startswith(('mods/', 'atmosphere/'))], [])
@@ -99,6 +118,18 @@ class Walk(unittest.TestCase):
 
 
 class Source(unittest.TestCase):
+    def test_the_layouts_are_upstreams(self):
+        """The walk finds a version's package where upstream's DumpLayout does (root, versions): the same three places, the same version folders"""
+        walk = (UI / 'LibraryWalk.java').read_text(encoding='utf-8')
+        up = (REPO / 'android/app/src/main/java/dev/nxnative/android/DumpLayout.java').read_text(encoding='utf-8')
+        for line in ('for (String r : new String[] {"", "program/0", "program/0/program"}) {',
+                     'if (new File(d, "exefs").isDirectory() || new File(d, "romfs").isDirectory()) return d;',
+                     r'u.getName().matches("\\d+") && new File(root(u), "exefs/main").isFile()'):
+            self.assertTrue(line in up, 'upstream changed: ' + line)
+            self.assertTrue(line in walk, 'walk: ' + line)
+        self.assertTrue('new File(root(new File(dump, "base")), "exefs/main").isFile()' in up, 'upstream changed: the base')
+        self.assertTrue('new File(root(new File(d, "base")), "exefs/main").isFile()' in walk, 'walk: the base')
+
     def test_the_scanner_walks_with_it(self):
         s = (UI / 'LibraryScanner.java').read_text(encoding='utf-8')
         self.assertIn('LibraryWalk.walk(root, 0,', s)
