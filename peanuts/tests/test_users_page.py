@@ -23,6 +23,30 @@ class UsersJvm(unittest.TestCase):
             self.assertIn('PASS', r.stdout)
 
 
+class AlwaysSaysWhatItDoes(unittest.TestCase):
+    """"Always X" when the app opens is the setting's Don't ask, which also stops the question before a game from a shortcut or a frontend (WhoPlays.decide,
+    checked on the JVM above). The texts say so: the switch's line and the Who's playing? setting name both questions"""
+
+    def setUp(self):
+        self.activity = (USERS / 'WhoPlaysActivity.java').read_text(encoding='utf-8')
+        self.page = (USERS / 'UsersPage.java').read_text(encoding='utf-8')
+
+    def test_always_is_dont_ask(self):
+        play = self.activity[self.activity.index('private void play()'):]
+        self.assertIn('if (always) UsersPrefs.whoMode(this, WhoPlays.DONT_ASK);', play[:play.index('return;')])
+
+    def test_the_switch_names_both_questions(self):
+        self.assertIn('.value("Skips this question and the one before games from shortcuts or frontends")', self.activity)
+        self.assertNotIn('"Skips this question when the app opens"', self.activity)
+
+    def test_the_setting_names_both_questions(self):
+        self.assertIn('return "Asks when the app opens and before games from shortcuts";', self.page)
+        self.assertIn('{"Ask when the app opens and before games from shortcuts or frontends", "Don\'t ask"}', self.page)
+
+    def test_the_question_for_one_game_keeps_its_own_line(self):
+        self.assertIn('.value("Skips this question for this game")', self.activity)
+
+
 YAZ0_TEST = REPO / 'android/app/src/jvmtest/java/dev/peanuts/users/Yaz0JvmTest.java'
 
 
