@@ -102,6 +102,7 @@ not edited (see table above).
 | `dm/games/0100A0F00DA68000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Monster Sanctuary (provisional: packed on a PC, not run on a device) |
 | `dm/games/0100B63016916000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for My Time at Sandrock (provisional: packed on a PC, not run on a device) |
 | `dm/games/0100DAE01E4C8000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for STORY OF SEASONS: Grand Bazaar |
+| `dm/gfx/nvn/hle_nvn.c` | marked (the pool-builder getters; New Pokemon Snap) | **yes** — any NVN title that reads a pool builder back needs the four `nvnMemoryPoolBuilderGet*` getters |
 | `dm/gfx/tools/drp.py` | marked (2026-11-21, New Pokemon Snap's DRPF reader); ported from kwsch/NewSnap's DRPF implementation (ISC licence, credited in the file header), not original Peanuts work | **yes** — a general reader for a Switch 1 format; Banana Native has no profile for the title |
 | `dm/gfx/tools/shader_split.py` | **fixed this pass** (header note + 6 def-site tags covering DM_SPLIT_DIRECT/WORKER, DM_UE_DECODE; the DRPF reader hook, 2026-11-21) | **yes** — the on-device process-pool split and the comment-insensitive table comparison (`table_rows`) are general infra, not game-specific |
 | `dm/gfx/tools/tool_lock.py` | marked (2026-11-21: the Darwin-only xcrun guard behind `sys.platform == 'darwin'`; the pre-existing `xlate_command`/`no_run_message` Linux lines carry `PEANUTS`) | **yes** — xcrun is macOS-only and dotnet starts the portable translator dlls on Linux: general portability, one PR with `vk_android_build.py`'s hunk |
@@ -1571,3 +1572,11 @@ The DRPF reader (`dm/gfx/tools/drp.py`) and its hook in `shader_split.py` read N
 |---|---|---|---|
 | `dm/gfx/tools/drp.py` (new) | whole file | the DRPF reader: header and chunk crypto (ported from kwsch/NewSnap, ISC), the entry table, the Oodle payload hand-off | `PEANUTS(upstream-candidate)` in the docstring |
 | `dm/gfx/tools/shader_split.py` | 3 | the header note, the `DRP` magic constant, and the `scan_file_in` branch that decrypts each entry and scans it | `PEANUTS(upstream-candidate)` on each hunk |
+
+### New Pokemon Snap: NVN pool-builder getters (2026-11-21)
+
+The game reads the pool builder's device, memory, size and flags back through four getters the host did not answer; the calls returned zero and the game's resource pipeline read a null pool. The getters return the builder's fields. A general fix: any NVN title that reads a builder back needs them.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/nvn/hle_nvn.c` | 1 | the four `nvnMemoryPoolBuilderGet*` getters | `PEANUTS(upstream-candidate)` |
