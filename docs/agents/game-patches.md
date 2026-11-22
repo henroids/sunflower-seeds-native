@@ -927,6 +927,7 @@ Profile keys (`game.tsv`) whose value changes what the host does, set away from 
 | `enc_thread on` | [Need For Speed™ Hot Pursuit Remastered](../../dm/games/010029B0118E8000/README.md) | `game` → `host`, gap | what iOS does for every game: a default for every game after `regress.py check` on the games |
 | `event_wait off` | [Mario Kart World](../../dm/games/0400C3F00006E000/README.md) | `game` → `host`, gap | parked waits cost this game a third of its frame rate and lose the device on Turnip V39; waits that cost no extra submissions would let every game keep them |
 | `fps_modes 20,30,45,60` | [Yoshi's Crafted World](../../dm/games/01006000040C2000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
+| `fps_modes 20,30,60` | [STAR OCEAN THE SECOND STORY R](../../dm/games/010065301A2E0000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `fps_modes 30,40,45,60` | [NieR:Automata The End of YoRHa Edition (0100B8E016F76000)](../../dm/games/0100B8E016F76000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `fps_modes 30,60,120` | [Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `fps_modes 60` | [DRAGON BALL: Sparking! ZERO](../../dm/games/010035F022078000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |

@@ -32,7 +32,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.6 includes 52 games, and 6 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.6 includes 52 games, and 7 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion | Contributor |
 |---|---|---|---|---|
@@ -94,6 +94,7 @@ Peanuts Native 0.1.6 includes 52 games, and 6 more are coming in 0.1.7 (marked i
 | New Pokémon Snap (coming in 0.1.7) | `0100F4300BF2C000` | v0 | No | ⭐<br><a href="https://github.com/ssv0225"><img src="https://img.shields.io/badge/ssv0225-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="ssv0225"></a> |
 | Digimon Story Time Stranger (coming in 0.1.7) | `010062E01FE0C000` | 1.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
 | Hogwarts Legacy (coming in 0.1.7) | `0100F7E00C70E000` | 1.0.5 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
+| Star Ocean The Second Story R (coming in 0.1.7) | `010065301A2E0000` | 1.1.0 | No |  |
 
 <!-- PEANUTS end: the Supported games table -->
 

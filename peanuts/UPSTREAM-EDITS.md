@@ -1958,3 +1958,7 @@ Tests: `peanuts/tests/test_play_time.py`. Upstream candidate: no.
 ### Hogwarts Legacy 1.0.5
 
 The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7, checked on an AYN Thor (Turnip 27.0.0-R2) from a PC-built pack. The profile builds 1.0.5 only on the phone (`android_builds v327680`) and offers frame limits 20 to 60 as experimental, from the FPSLocker Warehouse rows of its exact `main` (`fps_limit_present 1`, `fps_limit_max 60`, three `fpslocker` rows). The PC builder decodes its Oodle shader archives with the ooz worker (`PC_DECODE` in `peanuts/scripts/peanuts_build.py`): a PC build of 1.0.5 split exactly the profile's 65,047 keys.
+
+### STAR OCEAN THE SECOND STORY R 1.1.0
+
+The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7, checked on an AYN Thor (Turnip v26.2.0-R5) from a PC-built pack. The profile (`dm/games/010065301A2E0000/`, Peanuts' own) takes My Time at Sandrock's alias region (the survey's ran out of address space at boot), offers frame limits 20, 30 and 60 as opt-in (`fps_limit_present 1`; Game owned stays the default) and ships a prewarm seed of 69 keys (`vk_prewarm.bin`, allow-listed in `peanuts/upstream-unmarked.txt`).
