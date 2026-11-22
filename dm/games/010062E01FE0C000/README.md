@@ -67,3 +67,7 @@ The two rate-offset kinds are new in `fpslocker_rows.h` for this config. On the 
 - The movies (CRIWARE through `subsdk0`) and the add-on content are not checked yet.
 - **Prewarm seed:** [`vk_prewarm.bin`](vk_prewarm.bin) holds 2,107 pipeline keys (2,105 graphics, 2 compute) from the runs on the Thor, 2026-11-20: the title screen, Shinjuku's streets, battles and a 40-minute session (Game owned, 30 fps, no stop or crash; at most 37 of 2,366 pipelines made on the frame path). No system-driver run is in it yet.
 - The memory layout is a guess.
+
+## Android on the AYN Thor
+
+Joins the release in 0.1.7. The Thor results above (the title screen, Shinjuku's streets and battles on Turnip 27.0.0 R2, the frame rates, the 6-minute and 40-minute runs with the job pool cut, and the system driver's black silhouettes) are the contributor's own report from pull request #269. They have not been repeated on a maintainer's Thor.

@@ -57,7 +57,8 @@
     "01002C9022770000",
     "01006000040C2000",
     "0100DE501433A000",
-    "0100F4300BF2C000"
+    "0100F4300BF2C000",
+    "010062E01FE0C000"
   ],
   "games": [
     {
@@ -230,6 +231,27 @@
       "contributors": [],
       "profile": "dm/games/01001B300B9BE000/game.tsv",
       "note": "dm/games/01001B300B9BE000/README.md"
+    },
+    {
+      "title_id": "010062E01FE0C000",
+      "name": "Digimon Story Time Stranger",
+      "profile_name": "Digimon Story Time Stranger",
+      "builds": [
+        {
+          "version": "v262144",
+          "number": 262144,
+          "display": "1.2.2"
+        }
+      ],
+      "readme_update": "1.2.2",
+      "package": "v262144",
+      "companion": false,
+      "since": "0.1.7",
+      "contributors": [
+        "intermission88"
+      ],
+      "profile": "dm/games/010062E01FE0C000/game.tsv",
+      "note": "dm/games/010062E01FE0C000/README.md"
     },
     {
       "title_id": "01006AE02236C000",

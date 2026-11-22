@@ -1650,3 +1650,7 @@ Tomodachi Life: Living the Dream warned at most starts that the system time had 
 | `dm/host/tests/t_peanuts_time.c` (new) | whole file | sleep, restart, sleep during a run, a custom time, an old time point and clocks at other points within the second, on stand-in clocks, a child process per run | `PEANUTS` in its header |
 
 Tests: `make GAME=<id> peanuts-time` (Linux; with gcc, `CLANG=gcc`): 26 checks pass; the same test against the old `hle_time.c` fails 12. Upstream candidate: yes (a Mac's `CLOCK_MONOTONIC` counts sleep but also starts again at a restart).
+
+### Digimon Story Time Stranger 1.2.2
+
+The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7; the game note says its Thor results are the contributor's report (pull request #269).
