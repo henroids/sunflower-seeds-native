@@ -257,13 +257,13 @@ static inline void im_unhold_locked(vka_img *im) {
 // again (g_tver / g_sver, per ID) and no texture mapping was dropped or image let go since (g_tgen). It saves the table lock and the lookups 3-4 times a texture binding
 static vka_img *g_big[64]; static int g_nbig;   // large images (DM_VK_BIGIMG_MB), for the storage overlap check (big_note)
 static vka_img *g_lrz_prev;   // PEANUTS: the depth image of the last pass that had one (vka_lrz_touch), under g_tmu
-static vka_img *g_linger[32]; static int g_nlinger;   // PEANUTS: GPU-drawn images kept past their last texture object (linger_keep below), under g_tmu
-static void linger_prune_locked(void); static void linger_take(vka_img *im);   // PEANUTS
+static vka_img *g_linger[256]; static int g_nlinger; static uint64_t g_linger_small;   // PEANUTS: GPU-drawn images kept past their last texture object (linger_keep below), under g_tmu
+static void linger_prune_locked(void); static void linger_take(vka_img *im); static int linger_late_cpu(const vka_img *im, const tex_t *t);   // PEANUTS
 static void unref_locked(vka_img *im) {
     atomic_fetch_add_explicit(&g_tgen, 1, memory_order_release);
     if (--im->refs) return;
     if (g_lrz_prev == im) g_lrz_prev = NULL;   // PEANUTS: (vka_lrz_touch)
-    if (im->linger) { for (int i = 0; i < g_nlinger; i++) if (g_linger[i] == im) { g_linger[i] = g_linger[--g_nlinger]; break; } im->linger = 0; }   // PEANUTS: (an evicted lingering image)
+    if (im->linger) { for (int i = 0; i < g_nlinger; i++) if (g_linger[i] == im) { g_linger[i] = g_linger[--g_nlinger]; if (im->bytes <= (4 << 20)) g_linger_small -= im->bytes; break; } im->linger = 0; }   // PEANUTS: (an evicted lingering image)
     map_del_im(im);
     if (im->par) {   // a level child: destroyed after its last use, then its reference on the parent let go (the parent's image outlives the child's views' use)
         vka_img *p = im->par; uint64_t f = im->last_fence ? im->last_fence : (vka_fence_last() + 1);
@@ -2036,7 +2036,7 @@ vka_img *vka_tex_get(const tex_t *t, VkCommandBuffer cb) {
         // draws it again, and a large depth buffer is not made twice), but not one whose content came from the storage: the new pool's storage is the new texture's content,
         // and its pages were never protected for that image, so its tracking would not see the CPU's writes there and it kept the old pool's texels (tiles of the scene
         // before; docs/reference/nvn-objects.md "An image of a finalized pool taken over with its old content")
-        int lk; for (vka_img *o = t->mem ? live_first(t->mem, &lk) : NULL; o && !im; o = live_next(o, t->mem, &lk)) if (same_shape(o, t, &f, 1) && !(o->base && sparse_gpu(t, &f)) && (!img_pool_dead(o) || o->gpu_owned)) {
+        int lk; for (vka_img *o = t->mem ? live_first(t->mem, &lk) : NULL; o && !im; o = live_next(o, t->mem, &lk)) if (same_shape(o, t, &f, 1) && !(o->base && sparse_gpu(t, &f)) && (!img_pool_dead(o) || o->gpu_owned) && !linger_late_cpu(o, t)) {
             im = o; if (im->linger) linger_take(im); else im->refs++;   // PEANUTS: a lingering image's reference becomes this texture's (linger_keep)
             int revived = im->pdead;
             if (revived) {
@@ -2332,23 +2332,36 @@ static int tex_obj_holds(uintptr_t obj, uint64_t serial) {   // read through the
 // races of issue #6, with water and particles, drawn later, still there). On the Switch the storage keeps its bytes. A lingering image stays in the live list, so a texture
 // of the same storage and shape takes it over (vka_tex_get's same_shape scan), with the lingering reference; one not taken over within two frames, or past 32 lingering,
 // goes. DM_VK_TEX_LINGER=0 (restart): an image goes with its last texture object, as before
-enum { LINGER_MAX = 32, LINGER_FRAMES = 2 };   // (g_linger: above unref_locked)
-static void linger_drop_at(int i) { vka_img *im = g_linger[i]; g_linger[i] = g_linger[--g_nlinger]; im->linger = 0; unref_locked(im); }
+// A small one (at most LINGER_SMALL bytes) lingers past the two frames, for as long as its pool lives, within LINGER_SMALL_BUDGET bytes in all (the oldest goes first):
+// the Switch keeps the bytes of storage the GPU wrote for good, and the host never copies them back. MLB The Show 26 renders its skin tone palette (256x512 RGBA8) through
+// one texture object, finalizes it, and a second object over the same storage is sampled seconds later by the compute pass that averages each generated player's
+// target skin tone: after two frames that object got a new, empty image, the target came out zero and every generated player's body black. Taken over past the two
+// frames only while the storage itself is all zero: storage holding data was written by the CPU (a loaded file) after the GPU's write, and that is the content
+enum { LINGER_MAX = 256, LINGER_FRAMES = 2, LINGER_SMALL = 4 << 20, LINGER_SMALL_BUDGET = 64 << 20 };   // (g_linger: above unref_locked)
+static int linger_small(const vka_img *im) { return im->bytes <= LINGER_SMALL; }
+static void linger_drop_at(int i) { vka_img *im = g_linger[i]; g_linger[i] = g_linger[--g_nlinger]; if (linger_small(im)) g_linger_small -= im->bytes; im->linger = 0; unref_locked(im); }
 static void linger_prune_locked(void) {
     uint64_t vka_frame(void); uint64_t f = vka_frame();
-    for (int i = 0; i < g_nlinger; ) if (f > g_linger[i]->linger + LINGER_FRAMES) linger_drop_at(i); else i++;
+    for (int i = 0; i < g_nlinger; ) if ((!linger_small(g_linger[i]) && f > g_linger[i]->linger + LINGER_FRAMES) || img_pool_dead(g_linger[i])) linger_drop_at(i); else i++;
+}
+static int linger_late_cpu(const vka_img *im, const tex_t *t) {   // taken over past the two frames while the storage holds data: the CPU wrote it later (above)
+    uint64_t vka_frame(void); if (!im->linger || vka_frame() <= im->linger + LINGER_FRAMES || !t->mem || !t->L.size || (t->pool && pool_sparse(t->pool))) return 0;
+    const uint8_t *m = t->mem; for (uint64_t i = 0; i < t->L.size; i++) if (m[i]) return 1;
+    return 0;
 }
 static int linger_keep(vka_img *im, const tex_t *t) {   // the texture object's reference, kept: 1
     static int on = -1; if (on < 0) on = VKA_ENV("DM_VK_TEX_LINGER", 1);
     if (!on || !im || !t->mem || !im->gpu_owned || im->refs != 1 || im->linger) return 0;
     linger_prune_locked();
-    if (g_nlinger == LINGER_MAX) { int o = 0; for (int i = 1; i < g_nlinger; i++) if (g_linger[i]->linger < g_linger[o]->linger) o = i; linger_drop_at(o); }
+    while (g_nlinger && (g_nlinger == LINGER_MAX || (linger_small(im) && g_linger_small + im->bytes > LINGER_SMALL_BUDGET))) {   // the oldest goes
+        int o = 0; for (int i = 1; i < g_nlinger; i++) if (g_linger[i]->linger < g_linger[o]->linger) o = i; linger_drop_at(o); }
     uint64_t vka_frame(void); im->linger = vka_frame() + 1;   // (+1: never 0)
+    if (linger_small(im)) g_linger_small += im->bytes;
     g_linger[g_nlinger++] = im;
     return 1;
 }
 static void linger_take(vka_img *im) {   // im taken over by a texture: the lingering reference becomes that texture's
-    for (int i = 0; i < g_nlinger; i++) if (g_linger[i] == im) { g_linger[i] = g_linger[--g_nlinger]; break; }
+    for (int i = 0; i < g_nlinger; i++) if (g_linger[i] == im) { g_linger[i] = g_linger[--g_nlinger]; if (linger_small(im)) g_linger_small -= im->bytes; break; }
     im->linger = 0;
 }
 // PEANUTS end
