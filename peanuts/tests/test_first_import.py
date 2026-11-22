@@ -231,6 +231,14 @@ class Wiring(unittest.TestCase):
         self.assertIn('case "import_pack": importPack(a, r, res); break;', text(OWN / 'ctl/Ctl.java'))
         self.assertIn('`import_pack`', text(REPO / 'peanuts/docs/CONTROL.md'))
 
+    def test_busy_has_one_spelling(self):
+        """Every use of PackImport's busy set goes through key(): busy() upper-cased the title ID and take() and give() did not (igawa6's review of #260)"""
+        src = text(OWN / 'pack/PackImport.java')
+        uses = re.findall(r'BUSY\.(add|remove|contains)\((.*?)\);', src)
+        self.assertEqual(sorted(u[0] for u in uses), ['add', 'contains', 'remove'])
+        for op, arg in uses:
+            self.assertEqual(arg, 'key(titleId)', op)
+
     def test_no_upstream_file_changed_for_it(self):
         """The feature reaches upstream only through reflection: no upstream source names it"""
         for f in list(UP.glob('*.java')) + list(OND.glob('*.java')):

@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -64,11 +65,14 @@ public final class PackImport {
     }
 
     /** Whether an import of this title's pack is working (the sheet's Build and the control interface's build wait for it) */
-    public static synchronized boolean busy(String titleId) { return BUSY.contains(titleId.toUpperCase(java.util.Locale.ROOT)); }
+    public static synchronized boolean busy(String titleId) { return BUSY.contains(key(titleId)); }
 
-    private static synchronized boolean take(String titleId) { return BUSY.add(titleId); }
+    private static synchronized boolean take(String titleId) { return BUSY.add(key(titleId)); }
 
-    private static synchronized void give(String titleId) { BUSY.remove(titleId); }
+    private static synchronized void give(String titleId) { BUSY.remove(key(titleId)); }
+
+    /** The one spelling of a title ID in {@link #BUSY}, whoever asks: upper case, as the library and FirstImport.Game have it */
+    private static String key(String titleId) { return titleId.toUpperCase(Locale.ROOT); }
 
     /** Imports source (a .zip or a pack folder) for g; see the class comment. Off the main thread */
     public static Done run(Context c, FirstImport.Game g, File source, Titles titles) throws Refused {

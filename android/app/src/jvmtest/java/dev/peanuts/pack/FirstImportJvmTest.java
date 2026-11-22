@@ -153,6 +153,7 @@ public final class FirstImportJvmTest {
         nspZipIntoBuildFolder(new File(t, "nsp-zip"));
         nspVersion(new File(t, "nsp-version"));
         otherTitle(new File(t, "title"));
+        busyKey(new File(t, "busy"));
         whoElse(new File(t, "who"));
         stoppedJob(new File(t, "job"));
         pickedPack(new File(t, "picked"));
@@ -315,6 +316,31 @@ public final class FirstImportJvmTest {
         check(r != null && r.getMessage().equals("That pack is for Mario Kart World, not Donkey Kong Bananza. Import it from Mario Kart World's sheet. Nothing was changed."), "another game: " + (r == null ? null : r.getMessage()));
         check(!target.exists() && !target.getParentFile().exists(), "nothing written for another game's pack");
         check(r.detail.contains(MKW) && r.detail.contains(ID), "the details: both title IDs");
+    }
+
+    /**
+     * The busy mark has one spelling (PackImport.key): while an import runs (Titles is asked in the middle of it, for a pack of another game), the title is
+     * busy in upper and in lower case, a second import of it is refused in either case, and both are free again after it
+     */
+    static void busyKey(File t) throws Exception {
+        reset();
+        File src = pack(new File(t, "src"), MKW, 0, "mkw"), target = new File(t, "app/packs/" + ID);
+        String lower = ID.toLowerCase(java.util.Locale.ROOT);
+        Map<String, Object> seen = new HashMap<>();
+        PackImport.Titles asks = new PackImport.Titles() {
+            @Override public String name(String id) {
+                seen.put("upper", PackImport.busy(ID));
+                seen.put("lower", PackImport.busy(lower));
+                seen.put("second", refused(() -> PackImport.run(C, new FirstImport.Game(lower, "", null, V, null, null, target, null), src, TITLES)));
+                return TITLES.name(id);
+            }
+            @Override public FirstImport.Other where(String id) { return TITLES.where(id); }
+        };
+        check(refused(() -> PackImport.run(C, game(null, V, target, null), src, asks)) != null, "a pack of another game: refused");
+        check(Boolean.TRUE.equals(seen.get("upper")) && Boolean.TRUE.equals(seen.get("lower")), "busy while it runs, asked in either case: " + seen);
+        PackImport.Refused second = (PackImport.Refused) seen.get("second");
+        check(second != null && second.getMessage().startsWith("An export or import of " + ID + "'s pack is still working."), "a second import of the title, in lower case: refused");
+        check(!PackImport.busy(ID) && !PackImport.busy(lower), "free again after it, in either case");
     }
 
     static void whoElse(File t) throws Exception {
