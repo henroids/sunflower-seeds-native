@@ -60,7 +60,19 @@ TREE = [
     'Kart/updates/65536/exefs/main',
     'One Version/exefs/main',
     'One Version/exefs/main.npdm',
+    'One Version/exefs/sdk',
     'One Version/romfs/data.bin',
+    # mods loose in the game folder that bring a whole main of their own (igawa6's review of #249): no sdk, so no dump
+    'Loose Code Mod/exefs/main',
+    'Loose Code Mod/exefs/main.npdm',
+    'Loose Code Mod/exefs/subsdk9',
+    'Loose Code Mod/romfs/Actor/x.bin',
+    # Eden's load/<title ID>/<mod>/ copied without its load folder
+    '01007EF00011E000/60 FPS Code/exefs/main',
+    '01007EF00011E000/60 FPS Code/exefs/main.npdm',
+    # a mod that loads its own code module beside the game's (subsdk9 and its main.npdm)
+    'Plugin Mod/exefs/main.npdm',
+    'Plugin Mod/exefs/subsdk9',
     # the console's layout as OunceCake serves it: each version's package at program/0/ (the walk did not see it before)
     'Ounce/base/program/0/exefs/main',
     'Ounce/base/program/0/exefs/main.npdm',
@@ -118,6 +130,19 @@ class Walk(unittest.TestCase):
 
 
 class Source(unittest.TestCase):
+    def test_every_game_has_sdk(self):
+        """One version's folder counts as a dump only with sdk beside main (LibraryWalk.wholeCode), because every profile's build checks the SDK's module:
+        a folder without it never plays. If a profile without sdk comes, the rule has to change with it"""
+        tsvs = sorted((REPO / 'dm/games').glob('*/game.tsv'))
+        self.assertTrue(tsvs)
+        for tsv in tsvs:
+            mods = [l.split('\t')[1].split() for l in tsv.read_text(encoding='utf-8').splitlines() if l.startswith('modules\t')]
+            self.assertEqual(len(mods), 1, tsv.parent.name)
+            self.assertIn('main', mods[0], tsv.parent.name)
+            self.assertIn('sdk', mods[0], tsv.parent.name)
+        self.assertIn('return new File(exefs, "main").isFile() && new File(exefs, "main.npdm").isFile() && new File(exefs, "sdk").isFile();',
+                      (UI / 'LibraryWalk.java').read_text(encoding='utf-8'))
+
     def test_the_layouts_are_upstreams(self):
         """The walk finds a version's package where upstream's DumpLayout does (root, versions): the same three places, the same version folders"""
         walk = (UI / 'LibraryWalk.java').read_text(encoding='utf-8')
