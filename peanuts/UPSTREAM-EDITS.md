@@ -2174,3 +2174,17 @@ extended to unaligned offsets, no game-specific branch.
 |---|---|---|---|
 | `dm/gfx/tools/shader_split.py` | 3 (5 in a one-line-context diff) | `raw_shaders`: the fallback candidate list for a control section with no built-address evidence, the unaligned control-section collection and its neighbour pass with the `taken` ranges (declared on a marked line), and the docstring's sentences on them | `PEANUTS(upstream-candidate)` |
 | `dm/tools/tests/test_raw_shaders_adjacent.py` (new) | whole file | the eight cases on a synthetic module image; a new file; the first line of its docstring carries the marker | `PEANUTS(upstream-candidate)` |
+
+### Round 56, Users and Miis: the review's later points (2026-11-22)
+
+igawa6's notes on Round 46 to 49 (PR #321) that were left for later, one change each; `DM_USER_IMAGES` with the other defaults came with 0.1.7 itself
+(3f35b1e4). No upstream file has a hunk; the JVM tests are new files with a `PEANUTS` first line.
+
+- The Mii editor kept its edits only in memory, so a turn of the device, a change to dark mode or the process ending in the background lost them.
+  `dev.peanuts.mii.MiiEditor` keeps the Mii, the Mii as it was, the Undo steps (the newest 100) and the tab in its saved state (`dev.peanuts.mii.MiiEditState`,
+  a CharInfo and a byte a field) and takes them back in `onCreate`; no `configChanges`, so a turn still lays the page out for the new width.
+
+Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/mii/MiiEditState.java` new, `MiiEditor.java`,
+`android/app/src/jvmtest/java/dev/peanuts/mii/MiiEditStateJvmTest.java` new, `peanuts/tests/test_mii_editor.py` new.
+
+Tests: `peanuts/tests/test_mii_editor.py`. Upstream candidate: no (Peanuts' pages).
