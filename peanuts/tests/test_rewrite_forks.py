@@ -246,11 +246,12 @@ class Wiring(unittest.TestCase):
         # the equivalent (scripts/pack_android.py EQUIV: a pack whose key was made with it counts as up to date) is the current file without the forks, and
         # nothing else: only then does a rewrite with it come out the same. main's PR #164 changed the rewriter under this branch (2026-11-20), and the file
         # kept here was still the one before #164: every pack rewritten before #164 would have counted as up to date, where main rewrites them. On dev 0.1.7
-        # #177 changed it again (its second pass, 2590f2d2): the file kept is dev's, and it follows every rewriter change on the branch this lands on
-        name = 'patch_nso.py.2590f2d24457'
+        # #177 changed it again (its second pass, 2590f2d2), and 0.1.7 with #290's allocator cuts: the file kept is main's at 54b9ce16, and it follows every
+        # rewriter change on the branch this lands on
+        name = 'patch_nso.py.54b9ce16465e'
         equiv = REPO / 'dm/tools/rewriter_equiv' / name
         self.assertTrue(equiv.is_file())
-        for before in ('6bc30f06074b', 'eaf706b807d5'):   # the files before #164 and before #177
+        for before in ('6bc30f06074b', 'eaf706b807d5', '2590f2d24457'):   # the files before #164, before #177 and before #290
             self.assertFalse((REPO / f'dm/tools/rewriter_equiv/patch_nso.py.{before}').exists())
         self.assertEqual(without_forks(SRC), equiv.read_text(encoding='utf-8'), f'{name} is not patch_nso.py without in_forks: the rewriter changed '
                          'on the branch this is on; the equivalent is then its file (git show <its last commit>:dm/tools/patch_nso.py)')
