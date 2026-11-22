@@ -67,6 +67,7 @@ public final class SettingsPage {
 
     /** MainActivity.buildSettings' last line (PEANUTS hook): its rows into the sections, and the section that was showing */
     public static void lay(Activity a, LinearLayout content) {
+        if (owner != a) a.registerActivityLifecycleCallbacks(new Gone());   // the activity's own callbacks: they go with it
         owner = a;
         pane = content;
         tablet = a.getResources().getConfiguration().smallestScreenWidthDp >= WIDE_DP;
@@ -108,6 +109,40 @@ public final class SettingsPage {
             for (View e : entries) if (e.isSelected()) { e.requestFocus(); break; }
         });
         bottom(a, content);
+    }
+
+    /**
+     * The activity went (Back out of the app, a change outside its configChanges, Android ended it): nothing of its window stays in the fields above,
+     * which until the next lay() held the activity and every row of Settings. What shows (current, atHub) is kept for the activity made again
+     */
+    private static final class Gone implements android.app.Application.ActivityLifecycleCallbacks {
+        @Override public void onActivityDestroyed(Activity x) { forget(x); }
+        @Override public void onActivityCreated(Activity x, android.os.Bundle b) {}
+        @Override public void onActivityStarted(Activity x) {}
+        @Override public void onActivityResumed(Activity x) {}
+        @Override public void onActivityPaused(Activity x) {}
+        @Override public void onActivityStopped(Activity x) {}
+        @Override public void onActivitySaveInstanceState(Activity x, android.os.Bundle b) {}
+    }
+
+    /** Every view and window of a's Settings let go (Gone); nothing when a newer activity laid Settings out since */
+    static void forget(Activity a) {
+        if (a != owner) return;
+        if (drawer != null) { try { drawer.dismiss(); } catch (RuntimeException ignored) { /* its window went with the activity */ } }
+        if (search != null) { try { search.dismiss(); } catch (RuntimeException ignored) { /* the same */ } }
+        drawer = null;
+        search = null;
+        owner = null;
+        focusWatched = null;
+        pane = null;
+        hubPage = null;
+        explained = null;
+        buildTag = null;
+        pages.clear();
+        entries.clear();
+        rowIcons.clear();
+        places.clear();
+        lastFocus.clear();
     }
 
     /** About how wide a section's page is, in dp: the page's width (Ui.page's, at most PAGE_DP) less its gutters, less the sidebar where there is one */

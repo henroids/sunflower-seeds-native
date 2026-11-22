@@ -361,3 +361,6 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   exit records on the main thread. That now runs on Cracked's own worker, in order with the settles after it; the Play's time is still taken at the tap.
   Which run counts is `CrackedCount.toCount` now (plain Java), so a record the next game's screen wrote before the worker read it counts nothing until its
   own start is noted. Tests `peanuts/tests/test_peanuts_cracked.py` (the rule on the JVM, nothing read at the Play's tap).
+  `SettingsPage` kept the activity, its rows, the section pages, the drawer and the search sheet in static fields after the activity was destroyed, until
+  the next `lay()`: the activity's own lifecycle callback (`Gone`, registered once per activity) now lets go of all of them; the section that shows is
+  kept for the activity made again. Test `peanuts/tests/test_settings_sections.py` (every such field is let go).

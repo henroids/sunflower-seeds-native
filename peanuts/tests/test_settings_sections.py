@@ -152,6 +152,26 @@ class Wiring(unittest.TestCase):
             self.assertTrue(f'`{label}`' in doc, f'CONTROL.md names the section {label}')
 
 
+class Lifetime(unittest.TestCase):
+    def test_nothing_of_a_gone_activity_is_kept(self):
+        # SettingsPage keeps Settings' activity, rows, pages and sheets in static fields while it shows. Once the activity is destroyed, forget() lets go
+        # of every one of them (#315's review: they stayed until the next lay()); the section that shows is kept for the activity made again
+        page = (UI / 'SettingsPage.java').read_text(encoding='utf-8')
+        held = re.findall(r'^    private static (?:final )?([\w.<>, ]+?) (\w+)(?: = [^;]+)?;', page, re.M)
+        views = re.compile(r'\b(Activity|View|LinearLayout|Dialog|AlertDialog|CharSequence)\b')
+        names = [n for t, n in held if views.search(t)]
+        self.assertGreaterEqual(len(names), 13, names)
+        forget = between(page, 'static void forget(Activity a) {', '\n    }\n')
+        for n in names:
+            self.assertRegex(forget, r'\b' + n + r'(?: = null;|\.clear\(\);)', n + " still holds the gone activity's views")
+        for kept in ('current', 'atHub'):
+            self.assertNotRegex(forget, r'\b' + kept + r' = ', kept + ' is what shows: kept')
+        self.assertIn('if (a != owner) return;', forget, 'a newer activity laid Settings out since: its views stay')
+        lay = between(page, 'public static void lay(Activity a, LinearLayout content) {', '\n    }\n')
+        self.assertIn('if (owner != a) a.registerActivityLifecycleCallbacks(new Gone());', lay, "the activity's own callbacks, once per activity")
+        self.assertIn('@Override public void onActivityDestroyed(Activity x) { forget(x); }', page)
+
+
 class Text(unittest.TestCase):
     def test_ui_rules(self):
         for f in ('SettingsSections.java', 'SettingsPage.java'):
