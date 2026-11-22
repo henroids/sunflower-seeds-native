@@ -440,7 +440,9 @@ static const tp_ent *tabpool_of(const vka_shlib *L, const dmsh_vk_entry *e) {
     pthread_mutex_unlock(&g_tpmu);
     tp_ent n = {.e = e}; unsigned rec[16]; n.nt = tabpool_plan(L, e, n.t, rec);
     if (!n.nt) return NULL;   // (not remembered: the plan is a walk of its records)
+    vka_tex_bindless_ready();   // PEANUTS: the pool set first (a prewarm's or preparing step's module may be read before the first frame made it)
     uint32_t slots = vka_bindless_tex_slots(); int sites = 0, ok = slots && vka_tex_pfb_flags(); char err[200] = "";
+    if (!slots) return NULL;   // PEANUTS: no pool set (yet): not remembered as left as built, so a later read plans it again
     for (int v = 0; ok && v <= DMSH_VK_MOD_SHUFFLE_LDS; v++) {
         const dmsh_vk_module *m = vka_shlib_module(L, e, v); if (!m) continue;
         size_t nb = 0, on = 0; int s = 0; char e2[96]; uint32_t *w = vka_shlib_spirv(L, m, &nb, e2, sizeof e2);
