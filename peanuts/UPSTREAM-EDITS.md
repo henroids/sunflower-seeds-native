@@ -2187,9 +2187,14 @@ igawa6's notes on Round 46 to 49 (PR #321) that were left for later, one change 
   by an older app. A read that works now keeps what the importer takes (`PeanutsPrefs.firmwareRead`, `LibrarySettings.FIRMWARE_READ` 3: the fonts, the
   Chinese and Korean ones, MiiModel and AvatarImage), and a firmware read so is not read again for what it lacks. The files decide only for a firmware read
   before; that one is read once more, as before. The importer's scan is unchanged.
+- `MiiGl` did not catch `OutOfMemoryError`, which on its thread would end the app, and once it could not start it stayed off until the process ended. A
+  picture or the preview that runs out of memory now gives none (a head made half-way gives its textures back), and a start that failed (the Mii files
+  unreadable, no EGL context, a shader refused) leaves nothing half made and is tried again once the firmware's Mii files change or 30 s later
+  (`dev.peanuts.mii.MiiGlRetry`).
 
 Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/mii/MiiEditState.java` new, `MiiEditor.java`,
 `android/app/src/jvmtest/java/dev/peanuts/mii/MiiEditStateJvmTest.java` new, `peanuts/tests/test_mii_editor.py` new; `dev/peanuts/PeanutsPrefs.java`,
-`dev/peanuts/ui/LibrarySettings.java`, `peanuts/tests/test_users_page.py`.
+`dev/peanuts/ui/LibrarySettings.java`, `peanuts/tests/test_users_page.py`; `dev/peanuts/mii/MiiGl.java`, `MiiGlRetry.java` new,
+`android/app/src/jvmtest/java/dev/peanuts/mii/MiiGlRetryJvmTest.java` new, `peanuts/tests/test_mii_gl.py` new.
 
-Tests: `peanuts/tests/test_mii_editor.py`, `test_users_page.py`. Upstream candidate: no (Peanuts' pages).
+Tests: `peanuts/tests/test_mii_editor.py`, `test_users_page.py`, `test_mii_gl.py`. Upstream candidate: no (Peanuts' pages).
