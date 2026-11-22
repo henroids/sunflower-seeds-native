@@ -217,6 +217,11 @@ public final class FirstImportJvmTest {
         FirstImport.Pick asked = new FirstImport.Pick(ID.toLowerCase(), target), none = new FirstImport.Pick(ID, null);
         check(asked.titleId.equals(ID) && asked.asked(target) && !asked.asked(new File("/x/builds/" + ID + "/pack")) && !none.asked(target),
                 "the pick: asked about this pack folder only, none when no pack was there");
+        FirstImport.Pick kept = FirstImport.Pick.of(asked.text()), keptNone = FirstImport.Pick.of(none.text());
+        check(kept != null && kept.titleId.equals(ID) && kept.asked(target) && keptNone != null && keptNone.titleId.equals(ID) && keptNone.replaces == null,
+                "the pick as kept while the picker is open, and read back by a new process: " + asked.text());
+        check(FirstImport.Pick.of(null) == null && FirstImport.Pick.of("") == null && FirstImport.Pick.of("0100\t/x") == null && FirstImport.Pick.of(ID) == null
+                && FirstImport.Pick.of("040074A01BF1200G\t") == null, "no pick from none or from a text that is not one");
         check(FirstImport.swapFailed(nsp).contains("could not be put back") && !FirstImport.swapFailed(nsp).contains("Nothing was changed"), "a failed swap never says nothing changed");
         for (String s : new String[] {other, unknown, base, FirstImport.stoppedBuild(nsp, false), FirstImport.inUse(nsp), FirstImport.imported(withFile, true, "x", true), FirstImport.running(nsp),
                 FirstImport.replaces(nsp), FirstImport.swapFailed(nsp)})

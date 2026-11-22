@@ -83,6 +83,8 @@ public final class Library {
     static List<LibraryScanner.Title> titlesNow() { return lastTitles; }
     private static List<CompanionPort.Item> catalog = new ArrayList<>();
     private static boolean catalogFetched, everScanned;
+    /** Whether this process scanned the folders once: before that the library has no game that is not in upstream's list (PackImportUi waits for it) */
+    static boolean scannedOnce() { return everScanned; }
     private static final Map<String, Bitmap> icons = new HashMap<>();
     private static final Set<String> listed = new HashSet<>();   // launch paths handed to upstream's list already (Upstream.addToList), so a failing add is not retried every refresh
     /**
@@ -411,6 +413,7 @@ public final class Library {
                 if (current != this) return;
                 titles = t; gen++; scanning = false; companions.clear();
                 if (box != null && box.isAttachedToWindow()) refresh.run(); else render();   // upstream's list again too (Prepare and the add above put games into it)
+                PackImportUi.scanned(a);   // a pack picked while Android made the process anew (GitHub issue #44) goes on now that the game is known
             });
             for (LibraryScanner.Title x : t) {   // the icons not kept yet (preloadIcons has the others), before anything slow: the catalog and the build ids below
                 if (icons.containsKey(x.titleId)) { LibraryScanner.keep(a, x); continue; }   // a .nup without an icon of its own gets this one beside it (issue #158)
@@ -431,7 +434,7 @@ public final class Library {
             for (LibraryScanner.Title x : t)   // the fonts and build id every ready game's env needs (GameEnv)
                 if (x.status == LibraryScanner.Status.READY && x.launch != null) { GameEnv.ensureFonts(a, x.titleId); GameEnv.ensureBuildId(a, x.titleId, x.launch); }
         } catch (RuntimeException e) {   // a failed scan must not leave the library "scanning" for good
-            UI.post(() -> { scanning = false; if (current == this) render(); });
+            UI.post(() -> { scanning = false; if (current == this) { render(); PackImportUi.scanned(a); } });   // a waiting pick: its checks say what is wrong
         } }, "peanuts-scan").start();
     }
 

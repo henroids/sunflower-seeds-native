@@ -76,6 +76,20 @@ public final class FirstImport {
 
         /** Whether the player agreed to replace the pack in this pack folder (when one is there now, the import may replace it without asking again) */
         public boolean asked(File target) { return replaces != null && replaces.equals(target); }
+
+        /**
+         * As it is kept while the picker is open (dev.peanuts.PeanutsPrefs.packImportPick: Android may end the process meanwhile, and the picker's answer then
+         * comes to a new one): "&lt;title ID&gt;\t&lt;pack folder&gt;", the folder empty when none
+         */
+        public String text() { return titleId + "\t" + (replaces == null ? "" : replaces.getPath()); }
+
+        /** The pick of a {@link #text}, null for none or for a text that is not one */
+        public static Pick of(String text) {
+            int tab = text == null ? -1 : text.indexOf('\t');
+            if (tab != 16 || !text.substring(0, 16).matches("[0-9A-Fa-f]{16}")) return null;
+            String dir = text.substring(17);
+            return new Pick(text.substring(0, 16), dir.isEmpty() ? null : new File(dir));
+        }
     }
 
     // ---- Versions ----

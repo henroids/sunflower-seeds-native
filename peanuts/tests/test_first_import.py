@@ -266,6 +266,26 @@ class Wiring(unittest.TestCase):
         self.assertNotIn('if (!take(', imp, 'run takes nothing: the caller took the title on its main thread')
         self.assertIn('if (dev.peanuts.pack.PackImport.busy(s.titleId))', text(OWN / 'ui/Library.java'))
 
+    def test_the_pick_outlives_the_process(self):
+        """Android may end the process while the system picker is open; its answer then comes to a new process, where the static pick is gone (igawa6's
+        review of #260: the pick did nothing and said nothing). The pick is kept in PeanutsPrefs before the picker opens and read back when the memory has
+        none, and an answer that comes before the library's first scan waits for it: both ends of a scan (done or failed) let it go on"""
+        ui = text(OWN / 'ui/PackImportUi.java')
+        choose = method(ui, 'private static void choose(')
+        self.assertLess(choose.index('PeanutsPrefs.packImportPick(a, pending.text());'), choose.index('LibrarySettings.pickFolder('))
+        result = method(ui, 'static boolean result(')
+        self.assertIn('FirstImport.Pick p = pending != null ? pending : FirstImport.Pick.of(PeanutsPrefs.packImportPick(a));', result)
+        self.assertIn('PeanutsPrefs.packImportPick(a, null);', result)
+        self.assertLess(result.index('PeanutsPrefs.packImportPick(a, null);'), result.index('return true;'), 'read once, whatever the answer')
+        self.assertIn('if (!Library.scannedOnce() && PeanutsPrefs.gameDir(a) != null) {', result)
+        self.assertIn('if (p != null) picked(a, p, source);', method(ui, 'static void scanned(Activity a) {'))
+        self.assertIn('static boolean scannedOnce() { return everScanned; }', text(OWN / 'ui/Library.java'))
+        scan = method(text(OWN / 'ui/Library.java'), 'private void scan() {')
+        self.assertEqual(scan.count('PackImportUi.scanned(a);'), 2, 'after the scan, and after a failed one')
+        prefs = text(OWN / 'PeanutsPrefs.java')
+        self.assertIn('public static String packImportPick(Context c) { return of(c).getString("pack_import_pick", null); }', prefs)
+        self.assertIn('public static void packImportPick(Context c, String pick) { put(c, "pack_import_pick", pick); }', prefs)
+
     def test_no_upstream_file_changed_for_it(self):
         """The feature reaches upstream only through reflection: no upstream source names it"""
         for f in list(UP.glob('*.java')) + list(OND.glob('*.java')):

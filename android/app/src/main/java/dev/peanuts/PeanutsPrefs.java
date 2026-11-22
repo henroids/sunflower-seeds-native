@@ -211,6 +211,13 @@ public final class PeanutsPrefs {
     }
     public static void installCompanion(Context c, String titleId, boolean on) { of(c).edit().putBoolean(key(titleId, "install_companion"), on).apply(); }
 
+    /**
+     * The game sheet's Import pack… while the system picker is open (dev.peanuts.pack.FirstImport.Pick's text; dev.peanuts.ui.PackImportUi): Android may end the
+     * process meanwhile, and the picker's answer then comes to a new one. null when no picker of it is open
+     */
+    public static String packImportPick(Context c) { return of(c).getString("pack_import_pick", null); }
+    public static void packImportPick(Context c, String pick) { put(c, "pack_import_pick", pick); }
+
     // (Removed: a dead, unread duplicate of the "second screen physical/off" pref - dev.peanuts.settings.CompanionSection.secondScreen() is the one
     // Companion.java actually reads, in its own SharedPreferences file ("peanuts", MODE_MULTI_PROCESS).)
 

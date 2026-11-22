@@ -34,8 +34,13 @@ final class PackImportUi {
     static final int REQ_ZIP = 72, REQ_DIR = 73;   // after LibrarySettings' 60 to 70 and BuildLogUi's 71
 
     /** What the picker was opened for (the activity's result comes back to a static; it holds no view or activity). Its game is made again from the library
-     *  when the answer comes ({@link #picked}) */
+     *  when the answer comes ({@link #picked}). Kept in PeanutsPrefs too: when Android ends the process while the picker is open, the answer comes to a new
+     *  process, where this is null */
     private static FirstImport.Pick pending;
+    /** A picked pack whose answer came before the library's first scan of this process (Android made the process anew while the picker was open): it goes on
+     *  when that scan ends ({@link #scanned}) */
+    private static FirstImport.Pick waitingPick;
+    private static File waitingSource;
     private static final Handler UI = new Handler(Looper.getMainLooper());
 
     private PackImportUi() {}
@@ -96,6 +101,7 @@ final class PackImportUi {
         new AlertDialog.Builder(a).setTitle("Import " + g.name + "'s pack from…")
                 .setItems(new String[] {"A .zip file (made by Export pack…)", "A pack folder (with pack.tsv and shaders/)"}, (d, w) -> {
                     pending = new FirstImport.Pick(g.titleId, replaces);
+                    PeanutsPrefs.packImportPick(a, pending.text());
                     if (w == 1) LibrarySettings.pickFolder(a, REQ_DIR, "Pick the pack folder (the one with pack.tsv and shaders/)");
                     else LibrarySettings.pickFile(a, REQ_ZIP, "Pick the pack's .zip file", "application/zip");
                 })
@@ -105,16 +111,31 @@ final class PackImportUi {
     /** LibrarySettings.result: the picker's answer; true when the request was one of these (handled, whatever the answer) */
     static boolean result(Activity a, int request, int result, Intent data) {
         if (request != REQ_ZIP && request != REQ_DIR) return false;
-        FirstImport.Pick p = pending;
+        FirstImport.Pick p = pending != null ? pending : FirstImport.Pick.of(PeanutsPrefs.packImportPick(a));   // null here: a process made anew meanwhile
         pending = null;
+        PeanutsPrefs.packImportPick(a, null);
         if (p == null || result != Activity.RESULT_OK || data == null || data.getData() == null) return true;
         String path = request == REQ_ZIP ? Upstream.documentToPath(data.getData()) : Upstream.treeToPath(data.getData());
         if (path == null) {
             refused(a, "That " + (request == REQ_ZIP ? "file" : "folder") + " is not on the phone's storage by a path the app can read. Pick it from the phone's storage (the menu, then the phone's name), not from Recent, Downloads or a cloud provider.", String.valueOf(data.getData()));
             return true;
         }
+        if (!Library.scannedOnce() && PeanutsPrefs.gameDir(a) != null) {   // a process made anew: the library knows the game once its first scan ended
+            waitingPick = p;
+            waitingSource = new File(path);
+            return true;
+        }
         picked(a, p, new File(path));
         return true;
+    }
+
+    /** Library: a scan ended (or failed). A pick that waited for the library's first scan of the process goes on, on the library's activity */
+    static void scanned(Activity a) {
+        FirstImport.Pick p = waitingPick;
+        File source = waitingSource;
+        waitingPick = null;
+        waitingSource = null;
+        if (p != null) picked(a, p, source);
     }
 
     /**
