@@ -367,3 +367,5 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   On a tablet, Back from Advanced landed on the tiles of the sections instead of the section it was opened from: Advanced replaces Settings' column, and
   its detaching was taken for Settings closing. Now only Back from a section's page and Home's build (`SettingsPage.homeBuilt`, from
   `BottomScreen.home`) put a tablet's Settings on its tiles. Test `peanuts/tests/test_settings_sections.py`.
+  The icons' generator is in the repository: the `pi_*.xml` files said they came from an `icons.py` that was not there. `peanuts/scripts/icons.py` holds
+  all 37 icons (shell, kernel and ink dots, the same paths byte for byte) and writes them; `--check` says which file differs. Test `peanuts/tests/test_icons.py`.

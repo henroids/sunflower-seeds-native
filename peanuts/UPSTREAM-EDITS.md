@@ -1820,7 +1820,7 @@ know (one upstream adds) goes to the section of the heading it was built under, 
 | `android/app/src/main/java/dev/nxnative/android/PadFocus.java` | 1 | `watch()`: the focus frame goes on as `dev.peanuts.ui.FocusFrame.at(now, frame(...))`, which draws it where the view shows. A view draws its foreground in its scrolled coordinates and a one-line, centred text scrolls far, so on every button, Segmented tab and chip the frame was off screen: About's Check for updates showed no focus at all, a tab only Android's grey highlight | trailing `// PEANUTS: ...` |
 
 Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/ui/` (`SettingsSections.java`, `SettingsPage.java`, `Icons.java` new; `Motion.java`:
-the drawer's window animation), `android/app/src/peanuts/res/` (`drawable/pi_*.xml` new: the icons, made with `design/peanuts-native/icons/icons.py`;
+the drawer's window animation), `android/app/src/peanuts/res/` (`drawable/pi_*.xml` new: the icons, written by `peanuts/scripts/icons.py`;
 `values/peanuts_icons.xml`, `anim/peanuts_drawer_in.xml`, `anim/peanuts_drawer_out.xml` new), `dev/peanuts/ctl/Ctl.java` (`nav to=settings section=`
 picks a section; `screen.settings_section`), `FocusFrame.java` new (the controller's focus frame on a one-line button or tab; in the wide layout the D-pad
 stays in the page going up and down, left goes to the selected section, right from the sidebar to where the focus was in the page or its first item), the player texts that name a moved row (`FontGate`, `Library`, `CtlPort`), `peanuts/docs/` (`FAQ.md`,
