@@ -1585,6 +1585,17 @@ The DRPF reader (`dm/gfx/tools/drp.py`) and its hook in `shader_split.py` read N
 | `dm/gfx/tools/drp.py` (new) | whole file | the DRPF reader: header and chunk crypto (ported from kwsch/NewSnap, ISC), the entry table, the Oodle payload hand-off | `PEANUTS(upstream-candidate)` in the docstring |
 | `dm/gfx/tools/shader_split.py` | 3 | the header note, the `DRP` magic constant, and the `scan_file_in` branch that decrypts each entry and scans it | `PEANUTS(upstream-candidate)` on each hunk |
 
+### Level-5 NNDXDHSC shader objects (2026-11-22, GitHub PR #243, tapionallanaire)
+
+`shader_split.py` `nndx_shader` reads Level-5's `NNDXDHSC` version 1 objects (Inazuma Eleven: Victory Road's base CPK members under `data/nx/shader/`), one stage each: the stage tag at `+0x0c` (vertex 1, pixel 2, geometry 3, compute 6), the code and control ranges at `+0x48` / `+0x50`, both checked, and a graphics stage checked against its SPH header. `scan_blob` takes a blob by this magic, not by extension, and the records (`#NNDX`) take the single-stage pairing path. The game has no profile. `shader_split.py` is not a shader-cache input, so no library version moves.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/shader_split.py` | 3 | `nndx_shader`, its `scan_blob` branch, and `#NNDX` in `SINGLE_STAGE` | `PEANUTS(upstream-candidate)`, `PEANUTS` |
+| `docs/reference/shaders.md` | 1 | Level-5 NNDXDHSC shader objects | `PEANUTS(upstream-candidate)` |
+| `docs/agents/symptoms.md` | 1 | the reference entry's symptom line (`docs_symptoms.py`, allow-listed) | none |
+| `dm/tools/tests/test_split_nndx.py` (new) | whole file | the four stages from the header, and refused ranges and stage disagreements | `PEANUTS` in its header |
+
 ### New Pokemon Snap: NVN pool-builder getters (2026-11-21)
 
 The game reads the pool builder's device, memory, size and flags back through four getters the host did not answer; the calls returned zero and the game's resource pipeline read a null pool. The getters return the builder's fields. A general fix: any NVN title that reads a builder back needs them.
