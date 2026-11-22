@@ -1,4 +1,4 @@
-// PEANUTS: Import pack… before the first build (#44) on the JVM with upstream's own PackZip, Pack, BuildCheck and SaveStore (peanuts/tests/test_first_import.py compiles and runs it)
+// PEANUTS begin: Peanuts' own file, down to the marker on its last line. Import pack… before the first build (#44) on the JVM with upstream's own PackZip, Pack, BuildCheck and SaveStore (peanuts/tests/test_first_import.py compiles and runs it)
 package dev.peanuts.pack;
 
 import android.content.Context;
@@ -475,3 +475,4 @@ public final class FirstImportJvmTest {
         check(none.isEmpty() && !PackImport.busy(ID), "busy again after refusals");
     }
 }
+// PEANUTS end

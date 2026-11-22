@@ -2206,3 +2206,48 @@ and comments), `users/Yaz0.java` (its comment); in `android/app/src/jvmtest/java
 `test_users_page.py`, `test_mii_parts.py`.
 
 Tests: `peanuts/tests/test_mii_editor.py`, `test_users_page.py`, `test_mii_gl.py`, `test_mii_parts.py`. Upstream candidate: no (Peanuts' pages).
+
+### Round 57, the library and Import pack…: the review's later points, a card's partitions, one version's folder (2026-11-23, #280, #370)
+
+igawa6's notes on PR #260 (Import pack… before the first build) and PR #249 (mod folders out of the scan) that were left for later, one change each, and
+two library issues. One upstream path has hunks: Import pack…'s JVM test, a Peanuts file in the upstream test tree.
+
+- `PackImport.busy()` upper-cased the title ID, `take()` and `give()` used it as given: all three go through `key()`.
+- The sheet's checks ran before the system picker, not after it, so a build started while the picker was open could still have had its pack swapped. The
+  picker's answer is checked again against the library as it is then (`PackImportUi.picked`), and once more on the main thread right before the import,
+  where the title is taken (`PackImport.take`, which `PackImport.run` now expects) with nothing in between: `Library.startBuild` runs on the main thread too.
+  A pack that came into the pack folder meanwhile, which the player was not asked about, is asked about first (`FirstImport.Pick`).
+- The pick was a static field only, so when Android ended the process while the picker was open, the answer did nothing and said nothing. It is kept in
+  `PeanutsPrefs.packImportPick` too, and an answer that comes before the library's first scan of the new process waits for it (`Library.scannedOnce`,
+  `PackImportUi.scanned`).
+- `Request.check`: the comment on `needs_confirm` is back on `reimport`'s line.
+- The walk found a dump only with `base/exefs/main` or `exefs/main`: OunceCake's `base/program/0/exefs/main` was not seen, and an update-only dump was
+  listed as its `updates/<version>` folder. `LibraryWalk.isDump` reads the versions where `DumpLayout.versions` does, each at its package
+  (`LibraryWalk.root`, `DumpLayout.root`'s three places).
+- A mod loose in the game folder with a whole `exefs/main` of its own counted as a dump. One version's folder (`exefs/` at its top) counts only with `main`,
+  `main.npdm` and `sdk` (`LibraryWalk.wholeCode`): every profile's build checks `sdk`, and a code mod never brings it.
+- #280: an XCI of Hyrule Warriors: Age of Calamity was missing from the library and failed at Build with "not an NCA (wrong header key?)" on its meta NCA,
+  with keys that read other games. The importer read every partition of a card but `update`; `normal` (older cards) or `logo` (cards for firmware 4.0.0 and
+  later) hold the meta NCA and the icon NCA a second time under the same names, and one copy that did not read as an NCA failed the whole XCI. A card's game
+  is taken from its `secure` partition only; without one every partition but `update` is read, as before (`dm/peanuts/import/nx_nca.c`). Not checked
+  against the reporter's file.
+- #370: Breath of the Wild extracted on a PC (`exefs/` and `romfs/` at the top of its folder, updated to 1.9.0) showed as v0 with Wrong version, and Build
+  refused it with "Pick the dump folder above it", which there was not. A dump folder without `updates/<version>/` takes the version its main's build is
+  (`LibraryWalk.mainBuildId`, `versionOf`, the profile's build rows), and for one version's folder Prepare says to move `exefs` and `romfs` into a folder
+  named `base` (`dev.peanuts.build.VersionFolder`); the build card adds no "dump the game again" to it. Upstream's Prepare is
+  unchanged.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/jvmtest/java/dev/peanuts/pack/FirstImportJvmTest.java` | 24 | the import taken as the sheet takes it (`imp`), the busy mark in either case, an import nobody took, the pick and its kept text | the first line's `// PEANUTS` is now `// PEANUTS begin`, `// PEANUTS end` on the last line |
+
+Peanuts' own files, no marker: in `android/app/src/main/java/dev/peanuts/`, `pack/PackImport.java`, `pack/FirstImport.java`, `ui/PackImportUi.java`,
+`ui/CtlPort.java`, `ui/Library.java`, `ui/LibraryWalk.java`, `ui/LibraryScanner.java`, `ctl/Request.java`, `PeanutsPrefs.java`, `build/Prepare.java`,
+`build/VersionFolder.java` new; `dm/peanuts/import/nx_nca.c`, `CMakeLists.txt`, `tests/xci_test.c` new; `peanuts/docs/FAQ.md`;
+`peanuts/tests/test_first_import.py`, `test_library_walk.py`, `test_version_folder.py` new.
+
+Tests: `peanuts/tests/test_first_import.py` (with `FirstImportJvmTest`), `test_library_walk.py`, `test_version_folder.py`, `test_ctl.py`; `xci_test`
+(ctest; before the change six of its nine checks fail with "not an NCA (wrong header key?)"), `ncz_test` and `nup_meta_test`. On the emulator with the
+test app, a made-up NSP and a made-up pack: the process ended with `am kill` while the picker was open, then the pack picked: "Pack imported" once the
+library had scanned; a pack put into the pack folder while the picker was open: the question after it, Cancel keeps that pack; the game file moved away
+while the picker was open: "Pack not imported … Nothing was changed." Upstream candidate: no (Peanuts' library and importer).
