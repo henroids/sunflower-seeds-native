@@ -56,7 +56,8 @@
     "01002B00111A2000",
     "01002C9022770000",
     "01006000040C2000",
-    "0100DE501433A000"
+    "0100DE501433A000",
+    "0100F4300BF2C000"
   ],
   "games": [
     {
@@ -560,6 +561,27 @@
       "contributors": [],
       "profile": "dm/games/0100B63016916000/game.tsv",
       "note": "dm/games/0100B63016916000/README.md"
+    },
+    {
+      "title_id": "0100F4300BF2C000",
+      "name": "New Pokémon Snap",
+      "profile_name": "New Pokemon Snap",
+      "builds": [
+        {
+          "version": "v0",
+          "number": 0,
+          "display": null
+        }
+      ],
+      "readme_update": "v0",
+      "package": "v0",
+      "companion": false,
+      "since": "0.1.7",
+      "contributors": [
+        "ssv0225"
+      ],
+      "profile": "dm/games/0100F4300BF2C000/game.tsv",
+      "note": "dm/games/0100F4300BF2C000/README.md"
     },
     {
       "title_id": "0100B8E016F76000",

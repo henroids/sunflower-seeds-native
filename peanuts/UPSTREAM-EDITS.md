@@ -1590,3 +1590,7 @@ The profile (SDK 10, NVN + Wwise, Bandai Namco nu/nv) and its generated shader t
 |---|---|---|---|
 | `dm/games/0100F4300BF2C000/` (new) | whole profile | `game.tsv`, `README.md` and the generated tables | `PEANUTS` in `game.tsv` and the note; tables allow-listed |
 | `dm/games/README.md` | 1 | the games-table row | inline `<!-- PEANUTS: Peanuts-only profile -->` |
+
+### New Pokemon Snap v0
+
+The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7; the game note says its Thor results are the contributor's report (pull request #308).
