@@ -178,9 +178,9 @@ spin wait search 61 s). `patch_nso.py` computes those two phases in pieces with 
   parent kills the children first. The heap is frozen while the children run (`gc.freeze`): a collection in a child would copy the pages of every object it
   inherited (a model of it: 1 GB of objects and two children came to 2.4 GB). The children follow the worker's CPUs and priority when a game starts (the
   worker's game-yield watch moves only its own threads).
-- The rewriter file before this change is in `dm/tools/rewriter_equiv/` (`patch_nso.py.eaf706b807d5`, main's since its pull request 164): a pack made with it
-  counts as up to date (its key is one of the current rewriter's), so the update rewrites no module. It must stay the current file without the forks
-  (`test_rewrite_forks.py`): a change of the rewriter on main makes it main's new file, and packs made before that change are rewritten.
+- The rewriter file before this change is in `dm/tools/rewriter_equiv/` (`patch_nso.py.2590f2d24457`, dev 0.1.7's since #177's second pass, 2590f2d2): a pack made with
+  it counts as up to date (its key is one of the current rewriter's), so the update rewrites no module. It must stay the current file without the forks
+  (`test_rewrite_forks.py`): it follows every change of the rewriter on the branch this lands on, and packs made before that change are rewritten.
 
 Measured on an AYN Thor (ACNH 3.0.3, `incremental-check.py full`, 2026-11-19): the rewrite step 134 s in place of 195 s
 and 203 s (two runs with the file before), the build from nothing 5 min 34 s in place of 6 min 38 s; `main`, `subsdk0` and `sdk` byte for byte (SHA-256) the

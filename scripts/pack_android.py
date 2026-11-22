@@ -556,7 +556,17 @@ def _run_in_process_once(script, args, env, log, progress, mode):   # PEANUTS: r
 
 
 # PEANUTS begin: the phone's rewrite on its fast cores (issue #120, peanuts/docs/INCREMENTAL-BUILD.md "The rewrite on the fast cores")
-REWRITE_BOOT = 'import runpy, sys; sys.argv = sys.argv[1:]; sys.path.insert(0, sys.argv[0].rsplit("/", 1)[0]); runpy.run_path(sys.argv[0], run_name="__main__")'
+REWRITE_RERUN = 75                 # the worker's exit when its tool asked to be run again: the variables are on its last line, after RERUN_LINE
+RERUN_LINE = 'pn-rewrite-rerun '   # (a tool's own exit 75, or such a line alone, is not a rerun)
+REWRITE_BOOT = ('import json, runpy, sys\n'
+                'sys.argv = sys.argv[1:]; sys.path.insert(0, sys.argv[0].rsplit("/", 1)[0])\n'
+                'try: runpy.run_path(sys.argv[0], run_name="__main__")\n'
+                'except SystemExit as e:\n'
+                '    r = e.code.get("rerun_env") if isinstance(e.code, dict) else None\n'
+                '    if not isinstance(r, dict): raise\n'
+                '    sys.stderr.flush()\n'
+                '    print(%r + json.dumps({str(k): str(v) for k, v in r.items()}), flush=True)\n'
+                '    sys.exit(%d)\n') % (RERUN_LINE, REWRITE_RERUN)
 
 
 def pn_rewrite_worker(script, args, env, log, progress=None):
@@ -564,38 +574,60 @@ def pn_rewrite_worker(script, args, env, log, progress=None):
     split's workers), with DM_REWRITE_J = PN_REWRITE_J: its x18 and spin phases fork that many workers there (patch_nso.py in_forks; the phone's Python has no
     _multiprocessing, and the app's own process must not fork). The same output as run_in_process: the file log, its progress lines passed on (ProgressTee).
     → its exit code; None with no worker command or PN_REWRITE_J below 2 (run_in_process then, one core). A stop (this process interrupted) ends the worker
-    and its forks (their own process group)"""
+    and its forks (their own process group)
+    The tool sees DM_IN_PROCESS=1, as in run_in_process: the worker cannot exec either (Android refuses an exec of a file in the app's data), so a tool that
+    would run itself again with more variables (patch_nso.py's DM_PATCH_FRONT, #177) asks with sys.exit({'rerun_env': {...}}); REWRITE_BOOT passes that on
+    (RERUN_LINE, REWRITE_RERUN) and it is run again with them in a new worker, its output appended to the same log. One that asks again for the same fails.
+    (Found in review: without it the worker took the os.execve path, and DAVE THE DIVER stopped at "Rewriting the game's code" again)"""
     cmd = os.environ.get('DM_SPLIT_WORKER', '').split()
     try: j = int(os.environ.get('PN_REWRITE_J') or 1)
     except ValueError: j = 1
     if not cmd or j < 2: return None
-    with open(log, 'w', buffering=1, encoding='utf-8', errors='backslashreplace') as f:
+    extra = {}
+    for attempt in range(3):
+        code, rerun = _rewrite_worker_once(cmd, script, args, {**env, **extra, 'DM_REWRITE_J': str(j), 'DM_IN_PROCESS': '1'}, log, progress,
+                                           'a' if attempt else 'w')
+        if not rerun or rerun.items() <= extra.items(): return code if not rerun else 1
+        extra.update(rerun)
+    return 1
+
+
+def _rewrite_worker_once(cmd, script, args, env, log, progress, mode):   # pn_rewrite_worker's single run → (exit code, the rerun variables the tool asked for or None)
+    import json
+    with open(log, mode, buffering=1, encoding='utf-8', errors='backslashreplace') as f:
         tee = ProgressTee(f, sys.stdout, *progress) if progress else f
-        p = subprocess.Popen(cmd + ['-c', REWRITE_BOOT, str(script)] + [str(a) for a in args], env={**os.environ, **env, 'DM_REWRITE_J': str(j)},
+        p = subprocess.Popen(cmd + ['-c', REWRITE_BOOT, str(script)] + [str(a) for a in args], env={**os.environ, **env},
                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='backslashreplace',
                              start_new_session=True)
         # the pipe is read in a thread: a stop (an exception the packer raises in this thread, at its next bytecode) reached a read of it only with the
         # worker's next line, and in_forks' parent prints one only as each child is done (ACNH's spin phase on two workers: about 30 s), past the 20 s
         # after which PackService ends the process (found in review); a read that fails (the log's storage full) ends the worker here as before
         import threading
-        failed = []
+        failed, last = [], ['']
 
         def pump():
             try:
-                for line in p.stdout: tee.write(line)
+                for line in p.stdout: tee.write(line); last[0] = line
             except BaseException as e: failed.append(e)
         reader = threading.Thread(target=pump, name='pn-rewrite-log', daemon=True)
         try:
             reader.start()
             while reader.is_alive(): reader.join(0.5)
             if failed: raise failed[0]
-            return p.wait()
+            code = p.wait()
+            if code != REWRITE_RERUN or not last[0].startswith(RERUN_LINE): return code, None
+            try: rerun = json.loads(last[0][len(RERUN_LINE):])
+            except ValueError: return 1, None
+            return (0, {str(k): str(v) for k, v in rerun.items()}) if isinstance(rerun, dict) and rerun else (1, None)
         except BaseException:
             try: os.killpg(p.pid, signal.SIGKILL)
             except OSError: pass
             p.wait()
             reader.join(5)
             raise
+        finally:
+            try: p.stdout.close()
+            except OSError: pass
 # PEANUTS end
 
 

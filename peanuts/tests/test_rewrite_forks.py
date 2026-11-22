@@ -193,6 +193,37 @@ class Worker(unittest.TestCase):
         self.assertEqual(end, 3)
         self.assertEqual((self.d / 'tool.log').read_text().splitlines(), ['progress 1 2 spin', 'done'])
 
+    # patch_nso.py's second pass (#177: DM_PATCH_FRONT when the patch area does not fit before the base) asks for a rerun with sys.exit({'rerun_env': ...})
+    # only where DM_IN_PROCESS is set, and exec is refused in the worker as in the app's process: the worker lost it (found in review, DAVE THE DIVER)
+    RERUN = ("import os, sys\n"
+             "assert os.environ.get('DM_IN_PROCESS') == '1', 'the tool takes the exec path'\n"
+             "if 'DM_PATCH_FRONT' not in os.environ:\n"
+             "    print('first pass', flush=True); sys.exit({'rerun_env': {'DM_PATCH_FRONT': '0x1d0000'}})\n"
+             "print('second pass', os.environ['DM_PATCH_FRONT'], os.environ['DM_REWRITE_J'])\n")
+
+    def test_a_tool_that_asks_for_a_rerun_runs_again_with_its_variables(self):
+        end, _ = self.run_tool(self.RERUN)
+        self.assertEqual(end, 0)
+        text = (self.d / 'tool.log').read_text()
+        self.assertIn('first pass', text, 'the rerun appends to the first run\'s log')
+        self.assertIn('second pass 0x1d0000 2', text)
+        self.assertNotIn('DM_PATCH_FRONT', os.environ)
+        self.assertNotIn('DM_IN_PROCESS', os.environ)
+
+    def test_a_tool_that_asks_again_for_the_same_fails(self):
+        end, _ = self.run_tool("import sys\nprint('asks', flush=True)\nsys.exit({'rerun_env': {'X': '1'}})\n")
+        self.assertEqual(end, 1)
+        self.assertEqual((self.d / 'tool.log').read_text().count('asks'), 2, 'run once again, then failed')
+
+    def test_only_the_boot_asks_for_a_rerun(self):
+        # the tool's own exit 75 is its exit code, and a line like the boot's from a tool that ends otherwise is only output
+        end, _ = self.run_tool("import sys\nsys.exit(75)\n")
+        self.assertEqual(end, 75)
+        end, _ = self.run_tool(f"print({self.pa.RERUN_LINE!r} + '{{\"X\": \"1\"}}')\n")
+        self.assertEqual(end, 0)
+        end, _ = self.run_tool("import sys\nsys.exit({'not': 'a rerun'})\n")
+        self.assertEqual(end, 1)
+
     def test_a_log_that_cannot_be_written_ends_the_worker(self):
         # the pipe is read in a thread: one that fails must end the call and the worker, not leave the worker blocked on a full pipe and the call waiting
         class Broken:
@@ -214,13 +245,15 @@ class Wiring(unittest.TestCase):
     def test_the_file_before_it_counts_as_the_same_rewriter(self):
         # the equivalent (scripts/pack_android.py EQUIV: a pack whose key was made with it counts as up to date) is the current file without the forks, and
         # nothing else: only then does a rewrite with it come out the same. main's PR #164 changed the rewriter under this branch (2026-11-20), and the file
-        # kept here was still the one before #164: every pack rewritten before #164 would have counted as up to date, where main rewrites them
-        name = 'patch_nso.py.eaf706b807d5'
+        # kept here was still the one before #164: every pack rewritten before #164 would have counted as up to date, where main rewrites them. On dev 0.1.7
+        # #177 changed it again (its second pass, 2590f2d2): the file kept is dev's, and it follows every rewriter change on the branch this lands on
+        name = 'patch_nso.py.2590f2d24457'
         equiv = REPO / 'dm/tools/rewriter_equiv' / name
         self.assertTrue(equiv.is_file())
-        self.assertFalse((REPO / 'dm/tools/rewriter_equiv/patch_nso.py.6bc30f06074b').exists())   # the file before #164
-        self.assertEqual(without_forks(SRC), equiv.read_text(encoding='utf-8'), f'{name} is not patch_nso.py without in_forks: '
-                         'main changed the rewriter; the equivalent is then main\'s file (git show <its last commit>:dm/tools/patch_nso.py)')
+        for before in ('6bc30f06074b', 'eaf706b807d5'):   # the files before #164 and before #177
+            self.assertFalse((REPO / f'dm/tools/rewriter_equiv/patch_nso.py.{before}').exists())
+        self.assertEqual(without_forks(SRC), equiv.read_text(encoding='utf-8'), f'{name} is not patch_nso.py without in_forks: the rewriter changed '
+                         'on the branch this is on; the equivalent is then its file (git show <its last commit>:dm/tools/patch_nso.py)')
         self.assertIn(f'dm/tools/rewriter_equiv/{name}\t', (REPO / 'peanuts/upstream-unmarked.txt').read_text(encoding='utf-8'))
 
     def test_the_pack_script_runs_it_in_the_worker(self):
