@@ -13,7 +13,7 @@ CUTS = {
     (0x17ea0b0, '89003037', '1f2003d5', 'Battle step 2: use 60.0f instead of FixedFrameRate (tbnz w9, #6 -> nop)'),
     (0x1817390, '89003037', '1f2003d5', 'Frame ratio scale: use 60.0f instead of FixedFrameRate (tbnz w9, #6 -> nop)'),
     (0x196bf38, 'a9003037', '1f2003d5', '60fps mode check 1: treat bUseFixedFrameRate as false (tbnz w9, #6 -> nop)'),
-    (0x3b34398, '3f011a72', '3f001f6b', '60fps mode check 2: treat bUseFixedFrameRate as false (tst w9, #0x40 -> cmp wzr, wzr)'),
+    (0x3b34398, '3f011a72', 'ff031f6b', '60fps mode check 2: treat bUseFixedFrameRate as false (tst w9, #0x40 -> cmp wzr, wzr)'),
   ],
 }
 
