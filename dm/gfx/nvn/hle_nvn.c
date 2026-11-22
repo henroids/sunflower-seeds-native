@@ -1348,6 +1348,15 @@ NVN(nvnCommandBufferCopyBufferToBuffer, void, NVNcommandBuffer *c, NVNbufferAddr
 // uniform update: the data is copied into command memory at record time (NVN semantics: the caller may modify the original data after recording) and written into the buffer at submit
 NVN(nvnCommandBufferUpdateUniformBuffer, void, NVNcommandBuffer *c, NVNbufferAddress buf, size_t bufsz, ptrdiff_t off, size_t n, const void *data) {
     (void)bufsz; shp_bind(SHK_UPDATE, buf + off, n);
+    {   // PEANUTS: DM_NVN_WRITE_LOG=<hex address>+<hex length>: the inline uniform updates that reach that guest range, with the game's caller and source address (64 lines)
+        static uint64_t lo, hi; static int rd; static _Atomic int nl;
+        if (!rd) { const char *e = getenv("DM_NVN_WRITE_LOG"); char *q = NULL; if (e) { lo = strtoull(e, &q, 16); hi = lo + (q && *q == '+' ? strtoull(q + 1, NULL, 16) : 8); } rd = 1; }
+        if (hi && (uint64_t)(buf + off) < hi && (uint64_t)(buf + off) + n > lo && atomic_fetch_add(&nl, 1) < 64) {
+            uint64_t ra = (uint64_t)__builtin_return_address(0); module_t *m = module_of((void *)ra); uint32_t w[12] = {0}; memcpy(w, data, n < sizeof w ? n : sizeof w);
+            fprintf(stderr, "[dm] [nvn] write log: UpdateUniformBuffer to %#llx + %zu from guest %p, caller %s+%#llx: %08x %08x %08x %08x | %08x %08x %08x %08x | %08x %08x %08x %08x\n", (unsigned long long)(buf + off), n, data,
+                    m ? m->name : "?", (unsigned long long)(m ? ra - (uint64_t)m->base : ra), w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10], w[11]);
+        }
+    }
     uint32_t sz = (uint32_t)(24 + n);
     uint8_t *p = cmd_alloc(CB(c), sz); put_hdr(p, OP_UPDATE_UB, (sz + 7) & ~7u);
     uint64_t dst = buf + off, nn = n; memcpy(p + 8, &dst, 8); memcpy(p + 16, &nn, 8); memcpy(p + 24, data, n);

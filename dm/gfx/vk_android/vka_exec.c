@@ -1015,6 +1015,13 @@ static VkImageAspectFlags copy_aspect(const vka_img *im, const char *what) {
     return 0;
 }
 // Buffer ↔ texture: c->src is the buffer's guest address. Rows are SetCopyRowStride bytes apart (tightly packed without it), layers / slices SetCopyImageStride
+// PEANUTS: DM_NVN_WRITE_LOG=<hex address>+<hex length>: the GPU copies that write into that guest range (texture → buffer, buffer → buffer), 64 lines; the inline uniform
+// updates into it are logged where the game records them (hle_nvn.c)
+static int wlog_hit(uint64_t a, uint64_t n) {
+    static uint64_t lo, hi; static int rd; static _Atomic int nl;
+    if (!rd) { const char *e = getenv("DM_NVN_WRITE_LOG"); char *q = NULL; if (e) { lo = strtoull(e, &q, 16); hi = lo + (q && *q == '+' ? strtoull(q + 1, NULL, 16) : 8); } rd = 1; }
+    return hi && a < hi && a + n > lo && atomic_fetch_add(&nl, 1) < 64;
+}
 static void copy_bt(const p_copy_b2t *c, int to_tex) {
     if (!c->tex) return;
     vka_img *im = vka_tex_get(c->tex, g_cb);
@@ -1033,6 +1040,9 @@ static void copy_bt(const p_copy_b2t *c, int to_tex) {
     int is3d = im->depth > 1 || c->tex->d.target == NVN_TEXTURE_TARGET_3D, nz = c->r.depth > 0 ? c->r.depth : 1;
     if (row % f->bpb) { VRED_ONCE("buffer copy row stride %zu is not a whole number of %u-byte blocks", row, f->bpb); return; }
     uint64_t span = img * (size_t)(nz - 1) + row * (rows - 1) + (size_t)((c->r.width + f->bw - 1) / f->bw) * f->bpb;
+    if (!to_tex && wlog_hit(c->src, span))   // PEANUTS: DM_NVN_WRITE_LOG
+        VLOG("write log: texture → buffer copy to %#llx + %llu from texture serial %llu %ux%u format %#x flags %#x levels %u (gpu_owned %d), level %u, region %d,%d %dx%d", (unsigned long long)c->src, (unsigned long long)span,
+             (unsigned long long)im->serial, im->w, im->h, im->d.format, im->d.flags, im->levels, im->gpu_owned, lv, c->r.xoffset, c->r.yoffset, c->r.width, c->r.height);
     VkBuffer b; VkDeviceSize o;
     if (!vka_addr(c->src, span, &b, &o, NULL)) { static _Atomic int nr; if (atomic_fetch_add(&nr, 1) < 8) VRED("%s at %#llx (%llu bytes) is not in placed guest RAM", to_tex ? "buffer → texture copy source" : "texture → buffer copy destination", (unsigned long long)c->src, (unsigned long long)span); return; }
     vka_span s = {0}; VkDeviceSize al = asp == VK_IMAGE_ASPECT_COLOR_BIT ? (f->bpb % 4 == 0 ? f->bpb : f->bpb % 2 == 0 ? 2 * f->bpb : 4 * f->bpb) : 4;   // a whole block and a multiple of 4
@@ -1706,7 +1716,7 @@ static int exec(const uint8_t *p, int depth) {   // 1: parked at a wait (g_pk ho
             break; }
         case OP_RESET_COUNTER: { uint64_t t; memcpy(&t, a, 8); if (t == NVN_COUNTER_TYPE_SAMPLES_PASSED) oq_reset(); break; }
         case OP_CLEAR_BUF: mdx_write(); if (g_cb) { const p_clear_buf *cb = a; vka_rw_pre(g_cb); buf_fill(cb->addr, cb->size, cb->value); vka_barrier(g_cb); vka_rw_point(g_cb, 'f', 0, cb->value, cb->addr); } break;
-        case OP_COPY_B2B: mdx_write(); if (g_cb) { uint64_t s_, d, n; memcpy(&s_, a, 8); memcpy(&d, (const uint8_t *)a + 8, 8); memcpy(&n, (const uint8_t *)a + 16, 8); vka_rw_pre(g_cb); buf_copy(s_, d, n); vka_barrier(g_cb); vka_rw_point(g_cb, 'c', 0, s_, d); } break;
+        case OP_COPY_B2B: mdx_write(); if (g_cb) { uint64_t s_, d, n; memcpy(&s_, a, 8); memcpy(&d, (const uint8_t *)a + 8, 8); memcpy(&n, (const uint8_t *)a + 16, 8); vka_rw_pre(g_cb); if (wlog_hit(d, n)) VLOG("write log: buffer → buffer copy to %#llx + %llu from %#llx", (unsigned long long)d, (unsigned long long)n, (unsigned long long)s_); buf_copy(s_, d, n); vka_barrier(g_cb); vka_rw_point(g_cb, 'c', 0, s_, d); } break;
         case OP_UPDATE_UB: mdx_write(); g_n_ub++; if (g_cb) { uint64_t d, n; memcpy(&d, a, 8); memcpy(&n, (const uint8_t *)a + 8, 8); if (!vka_rp_ub_defer(d, n, (const uint8_t *)a + 16)) { vka_rp_end(); vka_rw_pre(g_cb); buf_update((const uint8_t *)a + 16, d, n); vka_barrier(g_cb); vka_rw_point(g_cb, 'u', 0, n, d); } } break;
         case OP_SET_RT: S.rt = *(const p_set_rt *)a; S.has_rt = 1; break;
         case OP_SCISSOR: S.sc = *(const p_scissor *)a; S.has_sc = 1; break;

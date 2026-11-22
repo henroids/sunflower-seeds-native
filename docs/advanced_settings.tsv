@@ -325,6 +325,7 @@ DM_PROBE_HEAPWORDS	developer	Diagnostics			text			both
 DM_PROBE_LIMIT	developer	Diagnostics			text			both						
 DM_PROBE_LIVE	developer	Diagnostics			text			both						
 DM_PROBE_POLL	developer	Diagnostics			text			both						
+DM_NVN_WRITE_LOG	developer	Diagnostics			text			both						
 DM_PROBE_WATCH	developer	Diagnostics			text			both						
 DM_PROBE_X2	developer	Diagnostics			text			both						
 DM_PROFILE_PATH	developer	Diagnostics			text			both						
