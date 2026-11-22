@@ -232,3 +232,9 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   user clock is that reading plus the custom time's offset, so a custom time is the only user change. New source ID `dmhost-steady-02`: a save from before
   warns once. `hle_time.c`; `t_peanuts_time` (`make GAME=<id> peanuts-time`). UPSTREAM-EDITS Round 51; `docs/reference/services.md` "The steady clock runs
   through sleep and restarts".
+- 2026-11-21 (GitHub issues #262 and #20, the Mali black screen): on an Arm GPU the start-up notice for a missing placed memory map no longer says
+  "Pick System": Arm's own driver has no placed maps, so it asks for a PanVK build that has them, and says when the picked driver did not load (Android's
+  driver ran under its name). `dev.peanuts.ui.MaliDriver`; one hunk in `GameActivity.readinessDecide`. Settings › GPU driver lists faux123's PanVK
+  (placed maps from v1.1.5 on G57 and G77, by its notes), and every PanVK file counts as a Mali build. FAQ "Can a Mali or other non-Adreno device use a
+  custom driver?". Seen on the emulator (the driver page and faux123's package import); the Mali notice itself only in the JVM test, no Mali device here.
+  UPSTREAM-EDITS Round 40.

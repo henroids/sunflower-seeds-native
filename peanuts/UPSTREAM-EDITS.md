@@ -1654,3 +1654,21 @@ Tests: `make GAME=<id> peanuts-time` (Linux; with gcc, `CLANG=gcc`): 26 checks p
 ### Digimon Story Time Stranger 1.2.2
 
 The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7; the game note says its Thor results are the contributor's report (pull request #269).
+
+### Round 40, Mali guidance: PanVK with placed memory maps (2026-11-21, GitHub issues #262 and #20)
+
+On a Mali or Immortalis GPU the start-up notice said "Pick System (the phone's own driver)" when a PanVK build lacked placed memory maps, and
+"the custom drivers the app can install are for Adreno GPUs only" on the system driver. Arm's own driver has neither `VK_KHR_map_memory2` nor
+`VK_EXT_map_memory_placed` (#20), so System never helps there. On an Arm GPU (vendor ID 0x13B5, else the GPU's name) the notice now asks for a PanVK
+build that has them, and says when the picked driver did not load (the check's `driver.custom` is empty: Android's driver ran under the picked
+driver's name). The words are Peanuts' own (`dev.peanuts.ui.MaliDriver`); the driver page's Mali hint and Settings › GPU driver's sources follow.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 1 | `readinessDecide`: a missing placed map on an Arm GPU takes `MaliDriver.advice` before upstream's two sentences | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/DriverFetch.java` | 1 | faux123's PanVK releases in the shared driver list | trailing `// PEANUTS: ...` |
+
+Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/ui/` (`MaliDriver.java` new; `DriverMatch` takes any file named PanVK as a
+Mali build; `DriverActivity`'s source sentence and Mali hint), `android/app/src/jvmtest/java/dev/peanuts/ui/DriverMatchJvmTest.java`,
+`peanuts/tests/test_driver_page.py`, `peanuts/docs/FAQ.md`. Upstream candidate: the not-loaded case is general (an Adreno whose Turnip did not load
+gets "Pick System" while System already ran), but upstream's custom drivers are Adreno ones, so the Mali words stay here.
