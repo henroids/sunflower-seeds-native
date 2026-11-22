@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The ten sections of Settings (design: the canvas "Peanuts Settings Redesign", page Konzept, board "Aufteilung"), as data: each section's label, icon,
+ * The ten sections of Settings (in place of one long page), as data: each section's label, icon,
  * line under its title and groups, and in each group the rows by their title as Settings builds them (upstream's MainActivity.buildSettings and
  * LibrarySettings.add), each with the Peanuts icon of its tile. SettingsPage puts the rows Settings built into these places. A row this table does not
  * know (upstream added one) goes to the section of the heading it was built under, in a group "More", so nothing is lost after an update.

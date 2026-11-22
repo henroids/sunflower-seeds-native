@@ -1806,8 +1806,7 @@ Tests: `peanuts/tests/test_bottom_screen_peanuts.py`. Upstream candidate: no (th
 ### Round 44, Settings in ten sections (2026-11-21)
 
 Settings was one long page of eight cards, its Library card holding folders, keys, haptics, both screens and Miis. Its rows now sit in ten sections,
-Library, Console, Graphics, Controls, Screens, Users, App, Help, Developer and About (the design: the canvas "Peanuts Settings Redesign", page Konzept,
-board "Aufteilung"), one section shown at a time: on a window 600 dp wide or more a sidebar of the sections at the left, each with its Peanuts icon and the
+Library, Console, Graphics, Controls, Screens, Users, App, Help, Developer and About, one section shown at a time: on a window 600 dp wide or more a sidebar of the sections at the left, each with its Peanuts icon and the
 selected one on banana yellow; on a tablet (its smaller side 600 dp or more) the ten sections as tiles across the screen, a tile opening the section's
 page and Back coming back to the tiles; on a narrow phone the section's page with a button that opens a drawer of the sections. Upstream still builds every row as
 before, with its listeners, its fields and its `refreshSettings()`; one line at the end of `buildSettings()` hands the column to

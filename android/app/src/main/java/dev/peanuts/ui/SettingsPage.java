@@ -207,8 +207,8 @@ public final class SettingsPage {
     }
 
     /**
-     * A tablet's Settings (the canvas's Konzept board "Variante B: Kategorien-Übersicht (wie Eden)"): Back to Home, "Settings" and the search, then the ten
-     * sections as tiles across the screen, each its icon, its name and what it holds; a tile opens the section's page
+     * A tablet's Settings opens on an overview of its sections, as a page of its own: Back to Home, "Settings" and the search, then the ten sections as
+     * tiles across the screen, each its icon, its name and what it holds; a tile opens the section's page, and Back from there comes back to the tiles
      */
     private static LinearLayout hub(Activity a) {
         LinearLayout col = new LinearLayout(a);

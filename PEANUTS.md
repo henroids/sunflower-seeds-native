@@ -317,11 +317,11 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   `MainActivity.bananaTaps`), pops the peanut there, with a light tick, and `BottomScreen.popped` counts it through MainActivity's own counter. The start
   page is not a background. The pop's look and the counter are upstream's, unchanged. UPSTREAM-EDITS Round 43; test
   `peanuts/tests/test_bottom_screen_peanuts.py`.
-- 2026-11-21 (Settings in ten sections, the canvas "Peanuts Settings Redesign", page App-Look): Settings shows one of ten sections at a time, Library,
+- 2026-11-21 (Settings in ten sections): Settings shows one of ten sections at a time, Library,
   Console, Graphics, Controls, Screens, Users, App, Help, Developer and About, instead of one long page whose Library card mixed folders, keys, haptics,
   both screens and Miis. A window 600 dp wide or more (the Thor's top screen, a phone held sideways) has the sections in a sidebar at the left, the
   selected one on banana yellow, and the rows at the right; a tablet (its smaller side 600 dp or more) opens Settings on the ten sections as tiles across
-  the screen (the canvas's board "Variante B, wie Eden"), a tile opens its section's page and Back goes to the tiles again; a narrow phone has the
+  the screen (an overview of the sections on a page of its own), a tile opens its section's page and Back goes to the tiles again; a narrow phone has the
   section's page with a button of three lines that opens a drawer of the sections. Every row keeps upstream's look and listener; its tile and each section
   show the Peanuts icons (`android/app/src/peanuts/res/drawable/pi_*.xml`, the kernel in the accent). Console's icon is a console with its two
   controllers; Screens' is two screens on a device with a second screen, one screen on any other. The rows of Screens and Console mode show what they
@@ -369,3 +369,5 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   `BottomScreen.home`) put a tablet's Settings on its tiles. Test `peanuts/tests/test_settings_sections.py`.
   The icons' generator is in the repository: the `pi_*.xml` files said they came from an `icons.py` that was not there. `peanuts/scripts/icons.py` holds
   all 37 icons (shell, kernel and ink dots, the same paths byte for byte) and writes them; `--check` says which file differs. Test `peanuts/tests/test_icons.py`.
+  Comments and notes that pointed at a board or page of the owner's design canvas say what they mean in words; readers of the repository cannot see
+  the canvas. Test `peanuts/tests/test_no_canvas_pointers.py` keeps such pointers out of Peanuts' code and notes.
