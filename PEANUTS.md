@@ -371,3 +371,5 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   all 37 icons (shell, kernel and ink dots, the same paths byte for byte) and writes them; `--check` says which file differs. Test `peanuts/tests/test_icons.py`.
   Comments and notes that pointed at a board or page of the owner's design canvas say what they mean in words; readers of the repository cannot see
   the canvas. Test `peanuts/tests/test_no_canvas_pointers.py` keeps such pointers out of Peanuts' code and notes.
+  About › Licenses names Banana Native and Frame generation GPL-3.0-or-later, as the README, `android/NOTICE.md` and the LSFG folder's LICENSE.md do
+  (it said GPL-3.0). Test `peanuts/tests/test_peanuts_cracked.py`.
