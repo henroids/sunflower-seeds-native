@@ -1547,6 +1547,17 @@ Tomodachi Life: Living the Dream 1.0.4 crashed about 3 s into a boot in the SDK'
 
 Tests: `make GAME=<id> peanuts-fontll` (Linux; with gcc, `CLANG=gcc`): 11 checks pass. A build with exclusion per call only fails 3 of them (the higher-priority thread measured 779 sequences with the other's font; an owner that does not block, and one that exits, were not waited for). Upstream candidate: yes (the Mac host runs a core's threads side by side too).
 
+### Level-5 VFS3 shader objects (2026-11-22, GitHub PR #230, tapionallanaire)
+
+`shader_split.py` reads Level-5's VFS3 archives (version 16, generation 1: Ni no Kuni II's `data/preload_zstd.vfs`), which index names and zstd block lists by file ID and store compressed members as blocks rather than whole frames. `vfs3_members` rebuilds each shader member's frame (with the archive's dictionary where it names one) and checks every range and size; each member's stage must match its extension. On Ni no Kuni II 1.0.0 the split reads 902 distinct shader keys; the game has no profile. `shader_split.py` is not a shader-cache input (`dmsh_chain.py` `FILES`), so no library version moves.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/shader_split.py` | 2 | `VFS3`, `VFS3_STAGES`, `vfs3_members`, and the `scan_file_in` branch for a file starting with the VFS3 header | `PEANUTS` |
+| `docs/reference/shaders.md` | 1 | Level-5 VFS3 shader objects | `PEANUTS(upstream-candidate)` |
+| `docs/agents/symptoms.md` | 1 | the reference entry's symptom line (`docs_symptoms.py`, allow-listed) | none |
+| `dm/tools/tests/test_vfs3.py` (new) | whole file | a synthetic archive: a compressed member, and a member crossing the payload boundary | `PEANUTS` in its header |
+
 ### Linux shader tools (2026-11-21)
 
 The packer's shader tools now run on Linux: `dm/gfx/tools/tool_lock.py` guards the macOS-only `xcrun` Metal queries behind `sys.platform == 'darwin'` (Linux has no Metal toolchain), and `dm/gfx/tools/vk_android_build.py` starts the translator through `tool_lock.xlate_command` (on Linux, dotnet runs the portable `dmsh_xlate.dll`; the apphost in the repository is a Mach-O). The shader chain procedure of `peanuts/docs/UPSTREAM.md` §3.3 was run for the `vk_android_build.py` edit. The lock and the chain headers are left to the maintainer, who regenerates them during integration (CONTRIBUTING.md).
