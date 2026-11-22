@@ -206,7 +206,7 @@ static void post(pop o) {
 // Costs: a query pool of OQ_N (a few hundred KB of driver memory), 16 more bytes per posted report, one vkGetQueryPoolResults per counted report on the completion thread.
 // The replay statistics (DM_VK_STATS) print "occlusion queries per frame: ..."
 enum { OQ_N = 16384, OQ_RB = 256 };   // queries in the ring; results read at a time
-static struct { VkQueryPool pool; int precise; PFN_vkResetQueryPool hreset; PFN_vkGetQueryPoolResults get; } OQ;
+static struct { VkQueryPool pool; int precise; PFN_vkResetQueryPool hreset; PFN_vkGetQueryPoolResults get; } OQ;   // PEANUTS: begin and end through vk (the encoder's query opcodes, #263)
 static int g_oq = -1;                           // 1 counted; 0 the constant 1 (DM_VK_OCCLUSION=0, no device, no host query reset or no pool); -1 not decided yet
 static int g_oq_count, g_oq_fresh, g_oq_open;   // a samples-passed reset came (draws count); a reset since the last report (its count starts from 0); a query is active in the open pass
 static uint32_t g_oq_lost;                      // draws of the segment that count 1 sample each (no query, or skipped by the replay)
@@ -222,18 +222,19 @@ static int oq_on(void) {
     VkPhysicalDeviceVulkan12Features f12 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
     VkPhysicalDeviceFeatures2 f2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &f12};
     vk.vkGetPhysicalDeviceFeatures2(V.pd, &f2);   // (the device was made with every feature it has: vka_dev.c)
+    // PEANUTS: vkCmdBeginQuery and vkCmdEndQuery are the vk table's (vka_enc.c hooks them, #263)
     OQ.hreset = (PFN_vkResetQueryPool)vk.vkGetDeviceProcAddr(V.dev, "vkResetQueryPool"); OQ.get = (PFN_vkGetQueryPoolResults)vk.vkGetDeviceProcAddr(V.dev, "vkGetQueryPoolResults");
     PFN_vkCreateQueryPool create = (PFN_vkCreateQueryPool)vk.vkGetDeviceProcAddr(V.dev, "vkCreateQueryPool");
     if (!f12.hostQueryReset || !OQ.hreset) { VRED("occlusion queries: the device has no host query reset: every samples-passed report writes 1"); return 0; }
     OQ.precise = f2.features.occlusionQueryPrecise != 0;
     VkQueryPoolCreateInfo ci = {VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, .queryType = VK_QUERY_TYPE_OCCLUSION, .queryCount = OQ_N};
-    VkResult r = create && vk.vkCmdBeginQuery && vk.vkCmdEndQuery && OQ.get ? create(V.dev, &ci, NULL, &OQ.pool) : VK_ERROR_FEATURE_NOT_PRESENT;
+    VkResult r = create && vk.vkCmdBeginQuery && vk.vkCmdEndQuery && OQ.get ? create(V.dev, &ci, NULL, &OQ.pool) : VK_ERROR_FEATURE_NOT_PRESENT;   // PEANUTS: (#263)
     if (r) { OQ.pool = VK_NULL_HANDLE; VRED("occlusion queries: no query pool (%d): every samples-passed report writes 1", r); return 0; }
     OQ.hreset(V.dev, OQ.pool, 0, OQ_N); atomic_store(&g_oq_ready, OQ_N);
     VLOG("occlusion queries: counted on the GPU (%s; a ring of %d; DM_VK_OCCLUSION=0: the constant 1)", OQ.precise ? "precise counts" : "not precise: a nonzero count for any sample", OQ_N);
     return g_oq = 1;
 }
-static void oq_rec(uint32_t q, uint32_t end) {
+static void oq_rec(uint32_t q, uint32_t end) {   // PEANUTS: in order with the encoder's calls: its query opcodes (#263)
     if (end) vk.vkCmdEndQuery(g_cb, OQ.pool, q);
     else vk.vkCmdBeginQuery(g_cb, OQ.pool, q, OQ.precise ? VK_QUERY_CONTROL_PRECISE_BIT : 0);
 }

@@ -148,7 +148,7 @@ typedef struct { CB_FIELD uint32_t v[5]; float f[4]; } r_val;               // t
 typedef struct { CB_FIELD VkPipelineBindPoint bp; VkPipelineLayout l; uint32_t set, n; const VkWriteDescriptorSet *w; } r_push;
 typedef struct { CB_FIELD uint32_t nb, na; const VkVertexInputBindingDescription2EXT *b; const VkVertexInputAttributeDescription2EXT *a; } r_vin;
 typedef struct { CB_FIELD VkPipelineLayout l; VkShaderStageFlags st; uint32_t o, n; const void *p; } r_pc;
-typedef struct { CB_FIELD VkQueryPool qp; uint32_t q; VkQueryControlFlags f; } r_qry;
+typedef struct { CB_FIELD VkQueryPool qp; uint32_t q; VkQueryControlFlags f; } r_qry;   // PEANUTS: query opcodes (#263)
 typedef struct { CB_FIELD void (*fn)(const void *); } r_call;   // a function of the replay's own, made in order with the calls (its argument bytes follow)
 
 static inline int mine(VkCommandBuffer cb) { return cb && cb == atomic_load_explicit(&g_ecb, memory_order_relaxed); }
@@ -356,7 +356,7 @@ static void VKAPI_CALL e_vkCmdPushConstants(VkCommandBuffer cb, VkPipelineLayout
     DIRECT(vkCmdPushConstants, cb, l, st, o, n, p);
     BEGIN(r_pc, E_vkCmdPushConstants, A8(n)); r->l = l; r->st = st; r->o = o; r->n = n; r->p = cpy(&at, p, n); END();
 }
-static void VKAPI_CALL e_vkCmdBeginQuery(VkCommandBuffer cb, VkQueryPool qp, uint32_t q, VkQueryControlFlags f) {
+static void VKAPI_CALL e_vkCmdBeginQuery(VkCommandBuffer cb, VkQueryPool qp, uint32_t q, VkQueryControlFlags f) {   // PEANUTS: query opcodes (#263)
     DIRECT(vkCmdBeginQuery, cb, qp, q, f); BEGIN(r_qry, E_vkCmdBeginQuery, 0); r->qp = qp; r->q = q; r->f = f; END();
 }
 static void VKAPI_CALL e_vkCmdEndQuery(VkCommandBuffer cb, VkQueryPool qp, uint32_t q) {
@@ -537,7 +537,7 @@ void vka_enc_switch(VkCommandBuffer cb) { atomic_store(&g_ecb, cb); flush_pub();
 // The pace line's view of the encoder: per frame, the time of each kind of call (from the timed sample) and their counts, since the last reading
 void vka_enc_pace(char *b, size_t n, double frames) {
     static uint64_t ln[E_N], lt[E_N], ltn[E_N];
-    enum { G_PUSH, G_DRAW, G_PIPE, G_VTX, G_SETS, G_STATE, G_PASS, G_BAR, G_COPY, G_DISP, G_QRY, G_OWN, G_N };
+    enum { G_PUSH, G_DRAW, G_PIPE, G_VTX, G_SETS, G_STATE, G_PASS, G_BAR, G_COPY, G_DISP, G_QRY, G_OWN, G_N };   // PEANUTS: query opcodes (#263)
     static const char *gn[G_N] = {"push descriptors", "draws", "pipelines", "vertex/index buffers", "sets+constants", "dynamic state", "passes", "barriers", "copies/clears", "dispatches", "queries", "part submits"};
     double ms[G_N] = {0}, cnt[G_N] = {0};
     uint64_t f; __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(f));
