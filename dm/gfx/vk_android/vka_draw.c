@@ -3507,6 +3507,13 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
     for (int i = 0; i < g_wk.n[5]; i++) { const vka_res *x = &g_wk.r[5][i];
         if (x->what == VKA_R_TEX && x->tid && x->desc != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && vka_tex_id_take_pending(x->tid)) vka_tex_id_take(x->tid, g_cb); }
     if (g_do_nk || g_do_all) dobj_note(sh[5]->key, g_wk.r[5], g_wk.n[5]);   // DM_VK_DISP_OBJ (g_do_nk -1: not read yet)
+    {   // PEANUTS: DM_NVN_WRITE_LOG: the compute shaders that bind a storage buffer over the logged guest range (they may write it), 64 lines
+        static uint64_t lo, hi; static int rd; static _Atomic int nl;
+        if (!rd) { const char *e = getenv("DM_NVN_WRITE_LOG"); char *q = NULL; if (e) { lo = strtoull(e, &q, 16); hi = lo + (q && *q == '+' ? strtoull(q + 1, NULL, 16) : 8); } rd = 1; }
+        if (hi) for (int i = 0; i < g_wk.n[5]; i++) { const vka_res *x = &g_wk.r[5][i];
+            if (x->what == VKA_R_BUF && x->desc == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && x->addr < hi && x->addr + x->size > lo && atomic_fetch_add(&nl, 1) < 64)
+                VLOG("write log: compute %016llx binds a storage buffer over it: binding %u, %#llx + %#llx (frame %llu)", (unsigned long long)sh[5]->key, x->binding, (unsigned long long)x->addr, (unsigned long long)x->size, (unsigned long long)vka_frame()); }
+    }
     p = img_retype(sh[5], &lay, p);
     {   // DM_VK_BIND_LOG=<hex key>[,…]: the binding records of those compute shaders' dispatches (the first 12 in all) (what each binding is bound to), to follow a pass's inputs and outputs
         const char *bl = getenv("DM_VK_BIND_LOG"); static _Atomic int nb; int hit = 0;
