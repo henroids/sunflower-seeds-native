@@ -434,8 +434,9 @@ static int tabpool_plan(const vka_shlib *L, const dmsh_vk_entry *e, vka_tabpool 
 static const tp_ent *tabpool_of(const vka_shlib *L, const dmsh_vk_entry *e) {
     static int env = -1; if (env < 0) { const char *q = getenv("DM_VK_TABLE_POOL"); env = !(q && q[0] == '0'); }
     if (!env || !e) return NULL;
+    static _Thread_local tp_ent tl;   // PEANUTS: what callers read: a copy made under the lock (a later entry's realloc moves g_tp)
     pthread_mutex_lock(&g_tpmu);
-    for (size_t i = 0; i < g_ntp; i++) if (g_tp[i].e == e) { const tp_ent *r = g_tp[i].b ? &g_tp[i] : NULL; pthread_mutex_unlock(&g_tpmu); return r; }   // (a linear scan of the entries with such arrays; a map if a game has tens of thousands)
+    for (size_t i = 0; i < g_ntp; i++) if (g_tp[i].e == e) { const tp_ent *r = NULL; if (g_tp[i].b) { tl = g_tp[i]; r = &tl; } pthread_mutex_unlock(&g_tpmu); return r; }   // (a linear scan of the entries with such arrays; a map if a game has tens of thousands)
     pthread_mutex_unlock(&g_tpmu);
     tp_ent n = {.e = e}; unsigned rec[16]; n.nt = tabpool_plan(L, e, n.t, rec);
     if (!n.nt) return NULL;   // (not remembered: the plan is a walk of its records)
@@ -468,7 +469,7 @@ static const tp_ent *tabpool_of(const vka_shlib *L, const dmsh_vk_entry *e) {
     tp_ent copy; if (r) copy = *r;
     pthread_mutex_unlock(&g_tpmu);
     if (!r) return NULL;
-    static _Thread_local tp_ent tl; tl = copy; return &tl;
+    tl = copy; return &tl;
 }
 // PEANUTS end
 // A library module's words. With the mesh draws drawn through compute (V.memu, vka_memu.c), a pixel shader of per-primitive inputs is only ever drawn behind the generated
