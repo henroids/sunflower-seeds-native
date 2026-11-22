@@ -25,9 +25,10 @@ int main(void) {
     CHECK((v = val(r, n, "DM_VK_SUBGROUP_GS")) && !strcmp(v, "0"), "Turnip: one-lane geometry subgroups");
     CHECK((v = val(r, n, "DM_VK_SHUFFLE_LDS")) && !strcmp(v, "1"), "Turnip: shuffles through workgroup memory");
     CHECK((v = val(r, n, "DM_VK_QUAD_SHFL")) && !strcmp(v, "1"), "Turnip: quad shuffles as quad operations");   // PEANUTS
+    CHECK((v = val(r, n, "DM_VK_CS_WARM")) && !strcmp(v, "1"), "Turnip: the compute warm-up");   // PEANUTS
     CHECK(!val(r, n, "DM_VK_MESH") && !val(r, n, "DM_VK_GS_FILL") && !val(r, n, "DM_VK_ONE_LANE") && !val(r, n, "DM_VK_OQ_SPLIT_PASS") && !val(r, n, "DM_VK_PREWARM"),
           "Turnip: no Qualcomm rule");
-    CHECK(n == 7, "Turnip: 7 rules, got %d", n);   // PEANUTS: 7 (DM_VK_QUAD_SHFL)
+    CHECK(n == 8, "Turnip: 8 rules, got %d", n);   // PEANUTS: 8 (DM_VK_QUAD_SHFL, DM_VK_CS_WARM)
 
     // Qualcomm's driver (512.800 or later), mesh draws through compute, profile with every key
     n = vka_auto_rules(&(vka_auto_in){.driver_id = VKA_DRV_QCOM, .mesh_ext = 1, .memu = 1, .vin_dyn_ext = 1, .prof_one_lane = 2, .prof_prepass_cut = 3, .prof_oq_split = 1}, r, 16);
@@ -47,7 +48,6 @@ int main(void) {
     // Qualcomm before 512.800: prewarm off, vertex input in the pipeline (only where the device has the dynamic state)
     n = vka_auto_rules(&(vka_auto_in){.driver_id = VKA_DRV_QCOM, .qcom_old = 1, .vin_dyn_ext = 1, .memu = 1}, r, 16);
     CHECK((v = val(r, n, "DM_VK_PREWARM")) && !strcmp(v, "0"), "old Qualcomm: no prewarm");
-    CHECK((v = val(r, n, "DM_VK_CS_WARM")) && !strcmp(v, "0"), "old Qualcomm: no compute warm-up");   // PEANUTS
     CHECK((v = val(r, n, "DM_VK_VIN_DYN")) && !strcmp(v, "0"), "old Qualcomm: vertex input dynamic state off");
     n = vka_auto_rules(&(vka_auto_in){.driver_id = VKA_DRV_QCOM, .qcom_old = 1, .memu = 1}, r, 16);
     CHECK(!val(r, n, "DM_VK_VIN_DYN"), "old Qualcomm without the extension: nothing to turn off");

@@ -484,7 +484,7 @@ DM_VK_CS_ASYNC_RETYPE	developer	Graphics			text			both
 DM_VK_CS_LANE	developer	Performance			text			both						
 DM_VK_CS_LANE_MEM_MB	developer	Performance			text			both						
 DM_VK_CS_SHARED_OVER	developer	Diagnostics			text			both						
-DM_VK_CS_WARM	developer	Performance			text		on; off with Qualcomm's driver before 512.800	both						
+DM_VK_CS_WARM	developer	Performance			text		1 on Turnip, 0 elsewhere; DM_VK_CS_WARM=1 forces it on	both						
 DM_VK_CS_WARM_MAX	developer	Performance			text			both						
 DM_VK_CS_WARM_STOP_MS	developer	Performance			text			both						
 DM_VK_DEVICE_FAULT	developer	Graphics			text			both						
