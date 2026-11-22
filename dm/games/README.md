@@ -184,12 +184,19 @@ One row per profile; the notes are each profile's `README.md`.
 | [Streets of Rage 4](0100EC9010258000/README.md) | `0100EC9010258000` | 1.0.9 | 9.3.1 | MonoGame (C# → C++ by BRUTE) | NVN |
 | [Subnautica](0100429011144000/README.md) | `0100429011144000` | 1.23.83358 | 13.3.5 | Unity 2019.4.36f1 IL2CPP, FMOD | NVN |
 | [Subnautica: Below Zero](010014C011146000/README.md) | `010014C011146000` | 1.23.55063 | 13.3.5 | Unity 2019.4.36f1 IL2CPP, FMOD | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario 3D World + Bowser's Fury](010028600EBDA000/README.md) | `010028600EBDA000` | 1.2.2 | 10.4.0 | Nintendo EPD (sead / agl, NintendoWare) | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Bros. Wonder](010015100B514000/README.md) | `010015100B514000` | 1.2.1 (and 1.0.0) | 16.2.12 (1.0.0: 16.2.0) | Nintendo EPD (sead / agl) | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Bros. Wonder - Nintendo Switch 2 Edition](040015100B514001/README.md) | `040015100B514001` | 1.2.1 (program 1) | 21.4.1 (Ounce) | Nintendo EPD (sead / agl) | NVN2 |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Galaxy](010099C022B96000/README.md) | `010099C022B96000` | 1.3.1 | 18.3.5 | NERD's Hagi Wii layer (recompiled PowerPC) | Vulkan |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Galaxy 2](0100FD8022DAA000/README.md) | `0100FD8022DAA000` | 1.4.0 | 18.3.5 | NERD's Hagi Wii layer (recompiled PowerPC) | Vulkan |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Odyssey](0100000000010000/README.md) | `0100000000010000` | 1.4.1 | 7.3.2 | Nintendo EPD (sead / agl, NintendoWare) | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Party Jamboree](0100965017338000/README.md) | `0100965017338000` | 2.3.0 | 17.5.9 | NintendoWare Bezel Engine 2.9 | NVN |
 | [Super Monkey Ball Banana Rumble](010031F019294000/README.md) | `010031F019294000` | 2.20 | 17.5.8 | Unity 2022.3.30f1 IL2CPP, CRIWARE, FMOD | NVN |
 | [SUPER ROBOT WARS Y](010063301BD50000/README.md) | `010063301BD50000` | 1.4.1 | 18.3.5 | Unity 2022.3.44f1 IL2CPP, CRIWARE | NVN |

@@ -263,3 +263,9 @@ dm/games/0100F7E00C70E000/vk_prewarm.bin	a prewarm seed list made by dm/tools/vk
 dm/games/010065301A2E0000/vk_prewarm.bin	a prewarm seed list made by dm/tools/vk_prewarm.py seed from this fork's runs on an AYN Thor (Turnip), 2026-11-22: binary, and tied to this host's pipeline key layout, so upstream's own seed for the game (it has none today) would replace it
 dm/games/01006000040C2000/vk_prewarm.bin	a prewarm seed list made by dm/tools/vk_prewarm.py seed from this fork's runs on an AYN Thor (Turnip), 2026-11-22: binary, and tied to this host's pipeline key layout, so upstream's own seed for the game (it has none today) would replace it
 dm/games/0100C49025D3E000/vk_prewarm.bin	a prewarm seed list made by dm/tools/vk_prewarm.py seed from this fork's runs on an AYN Thor (Turnip), 2026-11-21: binary, and tied to this host's pipeline key layout, so upstream's own seed for the game (it has none today) would replace it
+dm/games/010075101EF84000/shader_map.tsv	Generated shader key and offset map. Keep the shader input stamp reproducible.
+dm/games/010075101EF84000/shader_map.tsv.conflicts.tsv	Generated duplicate-key conflict log from shader_split.py for Stray.
+dm/games/010075101EF84000/shader_facts.tsv	Generated compute launch dimensions. Keep the shader input stamp reproducible.
+dm/games/010075101EF84000/shader_pairs.tsv	Generated vertex and pixel key pairs. Keep the shader input stamp reproducible.
+dm/games/010075101EF84000/pso_manifest.tsv	Generated prewarm seed list for Stray.
+dm/games/010075101EF84000/bf_want.tsv	Generated buffer-format table for Stray.
