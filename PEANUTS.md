@@ -373,3 +373,8 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   the canvas. Test `peanuts/tests/test_no_canvas_pointers.py` keeps such pointers out of Peanuts' code and notes.
   About › Licenses names Banana Native and Frame generation GPL-3.0-or-later, as the README, `android/NOTICE.md` and the LSFG folder's LICENSE.md do
   (it said GPL-3.0). Test `peanuts/tests/test_peanuts_cracked.py`.
+  Peanuts cracked takes its hours from the play-time ledger now (`dev.peanuts.launch.PlayTime`, `files/peanuts-playtime.tsv`, which came in 0.1.7):
+  what the ledger's total gained since the last look counts (`CrackedCount.fromLedger`), so a game's time counts only while it runs, and never while Build
+  prepares its shaders. 0.1.7 measured each run itself, from `last-exit.txt` to the process's end in Android's exit records; that is gone, and with it
+  the file read and the binder calls. On the first look after an update from 0.1.7 the ledger so far counts as counted (`seenAtFirstLook`), so no hour
+  counts twice. Tests `peanuts/tests/test_peanuts_cracked.py` (the rule on the JVM, the wiring).

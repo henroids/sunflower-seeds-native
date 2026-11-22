@@ -44,22 +44,31 @@ class Counting(unittest.TestCase):
         self.assertIn('Cracked.settle(x);', (UI / 'BottomScreen.java').read_text(encoding='utf-8'), 'play time is counted back in the launcher')
 
     def test_a_play_reads_nothing_at_its_tap(self):
-        # GameReturn.remember runs at every Play on the main thread: Cracked.starting reads the run record and asks Android for the processes on its
-        # worker, in order with the settles after it (#315's review); the Play's own time is taken at the tap
+        # GameReturn.remember runs at every Play on the main thread: Cracked.starting only hands the first start to its worker (#315's review)
         cracked = (UI / 'Cracked.java').read_text(encoding='utf-8')
         starting = cracked.split('public static void starting(Context c, String titleId) {')[1].split('\n    }\n')[0]
-        tap, worker = starting.split('BG.execute(() -> {')
-        self.assertIn('System.currentTimeMillis()', tap)
-        for read in ('settleNow(', 'started(', 'prefs(', 'record(', 'ended(', 'getRunningAppProcesses', 'getHistoricalProcessExitReasons'):
+        tap = starting.split('BG.execute(')[0]
+        self.assertIn('BG.execute(() -> started(app, titleId));', starting)
+        for read in ('settleNow(', 'started(', 'prefs(', 'PlayTime', 'state('):
             self.assertNotIn(read, tap, 'read at the Play: ' + read)
-        self.assertLess(worker.index('settleNow(app);'), worker.index('started(app, titleId);'))
-        self.assertLess(worker.index('started(app, titleId);'), worker.index('putString(RUN, noted)'), 'the run before is settled before this start is noted')
-        self.assertIn('BG = java.util.concurrent.Executors.newSingleThreadExecutor(', cracked, 'one worker: the settles keep their order')
+        self.assertIn('BG = java.util.concurrent.Executors.newSingleThreadExecutor(', cracked, 'one worker: the start and the settles keep their order')
         settle = cracked.split('public static void settle(Context c) {')[1].split('\n')[0]
         self.assertIn('BG.execute(() -> settleNow(app));', settle)
-        # the rule of which run counts is CrackedCount's (on the JVM above), Cracked only reads the record and Android's exit record
-        self.assertIn('CrackedCount.toCount(record(', cracked)
-        self.assertIn('played(c, CrackedCount.playedMs(run.start, end));', cracked)
+
+    def test_play_time_from_the_ledger(self):
+        # The play time is #282's ledger's (dev.peanuts.launch.PlayTime: counted only while a game runs, not while Build prepares its shaders): what its
+        # total gained since the last look, the rule on the JVM above. Peanuts cracked no longer measures runs itself: no run record, no process list
+        cracked = (UI / 'Cracked.java').read_text(encoding='utf-8')
+        now = cracked.split('private static synchronized void settleNow(Context c) {')[1].split('\n    }\n')[0]
+        self.assertIn('dev.peanuts.launch.PlayLedger.total(dev.peanuts.launch.PlayTime.all(c))', now)
+        self.assertIn('CrackedCount.seenAtFirstLook(p.contains(OLD_RUN) || p.contains(OLD_SETTLED), total)', now, "0.1.7's own measure: no hour twice")
+        self.assertIn('long add = CrackedCount.fromLedger(seen, total);', now)
+        for gone in ('last-exit.txt', 'getHistoricalProcessExitReasons', 'getRunningAppProcesses', 'ActivityManager', 'toCount', 'putString(RUN'):
+            self.assertNotIn(gone, cracked)
+        play = (PEANUTS / 'launch/PlayTime.java').read_text(encoding='utf-8')
+        self.assertIn('public static Map<String, PlayLedger.Entry> all(Context c) { return PlayLedger.parse(read(file(c))); }', play)
+        self.assertIn('return new File(c.getFilesDir(), "peanuts-playtime.tsv");', play)
+        self.assertIn('public static long total(Map<String, Entry> m) {', (PEANUTS / 'launch/PlayLedger.java').read_text(encoding='utf-8'))
 
     def test_the_old_count_carries_over(self):
         prefs = (UP / 'Prefs.java').read_text(encoding='utf-8')

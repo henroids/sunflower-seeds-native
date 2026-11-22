@@ -414,7 +414,7 @@ Most supported games run at 60 fps on the Thor. Animal Crossing: New Horizons ru
 
 ### What is Peanuts cracked?
 
-The count on Settings › **About**. A peanut cracks open each time you tap one on the drifting background, and the count also grows as you use the app: 25 for building a game version you had not built before, 1 for every 1,000 shaders that build prepared, 5 for every hour you play, 10 for a game's first start and 5 for your first own Mii. Building the same version again (**Import again**, **Rebuild**) adds nothing. The bananas you popped before are part of it. On a dual-screen device the second screen shows the count and the next milestone while About is open.
+The count on Settings › **About**. A peanut cracks open each time you tap one on the drifting background, and the count also grows as you use the app: 25 for building a game version you had not built before, 1 for every 1,000 shaders that build prepared, 5 for every hour you play (the time a game's **Played** row shows, which counts only while the game runs), 10 for a game's first start and 5 for your first own Mii. Building the same version again (**Import again**, **Rebuild**) adds nothing. The bananas you popped before are part of it. On a dual-screen device the second screen shows the count and the next milestone while About is open.
 
 ### How do I find a setting?
 

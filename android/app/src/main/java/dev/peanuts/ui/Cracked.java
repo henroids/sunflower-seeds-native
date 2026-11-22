@@ -66,67 +66,38 @@ public final class Cracked {
 
     // ---- Play time ----
 
-    private static final String RUN = "cracked_run", SETTLED = "cracked_settled";
-    /** One worker, in order: a Play's settling and noting, then every settle after it (back in the launcher, About) */
+    /** The ledger's total already counted (ms); and the keys of 0.1.7's own measure of each run, read once to tell an update from a fresh install */
+    private static final String SEEN = "cracked_play_seen", OLD_RUN = "cracked_run", OLD_SETTLED = "cracked_settled";
+    /** One worker, in order: a Play's first start, then every settle after it (back in the launcher, About) */
     private static final java.util.concurrent.Executor BG = java.util.concurrent.Executors.newSingleThreadExecutor(r -> new Thread(r, "peanuts-cracked"));
 
     /**
-     * The launcher starts a game (GameReturn.remember: Home's Play, a shortcut, a frontend): the run before it is settled (its play time counted), the
-     * title's first start counts, and this start is noted, so the record the game's screen writes is known as a player's run (a build's shader capture
-     * writes one too, and is not). Reading the record and asking Android for the processes happen on the worker, not at the Play's tap (igawa6's note on
-     * #315); the Play's time is taken here. Should the game's screen write its record before the worker gets to it, that record counts nothing until its
-     * start is noted (CrackedCount.toCount), and the run before it was settled when the launcher came back, before this Play
+     * The launcher starts a game (GameReturn.remember: Home's Play, a shortcut, a frontend): the title's first start counts. On the worker, not at the
+     * Play's tap (igawa6's note on #315: the preferences, and before the play-time ledger a file and Android's process lists, were read there)
      */
     public static void starting(Context c, String titleId) {
         Context app = c.getApplicationContext();
-        String noted = titleId.toUpperCase(java.util.Locale.ROOT) + "@" + System.currentTimeMillis();
-        BG.execute(() -> {
-            settleNow(app);
-            started(app, titleId);
-            prefs(app).edit().putString(RUN, noted).apply();
-        });
+        BG.execute(() -> started(app, titleId));
     }
 
-    /** Back in the launcher (or About shows): a run that has ended is counted, off the main thread */
+    /** Back in the launcher (or About shows): the play time the ledger gained since the last look is counted, off the main thread */
     public static void settle(Context c) { Context app = c.getApplicationContext(); BG.execute(() -> settleNow(app)); }
 
     /**
-     * The game's run record (files/last-exit.txt: title, pid, start, written by its screen) against the start noted above (CrackedCount.toCount): once its
-     * process has ended, the time from its start to the process's end (Android's exit record of that pid) is played time, at most six hours a run (a game
-     * left in the background keeps its process). Counted once per run. On the worker only: it reads a file and asks Android
+     * The play time is the play-time ledger's (dev.peanuts.launch.PlayTime, files/peanuts-playtime.tsv: each game's time, counted only while it runs, not
+     * while Build prepares its shaders, written by the game's process every 15 s and when it stops): what its total gained since the last look counts
+     * (CrackedCount.fromLedger). 0.1.7's Peanuts cracked measured each run itself; on the first look after that, the ledger counts as counted so far
+     * (CrackedCount.seenAtFirstLook), so no hour counts twice. On the worker only: it reads the ledger's file
      */
     private static synchronized void settleNow(Context c) {
         SharedPreferences p = prefs(c);
-        CrackedCount.Run run = CrackedCount.toCount(record(new java.io.File(c.getFilesDir(), "last-exit.txt")), p.getString(RUN, null), p.getString(SETTLED, null));
-        if (run == null) return;
-        long end = ended(c, run.pid);
-        if (end <= 0) return;   // still running, or not known yet
-        p.edit().putString(SETTLED, run.key).apply();
-        played(c, CrackedCount.playedMs(run.start, end));
-    }
-
-    /** When the process of that pid ended (Android's exit record), 0 when it runs or Android has no record of it */
-    private static long ended(Context c, int pid) {
-        android.app.ActivityManager am = c.getSystemService(android.app.ActivityManager.class);
-        if (am == null) return 0;
-        java.util.List<android.app.ActivityManager.RunningAppProcessInfo> running = am.getRunningAppProcesses();
-        if (running != null) for (android.app.ActivityManager.RunningAppProcessInfo r : running) if (r.pid == pid) return 0;
-        try {
-            for (android.app.ApplicationExitInfo e : am.getHistoricalProcessExitReasons(c.getPackageName(), pid, 1)) if (e.getPid() == pid) return e.getTimestamp();
-        } catch (RuntimeException ignored) { /* no record */ }
-        return 0;
-    }
-
-    private static java.util.Map<String, String> record(java.io.File f) {
-        java.util.Map<String, String> out = new java.util.HashMap<>();
-        if (!f.isFile()) return out;
-        try {
-            for (String line : new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8).split("\n")) {
-                int eq = line.indexOf('=');
-                if (eq > 0) out.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());   // a later line wins (state=..., log=...)
-            }
-        } catch (java.io.IOException ignored) { /* no record */ }
-        return out;
+        long total = dev.peanuts.launch.PlayLedger.total(dev.peanuts.launch.PlayTime.all(c));
+        boolean first = !p.contains(SEEN);
+        long seen = first ? CrackedCount.seenAtFirstLook(p.contains(OLD_RUN) || p.contains(OLD_SETTLED), total) : p.getLong(SEEN, 0);
+        if (!first && seen == total) return;
+        p.edit().putLong(SEEN, total).remove(OLD_RUN).remove(OLD_SETTLED).apply();
+        long add = CrackedCount.fromLedger(seen, total);
+        if (add > 0) played(c, add);
     }
 
     /** The player saved a Mii of their own */

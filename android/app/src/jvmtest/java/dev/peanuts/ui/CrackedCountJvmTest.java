@@ -45,41 +45,18 @@ public final class CrackedCountJvmTest {
         eq(0, CrackedCount.played(s, -5));
         eq(points + 15, s.points);
 
-        // which run to count (CrackedCount.toCount): the game's run record against the start the launcher noted at its Play
-        java.util.Map<String, String> rec = new java.util.HashMap<>();
-        rec.put("title", "0100F2C0115B6000");
-        rec.put("start", "1000000");
-        rec.put("pid", "4242");
-        CrackedCount.Run run = CrackedCount.toCount(rec, "0100f2c0115b6000@1000500", null);
-        eq("0100F2C0115B6000@1000000 1000000 4242", run.key + " " + run.start + " " + run.pid);
-        eq(null, CrackedCount.toCount(rec, "0100F2C0115B6000@1000500", run.key));   // counted once
-        eq(null, CrackedCount.toCount(rec, null, null));                            // no Play noted
-        eq(null, CrackedCount.toCount(rec, "0100F2C0115B6000@" + (1_000_000 + CrackedCount.RUN_MATCH_MS + 1), null));   // a build's shader capture
-        eq(null, CrackedCount.toCount(rec, "01006BB00C6F0000@1000500", null));      // another game was played
-        eq(null, CrackedCount.toCount(new java.util.HashMap<>(), "0100F2C0115B6000@1000500", null));   // no record yet
-        java.util.Map<String, String> bad = new java.util.HashMap<>(rec);
-        bad.put("pid", "-");
-        eq(null, CrackedCount.toCount(bad, "0100F2C0115B6000@1000500", null));
-        eq(null, CrackedCount.toCount(rec, "garbage", null));
-
-        // read late, on the worker: the next game's screen already wrote its record when the Play before it is settled. That record is not counted
-        // (its start is not the one noted), and the next settle, with its own start noted, counts it once
-        java.util.Map<String, String> next = new java.util.HashMap<>();
-        next.put("title", "01006BB00C6F0000");
-        next.put("start", "9000000");
-        next.put("pid", "5151");
-        eq(null, CrackedCount.toCount(next, "0100F2C0115B6000@1000500", run.key));
-        eq("01006BB00C6F0000@9000000", CrackedCount.toCount(next, "01006BB00C6F0000@9000020", run.key).key);
-        // the same game again within two minutes: the record matches, and its process, still running, keeps it from counting until it ends
-        next.put("title", "0100F2C0115B6000");
-        next.put("start", "1060000");
-        CrackedCount.Run again = CrackedCount.toCount(next, "0100F2C0115B6000@1000500", run.key);
-        eq("0100F2C0115B6000@1060000 5151", again.key + " " + again.pid);
-
-        // a run's time: from its start to its process's end, never below 0, at most six hours
-        eq(18 * 60_000L, CrackedCount.playedMs(1_000_000, 1_000_000 + 18 * 60_000L));
-        eq(0, CrackedCount.playedMs(1_000_000, 900_000));
-        eq(6 * 3_600_000L, CrackedCount.playedMs(0, 30 * 3_600_000L));
+        // PEANUTS: play time from the play-time ledger: what its total gained since the last look
+        eq(0, CrackedCount.fromLedger(0, 0));
+        eq(18 * 60_000L, CrackedCount.fromLedger(3_600_000L, 3_600_000L + 18 * 60_000L));
+        eq(0, CrackedCount.fromLedger(5_000_000L, 4_000_000L));   // a smaller ledger (a game's line gone): nothing, and the new start
+        // the first look: a fresh install counts the whole ledger; after 0.1.7's own measure, the ledger so far was counted already
+        eq(0, CrackedCount.seenAtFirstLook(false, 7_200_000L));
+        eq(7_200_000L, CrackedCount.seenAtFirstLook(true, 7_200_000L));
+        eq(0, CrackedCount.fromLedger(CrackedCount.seenAtFirstLook(true, 7_200_000L), 7_200_000L));
+        eq(2 * 3_600_000L, CrackedCount.fromLedger(CrackedCount.seenAtFirstLook(false, 7_200_000L), 7_200_000L));
+        CrackedCount.State ledger = new CrackedCount.State();
+        eq(10, CrackedCount.played(ledger, CrackedCount.fromLedger(0, 2 * 3_600_000L + 59 * 60_000L)));   // two whole hours, 59 minutes carried
+        eq(5, CrackedCount.played(ledger, CrackedCount.fromLedger(2 * 3_600_000L + 59 * 60_000L, 3 * 3_600_000L)));
 
         // firsts: a game's first start, the first own Mii, once each
         eq(10, CrackedCount.started(s, "0100F2C0115B6000"));
