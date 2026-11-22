@@ -2067,3 +2067,15 @@ Tests: the `t_android_*` suite (`t_android_spvpatch` extended), NDK syntax compi
 | `dm/gfx/vk_android/vka_tex.c` | 7 | `g_first_copy_src`; `storage_mode`'s `copy_src` and `dirty_first` (a block-compressed texture still empty at its first use, and after the `ST_FILL` case any other); `first_mode` passes it; `vka_tex_get_src` | `// PEANUTS:`, `// PEANUTS begin`/`end` |
 
 Tests: the `t_android_*` suite, NDK syntax compiles of the changed files. Upstream candidate: yes, for the Vulkan replay.
+
+### Round 54, the steady clock anchored: one real-time reading a run, then the boot-time clock (2026-11-22, the review of PR #336, PR #365)
+
+Round 51 (PR #336, the steady clock runs through sleep and restarts) made the steady clock the host's `CLOCK_REALTIME`. That clock steps when Android corrects the phone's clock from the network or the carrier, backwards too, and a span between two steady time points of one run could then come out negative, which a Switch never gives. As igawa6 asked in the review: the real-time clock is read once a run, at the first call, and advanced by `CLOCK_BOOTTIME`, which only goes forward and counts deep sleep (Apple: `CLOCK_MONOTONIC`, which counts sleep there). Within a run both clocks are monotonic and count sleep; across runs they carry on through the real time each run starts from, and a correction reaches the game at its next start.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_time.c` | 4 | `HOST_SLEEP_CLOCK`, `rt_anchor` and `host_rt_ns` (`pthread_once`); `user_clock_init` and `user_clock` read `host_rt_ns`; the context comment | `PEANUTS` (begin/end span and per-line) |
+| `dm/host/tests/t_peanuts_time.c` | 6 | the boot-time clock among the stand-ins; case 8: the phone's clock 10 minutes back and 20 minutes forward while a run goes on | Peanuts' own file (Round 51) |
+| `docs/reference/services.md` | 1 | the anchor in "The steady clock runs through sleep and restarts" | inside its `PEANUTS` span |
+
+Tests: `make GAME=<id> peanuts-time` (Linux, gcc): 31 checks pass; the same test against the unanchored `hle_time.c` fails 3, a span of −595 s for the 5 s that passed.

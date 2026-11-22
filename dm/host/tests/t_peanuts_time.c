@@ -8,6 +8,8 @@
 //   5. a snapshot of the old monotonic steady clock (source "dmhost-steady-01"): a span to it is unknown, no user clock change;
 //   6. a snapshot's user time is its context's offset plus its steady time point (one reading); DM_FIXED_TIME stays fixed;
 //   7. two runs whose clocks sit at other points within the second: no user clock change (two readings came out a second apart, which the game also warns about);
+//   8. the phone's clock corrected back (or forward) while the game runs: no negative span, no user clock change (the follow-up of PR #336: the real-time clock
+//      is read once a run and advanced by the boot-time clock, which counts sleep and never goes back);
 //   9. the first reads of the user clock from eight threads at once all carry the custom time's offset.
 // make GAME=<id> peanuts-time (part of peanuts-host). No game files.
 #include "../hle.h"
@@ -18,9 +20,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-// The host's clocks: seconds the test sets (real time) and moves (monotonic: stops while the phone sleeps, starts again at a restart)
-static int64_t g_rt = 1795251429, g_mono = 31523, g_rt_sub, g_mono_sub;   // seconds, and nanoseconds within the second
-uint64_t plat_clock_ns(clockid_t c) { return c == CLOCK_REALTIME ? (uint64_t)g_rt * 1000000000ull + g_rt_sub : (uint64_t)g_mono * 1000000000ull + g_mono_sub; }
+// The host's clocks: seconds the test sets (real time) and moves (monotonic: stops while the phone sleeps, starts again at a restart; boot time: counts sleep,
+// starts again at a restart)
+static int64_t g_rt = 1795251429, g_mono = 31523, g_boot = 31523, g_rt_sub, g_mono_sub;   // seconds, and nanoseconds within the second
+uint64_t plat_clock_ns(clockid_t c) {
+    if (c == CLOCK_REALTIME) return (uint64_t)g_rt * 1000000000ull + g_rt_sub;
+    if (c == CLOCK_BOOTTIME) return (uint64_t)g_boot * 1000000000ull + g_mono_sub;
+    return (uint64_t)g_mono * 1000000000ull + g_mono_sub;
+}
 uint64_t guest_ns(void) { return (uint64_t)g_mono * 1000000000ull + g_mono_sub; }   // the guest ticks run on the monotonic clock (hle_os.c now_ns)
 
 static int checks, failed;
@@ -32,7 +39,7 @@ static void put64(uint8_t *s, int off, int64_t v) { memcpy(s + off, &v, 8); }
 static void run(int64_t rt, int64_t mono, const char *env, uint8_t *out) {
     pid_t p = fork();
     if (!p) {
-        g_rt = rt; g_mono = mono;
+        g_rt = rt; g_mono = mono; g_boot = mono;
         if (env) putenv((char *)env);
         _exit(h_time_AdjSnapshot(out) == RES_OK ? 0 : 1);
     }
@@ -66,9 +73,9 @@ int main(void) {
         pid_t p = fork();
         if (!p) {
             uint8_t *x = snap + 0x300, *y = snap + 0x400;
-            g_rt = 1795300000; g_mono = 5000;
+            g_rt = 1795300000; g_mono = g_boot = 5000;
             h_time_AdjSnapshot(x);
-            g_rt += 3 * 3600;
+            g_rt += 3 * 3600; g_boot += 3 * 3600;   // asleep: the monotonic clock stands still
             h_time_AdjSnapshot(y);
             _exit(0);
         }
@@ -90,9 +97,9 @@ int main(void) {
         pid_t p = fork();
         if (!p) {
             uint8_t x[0xd0], y[0xd0]; int bad = 0, o;
-            putenv("DM_TIME=2026-11-22T12:00"); g_rt = 1795300000; g_mono = 100;
+            putenv("DM_TIME=2026-11-22T12:00"); g_rt = 1795300000; g_mono = g_boot = 100;
             h_time_AdjSnapshot(x);
-            g_rt += 5 * 3600;   // 5 h of sleep in the same run
+            g_rt += 5 * 3600; g_boot += 5 * 3600;   // 5 h of sleep in the same run
             h_time_AdjSnapshot(y);
             bad |= get64(y, 0x40) - get64(x, 0x40) != 5 * 3600;   // DM_TIME's clock runs with the host's, sleep included
             bad |= h_time_UserDiff(x, y) != 0;                      // and its offset stays: no new change
@@ -118,12 +125,33 @@ int main(void) {
     // 7. No sleep, the host clock 0.8 s ahead of the monotonic one within the second: read at .9 / .1 and, 100.3 s later, at .2 / .4 (the Thor's two runs said -1 s)
     {
         pid_t p = fork();
-        if (!p) { g_rt = 1795400000; g_rt_sub = 900000000; g_mono = 31523; g_mono_sub = 100000000; _exit(h_time_AdjSnapshot(a) != RES_OK); }
+        if (!p) { g_rt = 1795400000; g_rt_sub = 900000000; g_mono = g_boot = 31523; g_mono_sub = 100000000; _exit(h_time_AdjSnapshot(a) != RES_OK); }
         int st = 0; waitpid(p, &st, 0);
         p = fork();
-        if (!p) { g_rt = 1795400101; g_rt_sub = 200000000; g_mono = 31623; g_mono_sub = 400000000; _exit(h_time_AdjSnapshot(b) != RES_OK); }
+        if (!p) { g_rt = 1795400101; g_rt_sub = 200000000; g_mono = g_boot = 31623; g_mono_sub = 400000000; _exit(h_time_AdjSnapshot(b) != RES_OK); }
         waitpid(p, &st, 0);
         CHECK(h_time_UserDiff(a, b) == 0, "the clocks' phases within the second are no user clock change (was %lld s)", (long long)h_time_UserDiff(a, b) / 1000000000);
+    }
+
+    // 8. While the game runs, Android corrects the phone's clock: 10 minutes back after 5 s, then 20 minutes forward after 5 s more
+    {
+        pid_t p = fork();
+        if (!p) {
+            uint8_t *x = snap + 0x300, *y = snap + 0x400, *z = snap + 0x500;
+            g_rt = 1795500000; g_rt_sub = 0; g_mono = g_boot = 9000; g_mono_sub = 0;
+            h_time_AdjSnapshot(x);
+            g_rt += 5 - 600; g_mono += 5; g_boot += 5;
+            h_time_AdjSnapshot(y);
+            g_rt += 5 + 1200; g_mono += 5; g_boot += 5;
+            h_time_AdjSnapshot(z);
+            _exit(0);
+        }
+        int st = 0; waitpid(p, &st, 0);
+        uint8_t *x = snap + 0x300, *y = snap + 0x400, *z = snap + 0x500;
+        CHECK(span_s(x, y, &ok) == 5 && ok, "the clock set 10 minutes back: the span is the 5 s that passed, not negative (was %lld s)", (long long)span_s(x, y, &ok));
+        CHECK(span_s(y, z, &ok) == 5 && ok, "the clock set 20 minutes forward: the span is the 5 s that passed");
+        CHECK(h_time_UserDiff(x, y) == 0 && h_time_UserDiff(y, z) == 0, "and no user clock change");
+        CHECK(get64(y, 0x40) - get64(x, 0x40) == 5 && get64(z, 0x40) - get64(y, 0x40) == 5, "the user clock runs on with the steady clock within the run");
     }
 
     // 9. The first reads of the user clock from several threads at once: every one sees the custom time's offset (the mode is never read before its offset)

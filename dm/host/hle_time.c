@@ -27,6 +27,22 @@ static int64_t fixed_time(void) {
 // passed. The source ID is new: time points of the monotonic steady clock belong to another clock, and a span to them is unknown, as after an RTC reset
 #define STEADY_SOURCE "dmhost-steady-02"
 // PEANUTS end
+// PEANUTS begin: the real-time clock read once, at the first call of a run, then advanced by the clock that counts sleep (follow-up of issue #329, asked for in
+// the review of PR #336). CLOCK_REALTIME itself steps when Android corrects the phone's clock (network or carrier time), backwards too, and a span between two
+// steady time points of one run then came out negative, which a Switch's steady clock never gives. CLOCK_BOOTTIME only goes forward and counts deep sleep; it
+// starts again at a reboot, which is a new run and a new anchor. So within a run the steady clock and the user clock are monotonic and count sleep, and across
+// runs they carry on through the real time each run starts from. A correction of the phone's clock reaches the game at its next start, as time that passed.
+// Apple has no CLOCK_BOOTTIME; its CLOCK_MONOTONIC counts sleep
+#ifdef CLOCK_BOOTTIME
+#define HOST_SLEEP_CLOCK CLOCK_BOOTTIME
+#else
+#define HOST_SLEEP_CLOCK CLOCK_MONOTONIC
+#endif
+static int64_t g_rt_anchor, g_sleep_anchor;
+static pthread_once_t g_anchor_once = PTHREAD_ONCE_INIT;
+static void rt_anchor(void) { g_rt_anchor = (int64_t)plat_clock_ns(CLOCK_REALTIME); g_sleep_anchor = (int64_t)plat_clock_ns(HOST_SLEEP_CLOCK); }
+static int64_t host_rt_ns(void) { pthread_once(&g_anchor_once, rt_anchor); return g_rt_anchor + ((int64_t)plat_clock_ns(HOST_SLEEP_CLOCK) - g_sleep_anchor); }
+// PEANUTS end
 // DM_TIME=YYYY-MM-DDTHH:MM[:SS] / DM_TIME_OFFSET=<±seconds>: a custom user clock, as Eden's "set the time" does. The clock runs from
 // there instead of the host's: DM_TIME starts it there (it advances as much as the host clock does), DM_TIME_OFFSET
 // follows the host clock at that offset. DM_FIXED_TIME= keeps precedence (a replay needs the same calendar time every run).
@@ -34,7 +50,7 @@ static int64_t fixed_time(void) {
 static int uc_mode = -1; static int64_t uc_arg;   // -1 host clock, 0 offset (DM_TIME_OFFSET, or DM_TIME's start minus the host clock at the first call)   // PEANUTS
 // PEANUTS: set once under pthread_once, so a thread that comes second never reads the mode before its offset (issue #329)
 static void user_clock_init(void) {
-    int64_t now_ns = (int64_t)plat_clock_ns(CLOCK_REALTIME);   // PEANUTS
+    int64_t now_ns = host_rt_ns();   // PEANUTS: the anchored real-time clock (PR #365)
     const char *of = getenv("DM_TIME_OFFSET"), *t = getenv("DM_TIME");
     int mode = -1; int64_t arg = 0;   // PEANUTS
     if (of && *of) { mode = 0; arg = (int64_t)strtoll(of, NULL, 0); LOG("DM_TIME_OFFSET=%lld: the user clock runs %+lld s off the host clock", (long long)arg, (long long)arg); }
@@ -54,7 +70,7 @@ static void user_clock_init(void) {
 }
 static void user_clock(int64_t *sec, int64_t *nsec, int64_t *steady) {
     static pthread_once_t once = PTHREAD_ONCE_INIT; pthread_once(&once, user_clock_init);   // PEANUTS
-    int64_t now_ns = (int64_t)plat_clock_ns(CLOCK_REALTIME);   // PEANUTS: the one reading (issue #329)
+    int64_t now_ns = host_rt_ns();   // PEANUTS: the one reading (issue #329), of the anchored real-time clock (its follow-up)
     // PEANUTS: the user clock and the steady clock from the one reading (issue #329)
     *steady = now_ns / 1000000000;
     *sec = now_ns / 1000000000 + (uc_mode == 0 ? uc_arg : 0); *nsec = now_ns % 1000000000;
@@ -103,6 +119,7 @@ HLE_FORCE("_ZN2nn4time37GetStandardSteadyClockCurrentTimespecEP8timespec", "C li
 // The SDK reads it from the time service's shared memory, which the host never opens: it returns 0x74 and writes nothing. Unity's DateTime.UtcNow (Engage main+0x4ad40c; Ace Attorney Investigations
 // 1&2 per PR #14) then never starts its clock and reads 0001-01-01. Unity takes its time from GetCurrentTime plus system ticks and only compares the context to notice the clock being set, so like a
 // Switch's it stays the same until the host clock moves against the guest ticks by more than a second (clock set by hand, a sleep mach_absolute_time did not count); with DM_FIXED_TIME it is made once
+// PEANUTS: the host clock here is the anchored one (host_rt_ns), which a set of the device's clock does not move within a run; a sleep, which the guest ticks do not count, still renews it
 HLE_FORCE("_ZN2nn4time23StandardUserSystemClock21GetSystemClockContextEPNS0_18SystemClockContextE", "user clock context from the time service; the host's user clock over its steady clock, renewed when the host clock is set",
           Result, h_time_GetContext, uint8_t *out) {
     static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER; static uint8_t ctx[0x20]; static int64_t drift; static int made;

@@ -349,3 +349,6 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   played (a run's time from its start to its process's end, at most 6 h), 10 for a game's first start and 5 for the first own Mii (`dev.peanuts.ui.Cracked`,
   `CrackedCount`). A tapped background peanut cracks open (`Crack`) instead of bursting. `PrepareCover`'s peanut is `PeanutArt` now, shared by all three.
   UPSTREAM-EDITS Round 45; test `peanuts/tests/test_peanuts_cracked.py`.
+- 2026-11-22 (the review of PR #336): the steady and the user clock read the real-time clock once a run and advance it with `CLOCK_BOOTTIME`, so a correction of
+  the phone's clock (network or carrier time) can no longer make a span within a run negative; it reaches the game at its next start. `hle_time.c` `host_rt_ns`;
+  `t_peanuts_time` case 8. UPSTREAM-EDITS Round 54.
