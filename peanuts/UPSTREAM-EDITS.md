@@ -1990,3 +1990,16 @@ Tests: `t_android_spvpatch`; the game's 28 shuffle pixel shaders rewritten and v
 | `android/app/src/main/java/dev/nxnative/android/CheatsUi.java` | 1 | `PICK_FILE`, `PICK_ZIP`, `CREATE_ZIP` = 80, 81, 82 | `// PEANUTS:` |
 
 Tests: `peanuts/tests` (the JVM tests). Upstream candidate: yes.
+
+### Host emulation hardening for 0.1.7 (2026-11-22)
+
+Fixes found reviewing the 0.1.7 host changes before the release.
+
+The steady clock never goes back (issue #329's follow-up). Since round 51 the steady clock is the host's real-time clock, which Android can set back while a game runs (network time). The steady seconds are now the real-time seconds plus a per-run correction that grows by each step back, so they stay where they were and run on; the user clock keeps following the real-time clock, so the step is one change of the user clock context's offset, as a user clock set back on a Switch. The context is also made again when its offset changes, so a step of one second (below the guest-tick rule) still gives a context that matches the user time.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_time.c` | 3 | `steady_of` and its call in `user_clock`; `GetSystemClockContext` reads under its lock and renews the context on a new offset | `PEANUTS` (begin/end span and per-line) |
+| `dm/host/tests/t_peanuts_time.c` | 2 | case 8: the host clock set back 30 s and 1 s during a run, then a later run | `PEANUTS` in its header |
+
+Tests: `make GAME=<id> peanuts-time`: 37 checks pass; case 8 fails 4 against the previous `hle_time.c`. Upstream candidate: yes, with round 51.

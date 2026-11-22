@@ -7,7 +7,8 @@
 //   4. a custom time (DM_TIME_OFFSET, DM_TIME) is a user clock change, the same in every snapshot of its run, and its clock runs with the host's;
 //   5. a snapshot of the old monotonic steady clock (source "dmhost-steady-01"): a span to it is unknown, no user clock change;
 //   6. a snapshot's user time is its context's offset plus its steady time point (one reading); DM_FIXED_TIME stays fixed;
-//   7. two runs whose clocks sit at other points within the second: no user clock change (two readings came out a second apart, which the game also warns about).
+//   7. two runs whose clocks sit at other points within the second: no user clock change (two readings came out a second apart, which the game also warns about);
+//   8. the host clock set back while the game runs (Android corrects it): the steady clock never goes back, the step is one user clock change, the context is made again.
 // make GAME=<id> peanuts-time (part of peanuts-host). No game files.
 #include "../hle.h"
 #undef HLE_FORCE_BIG
@@ -122,6 +123,35 @@ int main(void) {
         if (!p) { g_rt = 1795400101; g_rt_sub = 200000000; g_mono = 31623; g_mono_sub = 400000000; _exit(h_time_AdjSnapshot(b) != RES_OK); }
         waitpid(p, &st, 0);
         CHECK(h_time_UserDiff(a, b) == 0, "the clocks' phases within the second are no user clock change (was %lld s)", (long long)h_time_UserDiff(a, b) / 1000000000);
+    }
+
+    // 8. The host clock goes back 30 s while the game runs, then 1 s more (the network time corrects it), and runs on 10 s; a later run starts without the step
+    {
+        uint8_t *x = snap + 0x500, *y = snap + 0x600, *z = snap + 0x700, *w = snap + 0x800, *v = snap + 0x900;
+        pid_t p = fork();
+        if (!p) {
+            g_rt = 1795500000; g_mono = 7000; g_rt_sub = g_mono_sub = 0;
+            h_time_AdjSnapshot(x);
+            g_rt -= 30; g_mono += 1;
+            h_time_AdjSnapshot(y);
+            g_rt -= 1;   // a step of one second, below the guest-tick rule's
+            h_time_AdjSnapshot(z);
+            g_rt += 10; g_mono += 10;
+            h_time_AdjSnapshot(w);
+            _exit(0);
+        }
+        int st = 0; waitpid(p, &st, 0);
+        CHECK(get64(y, 0x90) >= get64(x, 0x90) && get64(z, 0x90) >= get64(y, 0x90), "the steady clock never goes back (%lld, %lld, %lld)", (long long)get64(x, 0x90), (long long)get64(y, 0x90), (long long)get64(z, 0x90));
+        CHECK(span_s(x, y, &ok) == 0 && ok, "the span over the step back is 0, not negative");
+        CHECK(get64(y, 0x40) - get64(x, 0x40) == -30, "the user clock went back 30 s");
+        CHECK(h_time_UserDiff(x, y) == -30ll * 1000000000, "the step back is a user clock change of -30 s (was %lld s)", (long long)h_time_UserDiff(x, y) / 1000000000);
+        CHECK(h_time_UserDiff(y, z) == -1ll * 1000000000, "a step back of one second is a change of -1 s too (was %lld s)", (long long)h_time_UserDiff(y, z) / 1000000000);
+        CHECK(get64(z, 0x40) == get64(z, 0x00) + get64(z, 0x90), "after the steps, user time = context offset + steady time point");
+        CHECK(h_time_UserDiff(z, w) == 0 && span_s(z, w, &ok) == 10 && ok, "then both clocks run on together: no change, a span of 10 s");
+        CHECK(get64(w, 0x40) == get64(w, 0x00) + get64(w, 0x90), "and the context still matches");
+        run(1795500000 - 31 + 600, 9000, NULL, v);
+        CHECK(get64(v, 0x00) == 0, "a later run's context has offset 0 again (the correction belongs to the run)");
+        CHECK(h_time_UserDiff(x, v) == 0, "between the run before the step and a later run: no user clock change");
     }
 
     printf("peanuts time: %d checks, %d failed\n", checks, failed);

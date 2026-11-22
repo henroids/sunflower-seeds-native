@@ -26,6 +26,22 @@ static int64_t fixed_time(void) {
 // changes only when a custom time is set or changed, which games are meant to see. Changing the phone's own clock moves both, so a game counts it as time that
 // passed. The source ID is new: time points of the monotonic steady clock belong to another clock, and a span to them is unknown, as after an RTC reset
 #define STEADY_SOURCE "dmhost-steady-02"
+// The real-time clock can also go back while a game runs (Android corrects it from the network or the cell tower); a steady clock never does. The steady seconds
+// are the real-time seconds plus a correction that grows by each step back, so they stay where they were and run on from there; the user clock keeps following
+// the real-time clock, so a step back is a change of the context's offset (user time minus steady time), as a user clock set back on a Switch. Whole seconds,
+// so the offset does not wobble with the clocks' phases. Per process, as the steady clock's source ID belongs to the host: a new run starts without a correction
+static int64_t steady_of(int64_t rt_s) {
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER; static int64_t corr, last = INT64_MIN;
+    pthread_mutex_lock(&mu);
+    int64_t s = rt_s + corr;
+    if (s < last) {
+        static int said; if (said++ < 4) LOG("time: the host clock went back %lld s; the steady clock stays at %lld, the user clock goes back", (long long)(last - s), (long long)last);
+        corr += last - s; s = last;
+    }
+    last = s;
+    pthread_mutex_unlock(&mu);
+    return s;
+}
 // PEANUTS end
 // DM_TIME=YYYY-MM-DDTHH:MM[:SS] / DM_TIME_OFFSET=<±seconds>: a custom user clock, as Eden's "set the time" does. The clock runs from
 // there instead of the host's: DM_TIME starts it there (it advances as much as the host clock does), DM_TIME_OFFSET
@@ -52,7 +68,7 @@ static void user_clock(int64_t *sec, int64_t *nsec, int64_t *steady) {
         }
     }
     // PEANUTS: the user clock and the steady clock from the one reading (issue #329)
-    *steady = now_ns / 1000000000;
+    *steady = steady_of(now_ns / 1000000000);
     *sec = now_ns / 1000000000 + (mode == 0 ? arg : 0); *nsec = now_ns % 1000000000;
 }
 // PEANUTS begin: the user time (DM_FIXED_TIME first) and a steady time point of one reading, so a snapshot's or a context's two never fall in different seconds (issue #329)
@@ -102,12 +118,14 @@ HLE_FORCE("_ZN2nn4time37GetStandardSteadyClockCurrentTimespecEP8timespec", "C li
 HLE_FORCE("_ZN2nn4time23StandardUserSystemClock21GetSystemClockContextEPNS0_18SystemClockContextE", "user clock context from the time service; the host's user clock over its steady clock, renewed when the host clock is set",
           Result, h_time_GetContext, uint8_t *out) {
     static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER; static uint8_t ctx[0x20]; static int64_t drift; static int made;
+    pthread_mutex_lock(&mu);   // PEANUTS: read under the lock, so a context of an older reading never replaces a newer one (issue #329)
     uint8_t tp[0x18]; int64_t now; host_now(&now, NULL, tp);   // PEANUTS: one reading, so the offset is the custom time's own (0 on the phone's clock), issue #329
     int64_t d = now - (int64_t)(guest_ns() / 1000000000ull);
-    pthread_mutex_lock(&mu);
-    if (!made || (fixed_time() < 0 && llabs(d - drift) > 1)) {
-        int64_t off = now - *(const int64_t *)tp; memcpy(ctx, &off, 8); memcpy(ctx + 8, tp, 0x18);
-        if (made) LOG("time: host clock moved %+lld s against the guest ticks, new user clock context", (long long)(d - drift));
+    int64_t off = now - *(const int64_t *)tp, was;   // PEANUTS: the offset of this reading (moved by a step back of the host clock, issue #329)
+    memcpy(&was, ctx, 8);
+    if (!made || (fixed_time() < 0 && (off != was || llabs(d - drift) > 1))) {   // PEANUTS: a new offset makes a new context too (a step back of a second, below the guest-tick rule's)
+        memcpy(ctx, &off, 8); memcpy(ctx + 8, tp, 0x18);
+        if (made) LOG("time: host clock moved %+lld s against the guest ticks, new user clock context (offset %+lld s)", (long long)(d - drift), (long long)off);   // PEANUTS
         drift = d; made = 1;
     }
     memcpy(out, ctx, 0x20);
