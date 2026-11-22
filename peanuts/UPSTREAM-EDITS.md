@@ -2106,3 +2106,27 @@ Tests: the `t_android_*` suite; on the AYN Thor (Turnip v26.2.0-R5), the owner's
 | `dm/games/010075101EF84000/game.tsv`, `dm/games/010075101EF84000/README.md` | 1, 1 | Stray (`010075101EF84000`, base 1.0.0, SDK 17.5.6, Unreal Engine 4) profile and Android bring-up note on POCO F7 | `PEANUTS` |
 | `dm/games/010075101EF84000/game.tsv`, `dm/games/010075101EF84000/patches.py`, `dm/games/010075101EF84000/README.md` | 1, new, 1 | Stray (`010075101EF84000`, base 1.0.0, SDK 17.5.6, Unreal Engine 4) 60 fps unlock (`bUseFixedFrameRate` + `fps_target 60`) and Android bring-up note on POCO F7 | `PEANUTS` |
 | `dm/games/0100F9D023176000/game.tsv`, `dm/games/0100F9D023176000/README.md` | 1, 1 | Viewfinder (`0100F9D023176000`, base 1.0.0, SDK 19.3.9, Unity 2022.3.61f1 IL2CPP) 60 fps (`present_interval display`) and 16 GB alias memory profile on POCO F7 | `PEANUTS` |
+
+### Round 25 (2026-11-19) — vbf.py LZ4 blocks
+
+FFXII The Zodiac Age's `FFXII_TZA.vbf` (Virtuos SRYK) has the same layout as FFX's archives — 64 KB blocks, a
+16-bit stored length per block, length == uncompressed size means raw — but its compressed blocks are raw LZ4
+blocks, not zlib: `vbf.read` aborted with zlib's `Error -3 ... incorrect header check`. Verified on the real
+archive: `lz4.block.decompress(block, uncompressed_size=n)` returned exactly n bytes for 17,206 of 17,206
+sampled compressed blocks; FFX's blocks stay zlib. The reader chooses the codec from the block, not from an
+exception: a block is LZ4 when `lz4_block` parses it (the format's sequences and end rules, down to the last byte and
+exactly the block's uncompressed size, `None` otherwise), zlib when it is not LZ4 and starts with a zlib stream header
+(RFC 1950: deflate, a window of at most 32 KB, no preset dictionary, the two bytes a multiple of 31), and invalid
+otherwise (`ValueError`). `lz4_block` is the format itself in a few lines, so `vbf.py` needs no `lz4` package.
+Checked against the `lz4` package: all of 13,109 sampled compressed blocks of the real archive decode identically,
+and 150,000 randomly corrupted blocks agree in all but one (an offset of 0, which the library accepts and the format
+forbids); 30,000 zlib blocks never parse as LZ4. The zlib path is unchanged.
+`dm/gfx/tests/test_vbf.py` builds a small SRYK archive with one LZ4 block (written by hand) and one raw block, covers
+`lz4_block`'s accepted and refused blocks and `zlib_header`, and compares `lz4_block` with the `lz4` package when it
+is installed. Upstream candidate: yes — a general reader change for one more Virtuos compression method, no
+game-specific branch.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/vbf.py` | 4 | `lz4_block` and `zlib_header` (new) and `read`: a compressed block that parses as LZ4 is decoded as LZ4, one with a zlib header as zlib, any other is invalid; the module docstring names the three block kinds | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/tests/test_vbf.py` | 5 | `test_lz4_compressed_and_raw_blocks`, `test_zlib_header`, `test_lz4_block`, the comparison with the `lz4` package (skipped without it), the hand-written block and the optional import | `PEANUTS(upstream-candidate)` |
