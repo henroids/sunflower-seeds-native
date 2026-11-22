@@ -1241,6 +1241,8 @@ static void copy_t2t(const p_copy_t2t *c) {
         static _Atomic int noted_; if (tsf.vk != tdf.vk && !atomic_exchange(&noted_, 1)) VLOG("texture copy between formats of one size, %#x → %#x (Vulkan %u → %u): copied as bits, not converted", c->src->d.format, c->dst->d.format, s->f.vk, d->f.vk);   // PEANUTS: tsf / tdf (above)
         VkImageCopy r = {ss, {c->sr.xoffset, c->sr.yoffset, s3 ? c->sr.zoffset : 0}, ds, {c->dr.xoffset, c->dr.yoffset, d3 ? c->dr.zoffset : 0}, {(uint32_t)c->sr.width, (uint32_t)c->sr.height, s3 ? (uint32_t)nz : 1}};
         vk.vkCmdCopyImage(g_cb, s->img, VK_IMAGE_LAYOUT_GENERAL, d->img, VK_IMAGE_LAYOUT_GENERAL, 1, &r);
+        // PEANUTS(upstream-candidate): a copy mirrored into storage is not a GPU-only write to the destination.
+        if (vka_tex_mirror_mip(c, s, d)) { g_stat_ops++; vka_barrier(g_cb); return; }
     } else {   // a scaled, mirrored or format-changing copy: a blit (filtered with LINEAR_FILTER), or a draw into a depth format that is no blit destination (vka_t2tpath.h)
         // PEANUTS: the format the blit writes, which is asked for BLIT_DST: the destination's image, or the scratch image of the destination texture's format the copy
         // goes through below (a texture whose image has another format, or an sRGB destination of a linear source: sconv_image, one layer of a 2D colour texture)

@@ -1468,3 +1468,14 @@ A direct combined descriptor pairs the guest's sampler with one image view. Wher
 | `dm/gfx/vk_android/vka_selftest.c` | 5 | linear checkerboard sampler, a direct sampler before any submission, the edge texel read back | `PEANUTS` |
 | `dm/host/tests/t_android_sampfilter.c` | new | the filter requirements | `PEANUTS` |
 | `dm/host/tests/Makefile` | 2 | `t_android_sampfilter` built and run | `PEANUTS` |
+
+### Yoshi's Crafted World fixes 5/9: streamed mips mirrored into guest storage (2026-11-22, GitHub PR #140, 999sian)
+
+Unreal grows a streamed texture by copying its resident levels into a new texture on the GPU, then writing the finer levels from the CPU. The first copy made the whole destination GPU-owned, so the CPU's later writes were dropped (Yoshi's Crafted World 1.0.1: 53 block-compressed images with mip 0 all zero). A plain whole-level copy between compatible, CPU-backed 2D textures now also copies that level in guest storage (`nvn_tex_mirror_t2t`) and the destination keeps following CPU writes; any other GPU write keeps the old ownership rule. The Vulkan self-test reads back a copied level and a later unflushed CPU fill of the finer one.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka.h` | 1 | `vka_tex_mirror_mip` | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/vk_android/vka_exec.c` | 1 | `copy_t2t` mirrors a plain image copy | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/vk_android/vka_tex.c` | 2 | `mirror_mip_storage`, `vka_tex_mirror_mip`; the region-write queue declared before them | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/vk_android/vka_selftest.c` | 2 | `streamed_mip_test` | `PEANUTS(upstream-candidate)` |

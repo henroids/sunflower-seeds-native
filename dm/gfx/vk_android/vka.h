@@ -371,6 +371,7 @@ static inline int vka_img_lv(const vka_img *im, uint32_t *lv) { if (!vksoft_lv(i
 // The layers a render target view of level lv can name: a 3D texture's slices at that level (drawn into through 2D / 2D-array views, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT), else the array layers
 static inline uint32_t vka_img_slices(const vka_img *im, uint32_t lv) { return im->d.target == NVN_TEXTURE_TARGET_3D ? (im->depth >> lv ? im->depth >> lv : 1) : im->layers; }
 vka_img *vka_tex_get(const tex_t *t, VkCommandBuffer cb);   // the texture's image, made (and filled from guest memory, or cleared) on first use in cb; NULL = no image
+int vka_tex_mirror_mip(const p_copy_t2t *c, vka_img *s, vka_img *d);   // PEANUTS(upstream-candidate): a whole mip copied into both the image and its CPU backing
 uint64_t vka_tex_mem(int *n, uint64_t *gpu_written);   // bytes of image memory now: n images, of which gpu_written bytes the GPU wrote (the rest copies pool storage)
 void vka_tex_alias_stats(char *b, size_t n);        // image bytes by content (cleared, filled once, tracked) and how many of them could live on their pool storage
 void vka_tex_cache_stats(char *b, size_t n);        // the texture cache's limit, images, working set, MemAvailable, PSI and reserve, and the images it made and evicted (vka_texlimit.h)

@@ -673,7 +673,7 @@ static vka_img *img_create_(const tex_t *t, const vka_fmt *f, uint32_t base, int
 //     whose storage holds data at their first use (the GPU cannot render into them)
 //   ST_FILL: uploaded once: what a CPU_NO_ACCESS or CPU_UNCACHED pool, or a range the CPU flushed before the first use, holds (the CPU cannot or did not say it would write it again)
 //   ST_ZERO: GPU content (render targets, copy destinations): cleared
-// The GPU writing an image (gpu_owned) ends its tracking, as on Metal: its content is the GPU's from then on. DM_VK_TEX_TRACK=0 uploads ST_TRACK textures once (no write protection)
+// PEANUTS(upstream-candidate): GPU-only writes end tracking. A streamed mip mirrored into guest storage is not GPU-only. DM_VK_TEX_TRACK=0 uploads ST_TRACK textures once (no write protection).
 enum { ST_ZERO, ST_FILL, ST_TRACK, ST_SPARSE };
 int nvn_flushed(const void *p, uint64_t n);   // hle_nvn.c
 static int mem_any(const uint8_t *p, uint64_t n) { uint64_t i = 0, v; for (; i + 8 <= n; i += 8) { memcpy(&v, p + i, 8); if (v) return 1; } for (; i < n; i++) if (p[i]) return 1; return 0; }
@@ -2656,14 +2656,65 @@ typedef struct {
     size_t size;
     int copied;   // the drain recorded its copy (two copies over the same texels need a barrier between them)
 } tex_region_write_t;
+static tex_region_write_t *g_reg_writes;
+static int g_nreg_writes, g_reg_writes_cap;
+// Unreal grows a texture by copying the old mip chain into the new one, then writing the finer levels from the CPU. Giving the GPU ownership of the entire destination
+// on that first copy drops those CPU writes. Frame 492 of Yoshi 1.0.1: 53 BC images with mip 0 all zero on the GPU and texels in the pool (including the 4096-wide lightmaps).
+// PEANUTS(upstream-candidate): mirror the level in guest layout like Metal. NVN's SPARSE texture layout in a CPU-accessible physical pool is fine; a virtual pool is not.
+static int mirror_mip_storage(const tex_t *t, vka_img *im, unsigned lv, const NVNcopyRegion *r, int dst) {
+    unsigned pf = 0;
+    if (!t->mem || t->mem != im->mem || !t->pool || t->pool != im->pool || !im->pgen || im->pgen != nvn_pool_live(t->pool, &pf, NULL) ||
+        (pf & (NVN_MEMORY_POOL_FLAGS_CPU_NO_ACCESS | NVN_MEMORY_POOL_FLAGS_VIRTUAL)) || im->gpu_owned || im->vpool || im->par || im->rsc ||
+        memcmp(&t->d, &im->d, sizeof t->d) || im->samples != 1 || im->layers != 1 || im->f.kind >= 3 ||
+        t->d.target != NVN_TEXTURE_TARGET_2D || lv >= t->d.levels || lv >= 32 ||
+        (t->d.flags & (NVN_TEXTURE_FLAGS_IMAGE | NVN_TEXTURE_FLAGS_COMPRESSIBLE | NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET))) return 0;
+    uint32_t w = t->d.width >> lv, h = t->d.height >> lv;
+    if (r->xoffset || r->yoffset || r->zoffset || (r->depth != 1 && r->depth != 0) ||
+        r->width != (int)(w ? w : 1) || r->height != (int)(h ? h : 1)) return 0;
+    uint64_t off, len; sub_range(&t->d, &t->L, lv, 0, &off, &len);
+    if (!len || off > t->L.size || len > t->L.size - off) return 0;
+    uintptr_t lo = (uintptr_t)t->mem + off;
+    if (dm_guest_unmapped(lo, len)) return 0;
+    // WriteTexels of a different mip (often the fine one that just streamed in) need not land before this copy. A write into this level makes the CPU mirror ambiguous.
+    if (im->rw_pend) for (int i = 0; i < g_nreg_writes; i++) if (g_reg_writes[i].im == im && g_reg_writes[i].level == lv) return 0;
+    // A buffer write that prepare has not consumed can leave the image and storage with different bytes. An earlier buffer copy must not read our destination early.
+    for (int i = 0; i < g_ngw; i++) {
+        const gw_t *w = &g_gw[i];
+        if ((w->lo < lo + len && lo < w->hi) || (dst && w->kind == GW_COPY && w->src < lo + len && lo < w->src + (w->hi - w->lo))) return 0;
+    }
+    return 1;
+}
+int vka_tex_mirror_mip(const p_copy_t2t *c, vka_img *s, vka_img *d) {   // called only after recording a plain image copy
+    unsigned sl = c->has_sv && c->sv.set_levels ? c->sv.base_level : 0, dl = c->has_dv && c->dv.set_levels ? c->dv.base_level : 0;
+    if ((c->src->d.levels <= 1 && c->dst->d.levels <= 1) || s == d || c->src->d.format != c->dst->d.format || (c->flags & DM_COPY_RESOLVE)) return 0;
+    // A new destination can still be entirely empty (ST_ZERO): its registration says to follow its first CPU write. Take the flush registry lock before, not under,
+    // the image table lock (hle_nvn.c ft_flush calls mtl_tex_cpu_written under the registry lock).
+    int registered = nvn_ft_tracked(c->dst->serial), ok = 0;
+    nvn_pool_use(1); pthread_mutex_lock(&g_tmu);
+    // A raw global store names its pages only after completion; until the log is consumed, no guest level is known not to overlap it.
+    if (g_gml_init) for (int i = 0; i < GML_N; i++) if (g_gml[i].used) goto out;
+    if ((s->from_mem || s->track || s->wt) && (registered || d->from_mem || d->track || d->wt) &&
+        mirror_mip_storage(c->src, s, sl, &c->sr, 0) && mirror_mip_storage(c->dst, d, dl, &c->dr, 1) &&
+        !nvn_tex_mirror_t2t(c->src, sl, 0, &c->sr, c->dst, dl, 0, &c->dr)) {
+        d->from_mem = 1;
+        // Tracked images see the mirror's dirty pages; WriteTexels images already have the VkImage copy. A previously empty / fill-once image starts following storage.
+        if (!d->track && !d->wt) redo_add_locked(d);
+        if (atomic_load_explicit(&vka_rb_track, memory_order_relaxed)) rb_written_locked(d);
+        static unsigned n; if (n++ < 8) VLOG("streamed mip: serial %llu level %u -> serial %llu level %u (%dx%d): copied into guest storage too; destination keeps following CPU writes",
+                                            (unsigned long long)c->src->serial, sl, (unsigned long long)c->dst->serial, dl, c->dr.width, c->dr.height);
+        ok = 1;
+    }
+out:
+    pthread_mutex_unlock(&g_tmu); nvn_pool_use(0);
+    return ok;
+}
+
 // Whether a region copy already recorded in this prepare writes texels this one also writes: the copies must then be separated by a barrier, since a write-after-write hazard
 // between two transfer commands has no order of its own (a tile baked twice in one frame must keep the game's order)
 static int reg_write_overlap(const tex_region_write_t *a, const tex_region_write_t *b) {
     if (!a->copied || a->im != b->im || a->level != b->level || a->layer != b->layer) return 0;
     return a->x < b->x + (int32_t)b->w && b->x < a->x + (int32_t)a->w && a->y < b->y + (int32_t)b->h && b->y < a->y + (int32_t)a->h;
 }
-static tex_region_write_t *g_reg_writes;
-static int g_nreg_writes, g_reg_writes_cap;
 // PEANUTS: the region writes queued for im are dropped (caller holds g_tmu), for a caller that gives the image up whatever its references (vka_tex_drop_pool): their
 // entries stay in the queue with no image, which the drain skips; their references go with the image's forced count
 static void rw_cancel_locked(vka_img *im) {

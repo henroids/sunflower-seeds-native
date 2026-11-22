@@ -61,6 +61,44 @@ static uint8_t *lib_make(size_t *size) {
     return L;
 }
 
+// PEANUTS(upstream-candidate): a resident 16x16 mip copied into a new 32x32 texture, followed by a CPU fill of level 0 with no flush. Read both back through Vulkan.
+static int streamed_mip_test(uint8_t *cmd, uint8_t *rb) {
+    // A real NVN pool: it has a liveness generation and its writes go through the same dirty-page tracking as the game's.
+    unsigned long bytes; const struct { const char *name; void *fn; } *api = plat_table("swnvn", &bytes);
+    PFNNVNMEMORYPOOLINITIALIZEPROC init = NULL; PFNNVNMEMORYPOOLFINALIZEPROC fini = NULL;
+    for (size_t i = 0; i < bytes / sizeof *api; i++) {
+        if (!strcmp(api[i].name, "nvnMemoryPoolInitialize")) init = (PFNNVNMEMORYPOOLINITIALIZEPROC)api[i].fn;
+        if (!strcmp(api[i].name, "nvnMemoryPoolFinalize")) fini = (PFNNVNMEMORYPOOLFINALIZEPROC)api[i].fn;
+    }
+    if (!init || !fini) return 1;
+    size_t size = 2u << 16; uint8_t *mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mem == MAP_FAILED) return 1;
+    NVNmemoryPool pool; pool_builder_t pb = {.flags = NVN_MEMORY_POOL_FLAGS_CPU_UNCACHED | NVN_MEMORY_POOL_FLAGS_GPU_CACHED, .mem = mem, .size = size};
+    if (!init(&pool, (const NVNmemoryPoolBuilder *)&pb)) { munmap(mem, size); return 1; }
+    tex_t s = {.magic = MAGIC('T','E','X',0), .pool = (pool_t *)&pool, .mem = mem, .serial = nvn_new_serial(),
+               .d = {.target = NVN_TEXTURE_TARGET_2D, .format = NVN_FORMAT_RGBA8, .flags = NVN_TEXTURE_FLAGS_SPARSE, .width = 16, .height = 16, .depth = 1, .levels = 1}};
+    tex_t d = s; d.mem += 65536; d.off = 65536; d.d.width = d.d.height = 32; d.d.levels = 2; d.serial = nvn_new_serial();
+    nvn_tex_layout(&s.d, &s.L); nvn_tex_layout(&d.d, &d.L);
+    memset(s.mem, 0x55, s.L.size); mtl_tex_init(&s); mtl_tex_init(&d); mtl_tex_cpu_written(&s); mtl_tex_cpu_written(&d);
+    p_copy_t2t c = {.src = &s, .dst = &d, .has_dv = 1, .dv = {.set_levels = 1, .base_level = 1, .nlevels = 1}, .sr = {0,0,0,16,16,1}, .dr = {0,0,0,16,16,1}};
+    uint8_t *p = rec(cmd, OP_COPY_T2T, &c, sizeof c); rec(p, OP_END, NULL, 0);
+    mtl_sub_begin(); mtl_exec(cmd); int ok = mtl_wait(mtl_sub_commit(), 2000000000ull);
+    uint64_t level1 = nvn_tex_level_offset(&d.d, 1);
+    if (ok) {
+        // Mark the pages and lift protection before writing (the selftest runs without the game's fault handler). No mtl_tex_cpu_written / descriptor change.
+        dm_guest_write_prepare(d.mem, level1); memset(d.mem, 0xaa, level1);
+        p_copy_b2t read = {.tex = &d, .src = (uintptr_t)rb, .r = {0,0,0,1,1,1}};
+        p = rec(cmd, OP_COPY_T2B, &read, sizeof read); read.has_view = 1; read.view = c.dv; read.src += 16;
+        p = rec(p, OP_COPY_T2B, &read, sizeof read); rec(p, OP_END, NULL, 0);
+        mtl_sub_begin(); mtl_exec(cmd); ok = mtl_wait(mtl_sub_commit(), 2000000000ull);
+    }
+    uint32_t fine, coarse; memcpy(&fine, rb, 4); memcpy(&coarse, rb + 16, 4);
+    ok = ok && fine == 0xaaaaaaaau && coarse == 0x55555555u && d.mem[level1] == 0x55;
+    VLOG("selftest: streamed mip: fine %08x, copied %08x, guest copy %02x: %s", fine, coarse, d.mem[level1], ok ? "passed" : "FAILED");
+    mtl_tex_release(&s); mtl_tex_release(&d); fini(&pool); munmap(mem, size);
+    return !ok;
+}
+
 int nxhost_vk_selftest(ANativeWindow *w, int frames) {
     if (w) nxhost_set_window(w);
     if (!vka_init()) { VRED("selftest: no Vulkan device"); return 1; }
@@ -186,6 +224,7 @@ int nxhost_vk_selftest(ANativeWindow *w, int frames) {
         last = tk;
     }
     mtl_present_flush(); mtl_finish();
+    bad += streamed_mip_test(cmd, rb + 64);   // PEANUTS(upstream-candidate)
     // DM_VK_SHLIB=<a game's dmsh_vk.lib>: every shader of it through this device's compiler (any game's library: the chain must match, the game is not checked)
     const char *gl = getenv("DM_VK_SHLIB");
     if (gl && *gl) {
