@@ -1385,8 +1385,8 @@ static void cs_build(gval *g, vka_shader *cs, const vka_layout *lay, VkShaderMod
 // there. The prewarm list covers only what earlier runs met (none on a first run of a title without a seed). One thread at nice 10 through the gate after the frame's
 // compiles (gate_enter 0), cheapest first (as_cost), after the startup prewarm and the list's threads are done; shaders in the .heavy list (long on this driver before) and
 // retyped variants (integer images: their masks are known at the dispatch only; the prewarm list's klen 16 records hold those) are left out. A library with more than
-// DM_VK_CS_WARM_MAX (default 256) compute shaders is left alone: nx2androidX's Monster Hunter Rise (4096 or more) ran a phone out of GPU memory. DM_VK_CS_WARM=0 off;
-// default off where the prewarm list is (V.qcom_old: ~6 MB outside the process per pipeline)
+// DM_VK_CS_WARM_MAX (default 256) compute shaders is left alone: nx2androidX's Monster Hunter Rise (4096 or more) ran a phone out of GPU memory. DM_VK_CS_WARM: 1 on
+// Turnip, 0 elsewhere (measured on Turnip only; on Qualcomm's driver before 512.800 a pipeline also holds ~6 MB outside the process); 0 / 1 to choose
 typedef struct { vka_shader *sh; uint64_t cost; } cw_item;
 static int cw_cmp(const void *a, const void *b) { uint64_t x = ((const cw_item *)a)->cost, y = ((const cw_item *)b)->cost; return x < y ? -1 : x > y; }
 static void *cw_main(void *a) {
@@ -1430,7 +1430,7 @@ static void *cw_main(void *a) {
     return NULL;
 }
 static void cw_start(void) {
-    if (!VKA_ENV("DM_VK_CS_WARM", V.qcom_old ? 0 : 1)) return;
+    if (!VKA_ENV("DM_VK_CS_WARM", V.driver_id == VK_DRIVER_ID_MESA_TURNIP)) return;   // PEANUTS: Turnip only by default (above)
     pthread_t th; if (!pthread_create(&th, NULL, cw_main, NULL)) pthread_detach(th);
 }
 // PEANUTS end
@@ -2055,7 +2055,7 @@ static kmap g_cs = {.klen = sizeof(ckey)};
 // shot: a 3.7 s frame mid-play). A skipped dispatch leaves its outputs as they were: a particle effect is missing or frozen for those frames; work the game keeps (a
 // buffer written once, indirect arguments) stays stale until dispatched again. Pipelines with retyped images (umask / smask) stay on the frame path (the base pipeline in
 // their place would read the integer texels as floats)
-// PEANUTS begin: the compute lane (DM_VK_CS_LANE, default 1). A dispatch's compute pipeline made in the background goes to a queue of its own, built by one thread outside the
+// PEANUTS begin: the compute lane (DM_VK_CS_LANE, default 2 threads). A dispatch's compute pipeline made in the background goes to a queue of its own, built by one thread outside the
 // graphics gate, so one compute and the gate's graphics builds run at once. On Turnip the gate has one slot (vka_psogate.h): Hyrule Warriors: Age of Calamity's
 // retyped compute variants (1.5-2.4 s each, asynchronous since DM_VK_CS_ASYNC_RETYPE) held it while the draws' graphics pipelines queued behind them, 88,553 draws skipped
 // and one waiting 16.6 s in its first battle without a seed (2026-11-21). The lane waits while the phone has less than DM_VK_CS_LANE_MEM_MB (default 1024) available
