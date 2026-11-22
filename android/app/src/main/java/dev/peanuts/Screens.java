@@ -22,6 +22,7 @@ public final class Screens {
      * rejects the launch, retry on the launcher's display with the original intent.
      */
     public static void startGame(Activity launcher, Intent intent) {
+        if (dev.peanuts.users.WhoPlaysActivity.ask(launcher, intent)) return;   // Who's playing? first, with two or more users (Settings › Users); it starts the game
         Display d = PeanutsPrefs.swapScreens(launcher) ? external(launcher) : null;
         if (d != null) {
             Intent external = new Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

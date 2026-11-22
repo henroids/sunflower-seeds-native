@@ -291,6 +291,21 @@ public final class Library {
         return screensOffB;
     }
 
+    /**
+     * MainActivity.buildHome (PEANUTS hook): Home's header with the build line under the title as plain text. Upstream makes it selectable, which makes it a
+     * focus stop: a controller's first focus landed on it (the first focusable view of the page) and drew the focus frame round the whole line. The first
+     * cover takes the first focus instead (cover, setFocusedByDefault); the tag is still selectable in Settings › About.
+     */
+    public static LinearLayout homeHeader(LinearLayout header) {
+        plainText(header);
+        return header;
+    }
+
+    private static void plainText(View v) {
+        if (v instanceof TextView && ((TextView) v).isTextSelectable()) { ((TextView) v).setTextIsSelectable(false); v.setFocusable(false); }
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) plainText(((ViewGroup) v).getChildAt(i));
+    }
+
     // ---- The hook ----
 
     /**
@@ -1174,7 +1189,7 @@ public final class Library {
 
         cell.addView(cover, PUi.fill());
         cell.addView(n, nlp);
-        if (firstCover == null) firstCover = cover;
+        if (firstCover == null) { firstCover = cover; cover.setFocusedByDefault(true); }   // a controller's first focus on Home: the first game (homeHeader)
         return cell;
     }
 

@@ -424,7 +424,8 @@ public final class LibrarySettings {
         triedMoreFonts = true;
         File d = PeanutsPrefs.fontsDir(a);
         String src = PeanutsPrefs.firmwareDir(a);
-        boolean haveAll = new File(d, "cjk_sc.ttf").isFile() && new File(PeanutsPrefs.miiModelDir(a), "ShapeHigh.dat").isFile();   // PEANUTS: MiiModel too (the importer writes it beside the fonts)
+        boolean haveAll = new File(d, "cjk_sc.ttf").isFile() && new File(PeanutsPrefs.miiModelDir(a), "ShapeHigh.dat").isFile()   // PEANUTS: MiiModel too (the importer writes it beside the fonts)
+                && dev.peanuts.users.FirmwarePictures.dir(a).isDirectory();   // the console's profile pictures too (Settings › Users), which the importer reads since then
         if (src == null || !new File(d, "standard.ttf").isFile() || haveAll || !src.startsWith("/") || !new File(src).exists()) return;
         extractFonts(a, src, null);
     }

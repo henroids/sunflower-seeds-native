@@ -357,6 +357,7 @@ public final class SettingsPage {
         col.addView(top(a, s));
         if (!wide) PUi.add(col, line(a, s.line, 13), 4);
         if (s.key.equals("about")) { AboutPage.fill(a, col, wide || tablet, buildTag, () -> press("Check for updates"), () -> press("Questions and answers")); return col; }   // a tablet: About in two columns, as on a wide screen
+        if (s.key.equals("users")) { dev.peanuts.users.UsersPage.fill(a, col, wide || tablet); return col; }   // the users as cards, Who's playing? and the Miis (dev.peanuts.users); a tablet: four a row
         boolean first = true;
         for (String label : SettingsSections.groupOrder(s)) {
             List<Item> items = groups.get(label);

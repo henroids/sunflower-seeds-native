@@ -1841,3 +1841,104 @@ counted), `android/app/src/peanuts/res/raw/peanuts_games.json` new (written by `
 `android/app/src/jvmtest/java/dev/peanuts/ui/CrackedCountJvmTest.java` new, `peanuts/tests/test_peanuts_cracked.py` new, `peanuts/tests/test_issue_forms.py`. `.github/workflows/catalog.yml`: one marked line, the catalog's app copy staged with the rest.
 
 Tests: `peanuts/tests/test_peanuts_cracked.py`, `test_issue_forms.py`. Upstream candidate: no (the peanut is Peanuts' own art).
+
+### Round 46, Miis drawn from the firmware's parts, and an editor of their own (2026-11-21)
+
+Upstream's Miis page was a list with steppers. The Miis are now drawn as the console draws them: `dev.peanuts.mii.MiiGl` (OpenGL ES 3, its own thread) reads the
+head parts from the MiiModel system data the importer took from the player's own firmware (`files/firmware/miimodel`, never shipped or committed), deswizzles
+and decodes their textures (Tegra block-linear; BC4, BC5 and BC7 from bcdec, MIT; ASTC through the GPU) and draws the face's mask, its shapes and a simple upper
+body (the firmware has only heads; games draw their own bodies). The colour tables and the mask's placement follow vee (MIT or Apache-2.0), which follows the FFL
+decompilation; the PR says so. The Miis page shows the Miis as cards with Edit, Duplicate and Delete on the bottom screen, and `dev.peanuts.mii.MiiEditor` (an
+activity for a result) edits one: tabs of picture tiles, the classic colours and all of them, a place pad on the bottom screen, Random, Undo and Done. A firmware
+without the parts keeps numbered tiles.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/AndroidManifest.xml` | 1 line | the `dev.peanuts.mii.MiiEditor` activity | `PEANUTS` |
+| `android/NOTICE.md` | 1 paragraph | vee and bcdec, whose tables and decoders the Mii code ports (MIT) | `PEANUTS` |
+
+Peanuts' own files, no marker: `README.md` and `dev/peanuts/ui/AboutData.java` (vee and bcdec in the credits and About › Licenses), `android/app/src/main/java/dev/peanuts/mii/` (`MiiParts.java`, `Tegra.java`, `MiiPixels.java`, `MiiLook.java`, `MiiGl.java`,
+`MiiView.java`, `MiiEditor.java` new; `MiiActivity.java` the cards; `MiiStore.java` `hex`), `android/app/src/main/java/dev/peanuts/ui/UiPort.java` new
+(upstream's `Ui.Segmented` and tabs through reflection), the pieces of `android/app/src/main/java/dev/peanuts/users/` the Miis' pages use (`Bottom.java`: a
+page's second half on the bottom screen or below it; `UsersPort.java`, `UserPictures.java`, `UserFace.java`, `FirmwarePictures.java`, `Yaz0.java`,
+`UserImages.java` new), `android/app/src/peanuts/res/drawable/pi_mii.xml`, `pi_flip.xml`, `pi_random.xml` and `pi_undo.xml` new (made with
+`design/peanuts-native/icons/icons.py`), `android/app/src/jvmtest/java/dev/peanuts/mii/MiiPartsJvmTest.java` new, `peanuts/tests/test_mii_parts.py` new,
+`peanuts/tests/test_peanuts_cracked.py` (the first own Mii is counted where the editor saves it). Import Miis (GitHub issue #320): `MiiImport.java` new, reading
+the Mii database of Eden, yuzu and Ryujinx (MiiDatabase.dat, the console's "NFDB" layout), a zip of their exported user data that holds it, one StoreData or a
+.charinfo file; `MiiActivity.java` its card and the question; `android/app/src/jvmtest/java/dev/peanuts/mii/MiiImportJvmTest.java` and
+`peanuts/tests/test_mii_import.py` new.
+
+Tests: `peanuts/tests/test_mii_parts.py` (block-linear order, packed parts, BC4 and BC7 blocks, a synthetic texture and shape file, the colour tables),
+`test_mii_import.py` (every field's bits of a StoreData, a database, a zip, a CharInfo, empty slots, Miis already there, the limit of 100).
+Upstream candidate: no (Peanuts' pages).
+
+### Round 47, Users in Settings: cards with profile pictures (2026-11-21)
+
+Settings › Users shows the users as cards with their pictures (a letter on a colour until one is picked), Add a user, and the Who's playing? and Miis rows; the
+focused user's card with Change picture, Rename, Remove user and Start games as is on the bottom screen. A picture is one of the player's Miis or one of the
+firmware's own pictures (system data AvatarImage `010000000000080A`, `chara/*.szs`, Yaz0-packed 256 x 256 RGBA, which the importer now reads with the fonts and
+MiiModel into `files/firmware/avatar/chara`; a firmware added before is read again once at the next start), on one of eight backgrounds. The users stay
+upstream's (`Users`, its preferences); Peanuts keeps only the pictures (`files/users/pictures.tsv`).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/AndroidManifest.xml` | 1 line | the `dev.peanuts.users.PictureActivity` activity | `PEANUTS` |
+
+Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/users/` (`UsersPage.java`, `PictureActivity.java`, `UsersPrefs.java` and
+`WhoPlays.java`, the Who's playing? setting and its rule, new), `dev/peanuts/ui/SettingsPage.java` (the Users section
+filled by `UsersPage`), `dev/peanuts/ui/LibrarySettings.java` (the firmware read again when its pictures are missing), `dm/peanuts/import/nximport.c`
+(AvatarImage), `android/app/src/jvmtest/java/dev/peanuts/users/UserPicturesJvmTest.java` new, `peanuts/tests/test_users_page.py` new.
+
+Tests: `peanuts/tests/test_users_page.py`, `test_settings_sections.py`. Upstream candidate: no.
+
+### Round 48, Who's playing?: when the app opens, and before a game a shortcut starts (2026-11-21)
+
+With two users or more, opening the app from its icon first asks who plays: big cards over the app's drifting peanuts, under its peanut badge, the user playing
+now picked, and on the bottom screen Continue as and Always. The pick is upstream's preselected user (`Users.setDefault`, `DM_USER`), so every game started in
+the app plays as them. Home's header shows that user's picture at the top right, beside FAQ and Settings; it opens a menu with Profile (Settings › Users) and
+the other users to switch to. A game a home screen shortcut or a frontend starts without the app (`FrontendLaunch`'s `frontend` extra) asks for itself, the user
+who played it last picked, with Play as and Always for this game; it runs in a task of its own, so Home never shows in between. Settings › Users › Who's
+playing? turns both questions off. Nothing of it shows with one user.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/AndroidManifest.xml` | 1 line | the `dev.peanuts.users.WhoPlaysActivity` activity, an empty `taskAffinity` | `PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 1 | the users line: the preselected user is `WhoPlaysActivity.startUser` (the one picked for this game, else upstream's default) | `PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | `onCreate`'s `GameReturn.back` line: when no game comes back, `WhoPlaysActivity.appOpened`; `headerButtons` (a Peanuts block): `ProfileButton` after Settings | `PEANUTS` |
+
+Peanuts' own files, no marker: `dev/peanuts/Screens.java` (`startGame`'s first line asks), `dev/peanuts/users/WhoPlaysActivity.java` and
+`ProfileButton.java` new (its menu: Profile and Switch profile, which opens a dialog of every user side by side; a switch shows the app's peanut cracking
+open over the window for a moment, `dev/peanuts/ui/CrackingPeanut.java` new), `WhoPlays.java` (`atAppStart`, and a start in the app plays as the user playing
+now), `UsersPage.java` (Switch to, Playing now).
+
+Tests: `peanuts/tests/test_users_page.py` (`WhoPlays.decide` and `WhoPlays.atAppStart` on the JVM). Upstream candidate: no.
+
+### Round 49, the users' pictures for games: `LoadProfileImage` (2026-11-21)
+
+A game that asks for the user's picture got none. The launcher keeps each picture as the console does, a 256 x 256 JPEG (`files/users/images/<uid>.jpg`,
+`dev.peanuts.users.UserImages`), and the host gives it to the game.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_account.c` | 1 | `user_image` (reads `DM_USER_IMAGES/<uid>.jpg`, at most 128 KiB, JPEG only); `LoadProfileImage` returns it, else fails as before; `HLE_FORCE_BIG` for `fopen` | `PEANUTS` block |
+| `docs/env_switches.tsv` | 1 row | `DM_USER_IMAGES` | `[PEANUTS]` |
+| `docs/reference/services.md` | 1 | the entry "Users' profile pictures" | `PEANUTS` block |
+| `docs/agents/symptoms.md` | 1 | regenerated (`docs_symptoms.py`, allow-listed) | `(PEANUTS)` in the symptom |
+
+Peanuts' own files, no marker: `dev/peanuts/build/GameEnv.java` (`DM_USER_IMAGES` when the folder exists; `dev.peanuts.users.UserImages` writes the
+files, Round 46).
+
+Tests: none on a game yet (no game in the table is known to call it); the switch was seen reaching the host. Upstream candidate: maybe (the host side, with a
+front end that writes the files).
+
+### Round 53, Home's first controller focus on the first game, not the build line (2026-11-21)
+
+Upstream's header makes Home's build line selectable text, so it was the page's first focus stop: with a controller, Home opened with the focus frame round
+the whole line. The line is plain text on Home now (Settings › About still has the tag selectable), and the first cover takes the first focus
+(`setFocusedByDefault`).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 0 (the header line, already marked for the rebrand) | `buildHome`'s header goes through `dev.peanuts.ui.Library.homeHeader` | trailing `// PEANUTS: ...` |
+
+Tests: on the AYN Thor. Upstream candidate: no (the header's look is Peanuts').

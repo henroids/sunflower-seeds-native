@@ -35,7 +35,8 @@ class Counting(unittest.TestCase):
         self.assertIn('if (sh != null && jf.lastModified() >= since)', build, 'shaders only when this build prepared them')
         ret = (PEANUTS / 'GameReturn.java').read_text(encoding='utf-8')
         self.assertIn('dev.peanuts.ui.Cracked.starting(c, titleId);', ret, 'every start from Home, a shortcut or a frontend')
-        self.assertIn('miis.add(m); save(); dev.peanuts.ui.Cracked.mii(this);', (PEANUTS / 'mii/MiiActivity.java').read_text(encoding='utf-8'))
+        editor = (PEANUTS / 'mii/MiiEditor.java').read_text(encoding='utf-8')   # a new Mii is made in the editor, and counted once it is saved
+        self.assertRegex(editor, r'MiiStore\.save\(getFilesDir\(\), all\); \}\n[^\n]*\n\s*Feel\.done\(this\);\n\s*if \(index < 0\) dev\.peanuts\.ui\.Cracked\.mii\(this\);')
         self.assertIn('Cracked.settle(x);', (UI / 'BottomScreen.java').read_text(encoding='utf-8'), 'play time is counted back in the launcher')
 
     def test_the_old_count_carries_over(self):

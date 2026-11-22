@@ -38,5 +38,7 @@ final class AboutData {
             {"Noto Sans", "The font games fall back to", "OFL-1.1", REPO + "/blob/main/dm/third_party/README.md"},
             {"Ryujinx", "Shader translation, the default Miis", "MIT", REPO + "/blob/main/dm/third_party/README.md"},
             {"nx2android", "Some fixes, adapted", "MIT", "https://github.com/shirai91/nx2android"},
+            {"vee", "The Miis' colours and face layout", "MIT", "https://github.com/j0lol/vee"},
+            {"bcdec", "Unpacks the Mii parts' textures", "MIT", "https://github.com/iOrange/bcdec"},
     };
 }
