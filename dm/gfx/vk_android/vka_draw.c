@@ -2700,6 +2700,10 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
                 VLOG("bindings of draw %016llx stage %d: binding %u elem %u what %u desc %u dim %#x flags %#x tid %d sid %d addr %#llx size %#llx %s", (unsigned long long)sh[st]->key, st,
                      x->binding, x->elem, x->what, x->desc, x->dim, x->flags, x->tid, x->sid, (unsigned long long)x->addr, (unsigned long long)x->size, why); }
     }
+    vka_gkey k; memset(&k, 0, V.vin_dyn ? offsetof(vka_gkey, va) : sizeof k);   // (va, vb: only without vertex input dynamic state, vin_build; the pipeline lookup reads no further then)   // PEANUTS: buffer-texture classes resolved before make_images
+    // A retyped integer buffer texture must be prepared and bound with the same dimension key.
+    // Choosing its class after make_images can bind a stale CPU image instead of the compute pass's GPU-written rows.
+    tex_masks(sh, k.tex_u, k.tex_s);
     vktb_memo_reset(&g_tig);   // PEANUTS: this draw's answers (tbuf_img_gpu)
     if (make_images(d, sh, 1)) { vka_rp_end(); make_images(d, sh, 0); }
     if (vka_rs_on()) rs_fetch_fix(sh, d);   // PEANUTS: DM_RES_SCALE: a shader that fetches by pixel sees its 2D textures at one scale
@@ -2729,9 +2733,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     if ((R.df || R.sf) && !R.dread && depth_sampled(sh, d)) R.dread = 1;
     if (!R.swrite && draw_writes(sh, d)) R.swrite = 1;   // (a game barrier in this pass from now on ends it: vka_rp_game_barrier)
     d->b.samples = R.samples;
-    vka_gkey k; memset(&k, 0, V.vin_dyn ? offsetof(vka_gkey, va) : sizeof k);   // (va, vb: only without vertex input dynamic state, vin_build; the pipeline lookup reads no further then)
-    k.ncolor = (uint8_t)R.ncolor; k.samples = (uint8_t)R.samples; k.dfmt = R.df; k.sfmt = R.sf;
-    tex_masks(sh, k.tex_u, k.tex_s);
+    k.ncolor = (uint8_t)R.ncolor; k.samples = (uint8_t)R.samples; k.dfmt = R.df; k.sfmt = R.sf;   // PEANUTS: buffer-texture classes resolved before make_images (k and tex_masks moved above)
     if (g_fs_sub) { int rg = vka_shader_tex_range(g_fs_sub);   // a texture retype starts from the library's module, not the moved inputs: not drawn (the colour draw then tests LEQUAL)
                     if (rg >= 0 && rg < 5 && (k.tex_u[rg] | k.tex_s[rg])) { VRED_ONCE("mesh_prepass_cut: the prepass's pixel shader %016llx reads integer textures: its depth not drawn", (unsigned long long)g_fs_sub->key); return; } }
     k.topo = mesh ? 0 : (uint8_t)topo_class(topo);

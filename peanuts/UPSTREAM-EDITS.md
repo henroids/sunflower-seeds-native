@@ -1416,3 +1416,11 @@ A first start prepared every program's shader parts for near = -w, the default b
 The [profile](../dm/games/01002C9022770000/README.md), game index row and default Android build selection are marked `PEANUTS`; the five generated metadata tables are listed in `upstream-unmarked.txt`. `draw_body` in `dm/gfx/vk_android/vka_draw.c` recognizes the first chapter's pixel key at the existing Turnip D16 shadow pass split.
 
 The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7. `game.tsv` offers experimental display pacing (`fps_limit_present 1`, `PEANUTS`); `vk_prewarm.bin` is its Turnip prewarm seed, allow-listed in `peanuts/upstream-unmarked.txt`.
+
+### Yoshi's Crafted World fixes 1/9: integer buffer-texture classes before a draw's images (2026-11-22, GitHub PR #140, 999sian)
+
+A draw prepared its buffer textures (`make_images`) before it knew which of them the shader reads as integer textures (`tex_masks`), and bound them after. A buffer texture a compute pass had just written could then be prepared under one dimension key and bound under another, which bound an outdated CPU copy instead of the GPU-written rows: Yoshi's Crafted World's Rail-Yard Run hung on a OnePlus Pad 2 (Adreno 750, Turnip T30) and reached its results screen with the fix.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_draw.c` | 2 | `draw_body`: the pipeline key and `tex_masks` before `make_images` | `PEANUTS` |
