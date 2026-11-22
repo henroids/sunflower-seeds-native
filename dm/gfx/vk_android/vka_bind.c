@@ -138,7 +138,7 @@ int vka_walk(const vka_bstate *s, int st, const dmsh_vk_entry *e, const dmsh_vk_
 
 // PEANUTS begin: a table of handles read through the pool keeps its place in its sampler's record (vka_bind.h)
 void vka_tabpool_record(dmsh_vk_bind *x) {
-    x->reserved = (uint16_t)(x->reg + 1); x->bytes = (uint32_t)x->off | (uint32_t)x->count << 16;
+    x->step = (uint16_t)(x->reg + 1); x->bytes = (uint32_t)x->off | (uint32_t)x->count << 16;
     x->kind = x->skind; x->reg = x->sreg; x->off = x->soff == 0xFFFF ? 0 : x->soff; x->skind = 0; x->count = 1;
     x->desc = 0 /* VK_DESCRIPTOR_TYPE_SAMPLER */; x->flags |= VKA_BF_TABPOOL;
 }
@@ -147,12 +147,12 @@ int vka_tabpool_ids(const vka_bstate *s, int st, const dmsh_vk_entry *e, const d
     if (st < 0 || st >= VKA_NSTAGE) return 0;
     for (unsigned i = 0; i < e->bind_count; i++) {
         const dmsh_vk_bind *b = &bs[i]; unsigned j = 0;
-        if (!(b->flags & VKA_BF_TABPOOL) || !b->reserved) continue;
-        while (j < i && !((bs[j].flags & VKA_BF_TABPOOL) && bs[j].reserved == b->reserved && (bs[j].bytes & 0xffff) == (b->bytes & 0xffff))) j++;
+        if (!(b->flags & VKA_BF_TABPOOL) || !b->step) continue;
+        while (j < i && !((bs[j].flags & VKA_BF_TABPOOL) && bs[j].step == b->step && (bs[j].bytes & 0xffff) == (b->bytes & 0xffff))) j++;
         if (j < i) continue;   // (its table was read for an earlier record)
         if (!n && dim) *dim = b->dim;
         for (unsigned k = 0, cnt = b->bytes >> 16; k < cnt && n < max; k++) {
-            int tid = ubo_tex_id(s, (uint32_t)ubo_word(s, st, b->reserved - 1, (b->bytes & 0xffff) + 8u * k, 4, rd, ctx));
+            int tid = ubo_tex_id(s, (uint32_t)ubo_word(s, st, b->step - 1, (b->bytes & 0xffff) + 8u * k, 4, rd, ctx));
             if (tid) ids[n++] = tid;
         }
     }

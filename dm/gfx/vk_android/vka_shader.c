@@ -413,6 +413,7 @@ static int tabpool_plan(const vka_shlib *L, const dmsh_vk_entry *e, vka_tabpool 
     for (unsigned i = 0; i < e->bind_count && n < 16; i++) {   // (vka_spv_table_pool takes 16)
         if (b[i].kind != DMSH_VK_KIND_TEX_UBO || b[i].count < 2 || b[i].set != DMSH_VK_SET_DRAW || b[i].desc != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || (b[i].flags & DMSH_VK_BF_NOSLOT) || b[i].reg < 0) continue;
         if (b[i].skind != DMSH_VK_KIND_SAMP && b[i].skind != DMSH_VK_KIND_SAMP_TEX && b[i].skind != DMSH_VK_KIND_SAMP_ID) continue;   // (SAMP_UBO: a sampler per element, from the same handle)
+        if (b[i].step && b[i].step != 8) continue;   // PEANUTS: an array read by record (step, Tomodachi Life #182) stays an array: vka_spv_table_pool reads entry k at off + 8 k
         for (unsigned j = 0; j < e->bind_count; j++) if (b[j].kind == DMSH_VK_KIND_CBUF && b[j].set == DMSH_VK_SET_DRAW && b[j].reg == b[i].reg) { t[n] = (vka_tabpool){b[i].binding, b[j].binding, b[i].off}; rec[n++] = i; break; }
     }
     return n;

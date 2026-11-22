@@ -68,7 +68,7 @@ extern int vka_texu_elem;
 // PEANUTS begin: such a record keeps where its table is, so a draw makes the textures of the table's first entries as the array's bindings did (vka_draw.c make_images).
 // Read only through the pool, a texture was made by the pool reads' feedback, a frame after its first read: Hogwarts Legacy drew a stone slab and ledge plants black for one
 // frame when they first came into view on the cliff path. vka_tabpool_record turns an array's record (TEX_UBO with a count) into its sampler's (kind, reg, off from the
-// sampler half; count 1; VKA_BF_TABPOOL) with the table in fields a sampler record leaves unused: reserved = uniform slot + 1, bytes = element 0's byte offset | count << 16.
+// sampler half; count 1; VKA_BF_TABPOOL) with the table in fields a sampler record leaves unused: step = uniform slot + 1 (a sampler record of count 1 reads no step; dmsh_abi_vk.h named the field reserved before bfd5b02e), bytes = element 0's byte offset | count << 16.
 // vka_tabpool_ids gives the texture IDs in those entries (count of them, the translator's array length: entries past it are still made by the feedback alone), each table
 // once however many records read it (Hogwarts Legacy: up to 15 arrays over one table, one per sampler); *dim the first such record's shape. Returns how many (at most max)
 void vka_tabpool_record(dmsh_vk_bind *x);
