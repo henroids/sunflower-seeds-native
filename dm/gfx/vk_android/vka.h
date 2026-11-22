@@ -470,11 +470,11 @@ int vka_tex_id_is_buffer(int id);                   // texture ID id was registe
 VkBufferView vka_tbuf_view(int id, int storage);     // a texel buffer view over buffer texture id's guest memory; VK_NULL_HANDLE = none (logged)
 int vka_tbuf_pending(int id, uint8_t dim);           // buffer texture id read as an image of shape dim needs its copy refreshed (outside a render pass: vka_tbuf_refresh)
 void vka_tbuf_refresh(int id, uint8_t dim, VkCommandBuffer cb);   // copies buffer texture id's guest memory into its image (outside a render pass)
-VkImageView vka_tbuf_image_view(int id, uint8_t dim);   // that image's view (after vka_tbuf_refresh); VK_NULL_HANDLE = none
+VkImageView vka_tbuf_image_view(int id, uint8_t dim, VkFormat *actual);   // PEANUTS: on success, optionally returns the copied image's actual view format
 void vka_tbuf_wrote(uint64_t addr, uint64_t n);     // GPU work that writes guest memory [addr, addr+n) was recorded (vka_tex.c gw_add): images of buffer textures over it are copied again at their next use
 int vka_tex_id_pending(int id);                     // texture ID id is registered and its image is not made yet (its first use records commands)
-VkImageView vka_tex_id_view_rec(int id, VkCommandBuffer cb, uint8_t dim, int storage, VkImageLayout *layout);   // the same on the recording thread, through a memo (DM_VK_TEX_MEMO)
-VkImageView vka_tex_id_view_samp_rec(int id, int sid, VkCommandBuffer cb, uint8_t dim, int storage, VkImageLayout *layout);   // PEANUTS(upstream-candidate): the same through sampler ID sid (0: not known), whose pinned level a view of the pass's own target follows (vka_tex.c fb_view_levels)
+VkImageView vka_tex_id_view_rec(int id, VkCommandBuffer cb, uint8_t dim, int storage, VkFormat *actual);   // PEANUTS: recording-thread memo; GENERAL layout, actual optionally receives the resolved view format on success
+VkImageView vka_tex_id_view_samp_rec(int id, int sid, VkCommandBuffer cb, uint8_t dim, int storage, VkFormat *actual);   // PEANUTS(upstream-candidate): the same through sampler ID sid (0: not known), whose pinned level a view of the pass's own target follows (vka_tex.c fb_view_levels); PEANUTS: actual as above
 VkFormat vka_tex_id_vkfmt(int id);   // the format texture ID id is viewed in, not its (possibly shared) image's (vka_tex.c)
 VkImageView vka_tex_id_view_bits(int id, VkCommandBuffer cb, VkImageLayout *layout);   // a storage view of its image as R32_UINT (4-byte texels), not written into the bindless table (vka_tex.c)
 int vka_tex_id_pending_rec(int id, uint8_t dim);
@@ -482,8 +482,7 @@ int vka_tex_id_storage_pending(int id);            // texture ID id's image exis
 int vka_tex_id_tbuf(int id, int want, int storage, uint64_t *addr, uint64_t *bytes, VkFormat *fmt, uint32_t *texel);   // PEANUTS: a buffer texture's elements as a texel buffer: guest address, bytes, view format (vka_tex.c)
 int vka_tex_id_class(int id);                       // the numeric class of texture ID id's view format: 1 uint, 2 sint, 0 other
 int vka_tex_id_class_rec(int id);                   // the same, memoized for the recording thread (by the ID's registration version)
-VkSampler vka_samp_id_rec(int id);
-VkSampler vka_samp_id(int id);                      // sampler ID id; VK_NULL_HANDLE = not registered
+VkSampler vka_samp_id_rec(int id, VkFormat view_fmt);   // PEANUTS: direct combined sampler for this view; UNDEFINED = separate sampler; NULL = not registered
 VkSampler vka_samp_default(void);                   // the sampler an unbound sampler slot reads with (nearest, clamp to edge)
 
 // ---------- Shaders (vka_shader.c) ----------

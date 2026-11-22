@@ -1453,3 +1453,18 @@ Index buffers are bound with their real byte range where the device has `mainten
 | `dm/gfx/vk_android/vka_exec.c` | 1 | `mdi_rest` passes the primitive | `PEANUTS` |
 | `dm/host/tests/t_android_draw_range.c` | new | the range arithmetic | `PEANUTS` |
 | `dm/host/tests/Makefile` | 2 | `t_android_draw_range` built and run | `PEANUTS` |
+
+### Yoshi's Crafted World fixes 4/9: a direct sampler chosen by the view's format (2026-11-22, GitHub PR #140, 999sian)
+
+A direct combined descriptor pairs the guest's sampler with one image view. Where that view's format has no `FILTER_LINEAR` (or `FILTER_MINMAX` for a min/max reduction), linear filtering is invalid, so that pairing gets a nearest-only variant of the guest sampler (same wrap, LOD range, bias and border); every other pairing keeps the guest's filters. The format is the one the view was really made in, after class retypes and format-list fallback (`image_view`'s `actual`, kept in the view memo). The guest sampler cache was capped by the bindless sampler table's size, which is 0 before that table is made or where it is not made; it is now capped by `maxSamplerAllocationCount`. The Vulkan self-test samples its checkerboard linearly and checks an edge texel.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka.h` | 2 | `vka_tbuf_image_view`, `vka_tex_id_view_rec`, `vka_tex_id_view_samp_rec` report the view format; `vka_samp_id_rec(id, view_fmt)` replaces `vka_samp_id` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_draw.c` | 7 | `stage_writes` passes the view's format to the sampler; a placeholder view takes the default sampler | `PEANUTS` |
+| `dm/gfx/vk_android/vka_tbuf.c` | 1 | the row image's view format | `PEANUTS` |
+| `dm/gfx/vk_android/vka_tex.c` | 16 | `image_view` with `strict` and `actual`; the view memo keeps the format; `vka_samp_id_rec` with per-ID filtered and nearest variants; `sampler_of` capped by `maxSamplerAllocationCount` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_sampfilter.h` | new | `vksf_required`, `vksf_nearest` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_selftest.c` | 5 | linear checkerboard sampler, a direct sampler before any submission, the edge texel read back | `PEANUTS` |
+| `dm/host/tests/t_android_sampfilter.c` | new | the filter requirements | `PEANUTS` |
+| `dm/host/tests/Makefile` | 2 | `t_android_sampfilter` built and run | `PEANUTS` |

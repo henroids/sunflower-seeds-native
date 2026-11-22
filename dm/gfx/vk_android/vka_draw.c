@@ -1478,7 +1478,7 @@ static int tbuf_img_make(int tid, uint8_t dim, int dry) {
     if (vka_tbuf_pending(tid, dim)) {
         if (dry) return 1;
         vka_tbuf_refresh(tid, dim, g_cb);
-        if (vka_tbuf_pending(tid, dim) || !vka_tbuf_image_view(tid, dim)) { vka_tex_id_view(tid, g_cb, dim, 0, NULL); return 1; }
+        if (vka_tbuf_pending(tid, dim) || !vka_tbuf_image_view(tid, dim, NULL)) { vka_tex_id_view(tid, g_cb, dim, 0, NULL); return 1; }   // PEANUTS
         vktb_memo_fresh(&g_tig, tid, dim); return 1;
     }
     vktb_memo_fresh(&g_tig, tid, dim); return 0;
@@ -1618,6 +1618,7 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: case VK_DESCRIPTOR_TYPE_SAMPLER: case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
             int storage = r[i].desc == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; uint64_t ti_ = g_prof ? cntvct() : 0;
             VkImageView v = VK_NULL_HANDLE; VkSampler s = VK_NULL_HANDLE; VkImageLayout lay = VK_IMAGE_LAYOUT_GENERAL;
+            VkFormat fmt = VK_FORMAT_UNDEFINED; int sid = r[i].sid;   // PEANUTS: choose the sampler for the final view (including class retypes), not the texture ID's format
             if (r[i].desc != VK_DESCRIPTOR_TYPE_SAMPLER) {
                 int tid = r[i].what == VKA_R_TEX || r[i].what == VKA_R_IMG ? r[i].tid : 0;
                 // PEANUTS begin: a buffer texture read as an image is this fork's row image, by the texture's ID as any other texture's (below), and upstream's copy on the
@@ -1626,9 +1627,9 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
                 // texture through an image see, and not into the texture's memory, which is said once
                 if (tid && storage && vka_tex_id_is_buffer(tid)) { static _Atomic int k; if (atomic_fetch_add(&k, 1) < 8)
                     VRED("shader %016llx binding %u: buffer texture ID %d bound as a storage image: its stores go into its image of rows, not into the texture's memory (a read of that memory, or through a texel buffer, does not see them)", (unsigned long long)sh->key, r[i].binding, tid); }
-                if (tid && !storage && vka_tex_id_is_buffer(tid) && tbuf_img_gpu(tid, r[i].dim) && vktb_memo_bind_gpu(&g_tig, tid, r[i].dim) && (v = vka_tbuf_image_view(tid, r[i].dim))) tid = 0;
+                if (tid && !storage && vka_tex_id_is_buffer(tid) && tbuf_img_gpu(tid, r[i].dim) && vktb_memo_bind_gpu(&g_tig, tid, r[i].dim) && (v = vka_tbuf_image_view(tid, r[i].dim, &fmt))) tid = 0;   // PEANUTS: sampler chosen by the view format
                 // PEANUTS end
-                else if (tid) v = vka_tex_id_view_samp_rec(tid, storage ? 0 : r[i].sid, g_cb, r[i].dim, wbf_view_of_binding(storage, r[i].flags, DMSH_VK_BF_RW), &lay);   // (a shader image only read: not a GPU write)   // PEANUTS(upstream-candidate): with the binding's sampler (vka_tex.c fb_view_levels)
+                else if (tid) v = vka_tex_id_view_samp_rec(tid, storage ? 0 : r[i].sid, g_cb, r[i].dim, wbf_view_of_binding(storage, r[i].flags, DMSH_VK_BF_RW), &fmt);   // (a shader image only read: not a GPU write)   // PEANUTS(upstream-candidate): with the binding's sampler (vka_tex.c fb_view_levels); PEANUTS: report the final view format
                 if (tid && v) class_note(sh, st, &r[i], tid, storage);
                 if (tid) tex_peek(sh->key, st, &r[i], v, storage);
                 if (tid && g_rtl_pass && rtl_room()) {   // PEANUTS: DM_VK_RT_LOG: each draw's textures, in order with its draw lines (the tex peek line is logged once per texture)
@@ -1644,11 +1645,12 @@ static int stage_writes(const vka_dstate *d, int st, const vka_shader *sh, const
                         VLOG("%s binding fallback: shader %016llx binding %u, texture ID %d is a 2D texture (%s): it reads as zeros (the shader may leave it unused)", dd == 2 ? "3D" : "cube", (unsigned long long)sh->key, r[i].binding, tid, why); }
                 } else if (tid && !v) { static _Atomic int nm; if (atomic_fetch_add(&nm, 1) < 8) { char why[320]; vka_tex_id_desc(tid, why, sizeof why);
                     VRED("shader %016llx binding %u: texture ID %d has no view of shape %#x%s: it reads as unbound (%s)", (unsigned long long)sh->key, r[i].binding, tid, r[i].dim, storage ? " (storage)" : "", why); } }
+                if (!v) sid = 0;   // PEANUTS: a zero placeholder (here or in set_no_nulls) uses nearest/clamp, not the guest's filters or border color
                 if (!v && !V.null_desc) v = placeholder(r[i].dim, storage);
                 if (!v && !V.null_desc) { VRED_ONCE("an unbound image of shape %#x and no null descriptors: the draw is skipped", r[i].dim); g_skip_dev[VKS_FEATURE]++; return 0; }
             }
             if (r[i].desc == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || r[i].desc == VK_DESCRIPTOR_TYPE_SAMPLER) {
-                s = r[i].sid ? vka_samp_id_rec(r[i].sid) : VK_NULL_HANDLE;
+                s = sid ? vka_samp_id_rec(sid, fmt) : VK_NULL_HANDLE;   // PEANUTS: a separate sampler has no associated view (fmt remains UNDEFINED)
                 if (!s) s = vka_samp_default();
             }
             *ii = (VkDescriptorImageInfo){s, v, lay};
@@ -3240,9 +3242,9 @@ static int ndsr_fsr(int tin, int tout, vka_img *a, vka_img *b, VkFormat fb, int 
     if (st_ok < 0) { VkFormatProperties fp; vk.vkGetPhysicalDeviceFormatProperties(V.pd, fb, &fp); st_ok = (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
                      VLOG("NDSR FSR: B10G11R11 %s", st_ok ? "has storage use here: stored as floats" : "has no storage use here: stored as packed words through an R32_UINT view"); }
     VkImageLayout la = VK_IMAGE_LAYOUT_GENERAL, lb = VK_IMAGE_LAYOUT_GENERAL;
-    VkImageView va = vka_tex_id_view_rec(tin, g_cb, 1, 0, &la);   // dim 1: 2D; sampled
+    VkImageView va = vka_tex_id_view_rec(tin, g_cb, 1, 0, NULL);   // dim 1: 2D; sampled   // PEANUTS
     int packed = !st_ok;
-    VkImageView vb = packed ? vka_tex_id_view_bits(tout, g_cb, &lb) : vka_tex_id_view_rec(tout, g_cb, 1, 1, &lb);   // (a storage view: the image gains storage use if it had none)
+    VkImageView vb = packed ? vka_tex_id_view_bits(tout, g_cb, &lb) : vka_tex_id_view_rec(tout, g_cb, 1, 1, NULL);   // (a storage view: the image gains storage use if it had none)   // PEANUTS
     if (!va || !vb) { VRED_ONCE("NDSR FSR: no %s view (texture IDs %d -> %d)", va ? "output" : "input", tin, tout); return 0; }
     float sharp = VKA_ENVF("DM_VK_NDSR_SHARP", 0.25);   // RCAS's sharpness in stops (0 = the most, AMD's default 0.25); below 0: no RCAS
     int rcas = kernel == 0 && sharp >= 0 && nf_mid(b->w, b->h);
@@ -3316,8 +3318,8 @@ static int ndsr_sgsr(int tin, int tout, vka_img *a, vka_img *b, VkFormat fb, int
     }
     if (!*pp) return 0;
     VkImageLayout la = VK_IMAGE_LAYOUT_GENERAL, lb = VK_IMAGE_LAYOUT_GENERAL;
-    VkImageView va = vka_tex_id_view_rec(tin, g_cb, 1, 0, &la);   // dim 1: 2D; sampled
-    VkImageView vb = packed ? vka_tex_id_view_bits(tout, g_cb, &lb) : vka_tex_id_view_rec(tout, g_cb, 1, 1, &lb);   // (a storage view: the image gains storage use if it had none)
+    VkImageView va = vka_tex_id_view_rec(tin, g_cb, 1, 0, NULL);   // dim 1: 2D; sampled   // PEANUTS
+    VkImageView vb = packed ? vka_tex_id_view_bits(tout, g_cb, &lb) : vka_tex_id_view_rec(tout, g_cb, 1, 1, NULL);   // (a storage view: the image gains storage use if it had none)   // PEANUTS
     if (!va || !vb) { VRED_ONCE("NDSR SGSR: no %s view (texture IDs %d -> %d)", va ? "output" : "input", tin, tout); return 0; }
     float vp[4] = {1.0f / a->w, 1.0f / a->h, (float)a->w, (float)a->h};   // SGSR's ViewportInfo
     uint32_t pc[18] = {0}; for (int i = 0; i < 4; i++) pc[i] = nf_bits(vp[i]); pc[4] = b->w; pc[5] = b->h;
@@ -3579,7 +3581,7 @@ void vka_dispatch(vka_dstate *d, const p_dispatch *dp) {
         if (fits && !sq && fmt_ok > 0 && a->f.vk == fa && b->f.vk == fb &&   // (a blit copies the images' own formats: only where they are the textures')
              (a->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) && (b->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
           VkImageLayout la = VK_IMAGE_LAYOUT_GENERAL, lb = VK_IMAGE_LAYOUT_GENERAL;
-          vka_tex_id_view_rec(tin, g_cb, 1, 0, &la); vka_tex_id_view_rec(tout, g_cb, 1, 1, &lb);   // dim 1: 2D   // the layouts the images are kept in
+          vka_tex_id_view_rec(tin, g_cb, 1, 0, NULL); vka_tex_id_view_rec(tout, g_cb, 1, 1, NULL);   // PEANUTS: dim 1: 2D, views kept in GENERAL
           vka_barrier(g_cb);
           VkImageBlit bl = {{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {{0, 0, 0}, {(int32_t)a->w, (int32_t)a->h, 1}},
                             {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {{0, 0, 0}, {(int32_t)b->w, (int32_t)b->h, 1}}};
