@@ -1522,3 +1522,22 @@ nxnative 84e63860 ported. The host aborted with `FATAL account::GetUserId: the h
 ### Tetris Effect: Connected 2.0.2.2
 
 The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7; the game note says its Thor results are the contributor's report (pull request #330).
+
+### Round 52, two threads of one core in a font engine (2026-11-21, Tomodachi Life: Living the Dream's boot crash)
+
+Tomodachi Life: Living the Dream 1.0.4 crashed about 3 s into a boot in the SDK's font engine (`FSS_get_advance`, `map_char`; reads at 0x20 to 0x28), in 3 of 8 boots with one save on the AYN Thor (8 of 15 in an earlier series) and 1 of 3 in PR #86; with the fix in none of 24 (16 on Turnip, 8 on Qualcomm's driver). NintendoWare Font, linked into the game, keeps one `nn::fontll::ScalableFontEngine` per core and picks it by the caller's core number; the engine takes no lock. The job worker `AppJobThreadPool0` (priority 44) and the `Scene Prepare Thread` (50) are both pinned to core 0: on Horizon they never run at once, on the host they did, and one thread's `SetFont` (`FSS_set_font` clears the state's font pointers before it sets them again) ran while the other was reading them. The host now gives each engine the exclusion a Horizon core gives it: a call never runs beside another, and between two threads pinned to the same core the engine stays with the one that used it last until that one blocks (its next SVC, a native HLE wait, its exit), unless the other has the higher priority, which takes it between two calls.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_fontll.c` (new) | whole file | the engine table, `font_enter` / `font_leave`, the release of a blocking thread's engines, and the take-overs of every engine member that works on its font state | `PEANUTS begin`/`end` around the whole file |
+| `dm/host/hle_thread.c` | 4 | `dm_core_excl_held`, `dm_core_excl_release` and `dm_thread_id_self`; the release at `thr_svc_enter` and at a native wait's entry (`dm_thread_native_wait`); `dm_thread_core_excl_wait` (same core, owner runnable, same or higher priority) and `dm_thread_describe` for the log | `PEANUTS` (begin/end spans and line comments) |
+| `dm/host/hle.h` | 1 | the declarations | `PEANUTS begin`/`end` |
+| `dm/host/hle_sdk16.c` | 3 | `Initialize` and `LoadFont` take-overs enter and leave the engine through hle_fontll.c's pointers (NULL in a test of hle_sdk16.c alone) | `PEANUTS` |
+| `dm/host/tests/Makefile` | 1 | `peanuts-fontll` (part of `peanuts-host`) | inside the `PEANUTS begin`/`end` block |
+| `docs/reference/threads.md` | 1 | the entry "Two threads of one core in a font engine" | `PEANUTS` (HTML comments) |
+| `dm/games/010051F0207B2000/README.md` | 2 | the PR #86 crash resolved; "The boot crash in the font engine" and "Found on this game" | `PEANUTS` |
+| `docs/agents/symptoms.md` | 1 | regenerated (`docs_symptoms.py`, allow-listed) | none |
+| `dm/host/tests/t_peanuts_fontll.c` (new) | whole file | real guest threads on a fake engine: the race straight into it, then through the take-overs; who waits for whom by core and priority; a native wait and an exit; Finalize | `PEANUTS` in its header |
+| `peanuts/games.tsv`, `peanuts/games.json`, `README.md`, `peanuts/docs/README.github.md` | 1 row each | Tomodachi Life's Contributor cell: davdxpx beside intermission88 (`games_catalog.py`, no `--refresh`) | `games.tsv` and `games.json` are Peanuts'; the README tables are inside their `PEANUTS` sections |
+
+Tests: `make GAME=<id> peanuts-fontll` (Linux; with gcc, `CLANG=gcc`): 11 checks pass. A build with exclusion per call only fails 3 of them (the higher-priority thread measured 779 sequences with the other's font; an owner that does not block, and one that exits, were not waited for). Upstream candidate: yes (the Mac host runs a core's threads side by side too).

@@ -742,4 +742,13 @@ $(B)/t_peanuts_syncstress: t_peanuts_syncstress.c ../hle_thread.c ../dm.h $(GAME
 	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -I.. $(GINC) -o $@ t_peanuts_syncstress.c -lpthread -lm
 $(B)/t_peanuts_syncstress_old: t_peanuts_syncstress.c ../hle_thread.c ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -DDM_TEST_CV_OLD_ORDER -I.. $(GINC) -o $@ t_peanuts_syncstress.c -lpthread -lm
+# t_peanuts_fontll: hle_fontll.c's font engines used by one thread at a time, as a Horizon core keeps them, with real threads and a fake engine: the race straight into
+# the engine first (the check that the test sees it), then the take-overs (no call beside another, a higher-priority thread's sequences on its own font, who waits for
+# whom by core and priority, a native wait and an exit giving the engine back, Finalize freeing its slot)
+.PHONY: peanuts-fontll
+peanuts-fontll: $(B)/t_peanuts_fontll
+	$(B)/t_peanuts_fontll
+peanuts-host: peanuts-fontll
+$(B)/t_peanuts_fontll: t_peanuts_fontll.c ../hle_thread.c ../hle_fontll.c ../hle.h ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -I.. $(GINC) -o $@ t_peanuts_fontll.c -lpthread -lm
 # PEANUTS end

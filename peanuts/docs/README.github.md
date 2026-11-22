@@ -70,7 +70,7 @@ Peanuts Native 0.1.6 includes 52 games, and 3 more are coming in 0.1.7 (marked i
 | Astral Chain | `01007300020FA000` | 1.0.1 | No |  |
 | Diablo III: Eternal Collection | `01001B300B9BE000` | 2.7.7.92380 | Yes |  |
 | EA Sports FC 27 | `0100C49025D3E000` | 1.8d.6523, 1.8d.f570 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
-| Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Tomodachi Life: Living the Dream | `010051F0207B2000` | 1.0.4 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a><br><a href="https://github.com/davdxpx"><img src="https://img.shields.io/badge/davdxpx-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="davdxpx"></a> |
 | Unicorn Overlord | `010069401ADB8000` | 1.05 | No |  |
 | Luigi's Mansion 3 | `0100DCA0064A6000` | 1.4.0 | No |  |
 | Pokémon Legends: Z-A | `0100F43008C44000` | 2.0.2 | No |  |

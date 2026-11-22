@@ -220,3 +220,9 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   Paradise compressed with nsz 5.0.0: the `.nup` of the NSPs, of a solid set, of a block set and of a mixed set are one file (SHA-256 the same, 11.05
   GiB); import 30.8 s from the NSPs, 41.7 s from blocks, 64.3 s from solid; peak memory 321 to 403 MiB. A Build in the test app from the solid set ran
   to Ready in 8 min 4 s; Stop while unpacking left nothing behind. UPSTREAM-EDITS Round 29; HOOKS.md "Compressed dumps".
+- 2026-11-21 (Tomodachi Life: Living the Dream's boot crash in the font engine, the open crash of PR #86): a `nn::fontll::ScalableFontEngine` is used by one
+  thread at a time, as a Horizon core keeps it. NintendoWare Font keeps one engine per core and takes no lock; the job worker `AppJobThreadPool0` and the `Scene Prepare
+  Thread`, both pinned to core 0, ran in engine 0 at once on the host, and one's `SetFont` cleared the font pointers the other was reading. A call never
+  runs beside another now, and between two threads of one core the engine stays with its last user until that one blocks, unless the other has the higher
+  priority. `dm/host/hle_fontll.c` (new), `hle_thread.c` (`dm_core_excl_release` at SVCs and native waits), `hle_sdk16.c` (Initialize, LoadFont);
+  `t_peanuts_fontll` (`make GAME=<id> peanuts-fontll`). UPSTREAM-EDITS Round 52; `docs/reference/threads.md` "Two threads of one core in a font engine".
