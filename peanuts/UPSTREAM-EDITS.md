@@ -1492,3 +1492,14 @@ Yoshi's Crafted World (update 1.0.1) is listed for 0.1.7 with 999sian as its con
 | `docs/agents/game-patches.md` | 1 | the `fps_modes 20,30,45,60` row | allow-listed in `peanuts/upstream-unmarked.txt` (generated) |
 
 Peanuts' own files, no marker: `peanuts/games.tsv`, `peanuts/release-titles.txt`, `peanuts/games.json`, `peanuts/docs/README.github.md`.
+
+### account::GetUserId takes any handle (2026-11-21, GitHub issue #239)
+
+nxnative 84e63860 ported. The host aborted with `FATAL account::GetUserId: the handle was not issued by the host (0x2)` when a handle's third word was not the marker its own open calls write; the SDK's accessor copies the first 16 bytes and never reads that word. EA SPORTS FC 27 passes a handle it built for a second controller's player.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_account.c` | 2 | the marker check removed from `GetUserId`; a comment on `HANDLE_MAGIC` | `PEANUTS begin(upstream-candidate)` |
+| `dm/host/tests/Makefile` | 2 | `t_account` built and run | `PEANUTS(upstream-candidate)`, `PEANUTS begin(upstream-candidate)` |
+| `dm/host/tests/t_account.c` | new | nxnative's test as it is | allow-listed in `peanuts/upstream-unmarked.txt` |
+| `docs/reference/services.md`, `dm/games/0100C49025D3E000/README.md` | 1 each | the reference entry and the game note's line | `PEANUTS begin(upstream-candidate)`, `PEANUTS(upstream-candidate)` |

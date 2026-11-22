@@ -221,3 +221,4 @@ dm/games/01002C9022770000/shader_pairs.tsv	Generated vertex and pixel key pairs;
 dm/games/01002C9022770000/pso_pairs.tsv	Generated supplemental pair list; preserve the shader input stamp.
 dm/games/01002C9022770000/shader_files.tsv	Generated shader-bearing file inventory for the targeted split.
 dm/games/01002C9022770000/vk_prewarm.bin	Pipeline keys recorded on Thor with Turnip v26.2.0-R5 (title, prologue, Bright Family House, Elize Highway) and verified on a cold start.
+dm/host/tests/t_account.c	nxnative 84e63860's test ported as it is (account::GetUserId takes a handle the game built, issue #239); a later sync can take nxnative's file
