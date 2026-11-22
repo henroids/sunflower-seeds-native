@@ -2098,3 +2098,4 @@ Tears of the Kingdom's Depths caves drew chunks with another chunk's vertices fo
 
 Tests: the `t_android_*` suite; on the AYN Thor (Turnip v26.2.0-R5), the owner's Depths cave save: per-frame cave draw count changes 906 → 11 in about 1,300 frames. Upstream candidate: yes (the replay code is upstream's).
 | `dm/games/010075101EF84000/game.tsv`, `dm/games/010075101EF84000/README.md` | 1, 1 | Stray (`010075101EF84000`, base 1.0.0, SDK 17.5.6, Unreal Engine 4) profile and Android bring-up note on POCO F7 | `PEANUTS` |
+| `dm/games/010075101EF84000/game.tsv`, `dm/games/010075101EF84000/patches.py`, `dm/games/010075101EF84000/README.md` | 1, new, 1 | Stray (`010075101EF84000`, base 1.0.0, SDK 17.5.6, Unreal Engine 4) 60 fps unlock (`bUseFixedFrameRate` + `fps_target 60`) and Android bring-up note on POCO F7 | `PEANUTS` |

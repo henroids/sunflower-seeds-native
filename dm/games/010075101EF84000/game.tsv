@@ -35,3 +35,8 @@ sys_resource	0x5000000
 # the decoded shader code archives: the engine's global shaders and the game's material shaders
 shader_groups	ShaderArchive-Global-=global ShaderArchive-=game
 shader_note	Stray shaders
+
+# ---- Frame rate ----
+# BaseSwitchDeviceProfiles.ini sets rhi.syncinterval=2 and DefaultEngine.ini sets bUseFixedFrameRate=True (FixedFrameRate=30);
+# patches.py disables bUseFixedFrameRate and the host writes t.MaxFPS 60 and rhi.SyncInterval 1 (hle_fpslock.c).
+fps_target	60
