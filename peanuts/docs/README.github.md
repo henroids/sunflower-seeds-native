@@ -28,7 +28,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.6 includes 52 games, and 5 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.6 includes 52 games, and 6 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion | Contributor |
 |---|---|---|---|---|
@@ -89,6 +89,7 @@ Peanuts Native 0.1.6 includes 52 games, and 5 more are coming in 0.1.7 (marked i
 | Tetris Effect: Connected (coming in 0.1.7) | `0100DE501433A000` | 2.0.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
 | New Pokémon Snap (coming in 0.1.7) | `0100F4300BF2C000` | v0 | No | ⭐<br><a href="https://github.com/ssv0225"><img src="https://img.shields.io/badge/ssv0225-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="ssv0225"></a> |
 | Digimon Story Time Stranger (coming in 0.1.7) | `010062E01FE0C000` | 1.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Hogwarts Legacy (coming in 0.1.7) | `0100F7E00C70E000` | 1.0.5 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
 
 <!-- PEANUTS end: the Supported games table -->
 
@@ -185,7 +186,7 @@ Contributors:
 - [intermission88](https://github.com/intermission88): the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`, pull request #13), the profiles of Kirby's Return to Dream Land Deluxe, Kirby and the Forgotten Land, Super Mario 3D World + Bowser's Fury, Tetris Effect: Connected and Digimon Story Time Stranger (pull requests #34, #84, #83, #330 and #269), the guide for adding a game (`peanuts/docs/NEW-GAME.md`, pull request #34), and fixes to the on-device packer, the release notes popup and the Unreal shader step (pull requests #37, #35 and #71).
 - [davdxpx](https://github.com/davdxpx): the issue and discussion forms rebuilt from the ground up, with a game catalog that also keeps the Supported games table up to date (pull request #175), building from .nsz and .xcz files, the launcher and companion on the second screen, Swap screens, the GPU driver page, Share build log, game icons that outlive their NSP, companion release notes, and many smaller fixes across the app.
 - [elliott-groves](https://github.com/elliott-groves): development builds that install beside the Peanuts Native app (pull request #60).
-- [tapionallanaire](https://github.com/tapionallanaire): building the APK on Windows (pull request #54), and the Trails in the Sky 1st Chapter, Trails in the Sky 2nd Chapter and Double Dragon Revive profiles (pull requests #221, #164 and #197).
+- [tapionallanaire](https://github.com/tapionallanaire): building the APK on Windows (pull request #54), and the Hogwarts Legacy, Trails in the Sky 1st Chapter, Trails in the Sky 2nd Chapter and Double Dragon Revive profiles (pull requests #95, #221, #164 and #197).
 - [dnyan007](https://github.com/dnyan007): the DRAGON BALL: Sparking! ZERO profile, its allocator start-up fix and 60 fps, and the sync of GPU-written terrain into block-compressed textures (pull requests #168, #167, #290 and #302).
 - [skyhong2002](https://github.com/skyhong2002): STEINS;GATE RE:BOOT 1.0.4, standalone NUP updates in the library, and Prepare surviving a missed job status read (pull requests #192, #185 and #181).
 - [ssv0225](https://github.com/ssv0225): the New Pokémon Snap profile with its DRPF archive reader for the shader split and the NVN memory pool builder's getters, and the shader tools running on Linux (pull requests #307, #308, #309 and #310).

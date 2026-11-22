@@ -1954,3 +1954,6 @@ Each game's total play time, counted only while the game runs (started, its scre
 | `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | the game page's More card starts with a Played row (`PlayTime.line`) once the game was played | `PEANUTS` |
 
 Tests: `peanuts/tests/test_play_time.py`. Upstream candidate: no.
+### Hogwarts Legacy 1.0.5
+
+The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7, checked on an AYN Thor (Turnip 27.0.0-R2) from a PC-built pack. The profile builds 1.0.5 only on the phone (`android_builds v327680`) and offers frame limits 20 to 60 as experimental, from the FPSLocker Warehouse rows of its exact `main` (`fps_limit_present 1`, `fps_limit_max 60`, three `fpslocker` rows). The PC builder decodes its Oodle shader archives with the ooz worker (`PC_DECODE` in `peanuts/scripts/peanuts_build.py`): a PC build of 1.0.5 split exactly the profile's 65,047 keys.

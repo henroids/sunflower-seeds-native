@@ -19,6 +19,8 @@ build	v327680	1.0.5	main=0c00fc37b0610fbdb2cf73aed0cc73e7	subsdk0=d0c48eef6dc2f1
 build	v0	1.0.0	main=70658a5c238d69c24698fded6a34efa6	subsdk0=7c1a58cac01c4aa3935c6243f69cf0d3	sdk=835c229763ce5c1816a70f875bd70ccd
 package	v327680
 shader_versions	v327680
+# PEANUTS: the app builds 1.0.5 only (the shader tables are of 1.0.5)
+android_builds	v327680
 
 # ---- Files ----
 # subsdk0 is NintendoSDK_movie (main imports from it)
@@ -48,3 +50,10 @@ pad_layout	full
 # (shader_split.py separable_pairs)
 shader_groups	ShaderArchive-Global-=global ShaderArchive-=game
 shader_note	Hogwarts Legacy shaders
+
+# PEANUTS: frame rate, FPSLocker Warehouse 0100F7E00C70E000/0C00FC37B0610FBD.yaml (1.0.5): r.DynamicRes.FrameTimeBudget, t.MaxFPS, r.VSync off. Unreal steps by elapsed time; marked experimental (README, Frame rate)
+fps_limit_present	1
+fps_limit_max	60
+fpslocker	0c00fc37b0610fbdb2cf73aed0cc73e7	frame_ms_f32	0xa42c688/0x0	2	0
+fpslocker	0c00fc37b0610fbdb2cf73aed0cc73e7	target_f32	0xa4603a0/0x0	2	0
+fpslocker	0c00fc37b0610fbdb2cf73aed0cc73e7	zero_i32	0x9c0eed0/0x0	2	0
