@@ -233,7 +233,10 @@ class Wiring(unittest.TestCase):
     def test_ctl(self):
         req = text(OWN / 'ctl/Request.java')
         self.assertIn('"import_pack"', req)
-        self.assertIn('case "import_pack": titleId(true); need("path"); break;', req)
+        self.assertIn('case "import_pack": titleId(true); need("path"); break;\n', req)
+        # the comment about the question stays on reimport's line, where #44 had moved it from (igawa6's review of #260)
+        self.assertIn('case "reimport": titleId(true); flag("confirm"); flag("delete_first"); break;   // the question itself is answered where the plan is known '
+                      '(CtlPort.reimport: needs_confirm)\n', req)
         self.assertIn('case "import_pack": importPack(a, r, res); break;', text(OWN / 'ctl/Ctl.java'))
         self.assertIn('`import_pack`', text(REPO / 'peanuts/docs/CONTROL.md'))
 

@@ -115,8 +115,8 @@ public final class Request {
                 break;
             }
             case "build": case "prepare": case "play": case "share_build_log": titleId(true); break;
-            case "reimport": titleId(true); flag("confirm"); flag("delete_first"); break;
-            case "import_pack": titleId(true); need("path"); break;   // the question itself is answered where the plan is known (CtlPort.reimport: needs_confirm)
+            case "reimport": titleId(true); flag("confirm"); flag("delete_first"); break;   // the question itself is answered where the plan is known (CtlPort.reimport: needs_confirm)
+            case "import_pack": titleId(true); need("path"); break;
             case "job": action(); titleId(false); break;
             case "game": {
                 String a = action();
