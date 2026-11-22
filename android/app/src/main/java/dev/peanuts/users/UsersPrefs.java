@@ -9,7 +9,8 @@ public final class UsersPrefs {
 
     static SharedPreferences of(Context c) { return c.getSharedPreferences("peanuts_users", Context.MODE_PRIVATE); }
 
-    public static int whoMode(Context c) { return of(c).getInt("who_plays", WhoPlays.ASK); }
+    /** Off until the player turns it on in Settings › Users: a prompt nobody chose would stop frontend and shortcut starts for anyone with two users */
+    public static int whoMode(Context c) { return of(c).getInt("who_plays", WhoPlays.DONT_ASK); }
     public static void whoMode(Context c, int mode) { of(c).edit().putInt("who_plays", mode).apply(); }
 
     /** Who played the game last; null if nobody yet */

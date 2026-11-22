@@ -127,10 +127,19 @@ public final class PeanutsPrefs {
     public static void bottomScreen(Context c, boolean on) { of(c).edit().putBoolean("bottom_screen", on).apply(); }
     /** Settings > Library > Games without a companion: their cover stays on the second display, off by default */
     public static boolean bottomScreenInGames(Context c) { return of(c).getBoolean("bottom_screen_games", false); }
-    public static void bottomScreenInGames(Context c, boolean on) { of(c).edit().putBoolean("bottom_screen_games", on).apply(); }
+    public static void bottomScreenInGames(Context c, boolean on) {
+        SharedPreferences.Editor e = of(c).edit().putBoolean("bottom_screen_games", on);
+        if (on && !of(c).contains("bottom_screen_games_page")) e.putString("bottom_screen_games_page", GAMES_STATS);   // turned on now: the stats page, not the upgrade's cover
+        e.apply();
+    }
     /** What those games show there: their live stats (dev.peanuts.ui.StatsView, the default) or their cover */
     public static final String GAMES_STATS = "stats", GAMES_COVER = "cover";
-    public static String bottomScreenGamesPage(Context c) { return GAMES_COVER.equals(of(c).getString("bottom_screen_games_page", GAMES_STATS)) ? GAMES_COVER : GAMES_STATS; }
+    /** A player who had "Games without a companion" on before the stats page existed keeps the cover they had; turning it on later starts on the stats page */
+    public static String bottomScreenGamesPage(Context c) {
+        SharedPreferences p = of(c);
+        if (!p.contains("bottom_screen_games_page") && p.getBoolean("bottom_screen_games", false)) { p.edit().putString("bottom_screen_games_page", GAMES_COVER).apply(); return GAMES_COVER; }
+        return GAMES_COVER.equals(p.getString("bottom_screen_games_page", GAMES_STATS)) ? GAMES_COVER : GAMES_STATS;
+    }
     public static void bottomScreenGamesPage(Context c, String page) { of(c).edit().putString("bottom_screen_games_page", page).apply(); }
     /** The stats page's items (dev.peanuts.ui.StatsConfig.format; null: never set, every item) and its burn-in guards (StatsConfig.GUARDS, each on by default), for every game */
     public static String statsShown(Context c) { return of(c).getString("stats_shown", null); }
