@@ -7,6 +7,7 @@
 // PEANUTS: transform feedback from the vertex stage is captured (vka_tf.c); from a geometry stage, or of an indirect draw, it is not (logged once)
 #if defined(__ANDROID__)
 #include "vka.h"
+#include "vka_draw_range.h"   // PEANUTS: bounded draw ranges
 static void fbl_pass_begin(void);   // PEANUTS: feedback loops (below, beside DY)
 #include "vka_skipwarn.h"
 #include "vka_gmem.h"
@@ -99,13 +100,13 @@ int vka_state_op(vka_dstate *d, uint32_t op, const void *a) {
     case OP_BIND_VATTR: { const p_bind_vattr *b = a; d->s_vfmt = vka_stamp();
         // The bind replaces the attribute state, as the Metal backend does (S.nattr = b->n): shader inputs past its count read the zero buffer (vin_build).
         // Merging kept the attributes past the count from earlier binds, so such an input read another mesh's format and offset from this mesh's stream.
-        if (b->first >= 0 && b->first + b->n <= 16) {
+        if ((unsigned)b->first <= 16 && (unsigned)b->n <= 16u - (unsigned)b->first) {   // PEANUTS: bounded draw ranges
             if (g_vattr_clear) { memset(d->attr, 0, sizeof d->attr); d->nattr = 0; }
             memcpy(&d->attr[b->first], b->st, 4 * (size_t)b->n); if (b->first + b->n > d->nattr) d->nattr = b->first + b->n;
         }
         break; }
-    case OP_BIND_VSTREAM: { const p_bind_vstream *b = a; d->s_vfmt = vka_stamp(); if (b->first >= 0 && b->first + b->n <= 16) { memcpy(&d->stream[b->first], b->st, 8 * (size_t)b->n); if (b->first + b->n > d->nstream) d->nstream = b->first + b->n; } break; }
-    case OP_BIND_VBUF: case OP_BIND_VBUF1: { p_bind_vbuf tmp; const p_bind_vbuf *b = vbuf_rec(op, a, &tmp); d->s_vbuf = vka_stamp(); if (b->first >= 0 && b->first + b->n <= 16) memcpy(&d->vbuf[b->first], b->r, sizeof *b->r * (size_t)b->n); break; }
+    case OP_BIND_VSTREAM: { const p_bind_vstream *b = a; d->s_vfmt = vka_stamp(); if ((unsigned)b->first <= 16 && (unsigned)b->n <= 16u - (unsigned)b->first) { memcpy(&d->stream[b->first], b->st, 8 * (size_t)b->n); if (b->first + b->n > d->nstream) d->nstream = b->first + b->n; } break; }   // PEANUTS: bounded draw ranges
+    case OP_BIND_VBUF: case OP_BIND_VBUF1: { p_bind_vbuf tmp; const p_bind_vbuf *b = vbuf_rec(op, a, &tmp); d->s_vbuf = vka_stamp(); if ((unsigned)b->first <= 16 && (unsigned)b->n <= 16u - (unsigned)b->first) memcpy(&d->vbuf[b->first], b->r, sizeof *b->r * (size_t)b->n); break; }
     case OP_BIND_UBO: case OP_BIND_UBO_SMALL: { p_bind_buf tmp; const p_bind_buf *b = bind_buf_rec(op, a, &tmp); if (b->stage >= 0 && b->stage < VKA_NSTAGE && b->index >= 0 && b->index < 16) { d->ubo_dirty[b->stage] |= 1u << b->index; d->b.ubo[b->stage][b->index] = (vka_range){b->addr, b->size}; } break; }
     case OP_BIND_SSBO: { const p_bind_buf *b = a; if (b->stage >= 0 && b->stage < VKA_NSTAGE && b->index >= 0 && b->index < 16) { d->b.ssbo[b->stage][b->index] = (vka_range){b->addr, b->size}; d->s_ssbo[b->stage] = vka_stamp(); } break; }
     case OP_BIND_TEX: case OP_BIND_TEX1: { p_bind_handles t1; const p_bind_handles *b = bind_rec(op, a, &t1);
@@ -216,7 +217,7 @@ static struct {
     struct { uint64_t dst, n, cap; uint8_t *data; } e[UB_MAX];
 } UB;
 static int ub_overlaps(uint64_t addr, uint64_t size) {
-    uint64_t b = addr + size;
+    uint64_t b = size <= UINT64_MAX - addr ? addr + size : UINT64_MAX;   // PEANUTS: bounded draw ranges
     if (!UB.n || !size || b <= UB.lo || addr >= UB.hi) return 0;
     for (int i = 0; i < UB.n; i++) if (UB.e[i].dst < b && addr < UB.e[i].dst + UB.e[i].n) return 1;
     return 0;
@@ -1909,7 +1910,7 @@ static int depth_sampled(vka_shader *const sh[VKA_NSTAGE], const vka_dstate *d) 
     return 0;
 }
 // When inline updates are deferred in UB: a draw with raw global memory access, or whose storage, vertex, index or indirect buffer overlaps UB, or whose overlapping UBO has an uncompleted opaque GPU write, ends the pass first
-static int ub_hazard(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], int mesh, const p_draw *dw, const p_draw_idx *di) {
+static int ub_hazard(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], int mesh, const p_draw *dw, const p_draw_idx *di, uint32_t mdi_n, uint32_t mdi_st) {   // PEANUTS: bounded draw ranges
     for (int st = 0; st < VKA_NSTAGE; st++) {
         if (!sh[st] || (st == 1 && d->rast_discard)) continue;
         if (g_wk.n[st] < 0) return 1;
@@ -1931,14 +1932,18 @@ static int ub_hazard(const vka_dstate *d, vka_shader *const sh[VKA_NSTAGE], int 
         }
     }
     if (!mesh) {
-        for (int st = 0; st < 16; st++) if (d->vbuf[st].address && ub_overlaps(d->vbuf[st].address, d->vbuf[st].size ? d->vbuf[st].size : 65536)) return 1;
+        for (int st = 0; st < 16; st++) if (d->vbuf[st].address && ub_overlaps(d->vbuf[st].address, d->vbuf[st].size)) return 1;   // PEANUTS: bounded draw ranges
         if (di && di->ibuf) {
             size_t isz = di->itype == 0 ? 1 : di->itype == 1 ? 2 : 4;
-            if (ub_overlaps(di->ibuf, di->ind ? 65536 : isz * (uint64_t)(di->count > 0 ? di->count : 1))) return 1;
+            VkBuffer b; VkDeviceSize o;   // PEANUTS: bounded draw ranges
+            uint64_t bytes = di->ind ? vka_addr_run(di->ibuf, UINT64_MAX, &b, &o) : isz * (uint64_t)(uint32_t)di->count;
+            if (ub_overlaps(di->ibuf, bytes)) return 1;
         }
     }
     uint64_t ind = dw ? dw->ind : di ? di->ind : 0;
-    return ind && ub_overlaps(ind, 20);
+    uint32_t rec = di ? 20 : mesh ? 12 : 16;   // PEANUTS: bounded draw ranges
+    if (mdi_n && ub_overlaps(dw ? dw->mdi_cnt : di->mdi_cnt, 4)) return 1;
+    return ind && ub_overlaps(ind, mdi_n ? vkdi_arg_span(mdi_n, mdi_st, rec) : rec);
 }
 
 // ---------- Draws ----------
@@ -1956,10 +1961,10 @@ static int resolve(const prog_t *p, int st, vka_shader **out, unsigned *bad) {
 }
 // Vertex input: an attribute per input location the vertex shader reads (Location = NVN attribute index), each from its stream; an input no attribute feeds reads a zero buffer.
 // With VK_EXT_vertex_input_dynamic_state the descriptions are set per draw, else they go into the pipeline key
-static struct { VkVertexInputBindingDescription2EXT b[33]; VkVertexInputAttributeDescription2EXT a[32]; uint32_t nb, na, used, zb; int zero; } VI;
+static struct { VkVertexInputBindingDescription2EXT b[33]; VkVertexInputAttributeDescription2EXT a[32]; uint32_t nb, na, used, zb; int zero, instance_stream; } VI;   // PEANUTS: bounded draw ranges
 static uint32_t g_vi_ser;   // raised at each vin_build: VI may have changed
 static void vin_build(const vka_dstate *d, const vka_shader *vs, vka_gkey *k) {
-    VI.nb = VI.na = VI.used = 0; VI.zero = 0; g_vi_ser++;
+    VI.nb = VI.na = VI.used = 0; VI.zero = VI.instance_stream = 0; g_vi_ser++;   // PEANUTS: bounded draw ranges
     VI.zb = V.max_vin_bindings > 32 ? 31 : V.max_vin_bindings > 16 ? V.max_vin_bindings - 1 : 15;   // the zero buffer's binding: past the 16 streams when the device has room
     for (uint32_t loc = 0; loc < 32; loc++) {
         if (!(vs->e->vin_mask >> loc & 1)) continue;
@@ -1980,7 +1985,9 @@ static void vin_build(const vka_dstate *d, const vka_shader *vs, vka_gkey *k) {
         VI.used |= 1u << st;
     }
     for (uint32_t st = 0; st < 16; st++) if (VI.used >> st & 1) {
-        uint32_t div = d->stream[st].divisor;
+        // PEANUTS: with zero stride every fetch addresses the same element, independently of the instance or divisor.
+        uint32_t div = d->stream[st].stride ? d->stream[st].divisor : 0;
+        if (div) VI.instance_stream = 1;
         if (div > 1 && !V.divisor) { VRED_ONCE("instance divisor %u and no vertexAttributeInstanceRateDivisor: drawn with divisor 1", div); div = 1; }
         VI.b[VI.nb++] = (VkVertexInputBindingDescription2EXT){VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT, NULL, st, d->stream[st].stride,
                                                                div ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX, div ? div : 1};
@@ -2017,7 +2024,7 @@ static void vin_bind(const vka_dstate *d) {
     for (uint32_t st = 0; st < 16; st++) if (VI.used >> st & 1) {   // each stream at its address, as far as it is bound and placed
         VkBuffer b = g_zero.buf; VkDeviceSize o = g_zero.off, sz = 65536;
         uint64_t addr = d->vbuf[st].address, size = d->vbuf[st].size;
-        if (addr) { VkBuffer cb; VkDeviceSize co; uint64_t run = vka_gpu_addr_run(addr, size ? size : 1ull << 30, &cb, &co);
+        if (addr && size) { VkBuffer cb; VkDeviceSize co; uint64_t run = vka_gpu_addr_run(addr, size, &cb, &co);   // PEANUTS: a zero-size binding reads zeros (as Maxwell and nvn_mtl.m)
                     if (run) { b = cb; o = co; sz = run; } else { UNPLACED(UNP_VERTEX, addr); VRED_ONCE("vertex stream at %#llx is not in placed guest RAM: it reads zeros", (unsigned long long)addr); } }   // PEANUTS: counted
         vb_set(st, b, o, sz, &n0, &nn, rb, ro, rs);
     }
@@ -2060,10 +2067,13 @@ static struct { int valid; VkPipeline pipe; VkViewport vp; VkRect2D sc; uint32_t
 #define DY_SET(f, val, call) do { if (!DY.valid || !g_dyn_filter || memcmp(&DY.f, &(val), sizeof DY.f)) { memcpy(&DY.f, &(val), sizeof DY.f); call; } } while (0)
 #define DY_SET1(f, val, call) do { uint32_t v_ = (val); if (!DY.valid || !g_dyn_filter || DY.f != v_) { DY.f = v_; call; } } while (0)
 // The index buffer the command buffer holds: bound again only when it changes (DM_VK_VB_FILTER), forgotten with the dynamic state
-static struct { int valid; VkBuffer b; VkDeviceSize o; VkIndexType t; } IB;
-static void ib_bind(VkBuffer b, VkDeviceSize o, VkIndexType t) {
-    if (IB.valid && g_vb_filter && IB.b == b && IB.o == o && IB.t == t) return;
-    vk.vkCmdBindIndexBuffer(g_cb, b, o, t); IB.valid = 1; IB.b = b; IB.o = o; IB.t = t;
+static struct { int valid; VkBuffer b; VkDeviceSize o, size; VkIndexType t; } IB;   // PEANUTS: bounded draw ranges
+static void ib_bind(VkBuffer b, VkDeviceSize o, VkDeviceSize size, VkIndexType t) {
+    if (!vk.vkCmdBindIndexBuffer2KHR) size = VK_WHOLE_SIZE;   // legacy bind has no range argument
+    if (IB.valid && g_vb_filter && IB.b == b && IB.o == o && IB.size == size && IB.t == t) return;
+    if (size == VK_WHOLE_SIZE) vk.vkCmdBindIndexBuffer(g_cb, b, o, t);
+    else vk.vkCmdBindIndexBuffer2KHR(g_cb, b, o, size, t);
+    IB.valid = 1; IB.b = b; IB.o = o; IB.size = size; IB.t = t;
 }
 static void inst_reset(void);
 static void fbl_pass_begin(void) { DY.fbl = ~0u; }   // PEANUTS: feedback loops: emitted again at the pass's first draw
@@ -2082,7 +2092,7 @@ uint64_t vka_enc_total(void); int vka_enc_on(void);
 enum { INST_LOC = 30, INST_BIND = 31, INST_CAP = 256 };
 typedef struct { uint32_t binding, type; uint64_t a, b, c; } ikw;   // a write as compared: buffer, offset, range / sampler, view, layout
 typedef struct {
-    int valid; VkPipeline p; VkBuffer ib; VkDeviceSize io; VkIndexType it; uint32_t cnt; int32_t bv; uint64_t mark;
+    int valid; VkPipeline p; VkBuffer ib; VkDeviceSize io; VkIndexType it; uint32_t cnt; int32_t bv; uint64_t mark, mem_gen;   // PEANUTS: bounded draw ranges
     uint32_t nw; ikw w[64]; uint64_t ad[64];
     uint32_t nb, na, used, zb; int zero; VkVertexInputBindingDescription2EXT b[33]; VkVertexInputAttributeDescription2EXT a[32]; uint64_t va[16], vs[16];
 } isnap;
@@ -2093,6 +2103,7 @@ static struct { int open; isnap base; VkPipeline ipipe; uint32_t wv, wp; VkDevic
 static uint64_t g_inst_runs, g_inst_joined, g_inst_falls, g_inst_fast;
 static int inst_snap(isnap *s, VkPipeline p, VkBuffer ib, VkDeviceSize io, VkIndexType it, const p_draw_idx *di, const vka_dstate *d) {
     if (g_w.n > 64) return s->valid = 0;
+    s->mem_gen = vka_mem_gen();   // PEANUTS: bounded draw ranges
     s->p = p; s->ib = ib; s->io = io; s->it = it; s->cnt = (uint32_t)di->count; s->bv = di->base_vertex; s->nw = g_w.n;
     for (uint32_t i = 0; i < g_w.n; i++) {
         const VkWriteDescriptorSet *w = &g_w.w[i]; ikw *k = &s->w[i]; k->binding = w->dstBinding | w->dstArrayElement << 16; k->type = w->descriptorType;
@@ -2108,7 +2119,7 @@ static int inst_snap(isnap *s, VkPipeline p, VkBuffer ib, VkDeviceSize io, VkInd
 }
 // The same draw as snapshot s apart from its descriptors: index range, base vertex, vertex input and streams
 static int inst_same_draw(const isnap *s, VkBuffer ib, VkDeviceSize io, VkIndexType it, const p_draw_idx *di, const vka_dstate *d) {
-    if (!s->valid || s->ib != ib || s->io != io || s->it != it || s->cnt != (uint32_t)di->count || s->bv != di->base_vertex) return 0;
+    if (!s->valid || s->mem_gen != vka_mem_gen() || s->ib != ib || s->io != io || s->it != it || s->cnt != (uint32_t)di->count || s->bv != di->base_vertex) return 0;   // PEANUTS: bounded draw ranges
     if (s->nb != VI.nb || s->na != VI.na || s->used != VI.used || s->zb != VI.zb || s->zero != VI.zero) return 0;
     if (memcmp(s->b, VI.b, VI.nb * sizeof *VI.b) || memcmp(s->a, VI.a, VI.na * sizeof *VI.a)) return 0;
     for (int st = 0; st < 16; st++) if (VI.used >> st & 1 && (s->va[st] != d->vbuf[st].address || s->vs[st] != d->vbuf[st].size)) return 0;
@@ -2167,7 +2178,7 @@ void inst_reset_on_ub(void) { inst_reset(); }
 // A draw that joins the open run without its walk: nothing but the run's two uniform slots was bound since the run's last draw, nothing was recorded, the same
 // draw record, targets and scissor; the slots moved by one amount inside the windows. Every other draw takes the full path (which may still join)
 static int inst_fast(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_scissor *sc, int has_sc, const p_draw_idx *di) {
-    if (d->bind_gen != RUN.gen) return 0;
+    if (d->bind_gen != RUN.gen || RUN.base.mem_gen != vka_mem_gen()) return 0;   // PEANUTS: bounded draw ranges
     if (RUN.n >= INST_CAP) return 0;
     if (vka_enc_total() != RUN.mark) return 0;
     if (di->ind || di->mdi_cnt || di->ibuf != RUN.ibuf || di->count != (int32_t)RUN.base.cnt || di->base_vertex != RUN.base.bv || di->itype != RUN.itype || di->prim != RUN.prim
@@ -2510,14 +2521,16 @@ static void prepass_side(const vka_dstate *d, const p_set_rt *rt, int has_rt, co
 // whatever the memory held (Mario Kart World 1.8.0 on Turnip: the device was lost in its first race 15-22 s in, with waits on only). Now the multi-draw is made at its
 // first record with vkCmdDraw*IndirectCount (drawIndirectCount, Vulkan 1.2) and the later records are passed over (vka_exec.c). Where the device lacks it, the records or
 // the count lie outside one buffer range, or DM_VK_MDI_GPU=0 (live): the count read on the CPU at replay, as before
-int vka_mdi_gpu(int indexed, uint32_t n, uint32_t stride) {
+int vka_mdi_gpu(int indexed, int prim, uint32_t n, uint32_t stride) {   // PEANUTS: bounded draw ranges
+    // Only native topologies can consume all records here. An expanded primitive reads and converts one record per replay draw.
+    int expand; topology(prim, &expand); if (expand) return 0;
     if (!V.draw_count || !VKA_ENV("DM_VK_MDI_GPU", 1)) return 0;
     if (!n || stride < (indexed ? 20u : 16u) || (stride & 3) || n > V.props.limits.maxDrawIndirectCount) return 0;
     return indexed ? vk.vkCmdDrawIndexedIndirectCount != NULL : vk.vkCmdDrawIndirectCount != NULL;
 }
 // The multi-draw's records and its count, each in one buffer range: the GPU reads the count and at most n records from them
 static int mdi_ranges(uint64_t ind, uint64_t cnt, uint32_t n, uint32_t st, uint32_t rec, VkBuffer *b, VkDeviceSize *o, VkBuffer *cb, VkDeviceSize *co) {
-    return vka_addr(ind, (uint64_t)(n - 1) * st + rec, b, o, NULL) && !(*o & 3) && vka_addr(cnt, 4, cb, co, NULL) && !(*co & 3);
+    return vka_addr(ind, vkdi_arg_span(n, st, rec), b, o, NULL) && !(*o & 3) && vka_addr(cnt, 4, cb, co, NULL) && !(*co & 3);   // PEANUTS: bounded draw ranges
 }
 // They are not: the count as the CPU reads it now (as before), a draw per record below it
 static void mdi_cpu(int indexed, uint64_t ind, uint64_t cnt, uint32_t n, uint32_t st) {
@@ -2558,18 +2571,20 @@ static void rd_run(const vka_dstate *d) {
 // PEANUTS end
 static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_scissor *sc, int has_sc, const p_draw *dw, const p_draw_idx *di) {
     if (!g_cb || !draws_on() || !statics()) { g_skipped++; return; }
+    if (!(dw ? dw->ind : di->ind) && (dw ? dw->count : di->count) <= 0) return;   // PEANUTS: bounded draw ranges
+    if (di && (unsigned)di->itype > NVN_INDEX_TYPE_UNSIGNED_INT) SKIP("unknown index type %d: skipped", di->itype);
     if (RUN.open && RUN.fast && di && !dw && g_inst_on && inst_fast(d, rt, has_rt, sc, has_sc, di)) {   // DM_VK_INSTANCE: the run's next object, no walk
         if (VKA_ENV("DM_VK_SHADER_STATS", 0) && g_ss_last >= 0) { ss_ent *e = &g_ss[g_ss_last]; e->draws++; e->joined++; e->inst++; e->verts += di->count > 0 ? di->count : 0; ss_tick(); }
         return;
     }
     if (!d->inited) vka_dstate_reset(d);
     uint64_t mdi = dw ? dw->mdi_cnt : di->mdi_cnt; int mdi_i = dw ? dw->mdi_i : di->mdi_i; uint32_t mdi_n = 0, mdi_st = 0;
-    if (mdi && vka_mdi_gpu(di != NULL, dw ? dw->mdi_n : di->mdi_n, dw ? dw->mdi_stride : di->mdi_stride)) {   // made whole at its first record, the count read by the GPU
+    if (mdi && vka_mdi_gpu(di != NULL, dw ? dw->prim : di->prim, dw ? dw->mdi_n : di->mdi_n, dw ? dw->mdi_stride : di->mdi_stride)) {   // made whole at its first record, the count read by the GPU   // PEANUTS: bounded draw ranges
         if (mdi_i) return;   // (vka_exec.c passes the later records over)
         mdi_n = dw ? dw->mdi_n : di->mdi_n; mdi_st = dw ? dw->mdi_stride : di->mdi_stride;
         static _Atomic int logged; if (!atomic_exchange(&logged, 1)) VLOG("indirect-count multi-draws: each made whole at its first record, its count read by the GPU (vkCmdDraw*IndirectCount; DM_VK_MDI_GPU=0: read on the CPU at replay)");
     } else if (mdi) { uint32_t cnt = 0; if (!cpu_read(mdi, &cnt, 4) || (uint32_t)mdi_i >= cnt) { vka_rtlog_skip(rt, has_rt, d, "not drawn: past its multi-draw's count as the CPU reads it"); return; }   // past the multi-draw's count (read now: a count the GPU writes in this submission is not seen)
-               VRED_ONCE("indirect-count multi-draws read their count on the CPU at replay (no drawIndirectCount, a stride it does not take, or DM_VK_MDI_GPU=0)"); }
+               VRED_ONCE("indirect-count multi-draws read their count on the CPU at replay (no native multi-draw for the topology, device, stride or settings)"); }   // PEANUTS: bounded draw ranges
     d->b.base_instance = (uint32_t)(dw ? dw->base_instance : di->base_instance);
     vka_shader *sh[VKA_NSTAGE] = {0}; unsigned bad = 0;
     PT(0);
@@ -2648,6 +2663,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
         if (topo == VK_PRIMITIVE_TOPOLOGY_PATCH_LIST) SKIP("tessellation patches are not on Vulkan yet (no patch size is recorded): the draw is skipped");
     }
     uint64_t ind = memu_e ? 0 : dw ? dw->ind : di->ind;
+    uint32_t inst = (dw ? dw->instances : di->instances) > 0 ? (uint32_t)(dw ? dw->instances : di->instances) : 1;   // direct record convention   // PEANUTS: bounded draw ranges
     // A geometry shader that writes memory makes those writes in the run that claims its primitive (vka_spv_gs_claim): a zeroed word per primitive at VKA_GS_CLAIM_BINDING.
     // Primitive IDs restart with each instance and an indirect draw's count is the GPU's, so those draws take the shader as it is (each run writing)
     g_claim_words = 0;
@@ -2663,9 +2679,16 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     if (expand && ind) {
         uint32_t r[5] = {0};
         if (!cpu_read(ind, r, di ? 20 : 16)) SKIP("indirect draw of quads or a line loop: its record at %#llx is not readable: skipped", (unsigned long long)ind);
+        if (!r[0] || !r[1]) return;   // indirect arguments have no implicit instance   // PEANUTS: bounded draw ranges
+        inst = r[1];
         VRED_ONCE("indirect draws of quads or a line loop read their record on the CPU at replay (first: %u vertices, %u instances)", r[0], r[1]);
         if (dw) { dwc = *dw; dwc.count = (int32_t)r[0]; dwc.instances = (int32_t)r[1]; dwc.first = (int32_t)r[2]; dwc.base_instance = (int32_t)r[3]; dwc.ind = 0; dw = &dwc; }
-        else { dic = *di; dic.count = (int32_t)r[0]; dic.instances = (int32_t)r[1]; dic.ibuf += (uint64_t)r[2] * (di->itype == 0 ? 1 : di->itype == 1 ? 2 : 4); dic.base_vertex = (int32_t)r[3]; dic.base_instance = (int32_t)r[4]; dic.ind = 0; di = &dic; }
+        else {   // PEANUTS: bounded draw ranges
+            uint64_t first_byte = (uint64_t)r[2] << di->itype;
+            if (first_byte > UINT64_MAX - di->ibuf) SKIP("expanded indirect draw's first index overflows its guest address");
+            dic = *di; dic.count = (int32_t)r[0]; dic.instances = (int32_t)r[1]; dic.ibuf += first_byte;
+            dic.base_vertex = (int32_t)r[3]; dic.base_instance = (int32_t)r[4]; dic.ind = 0; di = &dic;
+        }
         d->b.base_instance = (uint32_t)(dw ? dw->base_instance : di->base_instance);
         ind = 0;
     }
@@ -2708,7 +2731,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     if (make_images(d, sh, 1)) { vka_rp_end(); make_images(d, sh, 0); }
     if (vka_rs_on()) rs_fetch_fix(sh, d);   // PEANUTS: DM_RES_SCALE: a shader that fetches by pixel sees its 2D textures at one scale
     if (R.on && R.bar_pending && bar_hazard(sh, d)) { g_bar_late++; vka_rp_end(); }   // the game barrier taken inside the pass is needed here: the pass ends (its full barrier) first
-    if (R.on && UB.n && ub_hazard(d, sh, mesh, dw, di)) vka_rp_end();
+    if (R.on && UB.n && ub_hazard(d, sh, mesh, dw, di, mdi_n, mdi_st)) vka_rp_end();   // PEANUTS: bounded draw ranges
     if (R.on && (R.df || R.sf) && rt_same(rt, has_rt, &R.rt, R.has_rt)) {   // SetRenderTargets of the same targets between a depth write and sampling depth (or sampling depth then writing it)
         int ds = (R.rt_cont || !R.dread) ? depth_sampled(sh, d) : 0;
         int hd_ = R.df != VK_FORMAT_UNDEFINED, hs_ = R.sf != VK_FORMAT_UNDEFINED;
@@ -2811,6 +2834,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     // instanced pipeline stays bound) or start one (decided at the sets, below)
     VkBuffer i_ib = VK_NULL_HANDLE; VkDeviceSize i_io = 0; VkIndexType i_it = VK_INDEX_TYPE_UINT16;
     int icand = g_inst_on && !mesh && di && !di->ind && !expand && di->instances <= 1 && d->b.base_instance == 0 && sh[1] && !sh[2] && !sh[3] && !sh[4] && !d->rast_discard && !tfc /* PEANUTS: a capture is drawn alone */
+                && V.vin_dyn && !VI.instance_stream && V.max_vin_bindings > INST_BIND && V.props.limits.maxVertexInputAttributes > INST_LOC   // PEANUTS: bounded draw ranges
                 && !(k.vin_u | k.vin_s) && k.fs_variant == DMSH_VK_MOD_BASE && lay.push && vka_enc_on() && inst_ib(di, &i_ib, &i_io, &i_it);
     int ijoin = icand && RUN.open && p == RUN.base.p && DY.valid && DY.pipe == RUN.ipipe && vka_enc_total() == RUN.mark && inst_same_draw(&RUN.base, i_ib, i_io, i_it, di, d);
     if (!ijoin) {
@@ -2851,7 +2875,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
                 vk.vkCmdBindPipeline(g_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ip); DY.pipe = ip; VB.valid = 0;
                 g_w.bi[i_wv].range = wv; g_w.bi[i_wp].range = wp;
                 vk.vkCmdPushDescriptorSetKHR(g_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, lay.layout, 0, g_w.n, g_w.w); g_pd[0].n = 0;
-                RUN.open = 1; RUN.ipipe = ip; RUN.wv = i_wv; RUN.wp = i_wp; RUN.win_v = wv; RUN.win_p = wp; RUN.n = 1;
+                RUN.ipipe = ip; RUN.wv = i_wv; RUN.wp = i_wp; RUN.win_v = wv; RUN.win_p = wp; RUN.n = 1;   // PEANUTS: bounded draw ranges
                 RUN.table = (uint32_t *)i_ta.ptr; RUN.args = (uint32_t *)i_aa.ptr; RUN.table[0] = 0;
             } else if (!sets_push(&lay, VK_PIPELINE_BIND_POINT_GRAPHICS, g_dry_pool)) { g_skipped++; return; }
         }
@@ -3010,11 +3034,11 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     PT(7);
     if (g_fs_sub) g_sub_drawn = 1;   // (prepass_draw: its depth reached the draw)
     // The draw
-    uint32_t inst = (uint32_t)((dw ? dw->instances : di->instances) > 0 ? (dw ? dw->instances : di->instances) : 1), binst = d->b.base_instance;
+    uint32_t binst = d->b.base_instance;   // PEANUTS: bounded draw ranges
     if (vka_gp_active) vka_gp_note(mesh ? 'm' : 'v', mesh ? sh[7]->key : sh[0] ? sh[0]->key : 0, sh[1] ? sh[1]->key : 0, mesh ? (ind ? 0 : (uint64_t)dw->count) : (uint64_t)(dw ? dw->count : di->count) * inst);
     if (memu_e) {   // through compute: the record's arguments, which the batch's passes wrote (vka_memu_draw.inc)
         VkDeviceSize ro = MB.rec.off + ((VkDeviceSize)memu_e->rec * VKA_MEMU_REC_WORDS + VKA_MEMU_R_DRAW) * 4;
-        if (memu_e->indexed) { ib_bind(MB.arena, 0, VK_INDEX_TYPE_UINT32); vk.vkCmdDrawIndexedIndirect(g_cb, MB.rec.buf, ro, 1, 20); }
+        if (memu_e->indexed) { ib_bind(MB.arena, 0, VK_WHOLE_SIZE, VK_INDEX_TYPE_UINT32); vk.vkCmdDrawIndexedIndirect(g_cb, MB.rec.buf, ro, 1, 20); }   // PEANUTS: bounded draw ranges
         else vk.vkCmdDrawIndirect(g_cb, MB.rec.buf, ro, 1, 16);
     } else if (mesh) {   // count workgroups of the task shader, or of the mesh shader without one (the device's limit per dimension: maxTaskWorkGroupCount / maxMeshWorkGroupCount, 65535 on the Adreno 840)
         if (ind) {
@@ -3030,16 +3054,18 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
         }
     } else if (expand) {   // quads or a line loop: the indices made here, 32-bit, in scratch memory
         uint32_t count = (uint32_t)(dw ? dw->count : di->count), *src = NULL;
+        uint32_t nout = vkdi_expanded_count(expand, count);   // PEANUTS: bounded draw ranges
+        if (!nout) { if (expand == 1 && count < 4) return; SKIP("expanded draw of %u elements exceeds the Vulkan index count", count); }
         if (di && !(src = read_indices(di->ibuf, di->itype, count))) SKIP("indices at %#llx are not readable: the draw is skipped", (unsigned long long)di->ibuf);
-        uint32_t nout = expand == 1 ? count / 4 * 6 : count + 1; vka_span s;
-        if (!nout || !vka_scratch(4 * (VkDeviceSize)nout, 4, &s)) { free(src); return; }
+        vka_span s;   // PEANUTS: bounded draw ranges
+        if (!vka_scratch(4 * (VkDeviceSize)nout, 4, &s)) { free(src); return; }
         uint32_t *o = (uint32_t *)s.ptr, base = dw ? (uint32_t)dw->first : 0;
         #define IX(i) (src ? src[i] : base + (i))
         if (expand == 1) for (uint32_t q = 0; q < count / 4; q++) { static const uint8_t t[6] = {0, 1, 2, 0, 2, 3}; for (int j = 0; j < 6; j++) o[6 * q + j] = IX(4 * q + t[j]); }
         else { for (uint32_t i = 0; i < count; i++) o[i] = IX(i); o[count] = IX(0); }
         #undef IX
         free(src);
-        ib_bind(s.buf, s.off, VK_INDEX_TYPE_UINT32);
+        ib_bind(s.buf, s.off, 4 * (VkDeviceSize)nout, VK_INDEX_TYPE_UINT32);   // PEANUTS: bounded draw ranges
         vk.vkCmdDrawIndexed(g_cb, nout, inst, 0, di ? di->base_vertex : 0, binst);
     } else if (dw) {
         if (ind) { VkBuffer b, cb; VkDeviceSize o, co;
@@ -3051,12 +3077,13 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
     } else {
         VkBuffer ib; VkDeviceSize io; VkIndexType it = di->itype == 0 ? VK_INDEX_TYPE_UINT8 : di->itype == 1 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
         size_t isz = di->itype == 0 ? 1 : di->itype == 1 ? 2 : 4;
+        VkDeviceSize ibytes = isz * (VkDeviceSize)(uint32_t)di->count;   // PEANUTS: bounded draw ranges
         if (it == VK_INDEX_TYPE_UINT8 && !V.idx8) {   // 8-bit indices on a device without them: widened on the CPU
             if (ind) SKIPD(VKS_FEATURE, "an indirect draw of 8-bit indices on a device without them: skipped");
             uint32_t *src = read_indices(di->ibuf, 0, (uint32_t)di->count); vka_span s;
             if (!src || !vka_scratch(2 * (VkDeviceSize)di->count + 4, 4, &s)) { free(src); SKIP("8-bit indices at %#llx not readable: skipped", (unsigned long long)di->ibuf); }
             for (int i = 0; i < di->count; i++) ((uint16_t *)s.ptr)[i] = (uint16_t)src[i];
-            free(src); ib = s.buf; io = s.off; it = VK_INDEX_TYPE_UINT16;
+            free(src); ib = s.buf; io = s.off; it = VK_INDEX_TYPE_UINT16; ibytes = 2 * (VkDeviceSize)di->count;   // PEANUTS: bounded draw ranges
             if (restart) VRED_ONCE("primitive restart with widened 8-bit indices");
         } else if (ijoin) {   // the run's next object: its offset in the table, one more instance; nothing recorded unless something was since the run's last draw
             if (vka_enc_total() == RUN.mark) { RUN.table[RUN.n++] = (uint32_t)(i_d / 16); RUN.args[1] = RUN.n; g_inst_joined++; g_draws++; inst_fast_arm(d, rt, has_rt, sc, has_sc, di, 0); PT(8); return; }
@@ -3065,15 +3092,20 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
             vin_bind(d); VBC.valid = 0;
             if (!sets_push(&lay, VK_PIPELINE_BIND_POINT_GRAPHICS, 0)) { g_skipped++; return; }
             ijoin = 0; ib = i_ib; io = i_io; it = i_it;
-        } else if (!vka_gpu_addr(di->ibuf, ind ? isz : isz * (uint64_t)(di->count > 0 ? di->count : 1), &ib, &io) || io % isz) SKIPU(UNP_INDEX, di->ibuf, /* PEANUTS: counted */ "index buffer at %#llx is not in placed guest RAM: skipped", (unsigned long long)di->ibuf);
-        ib_bind(ib, io, it);
+        } else if (icand) { ib = i_ib; io = i_io; it = i_it; }   // inst_ib checked the direct draw's entire range
+        else {
+            uint64_t run = vka_gpu_addr_run(di->ibuf, ind ? UINT64_MAX : ibytes, &ib, &io);   // PEANUTS: bounded index range
+            ibytes = vkdi_index_span(run, (unsigned)isz, (uint32_t)di->count, ind != 0);
+            if (!ibytes || io % isz) SKIPU(UNP_INDEX, di->ibuf, "index buffer at %#llx has no aligned, fully placed index range: skipped", (unsigned long long)di->ibuf);
+        }
+        ib_bind(ib, io, ibytes, it);
         if (ind) { VkBuffer b, cb; VkDeviceSize o, co;
                    if (mdi_n) { if (mdi_ranges(ind, mdi, mdi_n, mdi_st, 20, &b, &o, &cb, &co)) vk.vkCmdDrawIndexedIndirectCount(g_cb, b, o, cb, co, mdi_n, mdi_st); else mdi_cpu(1, ind, mdi, mdi_n, mdi_st); }
                    else { if (!vka_addr(ind, 20, &b, &o, NULL) || (o & 3)) SKIPU(UNP_INDIRECT, ind, /* PEANUTS: counted */ "indirect draw arguments at %#llx are not in placed guest RAM: skipped", (unsigned long long)ind);
                           vk.vkCmdDrawIndexedIndirect(g_cb, b, o, 1, 20); } }
         else if (istart) {   // the run's first draw: indirect, its instance count raised by the draws that join
             RUN.args[0] = (uint32_t)di->count; RUN.args[1] = 1; RUN.args[2] = 0; RUN.args[3] = (uint32_t)di->base_vertex; RUN.args[4] = 0;
-            vk.vkCmdDrawIndexedIndirect(g_cb, i_aa.buf, i_aa.off, 1, 20); RUN.mark = vka_enc_total(); g_inst_runs++;
+            vk.vkCmdDrawIndexedIndirect(g_cb, i_aa.buf, i_aa.off, 1, 20); RUN.mark = vka_enc_total(); RUN.open = 1; g_inst_runs++;   // PEANUTS: bounded draw ranges
             inst_fast_arm(d, rt, has_rt, sc, has_sc, di, 1);
         } else { if (tfc) vka_tf_begin(g_cb); vk.vkCmdDrawIndexed(g_cb, (uint32_t)di->count, inst, 0, di->base_vertex, binst); if (tfc) vka_tf_end(g_cb); }   // PEANUTS: tfc: the transform feedback capture around it (vka_tf.c)
     }

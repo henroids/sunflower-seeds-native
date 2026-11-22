@@ -1655,8 +1655,8 @@ void vka_event_replayed(volatile uint32_t *w, uint32_t mode, uint32_t v);
 static qs_cont *g_pk;
 // A later record of an indirect-count multi-draw that its first record makes whole (vka_draw.c vka_mdi_gpu): nothing of its own to record
 static int mdi_rest(uint32_t op, const void *a, uint32_t size) {   // (a multi-draw's record is always whole: hle_nvn.c rec_draw; a plain draw's stops before ind)
-    if (op == OP_DRAW) { if (size - 8 < sizeof(p_draw)) return 0; const p_draw *d = a; return d->mdi_cnt && d->mdi_i > 0 && d->prim != NVN_PRIM_MESH && vka_mdi_gpu(0, d->mdi_n, d->mdi_stride); }
-    if (op == OP_DRAW_IDX) { if (size - 8 < sizeof(p_draw_idx)) return 0; const p_draw_idx *d = a; return d->mdi_cnt && d->mdi_i > 0 && vka_mdi_gpu(1, d->mdi_n, d->mdi_stride); }
+    if (op == OP_DRAW) { if (size - 8 < sizeof(p_draw)) return 0; const p_draw *d = a; return d->mdi_cnt && d->mdi_i > 0 && vka_mdi_gpu(0, d->prim, d->mdi_n, d->mdi_stride); }   // PEANUTS: bounded draw ranges
+    if (op == OP_DRAW_IDX) { if (size - 8 < sizeof(p_draw_idx)) return 0; const p_draw_idx *d = a; return d->mdi_cnt && d->mdi_i > 0 && vka_mdi_gpu(1, d->prim, d->mdi_n, d->mdi_stride); }
     return 0;
 }
 static int exec(const uint8_t *p, int depth) {   // 1: parked at a wait (g_pk holds where it goes on)

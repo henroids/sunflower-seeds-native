@@ -1438,3 +1438,18 @@ An image whose last reference went during a submission's texture prepare (a queu
 | `dm/gfx/vk_android/vka_texown.h` | 1 | `vto_retire_fence` | `PEANUTS` |
 | `dm/host/tests/t_android_imglife.c` | 5 | the recorded fence in the model; `upload_then_release` for the worker and inline cases | `PEANUTS` |
 | `dm/host/tests/Makefile` | 1 | `t_android_imglife` depends on `vka_texown.h` and `nvn_hmap.h` | `PEANUTS` |
+
+### Yoshi's Crafted World fixes 3/9: bounded index and draw ranges (2026-11-22, GitHub PR #140, 999sian)
+
+Index buffers are bound with their real byte range where the device has `maintenance5` (core in Vulkan 1.4, else `VK_KHR_maintenance5`; the instance now asks for 1.4 where the loader has it): `vkCmdBindIndexBuffer2KHR` through the encoder, the legacy bind elsewhere. A direct draw needs its whole index range placed; an indirect one binds every whole mapped index. Indirect-count multi-draws of quads and line loops, which are expanded on the CPU per record, no longer take the native multi-draw path. Expanded index counts are checked before any allocation, a zero-size vertex binding reads zeros, vertex-state ranges are checked without overflow, and the instanced-run fast path checks the memory generation, the device limits and zero-stride streams. The transient blocks carry index and vertex buffer usage.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka.h` | 2 | `vkCmdBindIndexBuffer2KHR` in the device functions; `vka_mdi_gpu(indexed, prim, n, stride)` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_dev.c` | 6 | instance API 1.4 where available; `maintenance5` (core or extension) enabled and `vkCmdBindIndexBuffer2` resolved; index and vertex usage on transient blocks | `PEANUTS` |
+| `dm/gfx/vk_android/vka_draw.c` | 24 | `ib_bind` with a size; bounded direct and indirect index ranges; expanded-draw guard; `vka_mdi_gpu` refuses expanded topologies; `ub_hazard` ranges; `vin_bind` size 0; instanced-run guards | `PEANUTS` |
+| `dm/gfx/vk_android/vka_draw_range.h` | new | `vkdi_index_span`, `vkdi_arg_span`, `vkdi_expanded_count` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_enc.c` | 5 | `vkCmdBindIndexBuffer2KHR` recorded and replayed | `PEANUTS` |
+| `dm/gfx/vk_android/vka_exec.c` | 1 | `mdi_rest` passes the primitive | `PEANUTS` |
+| `dm/host/tests/t_android_draw_range.c` | new | the range arithmetic | `PEANUTS` |
+| `dm/host/tests/Makefile` | 2 | `t_android_draw_range` built and run | `PEANUTS` |

@@ -97,6 +97,8 @@ run: $(B)/t_language $(B)/t_motion $(B)/t_heap_size $(B)/t_touch $(B)/t_gesture 
 	$(B)/t_android_pckeep
 	$(B)/t_android_pwlist
 	$(B)/t_android_fmtlist
+# PEANUTS: bounded draw ranges
+	$(B)/t_android_draw_range
 	$(B)/t_android_place
 	$(B)/t_android_ovl
 	$(B)/t_android_pace
@@ -488,6 +490,10 @@ $(B)/t_android_pwlist: t_android_pwlist.c $(VKA)/vka_pwlist.h $(VKA)/vka_gkey.h 
 # An image's format list (vka_fmtlist.h; vka_tex.c img_create, img_lists, img_storage_upgrade)
 $(B)/t_android_fmtlist: t_android_fmtlist.c $(VKA)/vka_fmtlist.h | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_fmtlist.c
+# PEANUTS: bounded draw ranges
+run: $(B)/t_android_draw_range
+$(B)/t_android_draw_range: t_android_draw_range.c $(VKA)/vka_draw_range.h | $(B)
+	$(CLANG) -O1 -g -Wall -Werror -fsanitize=address,undefined -o $@ $<
 # Large memory pools placed by parts: the range arithmetic (vka_place.h; vka_mem.c mtl_pool_need)
 $(B)/t_android_place: t_android_place.c $(VKA)/vka_place.h | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -I.. -o $@ t_android_place.c
