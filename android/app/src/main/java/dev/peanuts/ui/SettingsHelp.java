@@ -34,6 +34,7 @@ public final class SettingsHelp {
         put(m, "Rescan", "Reads the folders again, for games you added or removed while the app was open.", null);
         put(m, "Free up space", "Deletes the original dump of a game that is built already. The game keeps playing from its build. Keep the original while a later update may come: an update needs it.", null);
         put(m, "Storage", "Finds leftovers and old files the app no longer needs, and removes the ones you tick. Saves are never listed.", null);
+        put(m, "Played", "The time you played every game in this app, counted only while a game runs. Each game's own time is on its page and on the second screen's card.", null);
         // Console
         put(m, "Keys", "Your console's prod.keys. The app needs them to read inside NSP and XCI files and to build a game. They stay inside the app.", null);
         put(m, "Firmware", "Your console's firmware, from a folder or a .zip. The app takes its fonts and Mii parts from it. Use the same version as your keys.", null);

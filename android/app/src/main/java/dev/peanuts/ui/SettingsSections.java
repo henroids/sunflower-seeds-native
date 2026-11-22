@@ -52,10 +52,11 @@ public final class SettingsSections {
     private static Row r(String title, String icon) { return new Row(title, icon); }
 
     public static final List<Section> ALL = Collections.unmodifiableList(java.util.Arrays.asList(
-            new Section("library", "Library", "library", "Where the app finds your games, and the space they take.",
+            new Section("library", "Library", "library", "Where the app finds your games, the space they take and the time you played.",
                     new Group("Folders", r("Game folder", "folder"), r("Update folder", "update"), r("DLC folder", "dlc"), r("Build folders", "build"),
                             r("Folders", "folder"), r("Rescan", "search")),
-                    new Group("Space", r("Free up space", "trash"), r("Storage", "storage"))),
+                    new Group("Space", r("Free up space", "trash"), r("Storage", "storage")),
+                    new Group("Play time", r("Played", "clock"))),
             new Section("console", "Console", "console", "What games find on a console of their own: its keys, its firmware and its clock.",
                     new Group("Keys and firmware", r("Keys", "key"), r("Firmware", "driver")),
                     new Group("Clock", r("Time of day", "clock"))),
@@ -87,7 +88,7 @@ public final class SettingsSections {
 
     /** What each section holds, in a few words: a tablet's tile of it (SettingsPage's hub) */
     private static final String[][] SUMMARY = {
-            {"library", "Game, update and DLC folders, builds and space"}, {"console", "Keys, firmware and the clock"},
+            {"library", "Game, update and DLC folders, builds, space and play time"}, {"console", "Keys, firmware and the clock"},
             {"graphics", "GPU driver, picture and speed"}, {"controls", "Buttons, touch controls and the controller"},
             {"screens", "Both screens, rotation, keeping the screen on"}, {"users", "Users and Miis"}, {"app", "Haptics, motion and updates"},
             {"help", "Readiness check, self-test, log and answers"}, {"developer", "Advanced, tester settings and adb"},

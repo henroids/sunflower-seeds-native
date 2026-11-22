@@ -1942,3 +1942,15 @@ the whole line. The line is plain text on Home now (Settings › About still has
 | `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 0 (the header line, already marked for the rebrand) | `buildHome`'s header goes through `dev.peanuts.ui.Library.homeHeader` | trailing `// PEANUTS: ...` |
 
 Tests: on the AYN Thor. Upstream candidate: no (the header's look is Peanuts').
+
+### Total play time (2026-11-21)
+
+Each game's total play time, counted only while the game runs (started, its screen resumed, not stopped or paused, not behind the "Preparing shaders" cover, not Build's shader preparation), kept in
+`files/peanuts-playtime.tsv` by `dev.peanuts.launch.PlayTime` (the format and arithmetic in `PlayLedger`, no Android class) and shown on the game's page, on the bottom screen's card of the focused game as three tiles, Total, Last run and Last played (`dev.peanuts.ui.BottomPanel`, read again at Home's resume) and in all in Settings › Library (`LibrarySettings`); after Stop, Home's toast says how long that session was.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 2 | `fpsTick` hands each tick to `PlayTime.tick`; `onDestroy` writes what is still in memory (`PlayTime.flush`) | `PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 1 | the game page's More card starts with a Played row (`PlayTime.line`) once the game was played | `PEANUTS` |
+
+Tests: `peanuts/tests/test_play_time.py`. Upstream candidate: no.
