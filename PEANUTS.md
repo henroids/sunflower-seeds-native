@@ -368,7 +368,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   its detaching was taken for Settings closing. Now only Back from a section's page and Home's build (`SettingsPage.homeBuilt`, from
   `BottomScreen.home`) put a tablet's Settings on its tiles. Test `peanuts/tests/test_settings_sections.py`.
   The icons' generator is in the repository: the `pi_*.xml` files said they came from an `icons.py` that was not there. `peanuts/scripts/icons.py` holds
-  all 37 icons (shell, kernel and ink dots, the same paths byte for byte) and writes them; `--check` says which file differs. Test `peanuts/tests/test_icons.py`.
+  all 41 icons (shell, kernel and ink dots, the same paths byte for byte) and writes them; `--check` says which file differs. Test `peanuts/tests/test_icons.py`.
   Comments and notes that pointed at a board or page of the owner's design canvas say what they mean in words; readers of the repository cannot see
   the canvas. Test `peanuts/tests/test_no_canvas_pointers.py` keeps such pointers out of Peanuts' code and notes.
   About › Licenses names Banana Native and Frame generation GPL-3.0-or-later, as the README, `android/NOTICE.md` and the LSFG folder's LICENSE.md do

@@ -94,6 +94,14 @@ ICONS = {
     "clock": [("s", circle(12, 12, 8.5)), ("s", "M12 7.5V12l3 2"), ("k", circle(12, 12, 1.5))],
     "user": [("s", circle(12, 8.5, 4)), ("s", "M4.5 20.5c.8-3.6 3.8-5.5 7.5-5.5s6.7 1.9 7.5 5.5"), ("k", circle(12, 8.5, 1.5))],
 
+    # The Mii editor (Users with Miis): a Mii, flip, random (a die) and undo
+    "mii": [("s", circle(12, 12, 8)), ("s", "M6.6 9.2c1.6-2.8 3.9-4 6.4-4 2.3 0 4.2 1 5 2.6"), ("k", circle(9.5, 12.5, 1.2) + circle(14.5, 12.5, 1.2)),
+            ("s", "M10 16q2 1.4 4 0")],
+    "flip": [("s", "M4 8h13.5M14 4.5 17.5 8 14 11.5M20 16H6.5M10 12.5 6.5 16l3.5 3.5"), ("k", circle(12, 8, 1.2))],
+    "random": [("s", rrect(4, 4, 16, 16, 3.5)), ("k", circle(8.6, 8.6, 1.35)), ("k", circle(15.4, 8.6, 1.35)), ("k", circle(12, 12, 1.35)),
+               ("k", circle(8.6, 15.4, 1.35)), ("k", circle(15.4, 15.4, 1.35))],
+    "undo": [("s", "M9 4.5 4.5 9 9 13.5M4.5 9H14a5.5 5.5 0 0 1 0 11H10")],
+
     # Console mode: the console with its two controllers (handheld), the console in its dock at a TV (docked)
     "console": [("s", rrect(1.5, 6.75, 21, 10.5, 3.25)), ("s", "M6.5 6.75V17.25M17.5 6.75V17.25"), ("k", rrect(8.75, 9, 6.5, 6, 1)),
                 ("f", circle(4, 10.3, 1.2)), ("f", circle(20, 13.7, 1.2))],
