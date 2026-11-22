@@ -2055,3 +2055,16 @@ Fixes found in the 0.1.7 review of the Vulkan replay, one commit each.
 | `dm/gfx/vk_android/vka_enc.c`, `vka_exec.c` | 7 (markers only) | the hunks of the query opcodes (#263: `vkCmdBeginQuery`/`vkCmdEndQuery` as encoder opcodes, `oq_rec` through the vk table) carry the marker they lacked | `// PEANUTS:` |
 
 Tests: the `t_android_*` suite (`t_android_spvpatch` extended), NDK syntax compiles of the changed files. Upstream candidate: the encoder opcode, the table plan fixes and the NonUniform decorations yes; the defaults no.
+
+### tex_dirty_upload tracked from first use on Android (PR #264, 2026-11-22)
+
+`hle_nvn.c` `ft_add` write-protected every texture it registered under the `tex_dirty_upload` profile at `nvnTextureInitialize`, and `nvn_ft_poll` found the CPU's writes at each submission. On Android the faults come while the game is still filling pages it has not used yet (Tears of the Kingdom: about 102,000). Android now protects such a texture at the first use that reads its storage (a sample, or a copy source through `vka_tex_get_src`), as a tracked image (`ST_TRACK`), and the registration-time protection and the poll are left out there. The Mac path is unchanged.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/nvn/hle_nvn.c` | 3 | `ft_add` does not protect on Android; `nvn_ft_poll` returns at once on Android | `// PEANUTS:` |
+| `dm/gfx/vk_android/vka.h` | 1 | `vka_tex_get_src` | `// PEANUTS:` |
+| `dm/gfx/vk_android/vka_exec.c` | 2 | `copy_t2t`'s source and `copy_bt`'s texture → buffer side through `vka_tex_get_src` | `// PEANUTS:` |
+| `dm/gfx/vk_android/vka_tex.c` | 7 | `g_first_copy_src`; `storage_mode`'s `copy_src` and `dirty_first` (a block-compressed texture still empty at its first use, and after the `ST_FILL` case any other); `first_mode` passes it; `vka_tex_get_src` | `// PEANUTS:`, `// PEANUTS begin`/`end` |
+
+Tests: the `t_android_*` suite, NDK syntax compiles of the changed files. Upstream candidate: yes, for the Vulkan replay.
