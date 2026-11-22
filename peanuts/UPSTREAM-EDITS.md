@@ -1995,23 +1995,22 @@ Tests: `peanuts/tests` (the JVM tests). Upstream candidate: yes.
 
 Fixes found reviewing the 0.1.7 host changes before the release.
 
-The steady clock never goes back (issue #329's follow-up). Since round 51 the steady clock is the host's real-time clock, which Android can set back while a game runs (network time). The steady seconds are now the real-time seconds plus a per-run correction that grows by each step back, so they stay where they were and run on; the user clock keeps following the real-time clock, so the step is one change of the user clock context's offset, as a user clock set back on a Switch. The context is also made again when its offset changes, so a step of one second (below the guest-tick rule) still gives a context that matches the user time.
+The user clock context is read under its lock (issue #329's follow-up), so a context of an older reading never replaces a newer one. A first version of this round also kept the steady clock from going back with the real-time clock by a per-run correction; round 54 (PR #365) does that by anchoring the real-time clock once a run instead, and the correction was taken out again: it made a step back one user clock change, which a save carried into the next run as a change forward.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
-| `dm/host/hle_time.c` | 3 | `steady_of` and its call in `user_clock`; `GetSystemClockContext` reads under its lock and renews the context on a new offset | `PEANUTS` (begin/end span and per-line) |
-| `dm/host/tests/t_peanuts_time.c` | 2 | case 8: the host clock set back 30 s and 1 s during a run, then a later run | `PEANUTS` in its header |
+| `dm/host/hle_time.c` | 1 | `GetSystemClockContext` reads under its lock | `PEANUTS` |
 
-Tests: `make GAME=<id> peanuts-time`: 37 checks pass; case 8 fails 4 against the previous `hle_time.c`. Upstream candidate: yes, with round 51.
+Tests: `make GAME=<id> peanuts-time`: all pass.
 
-The custom time's mode and offset are set once under `pthread_once`: two threads reading the user clock for the first time could see the mode before its offset. The context keeps its guest-tick rule beside the new offset rule: after a sleep or a frozen guest clock the offset is the same, but Unity's clock (its last `GetCurrentTime` plus the guest ticks since) re-reads the time only when the context changes.
+The custom time's mode and offset are set once under `pthread_once`: two threads reading the user clock for the first time could see the mode before its offset. A comment on the context's guest-tick rule: after a sleep or a frozen guest clock the offset is the same, but Unity's clock (its last `GetCurrentTime` plus the guest ticks since) re-reads the time only when the context changes.
 
 | File | Hunks | Change | Marker |
 |---|---|---|---|
-| `dm/host/hle_time.c` | 2 | `user_clock_init` (from `user_clock`, under `pthread_once`); a comment on the context's two rules | `PEANUTS` |
+| `dm/host/hle_time.c` | 2 | `user_clock_init` (from `user_clock`, under `pthread_once`); a comment on the context's guest-tick rule | `PEANUTS` |
 | `dm/host/tests/t_peanuts_time.c` | 2 | case 9: eight threads' first reads with `DM_TIME_OFFSET` | `PEANUTS` in its header |
 
-Tests: `make GAME=<id> peanuts-time`: 38 checks pass.
+Tests: `make GAME=<id> peanuts-time`: all pass.
 
 The hardware Opus decoder takes the plain libopus only from a game module. `guest_sym("opus_decode")` also finds the sdk's own libopus in older sdks (3.5.1, 5.5.0 export it under the plain names), so those games left the sdk's software `OpusDecoder` for a path meant for Hogwarts Legacy, whose `main` ships its own libopus. A decoder whose size or initialization fails is no longer kept in `objmap` without a state; its decode is a decode error (4), its reset does nothing and its rate and channels are 0, instead of calls on a NULL state.
 
