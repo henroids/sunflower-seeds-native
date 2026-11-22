@@ -2029,3 +2029,11 @@ The font engine's wait and take-over lines name their two threads from a buffer 
 | `dm/host/hle_fontll.c` (Peanuts' file) | 3 | `font_who` and its two uses | inside the file's `PEANUTS begin`/`end` |
 
 Tests: `make GAME=<id> peanuts-fontll`: all pass.
+
+The software keyboard's returned text (`text`, 3,007 bytes) is static like `init` and `msg` beside it (one keyboard at a time, the applet is modal), so the game's text-check callback, which runs on the game thread's stack below `swkbd_show`'s frame, has that much more of it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_swkbd.c` | 1 | `swkbd_show`'s `text` static | `// PEANUTS:` |
+
+Tests: `t_swkbd` (on Linux with the peanuts tests' flags): 29 of 29 pass. Upstream candidate: yes, with the text check (#292, #354).

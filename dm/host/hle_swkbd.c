@@ -140,7 +140,8 @@ static uint32_t swkbd_text_check(void *out, const uint8_t *arg, char *msg, size_
 }
 Result swkbd_show(void *out, const void *arg_, swkbd_input_fn input) {
     const uint8_t *arg = arg_;
-    char title[HEADER_N * 3 + 1], sub[SUB_N * 3 + 1], guide[GUIDE_N * 3 + 1], text[1002 * 3 + 1];
+    char title[HEADER_N * 3 + 1], sub[SUB_N * 3 + 1], guide[GUIDE_N * 3 + 1];
+    static char text[1002 * 3 + 1];   // PEANUTS: off the guest stack too, as init and msg: the game's text check runs on that stack while swkbd_show is in its frame
     static char init[1002 * 3 + 1], msg[TC_DIALOG / 2 * 3 + 1];   // off the guest stack (a game thread's can be 8 KB); one keyboard at a time (the applet is modal)
     init[0] = 0;
     swkbd_u16_to_u8((const uint16_t *)(arg + ARG_HEADER), HEADER_N, title, sizeof title);
