@@ -1479,3 +1479,16 @@ Unreal grows a streamed texture by copying its resident levels into a new textur
 | `dm/gfx/vk_android/vka_exec.c` | 1 | `copy_t2t` mirrors a plain image copy | `PEANUTS(upstream-candidate)` |
 | `dm/gfx/vk_android/vka_tex.c` | 2 | `mirror_mip_storage`, `vka_tex_mirror_mip`; the region-write queue declared before them | `PEANUTS(upstream-candidate)` |
 | `dm/gfx/vk_android/vka_selftest.c` | 2 | `streamed_mip_test` | `PEANUTS(upstream-candidate)` |
+
+### Yoshi's Crafted World fixes 9/9: the game on Android, its profile and notes (2026-11-22, GitHub PR #140, 999sian)
+
+Yoshi's Crafted World (update 1.0.1) is listed for 0.1.7 with 999sian as its contributor. Its profile offers display-paced caps measured on an AYN Thor, and its note has the OnePlus Pad 2 rendering notes from the pull request and an Android section for the Thor. The prewarm seed `vk_prewarm.bin` (548 keys) is ignored by git and not part of this change.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/games/01006000040C2000/game.tsv` | 1 | `fps_limit_present 1`, `fps_modes 20,30,45,60` | `PEANUTS` |
+| `dm/games/01006000040C2000/README.md` | 2 | the Android rendering notes under Rendering; the Android section | `PEANUTS` (HTML comments) |
+| `README.md` | 2 | the game's table row and the 0.1.7 count | inside the file's `PEANUTS` section |
+| `docs/agents/game-patches.md` | 1 | the `fps_modes 20,30,45,60` row | allow-listed in `peanuts/upstream-unmarked.txt` (generated) |
+
+Peanuts' own files, no marker: `peanuts/games.tsv`, `peanuts/release-titles.txt`, `peanuts/games.json`, `peanuts/docs/README.github.md`.

@@ -32,7 +32,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.6 includes 52 games, and 1 more is coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.6 includes 52 games, and 2 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion | Contributor |
 |---|---|---|---|---|
@@ -89,6 +89,7 @@ Peanuts Native 0.1.6 includes 52 games, and 1 more is coming in 0.1.7 (marked in
 | NieR:Automata The End of YoRHa Edition (Asian release) | `0100B8E016F76000` | 1.0.3 | No |  |
 | Hyrule Warriors: Age of Calamity | `01002B00111A2000` | 1.3.0 | No |  |
 | Trails in the Sky 1st Chapter (coming in 0.1.7) | `01002C9022770000` | 1.0.7 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
+| Yoshi's Crafted World (coming in 0.1.7) | `01006000040C2000` | 1.0.1 | No | ⭐<br><a href="https://github.com/999sian"><img src="https://img.shields.io/badge/999sian-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="999sian"></a> |
 
 <!-- PEANUTS end: the Supported games table -->
 
