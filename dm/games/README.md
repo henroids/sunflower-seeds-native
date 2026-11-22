@@ -173,6 +173,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [Sonic Frontiers Definitive Edition](0400921025B32000/README.md) | `0400921025B32000` | v65536 (Switch 2) | 21.4.1 (Ounce) | Hedgehog Engine 2, CRIWARE | NVN2 |
 | [Splatoon Raiders](0400380020056000/README.md) | `0400380020056000` | v65536 (Switch 2) | 21.4.4 (Ounce) | Nintendo EPD (sead / agl / gsys) | NVN2 |
 | [Star Fox](0400E88025B1A000/README.md) | `0400E88025B1A000` | v131072 (Switch 2) | 21.4.4 (Ounce) | custom (eclipse) | NVN2 |
+| [STAR OCEAN THE SECOND STORY R](010065301A2E0000/README.md) | `010065301A2E0000` | 1.1.0 (plays on an AYN Thor, Turnip) | 15.3.2 | Unity 2021.3.22f1 IL2CPP, CRIWARE, FMOD | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [STEINS;GATE RE:BOOT](01008BC024FDE000/README.md) | `01008BC024FDE000` | 1.0.3 | 20.5.17 | M2's ADV engine | NVN |
 | [Stardew Valley](0100E65002BB8000/README.md) | `0100E65002BB8000` | 1.6.15.13 | 20.5.27 | MonoGame (C# → C++ by BRUTE) | NVN |
 | [SteamWorld Dig](01009320084A4000/README.md) | `01009320084A4000` | 1.12.0 | 3.4.0 | Image & Form's own engine (SteamWorld) | NVN |
