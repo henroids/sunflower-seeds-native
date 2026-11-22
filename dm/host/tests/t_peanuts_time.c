@@ -9,7 +9,7 @@
 //   6. a snapshot's user time is its context's offset plus its steady time point (one reading); DM_FIXED_TIME stays fixed;
 //   7. two runs whose clocks sit at other points within the second: no user clock change (two readings came out a second apart, which the game also warns about);
 //   8. the phone's clock corrected back (or forward) while the game runs: no negative span, no user clock change (the follow-up of PR #336: the real-time clock
-//      is read once a run and advanced by the boot-time clock, which counts sleep and never goes back);
+//      is read once a run and advanced by the boot-time clock, which counts sleep and never goes back), nor against the next run, which starts on the corrected clock;
 //   9. the first reads of the user clock from eight threads at once all carry the custom time's offset.
 // make GAME=<id> peanuts-time (part of peanuts-host). No game files.
 #include "../hle.h"
@@ -152,6 +152,12 @@ int main(void) {
         CHECK(span_s(y, z, &ok) == 5 && ok, "the clock set 20 minutes forward: the span is the 5 s that passed");
         CHECK(h_time_UserDiff(x, y) == 0 && h_time_UserDiff(y, z) == 0, "and no user clock change");
         CHECK(get64(y, 0x40) - get64(x, 0x40) == 5 && get64(z, 0x40) - get64(y, 0x40) == 5, "the user clock runs on with the steady clock within the run");
+        // The game saved z; the phone restarted and the next run starts an hour after it, on the corrected clock (net 10 minutes ahead of the run's anchor)
+        uint8_t *w = snap + 0x600;
+        run(1795500000 + 610 + 3600, 50, NULL, w);
+        CHECK(get64(w, 0x00) == 0, "the next run's context has offset 0");
+        CHECK(h_time_UserDiff(z, w) == 0, "a snapshot saved after the corrections, against the next run: no user clock change (was %lld s)", (long long)h_time_UserDiff(z, w) / 1000000000);
+        CHECK(span_s(z, w, &ok) == 3600 + 600 && ok, "the correction reaches the next run as time that passed (%lld s)", (long long)span_s(z, w, &ok));
     }
 
     // 9. The first reads of the user clock from several threads at once: every one sees the custom time's offset (the mode is never read before its offset)

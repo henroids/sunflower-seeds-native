@@ -2079,3 +2079,9 @@ Round 51 (PR #336, the steady clock runs through sleep and restarts) made the st
 | `docs/reference/services.md` | 1 | the anchor in "The steady clock runs through sleep and restarts" | inside its `PEANUTS` span |
 
 Tests: `make GAME=<id> peanuts-time` (Linux, gcc): 31 checks pass; the same test against the unanchored `hle_time.c` fails 3, a span of −595 s for the 5 s that passed.
+
+Case 8 also takes the snapshot saved after the corrections to the next run, which starts an hour later on the corrected clock: offset 0, no user clock change, and the net correction counts as time that passed. 35 checks pass; against the per-run correction of the 0.1.7 hardening round 6 fail, among them a user clock change of +595 s at that next start.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/tests/t_peanuts_time.c` | 2 | case 8's next run, and its line in the header | Peanuts' own file (Round 51) |
