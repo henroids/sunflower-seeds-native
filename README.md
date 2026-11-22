@@ -188,7 +188,7 @@ The Miis are drawn with the colour tables and face layout of [vee](https://githu
 
 The companion runtime and package format come from [Eden Duo](https://github.com/igawa6/eden-duo).
 
-Contributors: <!-- PEANUTS: the contributor list of this fork -->
+Contributors: <!-- PEANUTS begin: the contributor list of this fork -->
 
 - [intermission88](https://github.com/intermission88): the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`, pull request #13), the profiles of Kirby's Return to Dream Land Deluxe, Kirby and the Forgotten Land, Super Mario 3D World + Bowser's Fury, Tetris Effect: Connected and Digimon Story Time Stranger (pull requests #34, #84, #83, #330 and #269), the guide for adding a game (`peanuts/docs/NEW-GAME.md`, pull request #34), and fixes to the on-device packer, the release notes popup and the Unreal shader step (pull requests #37, #35 and #71).
 - [davdxpx](https://github.com/davdxpx): the issue and discussion forms rebuilt from the ground up, with a game catalog that also keeps the Supported games table up to date (pull request #175), building from .nsz and .xcz files, the launcher and companion on the second screen, Swap screens, the GPU driver page, Share build log, game icons that outlive their NSP, companion release notes, and many smaller fixes across the app.
@@ -198,6 +198,7 @@ Contributors: <!-- PEANUTS: the contributor list of this fork -->
 - [skyhong2002](https://github.com/skyhong2002): STEINS;GATE RE:BOOT 1.0.4, standalone NUP updates in the library, and Prepare surviving a missed job status read (pull requests #192, #185 and #181).
 - [ssv0225](https://github.com/ssv0225): the New Pokémon Snap profile with its DRPF archive reader for the shader split and the NVN memory pool builder's getters, and the shader tools running on Linux (pull requests #307, #308, #309 and #310).
 - [ArchOwlen](https://github.com/ArchOwlen): the first issue and discussion forms (pull request #5).
+<!-- PEANUTS end -->
 
 The project as a whole is licensed GPL-3.0-or-later. Frame generation (ported from Eden and lsfg-vk) and other
 components carry their own licenses; see `android/NOTICE.md` and `dm/third_party/README.md`.

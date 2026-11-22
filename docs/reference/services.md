@@ -525,6 +525,7 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Found on:** [Mario Kart 8 Deluxe](../../dm/games/0100152000022000/README.md) (4.0.0 and 4.0.1; GitHub issue #550).
 - **Check:** `t_oe` and `t_hid` (`dm/host/tests`). On the Mac, from a save past the Mii pick: L+R at the title, Down, A (2P), A (Grand Prix), A (50cc). The log shows `oe library applet: controller support`, then `oe focus state → 2 (library applet open)` and `→ 1 (library applet closed)`, and the character select takes input. With one controller the applet logs `too few, closed as the player would (canceled)` once and the engine class menu comes back.
 
+<!-- PEANUTS: the text check and the moved work buffer (issue 292) -->
 ### The software keyboard's text check and the argument layout of later SDKs
 
 - **Symptom:** a game that checks the typed text with `swkbd::SetTextCheckCallback` never sees its callback called, so a name it would refuse goes through, or one it decides only in its callback is never decided; a game whose initial text lies in the work buffer at a moved offset gets a wrong initial text (found while looking for the cause of [`ngc::ProfanityFilter::GetContentVersion` reports a word list](#ngcprofanityfiltergetcontentversion-reports-a-word-list), which was the cause of that game's refused names).
@@ -569,6 +570,7 @@ Most service calls can be found before they crash, before the first boot or the 
 - **Fix:** the filter now gets a host vtable (`ngc_vtable` in `hle_misc.c`): each slot of the SDK's `_ZTVN2nn3ngc15ProfanityFilterE` is matched by address with the class's methods, and slots the loader already bound to forced take-overs keep them. The `unsigned short` and `char16_t` overloads are taken over by name too, as are the `char` overload, `SetMaskMode` and `Finalize` (`hle_misc.c`). Nothing is masked or reported.
 - **Found on:** [Monster Hunter Rise](../../dm/games/0100B04011742000/README.md) (the vtable); [DARK SOULS: REMASTERED](../../dm/games/01004AB00A260000/README.md) (SDK 4.5.0; one boot: the UTF-16 overload by name); [The Great Ace Attorney Chronicles](../../dm/games/010036E00FB20000/README.md) (SDK 10.4.1: the `char` overload, `SetMaskMode`, `Finalize`).
 
+<!-- PEANUTS: word list version 1 (issue 292) -->
 ### `ngc::ProfanityFilter::GetContentVersion` reports a word list
 
 - **Symptom:** every name the player types is refused ("That name cannot be used"), whatever it is; the log shows `swkbd: … → OK '<name>'`, then `ngc: ProfanityFilter host vtable …`, and the game's refusal (STORY OF SEASONS: Grand Bazaar, issue 292).

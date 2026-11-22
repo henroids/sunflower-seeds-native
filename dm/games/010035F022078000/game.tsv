@@ -21,6 +21,7 @@ romfs_marker	SparkingZERO/Content/Paks/pakchunk0-Switch.ucas
 zip_store	.pak:.ttf:.ucas:.usm:.utoc:.metallib
 
 # ---- Graphics ----
+# PEANUTS: 60 fps with patches.py (dnyan007, #302)
 fps_target	60
 fps_modes	60
 ue_texture_pool	1000

@@ -44,6 +44,7 @@ The game may also write into an NVN object directly, without an NVN call, throug
 
 ## Memory pools
 
+<!-- PEANUTS: the pool builder's getters (New Pokemon Snap, #309) -->
 ### The pool builder's getters return the builder's fields
 
 - **Symptom:** a game reads a pool builder back and gets zero for the device, memory, size and flags; its resource pipeline then reads a null pool.

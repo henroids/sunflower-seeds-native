@@ -52,15 +52,15 @@ def find(img): return ue_malloc.find(bytes(img), TEXT, RO, DATA)
 class FindTest(unittest.TestCase):
     def test_found_in_place(self):
         call, vt, slot, why = find(image())
-        self.assertEqual((call, vt, slot), ((CALLER + 4,), VT, 19), why)
+        self.assertEqual((call, vt, slot), ((CALLER + 4,), VT, 19), why)   # PEANUTS: a tuple of calls (#290)
 
     def test_found_through_relocations(self):
         call, vt, slot, why = find(image(slot=26, relocated=True))
-        self.assertEqual((call, vt, slot), ((CALLER + 4,), VT, 26), why)
+        self.assertEqual((call, vt, slot), ((CALLER + 4,), VT, 26), why)   # PEANUTS: a tuple of calls (#290)
 
     def test_found_with_relocated_rtti(self):  # PEANUTS: Captain Tsubasa 2 uses RTTI at its primary address point.
         call, vt, slot, why = find(image(slot=26, relocated=True, rtti_name=b'14FMallocBinned3\0'))
-        self.assertEqual((call, vt, slot), ((CALLER + 4,), VT, 26), why)
+        self.assertEqual((call, vt, slot), ((CALLER + 4,), VT, 26), why)   # PEANUTS: a tuple of calls (#290)
 
     def test_reject_wrong_rtti(self):  # PEANUTS: only a proven FMallocBinned3 header permits the constructor cut.
         call, _, _, why = find(image(slot=26, relocated=True, rtti_name=b'7FMalloc\0'))

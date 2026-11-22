@@ -519,7 +519,7 @@ def run_in_process(script, args, env, log, progress=None):
     """script run as `python3 script args` would run it, in this process: its sys.argv, env added to os.environ, stdout and stderr to the file log;
     everything put back after it (the modules it imported from outside the standard library are dropped, so the next run starts afresh). → its exit code.
     progress: (base, width) to pass the tool's progress lines on to this script's output (ProgressTee)
-    The tool sees DM_IN_PROCESS=1. One that would run itself again with more variables (patch_nso.py's DM_PATCH_FRONT, an os.execve the app's process does not allow)
+    PEANUTS: the tool sees DM_IN_PROCESS=1. One that would run itself again with more variables (patch_nso.py's DM_PATCH_FRONT, an os.execve the app's process does not allow)
     ends with sys.exit({'rerun_env': {...}}) instead; it is run again with them, after the first run is undone (its memory freed), its output appended to the same log"""
     extra = {}
     for attempt in range(3):
@@ -529,7 +529,7 @@ def run_in_process(script, args, env, log, progress=None):
     return 1
 
 
-def _run_in_process_once(script, args, env, log, progress, mode):   # run_in_process's single run → (exit code, the rerun variables the tool asked for or None)
+def _run_in_process_once(script, args, env, log, progress, mode):   # PEANUTS: run_in_process's single run → (exit code, the rerun variables the tool asked for or None)
     saved = (sys.argv, list(sys.path), dict(os.environ), set(sys.modules), sys.stdout, sys.stderr, os.getcwd())
     code, rerun = 0, None
     with open(log, mode, buffering=1, encoding='utf-8', errors='backslashreplace') as f:
@@ -540,7 +540,8 @@ def _run_in_process_once(script, args, env, log, progress, mode):   # run_in_pro
         except SystemExit as e:
             if e.code is None: code = 0
             elif isinstance(e.code, int): code = e.code
-            elif isinstance(e.code, dict) and isinstance(e.code.get('rerun_env'), dict): rerun = {str(k): str(v) for k, v in e.code['rerun_env'].items()}
+            elif isinstance(e.code, dict) and isinstance(e.code.get('rerun_env'), dict):   # PEANUTS: the rerun the tool asks for
+                rerun = {str(k): str(v) for k, v in e.code['rerun_env'].items()}
             else: print(e.code, file=f); code = 1
         except BaseException:
             import traceback; traceback.print_exc(); code = 1
@@ -551,7 +552,7 @@ def _run_in_process_once(script, args, env, log, progress, mode):   # run_in_pro
             std = os.path.realpath(sys.base_prefix) + os.sep
             for m in set(sys.modules) - mods:
                 if not os.path.realpath(getattr(sys.modules.get(m), '__file__', None) or '').startswith(std): sys.modules.pop(m, None)
-    return code, rerun
+    return code, rerun   # PEANUTS
 
 
 def staging(out, m):   # where a module is rewritten before it goes into the pack (inside it: same file system, so the swap is renames)

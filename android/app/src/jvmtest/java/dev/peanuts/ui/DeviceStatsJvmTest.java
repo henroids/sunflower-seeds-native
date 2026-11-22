@@ -1,3 +1,4 @@
+// PEANUTS: DeviceStats on the JVM (dm/tools/tests/test_android_game_stats.py); prints "ok" or throws
 package dev.peanuts.ui;
 
 import java.io.File;

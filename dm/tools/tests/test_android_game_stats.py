@@ -1,3 +1,4 @@
+# PEANUTS: the fork's stats page (dev.peanuts.ui)
 """The second screen's stats page for a game with no companion (StatsView and GameStats in android/app/src/main/java/dev/peanuts/ui): GameScreen shows it in
 place of the cover when Settings › Library › Games without a companion says Stats, and its maths run on a JVM (skipped without a JDK)."""
 import shutil

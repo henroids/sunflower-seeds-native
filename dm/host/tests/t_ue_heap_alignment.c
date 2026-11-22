@@ -1,3 +1,4 @@
+// PEANUTS: the Unreal 4.27 allocator's page alignment outside the small pools (hle_uemalloc.c align_of, #236)
 // Run with section garbage collection: only the allocator alignment policy is needed, not the guest loader.
 #include <stdbool.h>
 #include "../hle_uemalloc.c"
