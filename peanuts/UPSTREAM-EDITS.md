@@ -2207,3 +2207,28 @@ the run's end (the message that says no worker runs, at most 30 s; otherwise the
 Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/build/Prepare.java` (`earlier`: the states from before the run, `firstRead`;
 `runEnded`; `link`, `Link.service` volatile, `Link.heard`). Tests: `peanuts/tests/test_reuse_check.py` (`WorkerEnd`; `Resume`: a job the packer still
 holds, Try anyway once the failed run has ended). Upstream candidate: the `PackService` part, yes (upstream's own race).
+
+### Round 33, the review round before dev 0.1.7 (2026-11-22, issue #120)
+
+Rebased onto dev 0.1.7 (9afb633d). Since #177 (2590f2d2) `patch_nso.py` asks for its second pass (`DM_PATCH_FRONT`, when a module's patch area does not fit
+before the base) with `sys.exit({'rerun_env': ...})` only where `DM_IN_PROCESS` is set, and only `run_in_process` ran it again. The phone's rewrite goes through
+`pn_rewrite_worker` first, which set neither, so `patch_nso.py` took the `os.execve` path that Android refuses for a file in the app's data, and DAVE THE DIVER
+stopped at "Rewriting the game's code" again. The worker's tool now sees `DM_IN_PROCESS=1`; its boot passes a rerun on as its last line and exit code 75, and
+the tool runs again with those variables in a new worker, its output appended to the same log (one that asks again for the same fails). The rewriter's
+equivalent is dev's file since #177. The kept copies (the library's, each module's, the split's results) go under the 4 GB cap when they are made,
+`PN_REUSE=0` writes nothing for a later build, and `shader_reuse.py` and `rewrite_reuse.py` hash their own source into what they record, as `split_reuse.py`
+did. A job and a full check hold a lock on the game's build caches, which Settings › Storage takes before it deletes them.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `scripts/pack_android.py` (the rewrite on the fast cores) | 2 | `REWRITE_RERUN`, `RERUN_LINE`, `REWRITE_BOOT` passes a `rerun_env` on; `pn_rewrite_worker` runs the tool with `DM_IN_PROCESS=1` and again with the variables it asked for (`_rewrite_worker_once`), inside the existing span | `# PEANUTS begin`/`end` |
+| `dm/tools/rewriter_equiv/patch_nso.py.2590f2d24457` (replaces `.eaf706b807d5`) | file | dev 0.1.7's rewriter since #177, byte for byte: `patch_nso.py` without the forks; it follows every rewriter change on the branch this lands on | allow-listed in `peanuts/upstream-unmarked.txt` |
+| `android/app/src/main/java/dev/nxnative/android/StorageScan.java` | 1 | `delete` takes `reuseLock` for a game's build caches and leaves them when it cannot; `ReuseLock`, `reuseLock` (a file lock beside the folder, `no_backup/reuse/<title ID>.lock`) | `// PEANUTS`, `// PEANUTS begin`/`end` |
+| `android/app/src/ondevice/java/dev/nxnative/android/PackService.java` (the caches in use) | 4 | `work()` and `checkKept` hold `StorageScan.reuseLock` for their run, released in their `finally` | `// PEANUTS` (`checkKept` inside its span) |
+| `android/app/src/jvmtest/java/dev/nxnative/android/StorageScanJvmTest.java` | 1 | a game's build caches stay while a build holds their lock, and go once it is released; the lock file stays | `// PEANUTS`, `// PEANUTS begin`/`end` |
+
+Peanuts' own files, no marker: `dm/peanuts/reuse/shader_reuse.py` (`room`, `cap_bytes`, `dir_size`, `SPLIT_DIR`, `RULES`), `rewrite_reuse.py` (`RULES`,
+`record` with `PN_REUSE=0`, `_copy` under the cap), `split_reuse.py` (`_cap`), `peanuts/docs/INCREMENTAL-BUILD.md`, `peanuts/docs/BUILDER.md` (a build on a
+computer keeps nothing). Tests: `peanuts/tests/test_rewrite_forks.py` (`Worker`: a rerun, the same asked again, only the boot asks), `test_rewrite_reuse.py`
+(`Review`), `test_shader_reuse.py` (other keep rules, the split's results first), `test_split_reuse.py` (past the cap), `test_reuse_check.py`
+(`CachesInUse`), `StorageScanJvmTest`. Upstream candidate: the worker's rerun, with the worker.
