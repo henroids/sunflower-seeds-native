@@ -2012,3 +2012,12 @@ The custom time's mode and offset are set once under `pthread_once`: two threads
 | `dm/host/tests/t_peanuts_time.c` | 2 | case 9: eight threads' first reads with `DM_TIME_OFFSET` | `PEANUTS` in its header |
 
 Tests: `make GAME=<id> peanuts-time`: 38 checks pass.
+
+The hardware Opus decoder takes the plain libopus only from a game module. `guest_sym("opus_decode")` also finds the sdk's own libopus in older sdks (3.5.1, 5.5.0 export it under the plain names), so those games left the sdk's software `OpusDecoder` for a path meant for Hogwarts Legacy, whose `main` ships its own libopus. A decoder whose size or initialization fails is no longer kept in `objmap` without a state; its decode is a decode error (4), its reset does nothing and its rate and channels are 0, instead of calls on a NULL state.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_codec.c` | 6 | `popus_game` (`module_of`, not `sdk`) in `popus_on` and its log; the failed initialization frees its block; rate, channels, reset and decode of a decoder without a block | `PEANUTS` (begin/end span and per-line) |
+| `dm/host/tests/t_opus_hw.c` | 4 | a plain libopus in `sdk` and in `main` (a child process each) and `module_of`'s stand-in | `PEANUTS` (begin/end span and per-line) |
+
+Tests: `t_opus_hw` (on Linux with the peanuts tests' flags): 21 checks pass. Upstream candidate: no (the plain-libopus path is Peanuts').

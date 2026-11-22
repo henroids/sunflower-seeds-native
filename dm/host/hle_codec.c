@@ -23,15 +23,22 @@ static void *opus_soft(const void *hw) { void *s = objmap_get(hw); if (!s) die("
 // names (eMeans, tf_select_table, silk_*) with default visibility, and the loader binds a name to the first module that defines it: in Hogwarts Legacy that is main's own
 // libopus 1.1-beta (floating point), so the sdk's decoder read main's float eMeans as bytes and decoded every Opus stream 15-20 dB low with three of four CELT bands nearly
 // gone (speech and music muffled and thin; the same code run on its own decodes as libopus does). On the console this code never runs: the hardware decoder does the work.
-// When a game module exports the plain libopus decoder, the hardware decoder's C interface decodes with it (a block of its own per game decoder); DM_OPUS_SDK=1 keeps the sdk's
+// When a game module exports the plain libopus decoder, the hardware decoder's C interface decodes with it (a block of its own per game decoder); DM_OPUS_SDK=1 keeps the sdk's.
+// Only a module other than sdk counts: older sdks (3.5.1, 5.5.0) export their libopus under the plain opus_* names themselves, and their own C interface decodes with it as it is
 typedef struct { uint32_t magic; int rate, ch; void *st; } popus;
 #define POPUS_MAGIC 0x53554f50u
 static struct { int (*size)(int); int (*init)(void *, int32_t, int); int (*dec)(void *, const uint8_t *, int32_t, int16_t *, int, int); int (*ctl)(void *, int, ...); } g_po;
+static int popus_game(const void *f) { module_t *m = f ? module_of(f) : NULL; return m && strcmp(m->name, "sdk"); }   // a definition in a game module, not the sdk
 static int popus_on(void) {
     static _Atomic int on = -1; int v = atomic_load(&on); if (v >= 0) return v;
     g_po.size = guest_sym("opus_decoder_get_size"); g_po.init = guest_sym("opus_decoder_init"); g_po.dec = guest_sym("opus_decode"); g_po.ctl = guest_sym("opus_decoder_ctl");
-    const char *e = getenv("DM_OPUS_SDK"); v = g_po.size && g_po.init && g_po.dec && g_po.ctl && !(e && atoi(e));
-    if (atomic_exchange(&on, v) < 0) LOG("codec: hardware Opus decoder through %s", v ? "the game's own libopus (opus_decode exported by a game module)" : "the sdk's software OpusDecoder");
+    const char *e = getenv("DM_OPUS_SDK"); int game = popus_game(g_po.size) && popus_game(g_po.init) && popus_game(g_po.dec) && popus_game(g_po.ctl);
+    v = game && !(e && atoi(e));
+    if (atomic_exchange(&on, v) < 0) {
+        module_t *m = g_po.dec ? module_of(g_po.dec) : NULL;
+        LOG("codec: hardware Opus decoder through %s%s%s", v ? "the game's own libopus (opus_decode exported by " : "the sdk's software OpusDecoder", v && m ? m->name : "",
+            v ? ")" : g_po.dec && !game ? " (the plain opus_* names are the sdk's own)" : "");
+    }
     return v;
 }
 static popus *popus_of(const void *hw) { popus *p = objmap_get(hw); return p && p->magic == POPUS_MAGIC ? p : NULL; }
@@ -52,6 +59,7 @@ HLE_FORCE("_ZN2nn5codec29InitializeHardwareOpusDecoderEPNS0_23HardwareOpusDecode
         int n = g_po.size(ch); free(p->st);
         *p = (popus){POPUS_MAGIC, rate, ch, n > 0 ? calloc(1, (size_t)n) : NULL};
         r = p->st && !g_po.init(p->st, rate, ch) ? 0 : 8;   // 8: the sdk's answer to a rate or channel count it does not take
+        if (r) { objmap_del(hw); free(p->st); free(p); }   // PEANUTS: no decoder is left behind: its calls answer as for one never initialized (below)
     } else {
     int (*f)(void *, int, int, void *, size_t) = opus_fn("_ZN2nn5codec21InitializeOpusDecoderEPNS0_15OpusDecoderTypeEiiPvm");
     void *s = objmap_get(hw); if (!s) { s = calloc(1, SOFT_OPUS_STATE); objmap_put(hw, s); }
@@ -68,16 +76,16 @@ HLE_FORCE("_ZN2nn5codec27FinalizeHardwareOpusDecoderEPNS0_23HardwareOpusDecoderT
     void *s = objmap_del(hw); if (s) { f(s); free(s); }
 }
 HLE_FORCE("_ZN2nn5codec32GetHardwareOpusDecoderSampleRateEPKNS0_23HardwareOpusDecoderTypeE", "hwopus service; software OpusDecoder", int, h_codec_HwOpusRate, const void *hw) {
-    { popus *p = popus_of(hw); if (p) return p->rate; }   // PEANUTS
+    { popus *p = popus_of(hw); if (p) return p->rate; if (popus_on()) return 0; }   // PEANUTS: 0 for a decoder whose initialization failed
     int (*f)(const void *) = opus_fn("_ZN2nn5codec24GetOpusDecoderSampleRateEPKNS0_15OpusDecoderTypeE"); return f(opus_soft(hw));
 }
 HLE_FORCE("_ZN2nn5codec34GetHardwareOpusDecoderChannelCountEPKNS0_23HardwareOpusDecoderTypeE", "hwopus service; software OpusDecoder", int, h_codec_HwOpusCh, const void *hw) {
-    { popus *p = popus_of(hw); if (p) return p->ch; }   // PEANUTS
+    { popus *p = popus_of(hw); if (p) return p->ch; if (popus_on()) return 0; }   // PEANUTS: 0 for a decoder whose initialization failed
     int (*f)(const void *) = opus_fn("_ZN2nn5codec26GetOpusDecoderChannelCountEPKNS0_15OpusDecoderTypeE"); return f(opus_soft(hw));
 }
 HLE_FORCE("_ZN2nn5codec24ResetHardwareOpusDecoderEPNS0_23HardwareOpusDecoderTypeE", "hwopus service; software OpusDecoder", void, h_codec_HwOpusReset, void *hw) {
     if (opus_mgr_dec_reset(hw)) return;
-    { popus *p = popus_of(hw); if (p) { g_po.ctl(p->st, 4028); return; } }   // PEANUTS: OPUS_RESET_STATE
+    { popus *p = popus_of(hw); if (p) { g_po.ctl(p->st, 4028); return; } if (popus_on()) return; }   // PEANUTS: OPUS_RESET_STATE; nothing to reset when its initialization failed
     void (*f)(void *) = opus_fn("_ZN2nn5codec16ResetOpusDecoderEPNS0_15OpusDecoderTypeE"); f(opus_soft(hw));
 }
 HLE_FORCE("_ZN2nn5codec33DecodeOpusInterleavedWithHardwareEPNS0_23HardwareOpusDecoderTypeEPmPiPsmPKvm", "hwopus service; software OpusDecoder", int, h_codec_HwOpusDecode,
@@ -88,6 +96,8 @@ HLE_FORCE("_ZN2nn5codec33DecodeOpusInterleavedWithHardwareEPNS0_23HardwareOpusDe
         int got = ok ? g_po.dec(p->st, b + 8, (int32_t)n, out, (int)(out_size / 2 / (size_t)p->ch), 0) : -1;
         r = !ok ? 6 : got < 0 ? 4 : 0;   // the sdk's codes: 6 a short packet, 4 a decode error
         if (!r) { if (consumed) *consumed = 8 + (size_t)n; if (samples) *samples = got; }
+    } else if (popus_on()) {   // PEANUTS: a decoder whose initialization failed: a decode error, not a call on no state
+        r = 4;
     } else {
     int (*f)(void *, size_t *, int *, int16_t *, size_t, const void *, size_t) = opus_fn("_ZN2nn5codec21DecodeOpusInterleavedEPNS0_15OpusDecoderTypeEPmPiPsmPKvm");
     r = f(opus_soft(hw), consumed, samples, out, out_size, in, in_size);
