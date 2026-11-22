@@ -116,6 +116,7 @@ public final class BottomScreen {
 
     /** MainActivity.buildHome (PEANUTS hook) */
     public static void home(Activity a, Runnable settings) {
+        SettingsPage.homeBuilt();   // a tablet's Settings opens on its tiles again
         watch(a);
         openSettings = settings;
         explain = null;

@@ -51,7 +51,7 @@ public final class SettingsPage {
     private static boolean twoScreens;           // the device has a second screen: Screens' icon and tile say so (SettingsSections.icon, summary)
     private static final Map<View, String> rowIcons = new HashMap<>();   // the icon a row's tile shows now, for the rows whose icon follows their value
     private static boolean tablet;               // a tablet (its smaller side 600 dp or more): the sections as tiles (the hub), a section's page with Back
-    private static boolean atHub = true;         // a tablet's Settings shows its tiles (again whenever Settings is opened anew)
+    private static boolean atHub = true;         // a tablet's Settings shows its tiles (again when Settings is opened from Home: homeBuilt)
     private static LinearLayout hubPage;
     private static final Map<String, LinearLayout> pages = new HashMap<>();   // each section's column, built once per lay()
     private static final List<View> entries = new ArrayList<>();              // the sidebar's entries (wide)
@@ -150,6 +150,13 @@ public final class SettingsPage {
         int w = Math.min(c.getResources().getConfiguration().screenWidthDp, PAGE_DP) - 40;
         return wide ? w - SIDEBAR_DP - 18 : w;
     }
+
+    /**
+     * Home was built (BottomScreen.home, from MainActivity.buildHome): a tablet's Settings opens on the tiles of its sections next time. Nothing else
+     * puts it back on them but Back from a section's page: Advanced, the GPU driver page or another screen over Settings, and Settings built again (a
+     * value, a rotation, Back from Advanced), come back to the section they left
+     */
+    static void homeBuilt() { atHub = true; }
 
     /** The section that shows (its key: library, console, …), or "hub" while a tablet shows the tiles of the sections */
     public static String current() { return tablet && atHub ? "hub" : current; }
@@ -723,7 +730,9 @@ public final class SettingsPage {
             @Override public void onViewAttachedToWindow(View v) {}
             @Override public void onViewDetachedFromWindow(View v) {
                 content.removeOnAttachStateChangeListener(this);
-                UI.post(() -> { if (pane == content && !content.isAttachedToWindow()) { explained = null; atHub = true; BottomScreen.explain(a, null); } });   // Settings left (no new lay): a tablet opens on its tiles again
+                // Settings left (no new lay): Home, or Advanced over it. The section stays: Back from Advanced builds Settings again on it, and only Home's
+                // build (homeBuilt) puts a tablet's Settings on its tiles again
+                UI.post(() -> { if (pane == content && !content.isAttachedToWindow()) { explained = null; BottomScreen.explain(a, null); } });
             }
         });
         content.post(() -> { if (pane == content && !focusedRow(a.getCurrentFocus())) explainSection(current); });

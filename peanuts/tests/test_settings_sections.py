@@ -142,6 +142,25 @@ class Wiring(unittest.TestCase):
         self.assertIn('first.setFocusedByDefault(true);', about)
         self.assertIn('setNextFocusDownId(first.getId())', about)
 
+    def test_tablet_back_from_advanced_keeps_the_section(self):
+        # On a tablet, Advanced replaced Settings' column, its detach was taken for Settings closing, and Back from Advanced landed on the tiles
+        # (#315's review). The tiles come back only by Back from a section's page (showHub) and when Home is built (homeBuilt)
+        page = (UI / 'SettingsPage.java').read_text(encoding='utf-8')
+        detach = between(page, 'public void onViewDetachedFromWindow(View v) {', '\n            }\n')
+        self.assertNotIn('atHub', detach, "Settings' column detached (Home, or Advanced over it) changes nothing of what shows")
+        on = [m.start() for m in re.finditer(r'(?<!boolean )\batHub = true;', page)]   # not its first value
+        self.assertEqual(len(on), 2, 'the tiles come back in two places only')
+        show_hub = page.index('private static void showHub(boolean animate) {')
+        home = page.index('static void homeBuilt() { atHub = true; }')
+        self.assertEqual(sorted(on), sorted([page.index('atHub = true;', show_hub), home + len('static void homeBuilt() { ')]))
+        bottom = (UI / 'BottomScreen.java').read_text(encoding='utf-8')
+        self.assertIn('SettingsPage.homeBuilt();', between(bottom, 'public static void home(Activity a, Runnable settings) {', '\n    }\n'))
+        main = MAIN.read_text(encoding='utf-8')
+        self.assertIn('dev.peanuts.ui.BottomScreen.home(this, () -> page(true));', between(main, 'private void buildHome(LinearLayout content) {', '\n    }\n'))
+        # Back from Advanced builds Settings again (closeAdvanced), and lay() then shows the section it left
+        self.assertIn('if (advancedOpen) closeAdvanced();', main)
+        self.assertIn('if (tablet && atHub) showHub(false);\n        else show(current, false);', page)
+
     def test_control_interface_names_sections(self):
         ctl = (REPO / 'android/app/src/main/java/dev/peanuts/ctl/Ctl.java').read_text(encoding='utf-8')
         self.assertIn('dev.peanuts.ui.SettingsPage.go(a, section)', ctl)

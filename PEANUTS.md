@@ -364,3 +364,6 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   `SettingsPage` kept the activity, its rows, the section pages, the drawer and the search sheet in static fields after the activity was destroyed, until
   the next `lay()`: the activity's own lifecycle callback (`Gone`, registered once per activity) now lets go of all of them; the section that shows is
   kept for the activity made again. Test `peanuts/tests/test_settings_sections.py` (every such field is let go).
+  On a tablet, Back from Advanced landed on the tiles of the sections instead of the section it was opened from: Advanced replaces Settings' column, and
+  its detaching was taken for Settings closing. Now only Back from a section's page and Home's build (`SettingsPage.homeBuilt`, from
+  `BottomScreen.home`) put a tablet's Settings on its tiles. Test `peanuts/tests/test_settings_sections.py`.
