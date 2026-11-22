@@ -112,7 +112,7 @@ public final class SettingsSections {
      */
     static final String[][] BY_VALUE = {
             {"Bottom screen", "On", "companion", "Off", "screens-android"},
-            {"Games without a companion", "The game's cover", "screens-cover", "Android's", "screens-android", "Needs", "screens-android"},
+            {"Games without a companion", "The game's cover", "screens-cover", "Stats", "gauge", "Android's", "screens-android", "Needs", "screens-android"},
             {"Swap screens", "On", "swap-on", "Off", "swap-off"},
             {"Screen rotation", "Automatic", "screen-rotate", "Landscape", "screen-landscape"},
             {"Keep the screen on while preparing", "on", "awake", "off", "sleep"},

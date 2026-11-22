@@ -641,7 +641,7 @@ With a controller connected, each button shows the controller button that does t
 
 In Settings, the second screen explains what the D-pad is on: a section with its rows and their values, or a row with what it does, its value now and the app default. A switch can be flipped there too.
 
-During a game without a companion the second screen is Android's, as before. Settings › Screens › **Games without a companion** keeps the game's cover there instead.
+During a game without a companion the second screen is Android's, as before. Settings › Screens › **Games without a companion** puts the game's live stats there instead: the frame rate against the game's target and how many frames are on pace, a frame-time graph, the 1% low, the GPU's load and clock, the CPU's clock, the SoC's temperature, the battery's power in watts and the time left, the RAM, and whether the phone is throttling; tap it again for the game's cover. The gear in the stats card's corner picks what it shows (**Simple**, **Normal**, **Full**, or each item by hand) and the screen guards for an OLED panel: a black background, a pixel shifter that moves the page a pixel every 30 seconds, dimmer fixed labels, a dim after 10 minutes without a touch and a black screen after 30. A touch brings it back. The choices are kept for every game.
 
 On Home, open Settings with the top-screen gear or press **X**, as shown under the gear. The second screen also has a Settings button. To give the second screen back to Android while you are in the launcher, turn off Settings › Screens › **Bottom screen**. This setting controls the launcher and the optional cover shown while playing without a companion.
 
