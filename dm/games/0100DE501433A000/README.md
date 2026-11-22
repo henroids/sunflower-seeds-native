@@ -53,3 +53,7 @@ From the survey, before any rewrite:
 - Memory: the layout is the Unreal guess; measure it at the first boot.
 - The base game 1.0.0 has no `build` row.
 - Online play (NEX) is not expected to work.
+
+## Android on the AYN Thor
+
+Joins the release in 0.1.7. The Thor results above are the contributor's own report from pull request #330: update 2.0.2.2 from a `.nup` on an AYN Thor (Adreno 740, 16 GB, Android 13) with Turnip 27.0.0-R2, about 10 minutes in the frame loop at a median of 59.7 fps with the RedpointEOS cut, and no crash. They have not been repeated on a maintainer's Thor. The system driver, frame caps other than the game's own and a first-launch prewarm seed are not checked; Game settings offers no frame rate rows for this game yet.

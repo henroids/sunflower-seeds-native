@@ -55,7 +55,8 @@
     "0100B8E016F76000",
     "01002B00111A2000",
     "01002C9022770000",
-    "01006000040C2000"
+    "01006000040C2000",
+    "0100DE501433A000"
   ],
   "games": [
     {
@@ -893,6 +894,27 @@
       "contributors": [],
       "profile": "dm/games/0100000000010000/game.tsv",
       "note": "dm/games/0100000000010000/README.md"
+    },
+    {
+      "title_id": "0100DE501433A000",
+      "name": "Tetris Effect: Connected",
+      "profile_name": "Tetris Effect: Connected",
+      "builds": [
+        {
+          "version": "v1310720",
+          "number": 1310720,
+          "display": "2.0.2.2"
+        }
+      ],
+      "readme_update": "2.0.2.2",
+      "package": "v1310720",
+      "companion": false,
+      "since": "0.1.7",
+      "contributors": [
+        "intermission88"
+      ],
+      "profile": "dm/games/0100DE501433A000/game.tsv",
+      "note": "dm/games/0100DE501433A000/README.md"
     },
     {
       "title_id": "01007EF00011E000",

@@ -32,7 +32,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.6 includes 52 games, and 2 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.6 includes 52 games, and 3 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion | Contributor |
 |---|---|---|---|---|
@@ -90,6 +90,7 @@ Peanuts Native 0.1.6 includes 52 games, and 2 more are coming in 0.1.7 (marked i
 | Hyrule Warriors: Age of Calamity | `01002B00111A2000` | 1.3.0 | No |  |
 | Trails in the Sky 1st Chapter (coming in 0.1.7) | `01002C9022770000` | 1.0.7 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
 | Yoshi's Crafted World (coming in 0.1.7) | `01006000040C2000` | 1.0.1 | No | ⭐<br><a href="https://github.com/999sian"><img src="https://img.shields.io/badge/999sian-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="999sian"></a> |
+| Tetris Effect: Connected (coming in 0.1.7) | `0100DE501433A000` | 2.0.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
 
 <!-- PEANUTS end: the Supported games table -->
 
@@ -183,7 +184,7 @@ The companion runtime and package format come from [Eden Duo](https://github.com
 
 Contributors: <!-- PEANUTS: the contributor list of this fork -->
 
-- [intermission88](https://github.com/intermission88): the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`, pull request #13), the profiles of Kirby's Return to Dream Land Deluxe, Kirby and the Forgotten Land and Super Mario 3D World + Bowser's Fury (pull requests #34, #84 and #83), the guide for adding a game (`peanuts/docs/NEW-GAME.md`, pull request #34), and fixes to the on-device packer, the release notes popup and the Unreal shader step (pull requests #37, #35 and #71).
+- [intermission88](https://github.com/intermission88): the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`, pull request #13), the profiles of Kirby's Return to Dream Land Deluxe, Kirby and the Forgotten Land, Super Mario 3D World + Bowser's Fury and Tetris Effect: Connected (pull requests #34, #84, #83 and #330), the guide for adding a game (`peanuts/docs/NEW-GAME.md`, pull request #34), and fixes to the on-device packer, the release notes popup and the Unreal shader step (pull requests #37, #35 and #71).
 - [davdxpx](https://github.com/davdxpx): the issue and discussion forms rebuilt from the ground up, with a game catalog that also keeps the Supported games table up to date (pull request #175), building from .nsz and .xcz files, the launcher and companion on the second screen, Swap screens, the GPU driver page, Share build log, game icons that outlive their NSP, companion release notes, and many smaller fixes across the app.
 - [elliott-groves](https://github.com/elliott-groves): development builds that install beside the Peanuts Native app (pull request #60).
 - [tapionallanaire](https://github.com/tapionallanaire): building the APK on Windows (pull request #54), and the Trails in the Sky 1st Chapter, Trails in the Sky 2nd Chapter and Double Dragon Revive profiles (pull requests #221, #164 and #197).

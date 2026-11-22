@@ -1510,3 +1510,7 @@ nxnative 84e63860 ported. The host aborted with `FATAL account::GetUserId: the h
 | `dm/host/tests/Makefile` | 2 | `t_account` built and run | `PEANUTS(upstream-candidate)`, `PEANUTS begin(upstream-candidate)` |
 | `dm/host/tests/t_account.c` | new | nxnative's test as it is | allow-listed in `peanuts/upstream-unmarked.txt` |
 | `docs/reference/services.md`, `dm/games/0100C49025D3E000/README.md` | 1 each | the reference entry and the game note's line | `PEANUTS begin(upstream-candidate)`, `PEANUTS(upstream-candidate)` |
+
+### Tetris Effect: Connected 2.0.2.2
+
+The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7; the game note says its Thor results are the contributor's report (pull request #330).
