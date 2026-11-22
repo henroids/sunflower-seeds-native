@@ -25,6 +25,38 @@ On the AYN Thor with Turnip Gen8 V39, both settings reached the Mii creator's fa
 
 **`render_cond on` since GitHub issues #196 and #182** <!-- PEANUTS -->: with the conditions ignored, the host ran every conditional clear and draw. In the Mii creator the Mii model stayed empty (an AYN Thor Max with Turnip T30 and Kimchi R8), and in a town save the ground and much of the scene came out black, the Miis' bodies white and the lamp posts dark. With `render_cond on`, on the AYN Thor with Turnip v26.2.0 R5, the creator draws the Mii's head and every face in its grid, and the town from the issue #182 save draws its ground, lit buildings and lamp lights.
 
+<!-- PEANUTS begin: time (GitHub issue #329) -->
+## Time and the clock check
+
+**Resolved (GitHub issue #329):** at most starts the game said "Your system time has changed since the last time you played" and "If you start the game as is, the in-game time may change, or the items offered in shops may not change for a little while"; then the fountain gave nothing, the market stayed "Still setting up..." in the afternoon and at night, and no new foods came, for days. The save was started on Eden and played on a phone.
+
+The game keeps two adjustable `ClockSnapshot`s in `Player.sav` and compares the saved one with a new one at start (`main+0x8713a8` on 1.0.4). When it cannot compute the span (status 2), or the user clock moved by any amount (status 3), it shows both messages and shifts every timestamp it stores by that change, so the time does not count. The host's steady clock stopped while the phone slept, so every sleep came out as the user setting the clock forward, and the game threw that time away; the context could also come out a second off between two starts: [The steady clock runs through sleep and restarts](../../../docs/reference/services.md#the-steady-clock-runs-through-sleep-and-restarts). A save from before the fix, or from another emulator, warns once at its first start: its snapshots are of another clock.
+
+Measured on the AYN Thor (Turnip T30) with a copy of the issue's save, all 269 timestamps of `Player.sav` compared before and after a start and a Save:
+
+| Build | Start | Log | Messages | Timestamps |
+|---|---|---|---|---|
+| old clock | first start on the Thor | `the user clock was moved -30494 s` | both | −30,494 s |
+| old clock | 38 minutes after its save, no deep sleep | `the user clock was moved -1 s` | both | −1 s |
+| fix | first start (the save's snapshots of the old clock) | `two steady clocks and no network time, the span is unknown` | both, once | +11,051 s (the time since the save) |
+| fix | the next start, right after | none | none | (not saved) |
+| fix | 67 minutes after its save | none | none | unchanged |
+| fix, Qualcomm's driver | 7 minutes after that save | none | none | (not saved) |
+
+The Thor did not deep-sleep while plugged into the PC, so a start after a real sleep was not measured on it; `t_peanuts_time` runs that case.
+
+Time of day (Settings › System, `DM_TIME`) sets the console's clock, which this game treats as the user changing it, as on a Switch: it warns and shifts its times by the change. Leave it on the phone's clock for this game.
+
+On the Thor with the issue's save, the boot crashed in eight of fifteen starts, with both clocks and also with no message at start, in `nn::fontll::ScalableFontEngine` (`FSS_get_advance` and `map_char`; reads at 0 to 0x28; called from `main+0x105a1e8` ← `main+0x273218`, frame 11 or 12): the crash from PR #86 above, resolved in [The boot crash in the font engine](#the-boot-crash-in-the-font-engine).
+
+## Found on this game
+
+General host changes first needed here; each applies to every game:
+
+- **The steady clock runs through sleep and restarts:** [The steady clock runs through sleep and restarts](../../../docs/reference/services.md#the-steady-clock-runs-through-sleep-and-restarts).
+- **Two threads of one core in a font engine:** [Two threads of one core in a font engine](../../../docs/reference/threads.md#two-threads-of-one-core-in-a-font-engine): the boot crash below.
+<!-- PEANUTS end -->
+
 <!-- PEANUTS begin: picture shapes -->
 ## Picture shapes (Android)
 
@@ -39,7 +71,4 @@ On the AYN Thor with Turnip Gen8 V39, both settings reached the Mii creator's fa
 
 The game's font code is NintendoWare Font 20.5.3, linked into `main`. Its texture cache (`main+0x693930`, set up by `main+0x667b2c`) keeps one `ScalableFontEngine` per core: three, sead's core count set at `main+0x88dbb4`. It picks one with the game's own callback at `main+0x1d0d470`: sead's core number in a TLS slot, which a sead thread pinned to one core stores at its start (`main+0x2173274`), else `nn::os::GetCurrentCoreNumber`. Its per-engine font cache (`main+0x105ee64`) calls `SetFont` only when the engine's font is another. The job worker `AppJobThreadPool0` (priority 44, pinned to core 0) and the `Scene Prepare Thread` (made by `main+0x8a2f00` at priority 22, running at 50; created with the default core, so pinned to core 0) both lay out text on engine 0. On a Switch they never run at once: the job worker preempts the other one. On the host they did, and one thread's `SetFont` cleared the pointers the other was reading: [Two threads of one core in a font engine](../../../docs/reference/threads.md#two-threads-of-one-core-in-a-font-engine).
 
-## Found on this game
-
-- [Two threads of one core in a font engine](../../../docs/reference/threads.md#two-threads-of-one-core-in-a-font-engine): the boot crash above.
 <!-- PEANUTS end -->

@@ -226,3 +226,9 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   runs beside another now, and between two threads of one core the engine stays with its last user until that one blocks, unless the other has the higher
   priority. `dm/host/hle_fontll.c` (new), `hle_thread.c` (`dm_core_excl_release` at SVCs and native waits), `hle_sdk16.c` (Initialize, LoadFont);
   `t_peanuts_fontll` (`make GAME=<id> peanuts-fontll`). UPSTREAM-EDITS Round 52; `docs/reference/threads.md` "Two threads of one core in a font engine".
+- 2026-11-21 (GitHub issue #329, Tomodachi Life: Living the Dream's time stood still): the time service's steady clock is the host's real-time clock, not the
+  monotonic one, which on Android stops in deep sleep and starts again at 0 at every boot under the same source ID. Sleep came out as the user setting the
+  clock forward, and the game shifted every timestamp in its save by it, so no time passed while the phone slept. One reading gives both clocks now; the
+  user clock is that reading plus the custom time's offset, so a custom time is the only user change. New source ID `dmhost-steady-02`: a save from before
+  warns once. `hle_time.c`; `t_peanuts_time` (`make GAME=<id> peanuts-time`). UPSTREAM-EDITS Round 51; `docs/reference/services.md` "The steady clock runs
+  through sleep and restarts".

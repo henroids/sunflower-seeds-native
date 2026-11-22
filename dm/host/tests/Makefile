@@ -736,6 +736,14 @@ peanuts-host: peanuts-sync
 peanuts-nro: $(B)/t_peanuts_nroarena
 	$(B)/t_peanuts_nroarena "$(abspath $(B))" 2> $(B)/t_peanuts_nroarena.log
 peanuts-host: peanuts-nro
+# PEANUTS: t_peanuts_time: hle_time.c's steady and user clocks on a phone that sleeps and restarts (GitHub issue #329): no user clock change from sleep or a restart, spans of
+# the real time that passed, a custom time as the one user change, the old monotonic steady clock's time points as another clock
+.PHONY: peanuts-time
+peanuts-time: $(B)/t_peanuts_time
+	$(B)/t_peanuts_time 2> $(B)/t_peanuts_time.log
+peanuts-host: peanuts-time
+$(B)/t_peanuts_time: t_peanuts_time.c ../hle_time.c ../hle.h ../dm.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-unused-function $(PN_ASIF) -I.. $(GINC) -o $@ t_peanuts_time.c -lpthread
 $(B)/t_peanuts_nroarena: t_peanuts_nroarena.c ../loader.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -Istub_android -I.. $(GINC) -o $@ t_peanuts_nroarena.c -lpthread -lm
 $(B)/t_peanuts_syncstress: t_peanuts_syncstress.c ../hle_thread.c ../dm.h $(GAME_H) | $(B)

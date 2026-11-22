@@ -1594,3 +1594,18 @@ The profile (SDK 10, NVN + Wwise, Bandai Namco nu/nv) and its generated shader t
 ### New Pokemon Snap v0
 
 The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7; the game note says its Thor results are the contributor's report (pull request #308).
+
+### Round 51, the steady clock runs through sleep and restarts (2026-11-21, GitHub issue #329)
+
+Tomodachi Life: Living the Dream warned at most starts that the system time had changed, and its fountain, market and new foods stopped for days. The host's steady clock was the monotonic clock under one fixed source ID; on Android it stops in deep sleep and starts again at 0 at every boot, so the user clock context's offset grew by every hour the phone slept and `CalculateStandardUserSystemClockDifferenceByUser` reported the sleep as the user setting the clock; read from the two clocks one after the other, it could also come out a second off between two starts. The game then shifted every timestamp in its save by that change, and the time slept never counted. One reading of the host's real-time clock now gives the steady clock (in seconds, the new source ID `dmhost-steady-02`) and the user clock (the same reading plus `DM_TIME` / `DM_TIME_OFFSET`'s offset), as an RTC-based steady clock runs; the first eight comparisons of two steady clocks or a user change are logged. Measurements are in the [game note](../dm/games/010051F0207B2000/README.md#time-and-the-clock-check).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_time.c` | 12 | `STEADY_SOURCE`; `user_clock` reads `CLOCK_REALTIME` once and gives the steady seconds too (`DM_TIME` becomes an offset fixed at the first call); `host_now` (the user time, `DM_FIXED_TIME` first, and a steady time point of one reading); the steady clock, the user clock, the timespec forms, the context and the snapshot through it; `time_note` and its calls in `CalculateSpanBetween` and `CalculateStandardUserSystemClockDifferenceByUser`; comments | `PEANUTS` (begin/end spans and per-line) |
+| `dm/host/tests/Makefile` | 1 | `peanuts-time` (part of `peanuts-host`) | `PEANUTS` |
+| `docs/reference/services.md` | 2 | the entry "The steady clock runs through sleep and restarts", and the steady clock's line in "Steady clock, clock snapshots and user clocks" | `PEANUTS` (HTML comments) |
+| `dm/games/010051F0207B2000/README.md` | 1 | "Time and the clock check" and "Found on this game" | `PEANUTS` (begin/end) |
+| `docs/agents/symptoms.md` | 1 | regenerated (`docs_symptoms.py`, allow-listed) | none |
+| `dm/host/tests/t_peanuts_time.c` (new) | whole file | sleep, restart, sleep during a run, a custom time, an old time point and clocks at other points within the second, on stand-in clocks, a child process per run | `PEANUTS` in its header |
+
+Tests: `make GAME=<id> peanuts-time` (Linux; with gcc, `CLANG=gcc`): 26 checks pass; the same test against the old `hle_time.c` fails 12. Upstream candidate: yes (a Mac's `CLOCK_MONOTONIC` counts sleep but also starts again at a restart).
