@@ -187,7 +187,7 @@ Contributors: <!-- PEANUTS: the contributor list of this fork -->
 - [davdxpx](https://github.com/davdxpx): the issue and discussion forms rebuilt from the ground up, with a game catalog that also keeps the Supported games table up to date (pull request #175), building from .nsz and .xcz files, the launcher and companion on the second screen, Swap screens, the GPU driver page, Share build log, game icons that outlive their NSP, companion release notes, and many smaller fixes across the app.
 - [elliott-groves](https://github.com/elliott-groves): development builds that install beside the Peanuts Native app (pull request #60).
 - [tapionallanaire](https://github.com/tapionallanaire): building the APK on Windows (pull request #54), and the Trails in the Sky 1st Chapter, Trails in the Sky 2nd Chapter and Double Dragon Revive profiles (pull requests #221, #164 and #197).
-- [dnyan007](https://github.com/dnyan007): the DRAGON BALL: Sparking! ZERO profile and the sync of GPU-written terrain into block-compressed textures (pull requests #168 and #167).
+- [dnyan007](https://github.com/dnyan007): the DRAGON BALL: Sparking! ZERO profile, its allocator start-up fix and 60 fps, and the sync of GPU-written terrain into block-compressed textures (pull requests #168, #167, #290 and #302).
 - [skyhong2002](https://github.com/skyhong2002): STEINS;GATE RE:BOOT 1.0.4, standalone NUP updates in the library, and Prepare surviving a missed job status read (pull requests #192, #185 and #181).
 - [ArchOwlen](https://github.com/ArchOwlen): the first issue and discussion forms (pull request #5).
 
