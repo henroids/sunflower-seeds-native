@@ -1414,3 +1414,5 @@ A first start prepared every program's shader parts for near = -w, the default b
 ### Trails in the Sky 1st Chapter 1.0.7
 
 The [profile](../dm/games/01002C9022770000/README.md), game index row and default Android build selection are marked `PEANUTS`; the five generated metadata tables are listed in `upstream-unmarked.txt`. `draw_body` in `dm/gfx/vk_android/vka_draw.c` recognizes the first chapter's pixel key at the existing Turnip D16 shadow pass split.
+
+The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7. `game.tsv` offers experimental display pacing (`fps_limit_present 1`, `PEANUTS`); `vk_prewarm.bin` is its Turnip prewarm seed, allow-listed in `peanuts/upstream-unmarked.txt`.

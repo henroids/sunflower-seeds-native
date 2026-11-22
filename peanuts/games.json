@@ -53,7 +53,8 @@
     "010051C0134F8000",
     "01008BC024FDE000",
     "0100B8E016F76000",
-    "01002B00111A2000"
+    "01002B00111A2000",
+    "01002C9022770000"
   ],
   "games": [
     {
@@ -1012,6 +1013,27 @@
       ],
       "profile": "dm/games/010051F0207B2000/game.tsv",
       "note": "dm/games/010051F0207B2000/README.md"
+    },
+    {
+      "title_id": "01002C9022770000",
+      "name": "Trails in the Sky 1st Chapter",
+      "profile_name": "Trails in the Sky 1st Chapter",
+      "builds": [
+        {
+          "version": "v393216",
+          "number": 393216,
+          "display": "1.0.7"
+        }
+      ],
+      "readme_update": "1.0.7",
+      "package": "v393216",
+      "companion": false,
+      "since": "0.1.7",
+      "contributors": [
+        "tapionallanaire"
+      ],
+      "profile": "dm/games/01002C9022770000/game.tsv",
+      "note": "dm/games/01002C9022770000/README.md"
     },
     {
       "title_id": "01007A2027548000",
