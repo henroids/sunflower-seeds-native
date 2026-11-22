@@ -524,7 +524,7 @@ static void sh_save(unsigned slot) {   // the slot's last use is done: its segme
 }
 static int g_sub_cont;
 void vka_rp_sub_cont(int on) { g_sub_cont = on != 0; }
-void vka_rp_sub_begin(void) {
+void vka_rp_sub_begin(uint64_t reserved) {   // PEANUTS: known before texture prepare, not only when replaying the first handle
     int cont = g_sub_cont; g_sub_cont = 0;
     uint64_t tb0 = now_ns();
     vka_perf_thread(0); vka_ctl_sub();
@@ -576,7 +576,7 @@ void vka_rp_sub_begin(void) {
     vka_gp_sub_begin(g_cb, g_frame);
     vka_enc_start(g_cb);
     vka_barrier(g_cb);   // the host's writes to guest memory before this submission (made available by the submit), and earlier submissions' writes
-    if (!cont) { uint64_t tp0 = now_ns(); vka_tex_prepare(g_cb); g_t_prep += now_ns() - tp0;
+    if (!cont) { uint64_t tp0 = now_ns(); vka_tex_prepare(g_cb, reserved ? reserved : vka_fence_last() + 1); g_t_prep += now_ns() - tp0;   // PEANUTS: inline submits are serialized; their commit takes the next fence
                  vka_barrier(g_cb); }   // the re-uploads of CPU-written textures before the submission's draws read them
     vka_draw_sub_begin(g_cb, k);
     { void vka_pso_pause(int on); vka_pso_pause(0); }   // the game submits: resumed (mtl_drain paused the pipeline threads)

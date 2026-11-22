@@ -548,7 +548,8 @@ android-psosync: $(B)/t_android_psosync
 # queued region writes; vka_tex.c): the sanitizer stops at the first image used or freed after it was freed. `build/t_android_imglife old` shows the fault of the
 # first device run of the resolution scale. Built with run; android-imglife builds and runs it
 run: $(B)/t_android_imglife
-$(B)/t_android_imglife: t_android_imglife.c | $(B)
+# PEANUTS: image retirement covers the recording submission
+$(B)/t_android_imglife: t_android_imglife.c $(VKA)/vka_texown.h ../../gfx/nvn/nvn_hmap.h | $(B)
 	$(CLANG) -O1 -g -Wall -Werror -Wno-unused-function -fsanitize=address,undefined -o $@ t_android_imglife.c
 .PHONY: android-imglife
 android-imglife: $(B)/t_android_imglife

@@ -190,6 +190,10 @@ static vka_img *live_first(const uint8_t *mem, int *k) { return vkl_first(g_live
 static vka_img *live_next(const vka_img *im, const uint8_t *mem, int *k) { return vkl_next(g_live, g_nlive, &g_lvx, im, mem, k); }
 static vksm g_cpuw;   // (under g_tmu) serials the CPU wrote before their image existed (a set: vksm with no images)
 static pthread_mutex_t g_tmu = PTHREAD_MUTEX_INITIALIZER;
+// PEANUTS: highest fence whose recording has begun, under g_tmu. An upload or region copy at prepare can use
+// an image without a draw updating last_fence, even when the copy drops its last reference. Neither its image
+// nor its views may be destroyed before that command buffer finishes.
+static uint64_t g_recorded_fence;
 static void rb_created_locked(vka_img *im);   // PEANUTS: texture readback (vka_readback.inc, included below)
 static uint64_t g_img_bytes;
 // Since start, for the diagnostics (`ctl stats`, the `image cache pressure` line): what the cache made and what it took back. An eviction a scene undoes by asking for the same
@@ -266,8 +270,9 @@ static void unref_locked(vka_img *im) {
     if (g_lrz_prev == im) g_lrz_prev = NULL;   // PEANUTS: (vka_lrz_touch)
     if (im->linger) { for (int i = 0; i < g_nlinger; i++) if (g_linger[i] == im) { g_linger[i] = g_linger[--g_nlinger]; break; } im->linger = 0; }   // PEANUTS: (an evicted lingering image)
     map_del_im(im);
+    uint64_t f = vto_retire_fence(im->last_fence, g_recorded_fence);   // PEANUTS: cover recorded uses not represented by the image's last draw
     if (im->par) {   // a level child: destroyed after its last use, then its reference on the parent let go (the parent's image outlives the child's views' use)
-        vka_img *p = im->par; uint64_t f = im->last_fence ? im->last_fence : (vka_fence_last() + 1);
+        vka_img *p = im->par;   // PEANUTS: image retirement covers the recording submission
         p->nkids--; if (f > p->last_fence) p->last_fence = f;
         vka_after(f, img_destroy, im);
         unref_locked(p); return; }
@@ -275,8 +280,7 @@ static void unref_locked(vka_img *im) {
     for (int i = 0; i < g_nbig; i++) if (g_big[i] == im) { g_big[i] = g_big[--g_nbig]; break; }
     g_img_bytes -= im->bytes;
     if (im->soft) { g_soft_n--; g_soft_bytes -= im->soft_saved; }
-    uint64_t f = im->last_fence ? im->last_fence : (vka_fence_last() + 1);
-    vka_after(f, img_destroy, im);
+    vka_after(f, img_destroy, im);   // PEANUTS: image retirement covers the recording submission (f above)
 }
 
 // Textures of one memory and shape share an image (one storage, many texture objects: a clear through one and a present through another meet), and so do ones of another
@@ -1532,7 +1536,7 @@ static void lrz_copy(VkCommandBuffer cb, vka_img *im, int write) {
 void vka_lrz_touch(VkCommandBuffer cb, vka_img *cur, int loads) {
     vka_img *prev = NULL;
     pthread_mutex_lock(&g_tmu);
-    if (g_lrz_prev && g_lrz_prev != cur) { prev = g_lrz_prev; uint64_t f = vka_fence_last() + 1; if (prev->last_fence < f) prev->last_fence = f; }
+    if (g_lrz_prev && g_lrz_prev != cur) { prev = g_lrz_prev; prev->last_fence = vto_retire_fence(prev->last_fence, g_recorded_fence); }   // PEANUTS: this recording, not another fence after it
     g_lrz_prev = cur;
     pthread_mutex_unlock(&g_tmu);
     if (prev) lrz_copy(cb, prev, 1);
@@ -3715,10 +3719,11 @@ VkSampler vka_samp_default(void) {
     return s;
 }
 
-void vka_tex_prepare(VkCommandBuffer cb) {
+void vka_tex_prepare(VkCommandBuffer cb, uint64_t fence) {   // PEANUTS: image retirement covers the recording submission
     bindless_init();
     nvn_pool_use(1);   // the re-uploads below read guest storage: no pool is finalized (and unmapped) under them. Taken before g_tmu, as write_tex does
     pthread_mutex_lock(&g_tmu);
+    g_recorded_fence = vto_retire_fence(g_recorded_fence, fence);   // PEANUTS: before draining writes or releasing the table lock; never move back on another queue
     pfb_consume_locked();   // the texture IDs read through the pool in submissions done: their images stamped used, null slots written again with their images ("Texture pool reads")
     vka_tex_prune_locked();   // (the limit measured again every 60 frames; nothing to do under it)
     if (g_nbc_sync) {

@@ -1424,3 +1424,17 @@ A draw prepared its buffer textures (`make_images`) before it knew which of them
 | File | Hunks | Change | Marker |
 |---|---|---|---|
 | `dm/gfx/vk_android/vka_draw.c` | 2 | `draw_body`: the pipeline key and `tex_masks` before `make_images` | `PEANUTS` |
+
+### Yoshi's Crafted World fixes 2/9: image retirement covers the recording submission (2026-11-22, GitHub PR #140, 999sian)
+
+An image whose last reference went during a submission's texture prepare (a queued region copy, an upload) was destroyed after the fence of its last draw, which could be older than the command buffer being recorded. The replay now keeps the highest fence whose recording has begun (`g_recorded_fence`, set at `vka_tex_prepare` from the worker's reserved fence or, inline, the next fence) and retires images no earlier than it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka.h` | 2 | `vka_rp_sub_begin(reserved)`, `vka_tex_prepare(cb, fence)` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_exec.c` | 2 | the submission's fence passed to the texture prepare | `PEANUTS` |
+| `dm/gfx/vk_android/vka_worker.c` | 3 | the reserved fence (0 inline) passed to `vka_rp_sub_begin` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_tex.c` | 5 | `g_recorded_fence`; `unref_locked` and `vka_lrz_touch` retire through `vto_retire_fence` | `PEANUTS` |
+| `dm/gfx/vk_android/vka_texown.h` | 1 | `vto_retire_fence` | `PEANUTS` |
+| `dm/host/tests/t_android_imglife.c` | 5 | the recorded fence in the model; `upload_then_release` for the worker and inline cases | `PEANUTS` |
+| `dm/host/tests/Makefile` | 1 | `t_android_imglife` depends on `vka_texown.h` and `nvn_hmap.h` | `PEANUTS` |

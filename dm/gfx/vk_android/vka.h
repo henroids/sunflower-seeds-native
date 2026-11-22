@@ -161,7 +161,7 @@ uint64_t vka_fence_next(void);                      // reserve the next fence va
 uint64_t vka_fence_last(void);                      // the last fence reserved (its submission may still be recording on another thread)
 uint64_t vka_fence_queued(void);                    // the last fence handed to the queue: the most a submission (the present's) may wait for without a wait-before-signal on its own queue
 // The replay (vka_exec.c), entered by the replay worker (vka_worker.c) or inline by the mtl_* calls of the submitting thread
-void vka_rp_sub_begin(void);
+void vka_rp_sub_begin(uint64_t reserved);   // PEANUTS: the worker's fence, or zero for an inline submission that reserves at commit
 void vka_rp_sub_cont(int on);   // the next vka_rp_sub_begin goes on with a submission cut at a GPU wait (vka_worker.c): its texture work was done at its first part
 void vka_rp_exec(const uint8_t *handle, uint64_t fence);   // fence: the submission's, reserved before it (0 = taken at its commit)
 uint64_t vka_rp_sub_commit(uint64_t reserved);
@@ -407,7 +407,7 @@ unsigned vka_tex_pfb_flags(void);              // 0: off; else the VKA_PFB_* fla
 void vka_tex_pfb_draw(void);                   // the draw or dispatch being recorded reads the pool (vka_draw.c): this submission copies the bitmap out
 void vka_tex_pfb_commit(VkCommandBuffer cb, uint64_t fence);   // the submission's end (vka_exec.c): the bitmap copied to a host slot and cleared
 VkImageView vka_view(vka_img *im, VkFormat fmt, VkImageViewType type, VkImageAspectFlags aspect, uint32_t level, uint32_t nlevels, uint32_t layer, uint32_t nlayers, const VkComponentMapping *swz);
-void vka_tex_prepare(VkCommandBuffer cb);           // at submit begin: dirty CPU textures re-uploaded, registered descriptors written
+void vka_tex_prepare(VkCommandBuffer cb, uint64_t fence);   // PEANUTS: submission recording starts at this fence, including uploads not bound by a draw
 void vka_tex_uploads(VkCommandBuffer cb);
 VkDescriptorSet vka_bindless_set(void);
 VkDescriptorSetLayout vka_bindless_layout(void);
