@@ -116,6 +116,17 @@ public final class CrackedCountJvmTest {
         eq("[50000, 100000, 200000, 300000]", Arrays.toString(CrackedCount.around(150_000)));
         eq("[100000, 200000, 300000, 400000]", Arrays.toString(CrackedCount.around(250_000)));
 
+        // PEANUTS: counting never fails its caller (BuildService: a finished build stays finished)
+        java.util.List<RuntimeException> seen = new java.util.ArrayList<>();
+        CrackedCount.never(() -> { throw new IllegalStateException("job.json is not a job"); }, seen::add);
+        eq(1, seen.size());
+        eq("job.json is not a job", seen.get(0).getMessage());
+        CrackedCount.never(() -> { throw new NullPointerException(); }, null);   // nothing to tell: still no throw
+        int[] ran = {0};
+        CrackedCount.never(() -> ran[0]++, seen::add);
+        eq(1, ran[0]);
+        eq(1, seen.size());
+
         System.out.println("ok " + n);
     }
 }

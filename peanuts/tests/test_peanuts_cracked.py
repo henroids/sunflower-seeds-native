@@ -30,7 +30,11 @@ class Jvm(unittest.TestCase):
 class Counting(unittest.TestCase):
     def test_the_points_are_counted_where_they_happen(self):
         build = (PEANUTS / 'build/BuildService.java').read_text(encoding='utf-8')
-        self.assertRegex(build, r'ok = true;\n\s*cracked\(r, dump, startedAt\);', 'a build that ended well, and only that')
+        self.assertRegex(build, r'ok = true;\n(?:[^\n]*\n){2}\s*dev\.peanuts\.ui\.CrackedCount\.never\(\(\) -> cracked\(r, dump, startedAt\), ',
+                         'a build that ended well, and only that; counted after done, and never able to fail the build')
+        self.assertIn('progress("done", 100, message);\n', build)
+        self.assertLess(build.index('progress("done", 100, message);'), build.index('CrackedCount.never(() -> cracked('), 'counted after done')
+        self.assertEqual(build.count('cracked(r, '), 1, 'counted in one place only')
         self.assertIn('dev.peanuts.ui.Cracked.built(this, r.titleId, version < 0 ? null : "v" + version, shaders);', build)
         self.assertIn('if (sh != null && jf.lastModified() >= since)', build, 'shaders only when this build prepared them')
         ret = (PEANUTS / 'GameReturn.java').read_text(encoding='utf-8')

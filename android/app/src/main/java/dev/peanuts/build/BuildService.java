@@ -259,9 +259,9 @@ public final class BuildService extends Service {
             }
             if (prepareFailed != null) throw prepareFailed;
             ok = true;
-            cracked(r, dump, startedAt);
             message = name + " is ready to play." + shadersLeftOut(r, dump);
             progress("done", 100, message);
+            dev.peanuts.ui.CrackedCount.never(() -> cracked(r, dump, startedAt), e -> Log.w(TAG, "peanuts cracked: the build is not counted: " + e));   // after done; a failure in it is logged, never the build's
         } catch (IOException e) {
             message = e.getMessage() == null ? e.toString() : e.getMessage();
             code = category(e);

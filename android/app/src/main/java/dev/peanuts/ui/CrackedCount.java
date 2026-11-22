@@ -19,6 +19,18 @@ public final class CrackedCount {
     private CrackedCount() {}
 
     public static final int BUILD = 25, PER_THOUSAND_SHADERS = 1, PER_HOUR = 5, FIRST_START = 10, FIRST_MII = 5;
+
+    /**
+     * Counts with no risk to the caller: a RuntimeException in count (a job file that is not what it should be, the preferences, reflection into upstream)
+     * goes to failed and no further. BuildService counts a finished build this way, so the count can never turn it into "Build failed"
+     */
+    public static void never(Runnable count, java.util.function.Consumer<RuntimeException> failed) {
+        try {
+            count.run();
+        } catch (RuntimeException e) {
+            if (failed != null) failed.accept(e);
+        }
+    }
     static final long HOUR_MS = 3_600_000L;
     /** The milestones the second display shows; after the last, every further 100,000 */
     static final long[] MILESTONES = {100, 250, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000};
