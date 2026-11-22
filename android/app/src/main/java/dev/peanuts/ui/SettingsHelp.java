@@ -46,6 +46,7 @@ public final class SettingsHelp {
         put(m, "Resolution scale", "Draws the game's picture at a multiple of the size the game asks for. Above 1x is sharper and needs more of the GPU, below 1x is lighter. From the next start.", "1x");
         put(m, "Upscaler", "How the game's picture is scaled up to the screen. FSR and SGSR also sharpen it, the plain filters only scale.", "SGSR 1");
         put(m, "FSR sharpness", "How strongly FSR sharpens the picture. Higher is crisper and can show hard edges.", "Default");
+        put(m, "CRT filter", "Draws the picture as a CRT shows it: scanlines, and for the CRT looks an aperture-grille mask and a vignette, curved as well. A game can have its own, and the in-game panel changes it live.", "Off");
         put(m, "Dynamic resolution", "Lets a game draw smaller while a scene is heavy, so its frame rate holds.", "40%");
         put(m, "Frame rate cap", "The highest frame rate games run at. A lower cap saves battery and keeps the device cooler.", "60 fps");
         put(m, "Frame generation", "Draws frames between the game's own, for smoother motion with a little more input delay. Needs Lossless.dll.", "Off");
