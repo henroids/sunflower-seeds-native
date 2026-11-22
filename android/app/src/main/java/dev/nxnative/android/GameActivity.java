@@ -528,7 +528,6 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (Prefs.classicPasses(this, id)) env.add("DM_VK_CLASSIC_RP=1");   // Game settings › Classic render passes
         if (Prefs.skipLayersGame(id) && Prefs.skipLayers(this, id)) env.add("DM_VK_SKIP_FS=" + Prefs.skipLayersKeys(id));   // Game settings › Speedhack: Turn off hidden layers
         env.add("DM_VK_PSO_ASYNC=" + (Prefs.psoAsync(this, id) ? 2 : 0));   // Game settings › Background pipelines (an env.txt line of the player's comes later and wins)
-        if (Prefs.MLB26.equalsIgnoreCase(id)) { env.add("DM_VK_TEX_STATS=67d5da22e65373bf"); env.add("DM_VK_TEX_STATS_LINES=500"); env.add("DM_NVN_WRITE_LOG=404bec2800+80"); }   // TEMPORARY diagnostic (open issue: every player's body skin black): the inputs of the compute shader that averages a texture into a skin material's tone slots; remove once resolved
         if (Prefs.ramSaver(this, id)) { env.add("DM_MEM_FILEBACK=1"); env.add("DM_MEM_FILEBACK_KINDS=shader,texture"); }   // Game settings › RAM saver: texture pools in a file in TMPDIR, the cache folder (vka_mem.c "File-backed pools"); lines of env.txt or the game's own come later and win
         String padMap = Prefs.padMap(this, id);   // Button mapping (Game settings, Settings): wins over the label swap's A/B for the buttons it names
         if (!padMap.isEmpty()) env.add("DM_PAD_MAP=" + padMap);
