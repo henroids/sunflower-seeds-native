@@ -132,6 +132,8 @@ final class Prepare {
             // not a missing one (found in review; this used to say FILE_MISSING and offer "pick the file again", which does not fix a bad dump)
             boolean other = Boolean.TRUE.equals(Upstream.get(r, "otherBuild"));
             String detail = Upstream.str(Upstream.get(r, "detail"));
+            String flat = other ? null : VersionFolder.why(dump);   // one version's folder: where its files go, not "pick the folder above it" (GitHub issue #370)
+            if (flat != null) error = flat;
             throw new BuildListener.Failure((other ? "Untested game version: " : "Cannot prepare this dump: ") + error + (detail.isEmpty() ? "" : "\n" + detail),
                     other ? BuildListener.WRONG_VERSION : BuildListener.INVALID_DUMP);
         }

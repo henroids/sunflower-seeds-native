@@ -1546,7 +1546,8 @@ public final class Library {
                     : BuildListener.FILE_DAMAGED.equals(b.code) ? ""   // its message says what to do (Compressed.failure)
                     : BuildListener.FILE_MISSING.equals(b.code) ? " Open the game's sheet to pick the file again."
                     : BuildListener.WRONG_VERSION.equals(b.code) ? " Open the game's sheet: tap “Build anyway” there if you want to try it, or pick the recommended update."
-                    : BuildListener.INVALID_DUMP.equals(b.code) ? " The dump looks incomplete or wrong. Open the game's sheet to check the files, or dump the game again."
+                    : BuildListener.INVALID_DUMP.equals(b.code) ? (bt != null && bt.base != null && dev.peanuts.build.VersionFolder.is(bt.base.file) ? ""   // its message says where the files go (GitHub issue #370)
+                            : " The dump looks incomplete or wrong. Open the game's sheet to check the files, or dump the game again.")
                     : BuildListener.OUT_OF_SPACE.equals(b.code) ? " Free up some space, then Retry."
                     : BuildListener.STALLED.equals(b.code) || BuildListener.CANCELLED.equals(b.code) ? " Tap Resume: it picks up where it stopped."
                     : BuildListener.TOOL_STOPPED.equals(b.code) ? "" : " Tap Retry to open the sheet and build again.";
