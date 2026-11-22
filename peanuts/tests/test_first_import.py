@@ -138,6 +138,12 @@ def text(p):
     return p.read_text(encoding='utf-8')
 
 
+def method(src, signature):
+    """A method of a Java source at the class's indentation: from its signature to its closing brace"""
+    start = src.index(signature)
+    return src[start:src.index('\n    }\n', start) + 6]
+
+
 class Reflection(unittest.TestCase):
     """Upstream.java reaches upstream's package-private classes by name: each name and its parameters, as upstream's sources have them"""
 
@@ -238,6 +244,27 @@ class Wiring(unittest.TestCase):
         self.assertEqual(sorted(u[0] for u in uses), ['add', 'contains', 'remove'])
         for op, arg in uses:
             self.assertEqual(arg, 'key(titleId)', op)
+
+    def test_checked_again_after_the_picker(self):
+        """The sheet's checks run again when the picker answers, against the library as it is then, and once more right before the import with the title
+        taken on the main thread, before the import's own thread starts (igawa6's review of #260: they ran only before the picker, so a build started while
+        it was open could still have had its pack swapped). A pack that came into the pack folder meanwhile is asked about"""
+        ui = text(OWN / 'ui/PackImportUi.java')
+        result = method(ui, 'static boolean result(')
+        self.assertIn('picked(a, p, new File(path));', result)
+        self.assertNotIn('start(', result)
+        picked = method(ui, 'private static void picked(')
+        self.assertIn('LibraryScanner.Title t = lib == null ? null : lib.title(p.titleId);', picked)
+        self.assertIn('String[] no = refusal(a, lib, t, p.titleId);', picked)
+        self.assertIn('if (!p.asked(g.target) && new File(g.target, "pack.tsv").isFile())', picked)
+        start = method(ui, 'static void start(')
+        order = [start.index(s) for s in ('= refusal(a, lib,', 'wait.show();', 'if (!PackImport.take(g.titleId))', 'new Thread(', 'PackImport.run(')]
+        self.assertEqual(order, sorted(order), 'checked, taken, then the thread')
+        self.assertEqual(start.count('UI.post('), 1, 'nothing between the check and the take runs later on the main thread')
+        imp = text(OWN / 'pack/PackImport.java')
+        self.assertIn('if (!busy(g.titleId)) throw new IllegalStateException(', imp)
+        self.assertNotIn('if (!take(', imp, 'run takes nothing: the caller took the title on its main thread')
+        self.assertIn('if (dev.peanuts.pack.PackImport.busy(s.titleId))', text(OWN / 'ui/Library.java'))
 
     def test_no_upstream_file_changed_for_it(self):
         """The feature reaches upstream only through reflection: no upstream source names it"""

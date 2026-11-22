@@ -152,7 +152,8 @@ public final class CtlPort {
 
     /**
      * The sheet's Import pack… with a path instead of the picker (the control interface's import_pack): {code, sentence} when it cannot start, else null, and
-     * answer gets {null, what "Pack imported" says} or {"refused", the sentence} once the import ended (both dialogs show, as from the sheet). It never
+     * answer gets {null, what "Pack imported" says} or {"refused", the sentence} once the import ended (both dialogs show, as from the sheet; PackImportUi.start
+     * checks once more on the main thread, and a refusal there comes with its code). It never
      * replaces a pack (peanuts/docs/CONTROL.md, "Not offered"): a game whose pack folder holds one already is refused with pack_there
      */
     public static String[] importPack(Activity a, String titleId, String path, java.util.function.Consumer<String[]> answer) {

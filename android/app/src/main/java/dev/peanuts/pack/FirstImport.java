@@ -60,6 +60,24 @@ public final class FirstImport {
         }
     }
 
+    /**
+     * What the sheet asked before it opened the system picker: the title, and the pack folder whose pack the player agreed to replace (null when none was
+     * there). The picker's answer is checked again against the library as it is then (dev.peanuts.ui.PackImportUi.picked): a build may have started while the
+     * picker was open, and a pack in the pack folder then that the player was not asked about is asked about before it is replaced ({@link #asked})
+     */
+    public static final class Pick {
+        public final String titleId;
+        public final File replaces;
+
+        public Pick(String titleId, File replaces) {
+            this.titleId = titleId.toUpperCase(Locale.ROOT);
+            this.replaces = replaces;
+        }
+
+        /** Whether the player agreed to replace the pack in this pack folder (when one is there now, the import may replace it without asking again) */
+        public boolean asked(File target) { return replaces != null && replaces.equals(target); }
+    }
+
     // ---- Versions ----
 
     /** A pack.tsv version (the Switch version number), -1 when it is none */
@@ -153,9 +171,12 @@ public final class FirstImport {
         return home == null ? null : new File(home, home.getName() + ".nup");
     }
 
-    /** Asked before the picker when the pack folder holds a pack already (from an earlier build or import that no list entry plays from) */
+    /**
+     * Asked before the picker when the pack folder holds a pack already (from an earlier build or import that no list entry plays from), and after it when one
+     * came into the folder while the picker was open
+     */
     public static String replaces(Game g) {
-        return g.name + " has a pack already, from an earlier build or import. The pack you pick replaces it once it has been checked; if it is refused, the one there stays.";
+        return g.name + " has a pack already, from an earlier build or import. The new pack replaces it once it has been checked; if it is refused, the one there stays.";
     }
 
     /** The new pack could not be renamed in, and the pack that was there could not be renamed back (PackZip.swapIn): it is kept beside its folder */
