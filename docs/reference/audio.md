@@ -364,6 +364,16 @@ For a replaced DSP renderer the size query keeps the service's work-buffer contr
 - **Found on:** [DRAGON QUEST XI S: Echoes of an Elusive Age – Definitive Edition](../../dm/games/01006C300E9F0000/README.md).
 - **Check:** `audren: rendered 12000 frames, N of them not silent` shows whether a game's sound reaches the output.
 
+<!-- PEANUTS begin: the sound follows the game's pace (dm/peanuts/peanuts_audiosync.c) -->
+### A game that keeps its sound in step with its frames
+
+- **Symptom:** short dropouts in cutscenes and heavy scenes, 85–115 ms of exact zeros every few seconds (every 0.5 s at 47 fps), each with a one-frame volume ramp down before and up after; the output has no underruns and every rendered frame sounds.
+- **Cause:** the game's timeline counts frames, while its sound plays in real time. Below its frame rate (a panel slower than 60 Hz: the AYN Thor's measures 59.84 Hz; dropped frames) the timeline falls behind the sound, and the game resyncs: it sets the volume of a synced stream's voices to 0, pauses them (`nn::audio::SetVoicePlayState`) and starts them again about 70 ms later, each time the sound is about 100 ms ahead.
+- **Fix:** the host plays the renderer's output at the game's pace (presented frames / the game's frame rate, against real time, and the sound's lead): within 1 % for every game (a resampler, inaudible), and fully (a WSOLA time-stretch, pitch kept) for a game seen pausing and restarting a group of voices within 300 ms twice within 60 s while it runs slow; the finding is kept in `<DM_TEMP>/audio_follow`. A game whose world runs in real time keeps real-time sound. `PN_AUDIO_FOLLOW=0` off, `1` automatic (default), `2` always.
+- **Found on:** [Super Mario Odyssey](../../dm/games/0100000000010000/README.md) 1.4.1 on the AYN Thor.
+- **Check:** `t_peanuts_audiosync` (`make -C dm/host/tests GAME=<id> peanuts-host`); on the phone the log's `peanuts: the sound follows the game's pace` lines give the pace, the lead and the tempo, and a `DM_AUDIO_DUMP` shows no runs of exact zeros inside the sound.
+<!-- PEANUTS end -->
+
 ### No virtual audio input devices (SDK 22)
 
 - **Symptom:** abort at boot in SDK 22's audio input subsystem when listing virtual audio input devices.

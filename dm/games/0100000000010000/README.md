@@ -43,6 +43,7 @@ No `patches.py`. `op_mode` stays docked: Odyssey only takes its motion moves in 
 ## Audio
 
 - It is silent for its first minute with either audio renderer update lock: the old SDK 16 offset and the one `update_lock` now reads off the SDK's own `Update` (`MutexType` at +0x1d8 on SDK 6.4–8.2) ([The renderer's update lock](../../../docs/reference/audio.md#the-renderers-update-lock-update_lock)).
+- PEANUTS, Android: resolved, dropouts of about 100 ms in cutscenes and heavy scenes (every few seconds at 58–59 fps, every 0.5 s at 47 fps on the AYN Thor). The game resyncs its synced streams (`SoundData/streamSe/StSy*`) when they run about 100 ms ahead of its frame timeline: volume 0 and a pause on all 8 voices, a start about 70 ms later. Fixed by the sound following the game's pace ([A game that keeps its sound in step with its frames](../../../docs/reference/audio.md#a-game-that-keeps-its-sound-in-step-with-its-frames)). <!-- PEANUTS -->
 
 ## Files and shaders
 
@@ -70,6 +71,7 @@ No `patches.py`. `op_mode` stays docked: Odyssey only takes its motion moves in 
 
 General host and tool changes first needed here; each applies to every game:
 
+- **PEANUTS: the sound following the game's pace**: [A game that keeps its sound in step with its frames](../../../docs/reference/audio.md#a-game-that-keeps-its-sound-in-step-with-its-frames). <!-- PEANUTS -->
 - **Chinese language aliases in both settings equality operators:** [Chinese language aliases in settings comparisons](../../../docs/reference/services.md#chinese-language-aliases-in-settings-comparisons).
 - **BAHS pairs omitted from vertex padding:** [Pixel shader inputs the vertex shader does not write](../../../docs/reference/shaders.md#pixel-shader-inputs-the-vertex-shader-does-not-write).
 - **Front end at `-O1`** (`dmsh_build.py` and `ios_metal.py`): [Front end at -O1: Apple's control-flow lowering](../../../docs/reference/shaders.md#front-end-at--o1-apples-control-flow-lowering).
