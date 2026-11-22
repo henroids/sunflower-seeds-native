@@ -2037,3 +2037,12 @@ The software keyboard's returned text (`text`, 3,007 bytes) is static like `init
 | `dm/host/hle_swkbd.c` | 1 | `swkbd_show`'s `text` static | `// PEANUTS:` |
 
 Tests: `t_swkbd` (on Linux with the peanuts tests' flags): 29 of 29 pass. Upstream candidate: yes, with the text check (#292, #354).
+
+### Vulkan replay hardening for 0.1.7 (2026-11-22)
+
+Fixes found in the 0.1.7 review of the Vulkan replay, one commit each.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_enc.c` | 3 | `vkCmdSetAttachmentFeedbackLoopEnableEXT` is an encoder opcode (`ENC_FNS`, a value record, its case in the encoder loop): the draw's feedback loop aspects were set by a direct driver call while the encoder thread recorded into the same command buffer. The hook is installed only where the driver has the entry point, so it stays a no-op without the extension | `/* PEANUTS */`, `// PEANUTS:` |
+| `dm/gfx/vk_android/vka_ctl.c` | 1 | `DM_VK_FB_LOOP` in the restart-only table (the extensions are chosen at device creation) | `/* PEANUTS */` |

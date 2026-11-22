@@ -31,7 +31,8 @@
     X(vkCmdSetStencilCompareMask) X(vkCmdSetStencilWriteMask) X(vkCmdSetStencilReference) X(vkCmdSetDepthBias) X(vkCmdSetDepthBiasEnable) \
     X(vkCmdSetRasterizerDiscardEnable) X(vkCmdSetPrimitiveRestartEnable) X(vkCmdSetBlendConstants) X(vkCmdSetLineWidth) \
     X(vkCmdPushDescriptorSetKHR) X(vkCmdSetVertexInputEXT) X(vkCmdPushConstants) X(vkCmdDrawMeshTasksEXT) X(vkCmdDrawMeshTasksIndirectEXT) \
-    X(vkCmdDrawIndirectCount) X(vkCmdDrawIndexedIndirectCount) X(vkCmdBeginQuery) X(vkCmdEndQuery)
+    X(vkCmdDrawIndirectCount) X(vkCmdDrawIndexedIndirectCount) X(vkCmdBeginQuery) X(vkCmdEndQuery) \
+    X(vkCmdSetAttachmentFeedbackLoopEnableEXT) /* PEANUTS: feedback loops (vka_draw.c), recorded in order with the draws */
 #define ENC_ID(f) E_##f,
 enum { E_WRAP = 0, E_CALL, ENC_FNS(ENC_ID) E_N };
 #define ENC_REAL(f) PFN_##f f;
@@ -304,6 +305,7 @@ static void VKAPI_CALL e_vkCmdSetScissor(VkCommandBuffer cb, uint32_t first, uin
 ONE(vkCmdSetCullMode, VkCullModeFlags) ONE(vkCmdSetFrontFace, VkFrontFace) ONE(vkCmdSetPrimitiveTopology, VkPrimitiveTopology)
 ONE(vkCmdSetDepthTestEnable, VkBool32) ONE(vkCmdSetDepthWriteEnable, VkBool32) ONE(vkCmdSetDepthCompareOp, VkCompareOp) ONE(vkCmdSetDepthBoundsTestEnable, VkBool32)
 ONE(vkCmdSetStencilTestEnable, VkBool32) ONE(vkCmdSetDepthBiasEnable, VkBool32) ONE(vkCmdSetRasterizerDiscardEnable, VkBool32) ONE(vkCmdSetPrimitiveRestartEnable, VkBool32)
+ONE(vkCmdSetAttachmentFeedbackLoopEnableEXT, VkImageAspectFlags)   // PEANUTS: feedback loops (the aspects)
 static void VKAPI_CALL e_vkCmdSetStencilOp(VkCommandBuffer cb, VkStencilFaceFlags fc, VkStencilOp a, VkStencilOp b, VkStencilOp c, VkCompareOp d) {
     DIRECT(vkCmdSetStencilOp, cb, fc, a, b, c, d); BEGIN(r_val, E_vkCmdSetStencilOp, 0); r->v[0] = fc; r->v[1] = a; r->v[2] = b; r->v[3] = c; r->v[4] = d; END();
 }
@@ -422,6 +424,7 @@ static void run(const hdr *h) {
     case E_vkCmdPushConstants: { C(r_pc); R.vkCmdPushConstants(r->cb, r->l, r->st, r->o, r->n, r->p); break; }
     case E_vkCmdBeginQuery: { C(r_qry); R.vkCmdBeginQuery(r->cb, r->qp, r->q, r->f); break; }
     case E_vkCmdEndQuery: { C(r_qry); R.vkCmdEndQuery(r->cb, r->qp, r->q); break; }
+    case E_vkCmdSetAttachmentFeedbackLoopEnableEXT: { C(r_val); R.vkCmdSetAttachmentFeedbackLoopEnableEXT(r->cb, r->v[0]); break; }   // PEANUTS: feedback loops
     case E_CALL: { C(r_call); r->fn((const uint8_t *)r + A8(sizeof *r)); break; }
     default: break;
     }
