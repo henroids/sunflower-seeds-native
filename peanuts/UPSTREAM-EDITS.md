@@ -1962,3 +1962,21 @@ The release list (`peanuts/release-titles.txt`) and the README catalog row (`pea
 ### STAR OCEAN THE SECOND STORY R 1.1.0
 
 The release list (`peanuts/release-titles.txt`) and the README catalog row (`peanuts/games.tsv`) add the game for 0.1.7, checked on an AYN Thor (Turnip v26.2.0-R5) from a PC-built pack. The profile (`dm/games/010065301A2E0000/`, Peanuts' own) takes My Time at Sandrock's alias region (the survey's ran out of address space at boot), offers frame limits 20, 30 and 60 as opt-in (`fps_limit_present 1`; Game owned stays the default) and ships a prewarm seed of 69 keys (`vk_prewarm.bin`, allow-listed in `peanuts/upstream-unmarked.txt`).
+
+### Warp shuffles inside a quad as quad operations (Luigi's Mansion 3 #283, 2026-11-22)
+
+Luigi's Mansion 3 drew coloured lines along triangle edges in the flashlight's light on Turnip: its pixel shaders take derivatives with SHFL inside a quad, and
+ir3 may end helper lanes before a plain shuffle reads them ([Warp shuffles inside a quad read ended helper lanes on Turnip](../docs/reference/shaders.md#warp-shuffles-inside-a-quad-read-ended-helper-lanes-on-turnip)).
+The replay makes those calls quad swaps and broadcasts at pipeline time; no shader-chain file is changed, so existing packs take it.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_spvpatch.c`, `vka_spvpatch.h` | 1 each | `vka_spv_quad_shfl` | `// PEANUTS begin`/`end` |
+| `dm/gfx/vk_android/vka_shader.c` | 2 | `quad_shfl` (one span); its call in `prep_words` | `// PEANUTS begin`/`end`, `// PEANUTS:` |
+| `dm/gfx/vk_android/vka.h`, `vka_dev.c` | 1 each | `V.subgroup_quad` (VK_SUBGROUP_FEATURE_QUAD_BIT) | `// PEANUTS:` |
+| `dm/gfx/vk_android/vka_ctl.c` | 1 | `DM_VK_QUAD_SHFL` in the restart-only table | `/* PEANUTS */` |
+| `dm/host/tests/t_android_spvpatch.c` | 2 | the module and its case | `// PEANUTS begin`/`end` |
+| `docs/env_switches.tsv` | 1 row | `DM_VK_QUAD_SHFL` | `[PEANUTS]` |
+| `docs/reference/shaders.md` | 1 section | the entry above, and its line in the generated `docs/agents/symptoms.md` | `<!-- PEANUTS -->` |
+
+Tests: `t_android_spvpatch`; the game's 28 shuffle pixel shaders rewritten and valid under `spirv-val`; the AYN Thor with Turnip (see the game's README). Upstream candidate: yes (a general Turnip rule, not tied to the game).

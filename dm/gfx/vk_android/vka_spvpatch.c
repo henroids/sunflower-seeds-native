@@ -1695,3 +1695,107 @@ done:
     free(expr); free(queue);
     return out;
 }
+
+// PEANUTS begin: warp shuffles of a pixel shader inside a quad as quad operations (vka_spv_quad_shfl; docs/reference/shaders.md "Warp shuffles inside a quad read ended
+// helper lanes on Turnip"). The translator calls a helper of its own for SHFL (HelperFunctionManager.GenerateShuffleXor / GenerateShuffle: 4 parameters, value / index /
+// mask / valid pointer, one OpGroupNonUniformShuffle of lane ^ index (BFLY) or of (index & ~segment) | (lane & segment) (IDX)). With a constant index and a constant mask
+// whose segment and clamp keep every lane's source inside its own quad (Maxwell's 0x1c03, a game's own derivatives), a BFLY of 1, 2 or 3 is exactly a quad swap
+// (horizontal, vertical, diagonal) and an IDX a quad broadcast of one lane: lanes 0-3 of a Maxwell quad are top-left, top-right, bottom-left, bottom-right, as Vulkan's
+// quad index in a fragment shader. Vulkan keeps helper invocations for quad operations; a plain shuffle may read a lane ir3 has already ended (its (eq) after the last
+// instruction it counts as needing helpers), so on Turnip the result was garbage on every quad a triangle edge crosses
+enum { QX_Capability = 17, QX_FunctionCall = 57, QX_BitwiseAnd = 199, QX_BitwiseXor = 198, QX_GNUQuadBroadcast = 365, QX_GNUQuadSwap = 366, QX_CapGroupNonUniformQuad = 68 };
+// The quad operation that is exactly the helper's call for every lane: 0-2 a swap's direction (BFLY), 4 + q a broadcast of quad lane q (IDX), -1 none. Every source lane
+// must pass the helper's test (source <= its segment's top), so the helper never returns its own value instead
+static int qx_quad_op(int kind, uint32_t b, uint32_t c) {
+    uint32_t clamp = c & 0x1f, seg = (c >> 8) & 0x1f; int q = -1;
+    if (kind == 1 && (b < 1 || b > 3)) return -1;
+    for (uint32_t lane = 0; lane < 32; lane++) {
+        uint32_t src = kind == 1 ? lane ^ b : (b & ~seg) | (lane & seg), top = (clamp & ~seg) | (lane & seg);
+        if (src > top || (src & ~3u) != (lane & ~3u)) return -1;
+        if (kind == 2) { if (q >= 0 && (int)(src & 3) != q) return -1; q = (int)(src & 3); }
+    }
+    return kind == 1 ? (int)b - 1 : 4 + q;
+}
+#define QX_OP(i) ((w[i] & 0xffff) == QX_FunctionCall && (w[i] >> 16) == 8 && w[(i) + 3] < bound && helper[w[(i) + 3]] && w[(i) + 5] < bound && w[(i) + 6] < bound \
+                  && isconst[w[(i) + 5]] && isconst[w[(i) + 6]] ? qx_quad_op(hkind[w[(i) + 3]], cval[w[(i) + 5]], cval[w[(i) + 6]]) : -1)
+uint32_t *vka_spv_quad_shfl(const uint32_t *w, size_t nw, size_t *out_nw, int *sites, char *err, size_t errn) {
+    if (err && errn) err[0] = 0;
+    *sites = 0;
+    if (nw < 5 || w[0] != 0x07230203 || !w[3] || w[3] > 0x3fffff) return NULL;
+    uint32_t bound = w[3], t_u32 = 0, *cval = calloc(bound, 4), *ctype = calloc(bound, 4), *ptee = calloc(bound, 4), *helper = calloc(bound, 4);
+    uint8_t *isconst = calloc(bound, 1), *hkind = calloc(bound, 1);
+    int has_quad = 0; size_t cap_end = 0, func0 = 0;
+    vec_t o = {0};
+    const char *why = NULL;
+    if (!cval || !ctype || !ptee || !helper || !isconst || !hkind) { why = "out of memory"; goto done; }
+    for (size_t i = 5; i < nw;) {   // declarations: 32-bit constants, pointer pointees, the capability
+        uint32_t op = w[i] & 0xffff, len = w[i] >> 16;
+        if (!len || len > nw - i) { why = "malformed module"; goto done; }
+        if (op == OpFunction) { func0 = i; break; }
+        if (op == QX_Capability && len == 2) { cap_end = i + 2; if (w[i + 1] == QX_CapGroupNonUniformQuad) has_quad = 1; }
+        else if (op == OpTypeInt && len == 4 && w[i + 2] == 32 && !w[i + 3]) t_u32 = w[i + 1];
+        else if (op == OpConstant && len == 4 && w[i + 2] < bound) { cval[w[i + 2]] = w[i + 3]; ctype[w[i + 2]] = w[i + 1]; isconst[w[i + 2]] = 1; }
+        else if (op == OpTypePointer && len == 4 && w[i + 1] < bound) ptee[w[i + 1]] = w[i + 3];
+        i += len;
+    }
+    if (!func0 || !cap_end || !t_u32) goto done;
+    for (size_t i = func0; i < nw;) {   // functions of a helper's shape: helper[F] = 1 + its valid pointer's pointee type, hkind[F] 1 BFLY, 2 IDX
+        uint32_t len = w[i] >> 16;
+        if (!len || len > nw - i) { why = "malformed module"; goto done; }
+        if ((w[i] & 0xffff) != OpFunction || len != 5) { i += len; continue; }
+        uint32_t f = w[i + 2], par[4] = {0}, ptype = 0; int np = 0, shuf = 0, other = 0, xor_idx = 0, and_idx = 0;
+        size_t j = i + len;
+        while (j < nw) {
+            uint32_t op = w[j] & 0xffff, l = w[j] >> 16;
+            if (!l || l > nw - j) { why = "malformed module"; goto done; }
+            j += l;
+            if (op == OpFunctionEnd) break;
+            if (op == OpFunctionParameter && l == 3) { if (np < 4) par[np] = w[j - l + 2]; if (np == 3) ptype = w[j - l + 1]; np++; }
+            else if (op == OpGNUShuffle) shuf++;
+            else if (op >= OpGNUElect && op <= QX_GNUQuadSwap) other++;   // any other non-uniform group operation: not the helper
+            else if ((op == QX_BitwiseXor || op == QX_BitwiseAnd) && l == 5 && np == 4 && (w[j - 2] == par[1] || w[j - 1] == par[1])) *(op == QX_BitwiseXor ? &xor_idx : &and_idx) = 1;
+        }
+        if (np == 4 && shuf == 1 && !other && (xor_idx || and_idx) && f < bound && ptype < bound && ptee[ptype]) helper[f] = 1 + ptee[ptype], hkind[f] = xor_idx ? 1 : 2;
+        i = j;
+    }
+    // the constants the operations need: directions and quad lanes 0-2 / 0-3, the subgroup scope 3 (uint), -1 for each valid flag type
+    uint32_t next = bound, kid[4] = {0}, m1_type[8] = {0}, m1_id[8] = {0}; int nm1 = 0;
+    for (uint32_t q = 0; q < 4; q++) for (uint32_t id = 1; id < bound && !kid[q]; id++) if (isconst[id] && ctype[id] == t_u32 && cval[id] == q) kid[q] = id;
+    for (size_t i = func0; i < nw; i += w[i] >> 16) {
+        if (QX_OP(i) < 0) continue;
+        uint32_t vt = helper[w[i + 3]] - 1; int have = 0;
+        for (int m = 0; m < nm1; m++) if (m1_type[m] == vt) have = 1;
+        if (!have) {
+            if (nm1 == 8) { why = "more than 8 valid flag types"; *sites = 0; goto done; }
+            m1_type[nm1] = vt;
+            for (uint32_t c = 1; c < bound && !m1_id[nm1]; c++) if (isconst[c] && ctype[c] == vt && cval[c] == 0xffffffffu) m1_id[nm1] = c;
+            nm1++;
+        }
+        (*sites)++;
+    }
+    if (!*sites) goto done;
+    // the capability, new constants before the first function, each call a quad operation and a store of true into its valid flag
+    int ok = put_n(&o, w, cap_end);
+    if (ok && !has_quad) { uint32_t x[2] = {2u << 16 | QX_Capability, QX_CapGroupNonUniformQuad}; ok = put_n(&o, x, 2); }
+    ok = ok && put_n(&o, w + cap_end, func0 - cap_end);
+    for (uint32_t q = 0; q < 4 && ok; q++) if (!kid[q]) { kid[q] = next++; uint32_t x[4] = {4u << 16 | OpConstant, t_u32, kid[q], q}; ok = put_n(&o, x, 4); }
+    for (int m = 0; m < nm1 && ok; m++) if (!m1_id[m]) { m1_id[m] = next++; uint32_t x[4] = {4u << 16 | OpConstant, m1_type[m], m1_id[m], 0xffffffffu}; ok = put_n(&o, x, 4); }
+    for (size_t i = func0; i < nw && ok; i += w[i] >> 16) {
+        int q = QX_OP(i);
+        if (q < 0) { ok = put_n(&o, w + i, w[i] >> 16); continue; }
+        uint32_t vt = helper[w[i + 3]] - 1, m1 = 0;
+        for (int m = 0; m < nm1; m++) if (m1_type[m] == vt) m1 = m1_id[m];
+        // the call's result type and id; the value is the helper's int parameter, of the result's type; scope Subgroup (3); a swap's direction or a broadcast's lane
+        uint32_t x[9] = {6u << 16 | (q < 4 ? QX_GNUQuadSwap : QX_GNUQuadBroadcast), w[i + 1], w[i + 2], kid[3], w[i + 4], kid[q & 3], 3u << 16 | OpStore, w[i + 7], m1};
+        ok = put_n(&o, x, 9);
+    }
+    if (!ok) { why = "out of memory"; *sites = 0; goto done; }
+    o.w[3] = next; *out_nw = o.n;
+done:
+    free(cval); free(ctype); free(ptee); free(helper); free(isconst); free(hkind);
+    if (why) { if (err && errn) snprintf(err, errn, "%s", why); free(o.w); return NULL; }
+    if (!*sites) { free(o.w); return NULL; }
+    return o.w;
+}
+#undef QX_OP
+// PEANUTS end

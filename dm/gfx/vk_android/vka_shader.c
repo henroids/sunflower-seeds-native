@@ -388,6 +388,18 @@ static void gs_fill(uint64_t key, int stage, uint32_t **w, size_t *nb) {
     static _Atomic int n; if (atomic_fetch_add(&n, 1) < 8) VLOG("geometry shader %016llx: emits a degenerate primitive where it would emit none (DM_VK_GS_FILL)", (unsigned long long)key);
     free(*w); *w = o; *nb = on * 4;
 }
+// PEANUTS begin: a pixel shader's warp shuffles inside a quad as quad operations (vka_spv_quad_shfl has the why: Luigi's Mansion 3's flashlight drew coloured lines along
+// triangle edges on Turnip, #283). DM_VK_QUAD_SHFL (restart): 1 on VK_DRIVER_ID_MESA_TURNIP, 0 on other drivers (Qualcomm's untested); 0 / 1 to choose. Only where the
+// fragment stage runs the library's subgroup operations (not one lane) and the device has quad operations. Logged once per shader for the first few
+static void quad_shfl(uint64_t key, int stage, uint32_t **w, size_t *nb) {
+    if (stage != DMSH_VK_STAGE_FS || !V.subgroup_quad || runs_one_lane(key, stage)) return;
+    if (!VKA_ENV("DM_VK_QUAD_SHFL", V.driver_id == VK_DRIVER_ID_MESA_TURNIP)) return;
+    size_t on = 0; int sites = 0; char e[200] = ""; uint32_t *o = vka_spv_quad_shfl(*w, *nb / 4, &on, &sites, e, sizeof e);
+    if (!o) { if (e[0]) { static _Atomic int n; if (atomic_fetch_add(&n, 1) < 8) VRED("pixel shader %016llx: warp shuffles inside a quad not made quad operations: %s", (unsigned long long)key, e); } return; }
+    static _Atomic int n; if (atomic_fetch_add(&n, 1) < 8) VLOG("pixel shader %016llx: %d warp shuffle%s inside a quad made quad operations (DM_VK_QUAD_SHFL)", (unsigned long long)key, sites, sites == 1 ? "" : "s");
+    free(*w); *w = o; *nb = on * 4;
+}
+// PEANUTS end
 // The library's words for a module, made ready for this device: subgroups of one lane where the stage has none (single_lane), a geometry shader's empty runs filled (gs_fill)
 static void prep_words(const dmsh_vk_entry *e, uint64_t key, uint32_t **w, size_t *nb) {
     if (e->stage == DMSH_VK_STAGE_FS) {   // PEANUTS(upstream-candidate): apply depth precision to existing packs and every derived pixel module.
@@ -396,6 +408,7 @@ static void prep_words(const dmsh_vk_entry *e, uint64_t key, uint32_t **w, size_
         if (precise) { free(*w); *w = precise; *nb = count * sizeof **w; }
     }
     if (e->flags & DMSH_VK_F_SUBGROUP) single_lane(key, e->stage, w, nb);
+    if (e->flags & DMSH_VK_F_SUBGROUP) quad_shfl(key, e->stage, w, nb);   // PEANUTS: quad shuffles keep their helper lanes
     gs_fill(key, e->stage, w, nb);
     vka_tf_prep(key, w, nb);   // PEANUTS: a transform feedback capture variant's words get their capture (vka_tf.c; a key of no variant, every library key among them: untouched)
 }
