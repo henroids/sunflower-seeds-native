@@ -392,6 +392,11 @@ A game built by an older version whose original was deleted before that, and who
 
 - Settings › Library › **Free up space** deletes the original dump of a game that is already built. The game keeps playing from its built copy, and keeps its cover. Keep the original if you will add a later game update.
 - Settings › Library › **Storage** removes leftovers and old files. It never removes saves.
+- A game imported with an update by 0.1.6 or older: **Import again** makes its `.nup` smaller, see [Why is a `.nup` smaller since 0.1.7?](#why-is-a-nup-smaller-since-017).
+
+### Why is a `.nup` smaller since 0.1.7?
+
+With an update, the `.nup` now holds the update alone. The update already carries the whole game, so the base game inside was a second copy. A game whose data is one big file the update changes is about half the size: Yoshi's Crafted World went from 11.34 GB to 5.67 GB. An older `.nup` keeps working as it is. To get the smaller file, tap **Import again** on the game's sheet: it needs the base game's NSP or XCI and the update again, and builds the game again. Such a `.nup` plays its update only, not the base game: to build a game's base version, import it without an update. Version 0.1.6 opens the new `.nup` too.
 
 ## Playing
 
