@@ -2085,3 +2085,15 @@ Case 8 also takes the snapshot saved after the corrections to the next run, whic
 | File | Hunks | Change | Marker |
 |---|---|---|---|
 | `dm/host/tests/t_peanuts_time.c` | 2 | case 8's next run, and its line in the header | Peanuts' own file (Round 51) |
+
+### Uniform words read at bind time after a pass break (2026-11-22, #316)
+
+Tears of the Kingdom's Depths caves drew chunks with another chunk's vertices for single frames: a storage buffer's address taken from a uniform buffer word was read from guest memory that did not hold the game's inline update yet once a render pass had ended between the update and the draw.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_draw.c` | 1 | `rd_cb` (bind-time uniform word reads for `vka_walk`) reads placed memory through `vka_tex_gw_read` (the copies, fills and inline updates recorded before the draw that the GPU has not done), then the open pass's deferred updates; `DM_VK_RD_GW=0` keeps the read before | `// PEANUTS begin(upstream-candidate)` / `end` |
+| `docs/env_switches.tsv`, `docs/advanced_settings.tsv` | 1 each | the `DM_VK_RD_GW` rows | `[PEANUTS]` in the text / generated |
+| `docs/reference/rendering.md`, `docs/agents/symptoms.md` | 1 each | the entry and its symptom line | `<!-- PEANUTS -->` |
+
+Tests: the `t_android_*` suite; on the AYN Thor (Turnip v26.2.0-R5), the owner's Depths cave save: per-frame cave draw count changes 906 → 11 in about 1,300 frames. Upstream candidate: yes (the replay code is upstream's).

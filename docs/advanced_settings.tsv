@@ -698,6 +698,7 @@ DM_VK_RANGE_WATCH_LINES	developer	Diagnostics			text			both
 DM_VK_RC_LOG	developer	Diagnostics			text			both						
 DM_VK_RC_LOG_FROM	developer	Diagnostics			text			both						
 DM_VK_RC_QUERY_MEM	developer	Diagnostics			text			both						
+DM_VK_RD_GW	developer	Graphics			text			both						
 DM_VK_RD_SPLIT	developer	Packing			text			both						
 DM_VK_RD_TOUCH	developer	Input			text			both						
 DM_VK_READBACK_LOG	developer	Diagnostics			text			both						

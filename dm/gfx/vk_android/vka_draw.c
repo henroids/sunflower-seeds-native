@@ -922,7 +922,18 @@ static int cpu_read(uint64_t addr, void *out, size_t n) {   // guest bytes as th
     if (ok && UB.n) ub_apply(addr, out, n);
     return ok;
 }
-static int rd_cb(void *ctx, uint64_t addr, void *out, size_t n) { (void)ctx; return cpu_read(addr, out, n); }
+// PEANUTS begin(upstream-candidate): a uniform word read when the draw's bindings are resolved (vka_walk: a storage buffer's address or a texture handle the shader takes
+// from its uniform buffer) is the word as the GPU will see it at the draw: guest RAM with the copies, fills and inline updates recorded before it that the GPU has not done
+// (vka_tex_gw_read), then the open pass's deferred updates. cpu_read overlays only the latter, so an update made before a pass break (the 150-draw part split, a target
+// change, or every update with DM_VK_UB_DEFER=0) went to the GPU as a copy and the read took the address the memory held before it. Tears of the Kingdom's Depths caves
+// (GitHub issue #316) pull each chunk's vertices from a storage buffer at the address in a 0x30-byte record the game writes with nvnCommandBufferUpdateUniformBuffer
+// before each draw: a stale address drew another chunk's vertices (stretched slabs, walls gone for a frame). DM_VK_RD_GW=0 (live): the read before this
+static int rd_cb(void *ctx, uint64_t addr, void *out, size_t n) {
+    (void)ctx;
+    if (n && VKA_ENV("DM_VK_RD_GW", 1) && vka_addr(addr, n, NULL, NULL, NULL) && vka_tex_gw_read(addr, n, out)) { if (UB.n) ub_apply(addr, out, n); return 1; }   // (placed memory only: inline updates go nowhere else)
+    return cpu_read(addr, out, n);
+}
+// PEANUTS end
 int vka_cpu_read(uint64_t addr, void *out, size_t n) { return cpu_read(addr, out, n); }
 // DM_VK_TEX_STATS_TABLE (vka_nanscan.c has the format): the bindless textures a draw reads through a record table of handles in a storage buffer, added to ims / bs / ts
 // (m used of cap); returns the new count. Words are read as the CPU sees them now (the records are the CPU's). Every texture is scanned once a frame (the draw's own inputs too)
