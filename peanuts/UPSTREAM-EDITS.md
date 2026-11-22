@@ -1980,3 +1980,13 @@ The replay makes those calls quad swaps and broadcasts at pipeline time; no shad
 | `docs/reference/shaders.md` | 1 section | the entry above, and its line in the generated `docs/agents/symptoms.md` | `<!-- PEANUTS -->` |
 
 Tests: `t_android_spvpatch`; the game's 28 shuffle pixel shaders rewritten and valid under `spirv-val`; the AYN Thor with Turnip (see the game's README). Upstream candidate: yes (a general Turnip rule, not tied to the game).
+
+### Cheats pickers out of the library pickers' request codes (2026-11-22)
+
+`CheatsUi` asked for its cheat file, cheat zip and export with request codes 60 to 62, which `dev.peanuts.ui.LibrarySettings` uses for keys, game and update folder; `MainActivity.onActivityResult` asks `LibrarySettings` first, so Import cheat file was taken as a keys pick and the two zip pickers as folder picks. The cheats codes are now 80 to 82.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/CheatsUi.java` | 1 | `PICK_FILE`, `PICK_ZIP`, `CREATE_ZIP` = 80, 81, 82 | `// PEANUTS:` |
+
+Tests: `peanuts/tests` (the JVM tests). Upstream candidate: yes.
