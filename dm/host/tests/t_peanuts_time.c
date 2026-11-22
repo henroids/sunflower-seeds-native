@@ -8,7 +8,8 @@
 //   5. a snapshot of the old monotonic steady clock (source "dmhost-steady-01"): a span to it is unknown, no user clock change;
 //   6. a snapshot's user time is its context's offset plus its steady time point (one reading); DM_FIXED_TIME stays fixed;
 //   7. two runs whose clocks sit at other points within the second: no user clock change (two readings came out a second apart, which the game also warns about);
-//   8. the host clock set back while the game runs (Android corrects it): the steady clock never goes back, the step is one user clock change, the context is made again.
+//   8. the host clock set back while the game runs (Android corrects it): the steady clock never goes back, the step is one user clock change, the context is made again;
+//   9. the first reads of the user clock from eight threads at once all carry the custom time's offset.
 // make GAME=<id> peanuts-time (part of peanuts-host). No game files.
 #include "../hle.h"
 #undef HLE_FORCE_BIG
@@ -39,6 +40,7 @@ static void run(int64_t rt, int64_t mono, const char *env, uint8_t *out) {
     int st = 0; waitpid(p, &st, 0);
     CHECK(WIFEXITED(st) && !WEXITSTATUS(st), "a run at %lld (monotonic %lld) took its snapshot", (long long)rt, (long long)mono);
 }
+static void *first_read(void *out) { *(int64_t *)out = user_now(); return NULL; }
 static int64_t span_s(const uint8_t *a, const uint8_t *b, int *ok) { int64_t ns = 0x5a5a; *ok = h_time_SpanBetween(&ns, a, b); return ns / 1000000000; }
 
 int main(void) {
@@ -152,6 +154,21 @@ int main(void) {
         run(1795500000 - 31 + 600, 9000, NULL, v);
         CHECK(get64(v, 0x00) == 0, "a later run's context has offset 0 again (the correction belongs to the run)");
         CHECK(h_time_UserDiff(x, v) == 0, "between the run before the step and a later run: no user clock change");
+    }
+
+    // 9. The first reads of the user clock from several threads at once: every one sees the custom time's offset (the mode is never read before its offset)
+    {
+        pid_t p = fork();
+        if (!p) {
+            putenv("DM_TIME_OFFSET=3600"); g_rt = 1795600000;
+            pthread_t t[8]; int64_t got[8];
+            for (int i = 0; i < 8; i++) pthread_create(&t[i], NULL, first_read, &got[i]);
+            int bad = 0;
+            for (int i = 0; i < 8; i++) { pthread_join(t[i], NULL); bad |= got[i] != 1795600000 + 3600; }
+            _exit(bad);
+        }
+        int st = 0; waitpid(p, &st, 0);
+        CHECK(WIFEXITED(st) && !WEXITSTATUS(st), "eight threads' first reads all carry DM_TIME_OFFSET");
     }
 
     printf("peanuts time: %d checks, %d failed\n", checks, failed);

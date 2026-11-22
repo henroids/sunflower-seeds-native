@@ -2003,3 +2003,12 @@ The steady clock never goes back (issue #329's follow-up). Since round 51 the st
 | `dm/host/tests/t_peanuts_time.c` | 2 | case 8: the host clock set back 30 s and 1 s during a run, then a later run | `PEANUTS` in its header |
 
 Tests: `make GAME=<id> peanuts-time`: 37 checks pass; case 8 fails 4 against the previous `hle_time.c`. Upstream candidate: yes, with round 51.
+
+The custom time's mode and offset are set once under `pthread_once`: two threads reading the user clock for the first time could see the mode before its offset. The context keeps its guest-tick rule beside the new offset rule: after a sleep or a frozen guest clock the offset is the same, but Unity's clock (its last `GetCurrentTime` plus the guest ticks since) re-reads the time only when the context changes.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_time.c` | 2 | `user_clock_init` (from `user_clock`, under `pthread_once`); a comment on the context's two rules | `PEANUTS` |
+| `dm/host/tests/t_peanuts_time.c` | 2 | case 9: eight threads' first reads with `DM_TIME_OFFSET` | `PEANUTS` in its header |
+
+Tests: `make GAME=<id> peanuts-time`: 38 checks pass.

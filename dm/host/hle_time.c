@@ -47,29 +47,33 @@ static int64_t steady_of(int64_t rt_s) {
 // there instead of the host's: DM_TIME starts it there (it advances as much as the host clock does), DM_TIME_OFFSET
 // follows the host clock at that offset. DM_FIXED_TIME= keeps precedence (a replay needs the same calendar time every run).
 // PEANUTS: both are an offset from the host's real-time clock, fixed at the first call; *steady gets the steady clock's seconds of the same reading (issue #329)
-static void user_clock(int64_t *sec, int64_t *nsec, int64_t *steady) {
-    static int mode = -2; static int64_t arg;   // -1 host clock, 0 offset (DM_TIME_OFFSET, or DM_TIME's start minus the host clock at the first call)   // PEANUTS
-    int64_t now_ns = (int64_t)plat_clock_ns(CLOCK_REALTIME);   // PEANUTS: the one reading (issue #329)
-    if (mode == -2) {
-        const char *of = getenv("DM_TIME_OFFSET"), *t = getenv("DM_TIME");
-        mode = -1; arg = 0;
-        if (of && *of) { mode = 0; arg = (int64_t)strtoll(of, NULL, 0); LOG("DM_TIME_OFFSET=%lld: the user clock runs %+lld s off the host clock", (long long)arg, (long long)arg); }
-        else if (t && *t) {
-            struct tm tm; memset(&tm, 0, sizeof tm); tm.tm_sec = 0;
-            if (sscanf(t, "%d-%d-%dT%d:%d:%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour, &tm.tm_min, &tm.tm_sec) >= 5) {
-                tm.tm_year -= 1900; tm.tm_mon -= 1;
-                // local wall-clock time, as Eden's "set the time" means it: the fields are read in the host's zone (DM_TZ, else the
-                // system's), not in UTC. timegm gives the fields as UTC; the zone's offset at that instant moves them back
-                int64_t start = (int64_t)timegm(&tm);   // PEANUTS: the start as an offset from the host clock (issue #329)
-                { struct tm lt; time_t e = (time_t)start; if (localtime_r(&e, &lt)) start -= (int64_t)lt.tm_gmtoff; }
-                mode = 0; arg = start - now_ns / 1000000000;
-                LOG("DM_TIME=%s: the user clock starts there and advances (epoch %lld, local time)", t, (long long)start);
-            } else LOG("[RED] DM_TIME=%s: want YYYY-MM-DDTHH:MM[:SS]", t);
-        }
+static int uc_mode = -1; static int64_t uc_arg;   // -1 host clock, 0 offset (DM_TIME_OFFSET, or DM_TIME's start minus the host clock at the first call)   // PEANUTS
+// PEANUTS: set once under pthread_once, so a thread that comes second never reads the mode before its offset (issue #329)
+static void user_clock_init(void) {
+    int64_t now_ns = (int64_t)plat_clock_ns(CLOCK_REALTIME);   // PEANUTS
+    const char *of = getenv("DM_TIME_OFFSET"), *t = getenv("DM_TIME");
+    int mode = -1; int64_t arg = 0;   // PEANUTS
+    if (of && *of) { mode = 0; arg = (int64_t)strtoll(of, NULL, 0); LOG("DM_TIME_OFFSET=%lld: the user clock runs %+lld s off the host clock", (long long)arg, (long long)arg); }
+    else if (t && *t) {
+        struct tm tm; memset(&tm, 0, sizeof tm); tm.tm_sec = 0;
+        if (sscanf(t, "%d-%d-%dT%d:%d:%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour, &tm.tm_min, &tm.tm_sec) >= 5) {
+            tm.tm_year -= 1900; tm.tm_mon -= 1;
+            // local wall-clock time, as Eden's "set the time" means it: the fields are read in the host's zone (DM_TZ, else the
+            // system's), not in UTC. timegm gives the fields as UTC; the zone's offset at that instant moves them back
+            int64_t start = (int64_t)timegm(&tm);   // PEANUTS: the start as an offset from the host clock (issue #329)
+            { struct tm lt; time_t e = (time_t)start; if (localtime_r(&e, &lt)) start -= (int64_t)lt.tm_gmtoff; }
+            mode = 0; arg = start - now_ns / 1000000000;
+            LOG("DM_TIME=%s: the user clock starts there and advances (epoch %lld, local time)", t, (long long)start);
+        } else LOG("[RED] DM_TIME=%s: want YYYY-MM-DDTHH:MM[:SS]", t);
     }
+    uc_mode = mode; uc_arg = arg;   // PEANUTS
+}
+static void user_clock(int64_t *sec, int64_t *nsec, int64_t *steady) {
+    static pthread_once_t once = PTHREAD_ONCE_INIT; pthread_once(&once, user_clock_init);   // PEANUTS
+    int64_t now_ns = (int64_t)plat_clock_ns(CLOCK_REALTIME);   // PEANUTS: the one reading (issue #329)
     // PEANUTS: the user clock and the steady clock from the one reading (issue #329)
     *steady = steady_of(now_ns / 1000000000);
-    *sec = now_ns / 1000000000 + (mode == 0 ? arg : 0); *nsec = now_ns % 1000000000;
+    *sec = now_ns / 1000000000 + (uc_mode == 0 ? uc_arg : 0); *nsec = now_ns % 1000000000;
 }
 // PEANUTS begin: the user time (DM_FIXED_TIME first) and a steady time point of one reading, so a snapshot's or a context's two never fall in different seconds (issue #329)
 static void host_now(int64_t *user, int64_t *user_ns, uint8_t *tp) {
@@ -123,7 +127,10 @@ HLE_FORCE("_ZN2nn4time23StandardUserSystemClock21GetSystemClockContextEPNS0_18Sy
     int64_t d = now - (int64_t)(guest_ns() / 1000000000ull);
     int64_t off = now - *(const int64_t *)tp, was;   // PEANUTS: the offset of this reading (moved by a step back of the host clock, issue #329)
     memcpy(&was, ctx, 8);
-    if (!made || (fixed_time() < 0 && (off != was || llabs(d - drift) > 1))) {   // PEANUTS: a new offset makes a new context too (a step back of a second, below the guest-tick rule's)
+    // PEANUTS: a new offset makes a new context too (a step back of a second, below the guest-tick rule's). The guest-tick rule stays for a sleep, whose offset is the same:
+    // the guest ticks stop in deep sleep (CLOCK_MONOTONIC) and while the guest clock is frozen, and Unity's clock, its last GetCurrentTime plus the ticks since, re-reads the time
+    // only when the context changes; a renewal with the same offset is no user clock change (CalculateStandardUserSystemClockDifferenceByUser compares offsets)
+    if (!made || (fixed_time() < 0 && (off != was || llabs(d - drift) > 1))) {
         memcpy(ctx, &off, 8); memcpy(ctx + 8, tp, 0x18);
         if (made) LOG("time: host clock moved %+lld s against the guest ticks, new user clock context (offset %+lld s)", (long long)(d - drift), (long long)off);   // PEANUTS
         drift = d; made = 1;
