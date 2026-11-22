@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="status" src="https://img.shields.io/badge/release-0.1.6-brightgreen">
+  <img alt="status" src="https://img.shields.io/badge/release-0.1.7-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
 </p>
@@ -28,7 +28,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.6 includes 52 games, and 7 more are coming in 0.1.7 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.7 includes 59 games. The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion | Contributor |
 |---|---|---|---|---|
@@ -84,17 +84,17 @@ Peanuts Native 0.1.6 includes 52 games, and 7 more are coming in 0.1.7 (marked i
 | STEINS;GATE RE:BOOT | `01008BC024FDE000` | 1.0.3, 1.0.4 | No | ⭐<br><a href="https://github.com/skyhong2002"><img src="https://img.shields.io/badge/skyhong2002-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="skyhong2002"></a> |
 | NieR:Automata The End of YoRHa Edition (Asian release) | `0100B8E016F76000` | 1.0.3 | No |  |
 | Hyrule Warriors: Age of Calamity | `01002B00111A2000` | 1.3.0 | No |  |
-| Trails in the Sky 1st Chapter (coming in 0.1.7) | `01002C9022770000` | 1.0.7 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
-| Yoshi's Crafted World (coming in 0.1.7) | `01006000040C2000` | 1.0.1 | No | ⭐<br><a href="https://github.com/999sian"><img src="https://img.shields.io/badge/999sian-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="999sian"></a> |
-| Tetris Effect: Connected (coming in 0.1.7) | `0100DE501433A000` | 2.0.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
-| New Pokémon Snap (coming in 0.1.7) | `0100F4300BF2C000` | v0 | No | ⭐<br><a href="https://github.com/ssv0225"><img src="https://img.shields.io/badge/ssv0225-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="ssv0225"></a> |
-| Digimon Story Time Stranger (coming in 0.1.7) | `010062E01FE0C000` | 1.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
-| Hogwarts Legacy (coming in 0.1.7) | `0100F7E00C70E000` | 1.0.5 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
-| Star Ocean The Second Story R (coming in 0.1.7) | `010065301A2E0000` | 1.1.0 | No |  |
+| Trails in the Sky 1st Chapter | `01002C9022770000` | 1.0.7 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
+| Yoshi's Crafted World | `01006000040C2000` | 1.0.1 | No | ⭐<br><a href="https://github.com/999sian"><img src="https://img.shields.io/badge/999sian-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="999sian"></a> |
+| Tetris Effect: Connected | `0100DE501433A000` | 2.0.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| New Pokémon Snap | `0100F4300BF2C000` | v0 | No | ⭐<br><a href="https://github.com/ssv0225"><img src="https://img.shields.io/badge/ssv0225-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="ssv0225"></a> |
+| Digimon Story Time Stranger | `010062E01FE0C000` | 1.2.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Hogwarts Legacy | `0100F7E00C70E000` | 1.0.5 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
+| Star Ocean The Second Story R | `010065301A2E0000` | 1.1.0 | No |  |
 
 <!-- PEANUTS end: the Supported games table -->
 
-The 0.1.6 release candidate installed over 0.1.5 on an AYN Thor with its saves kept. Nine of the 13 new games reached early gameplay on an AYN Thor with Turnip, among them the Hyrule Field battle in Hyrule Warriors: Age of Calamity and Lumiose Station in Pokémon Legends: Z-A. The other four were checked on other Android devices.
+Every game new in 0.1.7 reached gameplay on an AYN Thor with Turnip. Trails in the Sky 1st Chapter, Yoshi's Crafted World, Star Ocean The Second Story R and Hogwarts Legacy were checked for this release, among them Rail-Yard Run in Yoshi's Crafted World at 60 fps and the London intro in Hogwarts Legacy. Tetris Effect: Connected, Digimon Story Time Stranger and New Pokémon Snap were checked by their contributors on their own AYN Thor.
 
 ## What you need
 
