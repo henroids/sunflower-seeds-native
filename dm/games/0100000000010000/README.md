@@ -88,6 +88,7 @@ General host and tool changes first needed here; each applies to every game:
 - **Small host segments for small grants** (`hostseg_size`): [Host-lent command memory segments](../../../docs/reference/nvn-objects.md#host-lent-command-memory-segments).
 - **Shorter state and single texture bind records** (`bind_state`, `p_bind_tex1`): [Model heaps sized by the host's command record sizes](../../../docs/reference/memory.md#model-heaps-sized-by-the-hosts-command-record-sizes); the null-pool grants they caused: [Host-lent command memory segments](../../../docs/reference/nvn-objects.md#host-lent-command-memory-segments).
 - **Same-pass feedback snapshots without a per-game list** (a draw that writes the attachment it samples; one snapshot until the game's next barrier): [Same-pass feedback read through a snapshot](../../../docs/reference/rendering.md#same-pass-feedback-read-through-a-snapshot).
+- **The KGSL GPU clock floor on host-DCVS Adreno** (PEANUTS, Android: a context of Peanuts' own submits a flagged command so the constraint reaches the clock): [The KGSL clock floor reaches the clock only through flagged commands on host-DCVS Adreno (Android)](../../../docs/reference/frame-rate.md#the-kgsl-clock-floor-reaches-the-clock-only-through-flagged-commands-on-host-dcvs-adreno-android).
 
 ## Open
 

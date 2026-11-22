@@ -2336,3 +2336,23 @@ On an NVN1 host a texture whose storage the game wrote from the CPU before the t
 | `dm/host/tests/t_android_texcontent.c` (new) | whole file | its host test | line 1 `PEANUTS(upstream-candidate)` |
 | `dm/host/tests/Makefile` | 3 | the test joins the run and the build rule | `PEANUTS(upstream-candidate)` comment before each hunk |
 | `docs/reference/nvn-objects.md` | 1 | the "Switch 1: uncompressed storage the CPU wrote before a texture's first sample" entry | `<!-- PEANUTS(upstream-candidate) -->` |
+### Round 62, the GPU clock floor reaches the clock on 8 Gen 2 / 8 Gen 3 (2026-11-23, GitHub issues #113 and #257)
+
+On Adreno 740 / 750 kernels (graphics-kernel, gen7 hwsched) the power constraint `vka_dev.c` sets on Turnip's queue contexts is applied only to commands of a
+context made with `KGSL_CONTEXT_PWR_CONSTRAINT` or carrying that flag, and Turnip sets neither: the log said `GPU clock floor (KGSL): 100 % (highest)` while the
+GPU ran 401 to 550 of 680 MHz (AYN Thor; #113 on an 8 Gen 3: with the clock pinned by root, Turnip held 60 fps). `dm/peanuts/peanuts_gpufloor.c` makes its own
+kernel context with the flag and the "highest" constraint and submits one CP_NOP to it at each replayed submission (at most every `PN_GPU_FLOOR_BEAT_MS`, 8),
+which applies the floor device-wide; it lapses within the kernel's idle interval when no frames come. It runs only where vka_dev.c found the "highest only" form
+of the constraint and `DM_VK_GPU_FLOOR` is above 0; `PN_GPU_FLOOR_BEAT=0` turns it off (live). On the Thor (2026-11-23) in Super Mario Odyssey's light start
+screens the GPU ran 401 MHz with the beat off and 680 MHz with it on, switched live twice. The entry:
+[frame-rate.md](../docs/reference/frame-rate.md#the-kgsl-clock-floor-reaches-the-clock-only-through-flagged-commands-on-host-dcvs-adreno-android).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_dev.c` | 1 | `vka_gpu_floor` calls `peanuts_gpu_floor_beat(s)` (weak) when the constraint is "highest only" and there is no queue hint | `PEANUTS` |
+| `android/host/CMakeLists.txt` | 1 | compiles `dm/peanuts/peanuts_gpufloor.c` | `PEANUTS` |
+| `docs/reference/frame-rate.md`, `docs/agents/symptoms.md` | 1 each | the entry above and its symptom line (`docs_symptoms.py`) | `PEANUTS begin/end`, `(PEANUTS)` in the symptom |
+| `docs/env_switches.tsv`, `docs/advanced_settings.tsv` | 2 rows each | `PN_GPU_FLOOR_BEAT`, `PN_GPU_FLOOR_BEAT_MS` | `[PEANUTS]` in the text / generated |
+| `dm/games/0100000000010000/README.md` | 1 line | under "Found on this game" | `PEANUTS` in the line |
+
+Peanuts' own files, no marker: `dm/peanuts/peanuts_gpufloor.c` (new). Upstream candidate: yes, general (`vka_dev.c`'s KGSL floor on every host-DCVS Adreno).
