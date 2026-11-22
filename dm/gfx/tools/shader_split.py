@@ -1188,15 +1188,22 @@ def cpk_shaders(path, rel, ents, out):
 # field, not a file name): 28,354 vertex and 28,354 pixel shaders, each one LZ4 block holding an NX?S container (nxsh_shader)
 MVGL = b'MDB1'
 def mvgl_jobs(files, parts=64):
-    """Every 'shad' entry of every 64-bit MVGL archive, in ranges of about equal stored length. → ([(path, rel, entry names), …], the archive paths)"""
+    """Every 'shad' entry of every 64-bit MVGL archive, in ranges of about equal stored length. → ([(path, rel, entry names), …], the archive paths)
+    An archive whose tables do not read is left out with a red line, as ue_legacy_jobs leaves out a pak, and is not scanned as a loose file either"""
     import mvgl
-    arcs = []
+    arcs, bad = [], set()
     for p, r in files:
         if not p.lower().endswith('.mvgl'): continue
         with open(p, 'rb') as f: h = f.read(0x20)
         if h[:4] != MVGL or not mvgl.wide(h): continue   # the 32-bit layout (Cyber Sleuth, an OpenGL game) is scanned as before
-        a = mvgl.Archive(p); a.f.close()
-        arcs.append((p, r, [(n, a.files[n][2]) for n in sorted(a.files) if n.endswith('.shad')]))
+        a = None
+        try:
+            a = mvgl.Archive(p)
+            arcs.append((p, r, [(n, a.files[n][2]) for n in sorted(a.files) if n.endswith('.shad')]))
+        except (OSError, ValueError, struct.error) as e:
+            print(f'[RED] /{r}: the MVGL archive cannot be read ({e}); its shaders are left out', flush=True); bad.add(p)
+        finally:
+            if a: a.f.close()
     jobs, step = [], max(1, sum(c for _, _, es in arcs for _, c in es) / parts)
     for p, r, es in arcs:
         cur, size = [], 0
@@ -1204,7 +1211,7 @@ def mvgl_jobs(files, parts=64):
             cur.append(n); size += c
             if size >= step: jobs.append((p, r, (MVGL, tuple(cur)))); cur, size = [], 0
         if cur: jobs.append((p, r, (MVGL, tuple(cur))))
-    return jobs, {p for p, _, _ in arcs}
+    return jobs, {p for p, _, _ in arcs} | bad
 
 def nxsh_shader(d, label):
     """One NX?S container (NXVS vertex, NXFS pixel): +0x04 its length, +0x0c / +0x10 the control section's offset and length, +0x14 / +0x18 the code area's"""

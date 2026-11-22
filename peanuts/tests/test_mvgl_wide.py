@@ -79,6 +79,15 @@ class WideMvgl(unittest.TestCase):
             stages = sorted(v[1] for v in ss.uniq_keys(out).values())
             self.assertEqual(stages, ['ps', 'vs'])
 
+    def test_corrupt_archive_is_left_out(self):
+        """An archive whose tables are cut short: that archive is left out with a red line (and kept out of the loose scan), the other one still gives its jobs"""
+        with tempfile.TemporaryDirectory() as t, contextlib.redirect_stdout(io.StringIO()) as log:
+            good, cut = self.write(t, self.arc), self.write(t, self.arc[:0x40], 'app_1.nx64.mvgl')
+            jobs, arcs = ss.mvgl_jobs([(cut, 'app_1.nx64.mvgl'), (good, 'app_0.nx64.mvgl')])
+            self.assertEqual(arcs, {good, cut})
+            self.assertEqual({path for path, _, _ in jobs}, {good})
+            self.assertIn('[RED] /app_1.nx64.mvgl: the MVGL archive cannot be read', log.getvalue())
+
     def test_containers_in_main(self):
         """main keeps NX?S containers too, with the control section's assembly text between it and the code area (control length > 0x880): raw_shaders reads them by their
         headers and leaves their control sections out of its own heuristic (no '[RED] … no code area' line)"""
