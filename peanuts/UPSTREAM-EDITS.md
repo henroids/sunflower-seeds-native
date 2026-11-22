@@ -102,6 +102,7 @@ not edited (see table above).
 | `dm/games/0100A0F00DA68000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Monster Sanctuary (provisional: packed on a PC, not run on a device) |
 | `dm/games/0100B63016916000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for My Time at Sandrock (provisional: packed on a PC, not run on a device) |
 | `dm/games/0100DAE01E4C8000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for STORY OF SEASONS: Grand Bazaar |
+| `dm/games/0100F4300BF2C000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for New Pokemon Snap |
 | `dm/gfx/nvn/hle_nvn.c` | marked (the pool-builder getters; New Pokemon Snap) | **yes** — any NVN title that reads a pool builder back needs the four `nvnMemoryPoolBuilderGet*` getters |
 | `dm/gfx/tools/drp.py` | marked (2026-11-21, New Pokemon Snap's DRPF reader); ported from kwsch/NewSnap's DRPF implementation (ISC licence, credited in the file header), not original Peanuts work | **yes** — a general reader for a Switch 1 format; Banana Native has no profile for the title |
 | `dm/gfx/tools/shader_split.py` | **fixed this pass** (header note + 6 def-site tags covering DM_SPLIT_DIRECT/WORKER, DM_UE_DECODE; the DRPF reader hook, 2026-11-21) | **yes** — the on-device process-pool split and the comment-insensitive table comparison (`table_rows`) are general infra, not game-specific |
@@ -1580,3 +1581,12 @@ The game reads the pool builder's device, memory, size and flags back through fo
 | File | Hunks | Change | Marker |
 |---|---|---|---|
 | `dm/gfx/nvn/hle_nvn.c` | 1 | the four `nvnMemoryPoolBuilderGet*` getters | `PEANUTS(upstream-candidate)` |
+
+### New Pokemon Snap (2026-11-21)
+
+The profile (SDK 10, NVN + Wwise, Bandai Namco nu/nv) and its generated shader tables (3,316 shaders, 4,689 variation pairs). The memory layout is the game's own: it maps its memory into the alias region and asks the SDK's region allocator for a 160-192 MB window at a park run and at the return to the lab, unchecked, so the profile gives it 8 GB of alias in an 8.625 GB block. The tables are the split's output; a marker comment would change the profile's shader inputs digest.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/games/0100F4300BF2C000/` (new) | whole profile | `game.tsv`, `README.md` and the generated tables | `PEANUTS` in `game.tsv` and the note; tables allow-listed |
+| `dm/games/README.md` | 1 | the games-table row | inline `<!-- PEANUTS: Peanuts-only profile -->` |
