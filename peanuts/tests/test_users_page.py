@@ -1,5 +1,5 @@
 """Settings › Users (dev.peanuts.users): the profile pictures' file (a reference to a Mii or a firmware picture and a background, never pixels) and the decision
-"Who's playing?" makes at a game's start, on the JVM with UserPicturesJvmTest. Skipped without a JDK."""
+"Who's playing?" makes at a game's start, on the JVM with UserPicturesJvmTest; the firmware pictures' Yaz0 with Yaz0JvmTest. Skipped without a JDK."""
 import shutil
 import subprocess
 import tempfile
@@ -23,9 +23,26 @@ class UsersJvm(unittest.TestCase):
             self.assertIn('PASS', r.stdout)
 
 
+YAZ0_TEST = REPO / 'android/app/src/jvmtest/java/dev/peanuts/users/Yaz0JvmTest.java'
+
+
+@unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'no JDK')
+class Yaz0Jvm(unittest.TestCase):
+    """The firmware's profile pictures are Yaz0-packed: data packed by the test comes back, and a reference before the start, a size past the limit, another
+    magic and an input that ends early are refused; nothing is written past the size the header gives"""
+
+    def test_jvm(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = subprocess.run(['javac', '-Xlint:all', '-Werror', '-encoding', 'UTF-8', '-d', d, str(USERS / 'Yaz0.java'), str(YAZ0_TEST)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            r = subprocess.run(['java', '-cp', d, 'dev.peanuts.users.Yaz0JvmTest'], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn('PASS', r.stdout)
+
+
 class Sources(unittest.TestCase):
     def test_no_android_classes(self):
-        for f in SOURCES:
+        for f in SOURCES + [USERS / 'Yaz0.java']:
             self.assertNotIn('import android.', f.read_text(encoding='utf-8'), f.name)
 
 

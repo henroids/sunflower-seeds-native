@@ -2191,10 +2191,15 @@ igawa6's notes on Round 46 to 49 (PR #321) that were left for later, one change 
   picture or the preview that runs out of memory now gives none (a head made half-way gives its textures back), and a start that failed (the Mii files
   unreadable, no EGL context, a shader refused) leaves nothing half made and is tried again once the firmware's Mii files change or 30 s later
   (`dev.peanuts.mii.MiiGlRetry`).
+- `MiiLook.java` named a `MiiLookJvmTest` that was not there, and nothing tested `Yaz0`. `MiiLookJvmTest` checks the colour tables and their lookups, each
+  part's colouring and the face's layout (mirrored halves, sizes and turns that follow the Mii's values, the layout scaling with the texture);
+  `Yaz0JvmTest` packs its own data (literals, short, long and overlapping references) and checks the refusals by their reason: a reference before the
+  start, a size past the limit (and one near 4 GiB), another magic, an input that ends early; a reference past the end stops at the size.
 
 Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/mii/MiiEditState.java` new, `MiiEditor.java`,
 `android/app/src/jvmtest/java/dev/peanuts/mii/MiiEditStateJvmTest.java` new, `peanuts/tests/test_mii_editor.py` new; `dev/peanuts/PeanutsPrefs.java`,
 `dev/peanuts/ui/LibrarySettings.java`, `peanuts/tests/test_users_page.py`; `dev/peanuts/mii/MiiGl.java`, `MiiGlRetry.java` new,
-`android/app/src/jvmtest/java/dev/peanuts/mii/MiiGlRetryJvmTest.java` new, `peanuts/tests/test_mii_gl.py` new.
+`android/app/src/jvmtest/java/dev/peanuts/mii/MiiGlRetryJvmTest.java` new, `peanuts/tests/test_mii_gl.py` new; `dev/peanuts/users/Yaz0.java` (its
+comment), `android/app/src/jvmtest/java/dev/peanuts/mii/MiiLookJvmTest.java` and `.../users/Yaz0JvmTest.java` new, `peanuts/tests/test_mii_parts.py`.
 
-Tests: `peanuts/tests/test_mii_editor.py`, `test_users_page.py`, `test_mii_gl.py`. Upstream candidate: no (Peanuts' pages).
+Tests: `peanuts/tests/test_mii_editor.py`, `test_users_page.py`, `test_mii_gl.py`, `test_mii_parts.py`. Upstream candidate: no (Peanuts' pages).
