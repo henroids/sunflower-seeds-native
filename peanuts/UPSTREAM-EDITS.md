@@ -2021,3 +2021,11 @@ The hardware Opus decoder takes the plain libopus only from a game module. `gues
 | `dm/host/tests/t_opus_hw.c` | 4 | a plain libopus in `sdk` and in `main` (a child process each) and `module_of`'s stand-in | `PEANUTS` (begin/end span and per-line) |
 
 Tests: `t_opus_hw` (on Linux with the peanuts tests' flags): 21 checks pass. Upstream candidate: no (the plain-libopus path is Peanuts').
+
+The font engine's wait and take-over lines name their two threads from a buffer under `font_eng_mu` instead of two 160-byte arrays on the game thread's stack: the engine take-overs are plain `HLE_FORCE` entries and run on the guest stack, which can be 8 KB.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_fontll.c` (Peanuts' file) | 3 | `font_who` and its two uses | inside the file's `PEANUTS begin`/`end` |
+
+Tests: `make GAME=<id> peanuts-fontll`: all pass.

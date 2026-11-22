@@ -31,6 +31,7 @@ static pthread_cond_t font_eng_cv;     // made in font_attach: on Android for CL
 #define FONT_CLOCK CLOCK_REALTIME      // Apple has no pthread_condattr_setclock
 #endif
 static unsigned font_eng_waits, font_eng_takes;   // font_eng_mu: waits and take-overs so far (the log names the first and each power of two)
+static char font_who[2][160];          // font_eng_mu: the two threads those lines name, off the guest stack (a game thread's can be 8 KB, and these take-overs are not on the big stack)
 static __thread int font_eng_waiting;    // this thread enters its wait in font_enter: the native wait's release must not take font_eng_mu, which it holds
 #define FONT_HOST_ID(me) ((me) ? (me) : ((uint64_t)(uintptr_t)pthread_self() | 1ull << 63))
 // A wait looks again this often: an owner can stop being runnable without passing an SVC or a native wait (a pause by the game, host GPU work)
@@ -78,14 +79,14 @@ static font_eng_t *font_enter(void *self, const char *what) {
         if (!in_call && !dm_thread_core_excl_wait(e->owner)) {   // free between two calls for this thread: it takes the engine over
             unsigned n = ++font_eng_takes;
             if (!(n & (n - 1))) {
-                char a[160], b[160]; dm_thread_describe(me >> 63 ? 0 : me, a, sizeof a); dm_thread_describe(e->owner >> 63 ? 0 : e->owner, b, sizeof b);
+                char *a = font_who[0], *b = font_who[1]; dm_thread_describe(me >> 63 ? 0 : me, a, sizeof font_who[0]); dm_thread_describe(e->owner >> 63 ? 0 : e->owner, b, sizeof font_who[1]);
                 LOG("font engine %p: %s takes it in %s from %s between two of its calls (take-over %u)", self, a, what, b, n);
             }
             break;
         }
         unsigned n = ++font_eng_waits;
         if (!(n & (n - 1))) {
-            char a[160], b[160]; dm_thread_describe(me >> 63 ? 0 : me, a, sizeof a); dm_thread_describe(e->owner >> 63 ? 0 : e->owner, b, sizeof b);
+            char *a = font_who[0], *b = font_who[1]; dm_thread_describe(me >> 63 ? 0 : me, a, sizeof font_who[0]); dm_thread_describe(e->owner >> 63 ? 0 : e->owner, b, sizeof font_who[1]);
             LOG("font engine %p: %s waits in %s for %s, %s (wait %u; two threads of one core in one engine, which Horizon's core keeps apart)", self, a, what, b,
                 in_call ? "inside a call" : "until it blocks", n);
         }
