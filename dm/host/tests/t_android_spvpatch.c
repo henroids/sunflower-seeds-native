@@ -556,6 +556,20 @@ int main(void) {
             CHECK(tv && samp && pointee == samp, "the array's variable is one sampler");
             CHECK(pool && rta, "a runtime array of the pool's images at set 1");
             CHECK(count_op(x, tout, 86) == 2, "an OpSampledImage per read");
+            {   // PEANUTS: NonUniform on the pool element's pointer, the loaded image and the sampled image (VUID-RuntimeSpirv-NonUniform-06274), each once
+                int need = 0, have = 0, twice = 0;
+                for (size_t i = 5; i < tout && (x[i] >> 16); i += x[i] >> 16) {
+                    uint32_t op = x[i] & 0xffff, id = 0;
+                    if (op == 86) id = x[i + 2];                                                           // OpSampledImage
+                    else if (op == 65 && x[i + 3] == pool) id = x[i + 2];                                  // OpAccessChain into the pool's array
+                    else if (op == 61) for (size_t k = 5; k < tout && (x[k] >> 16); k += x[k] >> 16) if ((x[k] & 0xffff) == 86 && x[k + 3] == x[i + 2]) id = x[i + 2];   // OpLoad of an image a read samples
+                    if (!id) continue;
+                    need++; int n = 0;
+                    for (size_t k = 5; k < tout && (x[k] >> 16); k += x[k] >> 16) n += (x[k] & 0xffff) == 71 && (x[k] >> 16) == 3 && x[k + 1] == id && x[k + 2] == 5300;
+                    have += n >= 1; twice += n > 1;
+                }
+                CHECK(need == 6 && have == need && !twice, "NonUniform on every pool pointer, image and sampled image: %d of %d (%d twice)", have, need, twice);
+            }
             int fs = 0, fe = 0; size_t fn = 0; uint32_t *y = vka_spv_pool_fb(x, tout, 1, 0, 2, 0, VKA_PFB_EARLY, 1, &fn, &fs, &fe, err, sizeof err);
             CHECK(y && fs == 2, "the pool reads take the feedback code: %d (%s)", fs, err);
             if (val) CHECK(validate(x, tout, "table through the pool"), "valid SPIR-V");

@@ -1466,13 +1466,13 @@ enum { TP_Capability = 17, TP_Extension = 10, TP_ExtInstImport = 11, TP_TypeSamp
 uint32_t *vka_spv_table_pool(const uint32_t *w, size_t nw, const vka_tabpool *t, int nt, uint32_t pool_set, uint32_t pool_binding, uint32_t max_id, size_t *out_nw, int *sites, char *err, size_t errn) {
     vec_t o = {0}; *sites = 0; err[0] = 0;
 #define FAIL(...) do { snprintf(err, errn, __VA_ARGS__); goto fail; } while (0)
-    uint32_t *dset = NULL, *dbind = NULL, *a1 = NULL, *a2 = NULL, *rty = NULL, *cval = NULL; uint16_t *dop = NULL; uint8_t *role = NULL;   // role: 1 + j an array's variable, TP_MAX + 1 + j a chain into it, 2 TP_MAX + 1 + j its loaded element
+    uint32_t *dset = NULL, *dbind = NULL, *a1 = NULL, *a2 = NULL, *rty = NULL, *cval = NULL; uint16_t *dop = NULL; uint8_t *role = NULL, *nu = NULL;   // nu: ids the module already decorates NonUniform (PEANUTS); role: 1 + j an array's variable, TP_MAX + 1 + j a chain into it, 2 TP_MAX + 1 + j its loaded element
     if (nw < 5 || w[0] != 0x07230203) { snprintf(err, errn, "not SPIR-V"); return NULL; }
     if (nt <= 0) return NULL;
     if (nt > TP_MAX) nt = TP_MAX;
     uint32_t bound = w[3];
-    dset = malloc(bound * 4); dbind = malloc(bound * 4); a1 = calloc(bound, 4); a2 = calloc(bound, 4); rty = calloc(bound, 4); cval = calloc(bound, 4); dop = calloc(bound, 2); role = calloc(bound, 1);
-    if (!dset || !dbind || !a1 || !a2 || !rty || !cval || !dop || !role) FAIL("out of memory");
+    dset = malloc(bound * 4); dbind = malloc(bound * 4); a1 = calloc(bound, 4); a2 = calloc(bound, 4); rty = calloc(bound, 4); cval = calloc(bound, 4); dop = calloc(bound, 2); role = calloc(bound, 1); nu = calloc(bound, 1);
+    if (!dset || !dbind || !a1 || !a2 || !rty || !cval || !dop || !role || !nu) FAIL("out of memory");
     memset(dset, 0xff, bound * 4); memset(dbind, 0xff, bound * 4);
     uint32_t glsl = 0, t_u32 = 0, t_f32 = 0, t_samp = 0, tvar[TP_MAX] = {0}, uvar[TP_MAX] = {0}, timg[TP_MAX] = {0}, tsi[TP_MAX] = {0}, kmax[TP_MAX] = {0};
     int cap_nu = 0, cap_si = 0, cap_rt = 0, has_ext = 0, nload = 0, found = 0;
@@ -1488,6 +1488,7 @@ uint32_t *vka_spv_table_pool(const uint32_t *w, size_t nw, const vka_tabpool *t,
             if (op == TP_Capability && len >= 2) { cap_nu |= in[1] == TP_CapShaderNonUniform; cap_si |= in[1] == TP_CapSampledImageArrayNonUniform; cap_rt |= in[1] == TP_CapRuntimeDescriptorArray; }
             else if (op == TP_Extension && len >= 8 && !memcmp(in + 1, "SPV_EXT_descriptor_indexing", 28)) has_ext = 1;
             else if (op == TP_ExtInstImport && len >= 6 && !memcmp(in + 2, "GLSL.std.450", 13)) glsl = in[1];
+            else if (op == OpDecorate && len == 3 && in[1] < bound && in[2] == TP_DecNonUniform) nu[in[1]] = 1;   // PEANUTS: (not decorated twice below)
             else if (op == OpDecorate && len >= 4 && in[1] < bound) { if (in[2] == DecDescriptorSet) dset[in[1]] = in[3]; else if (in[2] == DecBinding) dbind[in[1]] = in[3]; }
             else if (op == OpTypeInt && len >= 4 && in[1] < bound) { dop[in[1]] = OpTypeInt; if (in[2] == 32 && !in[3] && !t_u32) t_u32 = in[1]; }
             else if (op == OpTypeFloat && len >= 3 && in[1] < bound) { dop[in[1]] = OpTypeFloat; if (in[2] == 32 && !t_f32) t_f32 = in[1]; }
@@ -1546,6 +1547,9 @@ uint32_t *vka_spv_table_pool(const uint32_t *w, size_t nw, const vka_tabpool *t,
         if (i == first_annot) {
             for (int j = 0; j < nt; j++) if (rarr[j]) EMIT(TP_OP(4, OpDecorate), pool[j], DecDescriptorSet, pool_set, TP_OP(4, OpDecorate), pool[j], DecBinding, pool_binding);
             for (int q = 0; q < nload; q++) EMIT(TP_OP(3, OpDecorate), im0 + (uint32_t)q, TP_DecNonUniform);
+            // PEANUTS: and the pool element's pointer (a chain's id, kept) and the sampled image (a load's id, now the OpSampledImage), the operands that reach the
+            // pool at a non-uniform index (VUID-RuntimeSpirv-NonUniform-06274)
+            for (uint32_t q = 1; q < bound; q++) if (role[q] > TP_MAX && !nu[q]) EMIT(TP_OP(3, OpDecorate), q, TP_DecNonUniform);
         }
         if (i == first_fn) {   // the sampler each array becomes, the pool's arrays, the constants
             if (mk_samp) EMIT(TP_OP(2, TP_TypeSampler), mk_samp);
@@ -1605,13 +1609,13 @@ uint32_t *vka_spv_table_pool(const uint32_t *w, size_t nw, const vka_tabpool *t,
 #undef EMIT
 #undef FAIL
     o.w[3] = nb;
-    free(dset); free(dbind); free(a1); free(a2); free(rty); free(cval); free(dop); free(role);
+    free(dset); free(dbind); free(a1); free(a2); free(rty); free(cval); free(dop); free(role); free(nu);
     *out_nw = o.n; return o.w;
 oom:
     snprintf(err, errn, "out of memory");
 fail:
 none:
-    free(o.w); free(dset); free(dbind); free(a1); free(a2); free(rty); free(cval); free(dop); free(role);
+    free(o.w); free(dset); free(dbind); free(a1); free(a2); free(rty); free(cval); free(dop); free(role); free(nu);
     return NULL;
 }
 #undef TP_OP
