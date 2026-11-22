@@ -36,6 +36,9 @@ public final class PeanutsPrefs {
 
     public static String firmwareDir(Context c) { return of(c).getString("firmware_dir", null); }
     public static void firmwareDir(Context c, String p) { put(c, "firmware_dir", p); }
+    /** What the importer that last read the firmware takes from one (LibrarySettings.FIRMWARE_READ); 0 when it was read before the app kept this */
+    public static int firmwareRead(Context c) { return of(c).getInt("firmware_read", 0); }
+    public static void firmwareRead(Context c, int what) { of(c).edit().putInt("firmware_read", what).apply(); }
     public static String gameDir(Context c) { return of(c).getString("game_dir", null); }
     public static void gameDir(Context c, String p) { put(c, "game_dir", p); }
     public static String updateDir(Context c) { return of(c).getString("update_dir", null); }

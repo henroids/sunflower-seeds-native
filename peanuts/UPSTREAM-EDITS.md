@@ -2183,8 +2183,13 @@ igawa6's notes on Round 46 to 49 (PR #321) that were left for later, one change 
 - The Mii editor kept its edits only in memory, so a turn of the device, a change to dark mode or the process ending in the background lost them.
   `dev.peanuts.mii.MiiEditor` keeps the Mii, the Mii as it was, the Undo steps (the newest 100) and the tab in its saved state (`dev.peanuts.mii.MiiEditState`,
   a CharInfo and a byte a field) and takes them back in `onCreate`; no `configChanges`, so a turn still lays the page out for the new width.
+- A firmware without AvatarImage was read again at every cold start: `LibrarySettings.addMissingFonts` took the missing pictures' folder for a firmware read
+  by an older app. A read that works now keeps what the importer takes (`PeanutsPrefs.firmwareRead`, `LibrarySettings.FIRMWARE_READ` 3: the fonts, the
+  Chinese and Korean ones, MiiModel and AvatarImage), and a firmware read so is not read again for what it lacks. The files decide only for a firmware read
+  before; that one is read once more, as before. The importer's scan is unchanged.
 
 Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/mii/MiiEditState.java` new, `MiiEditor.java`,
-`android/app/src/jvmtest/java/dev/peanuts/mii/MiiEditStateJvmTest.java` new, `peanuts/tests/test_mii_editor.py` new.
+`android/app/src/jvmtest/java/dev/peanuts/mii/MiiEditStateJvmTest.java` new, `peanuts/tests/test_mii_editor.py` new; `dev/peanuts/PeanutsPrefs.java`,
+`dev/peanuts/ui/LibrarySettings.java`, `peanuts/tests/test_users_page.py`.
 
-Tests: `peanuts/tests/test_mii_editor.py`. Upstream candidate: no (Peanuts' pages).
+Tests: `peanuts/tests/test_mii_editor.py`, `test_users_page.py`. Upstream candidate: no (Peanuts' pages).

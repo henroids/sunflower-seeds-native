@@ -415,6 +415,7 @@ public final class LibrarySettings {
             }
             int r = imp.firmwareFonts(source, out.getPath());
             String err = imp.lastError();
+            if (r == 0) PeanutsPrefs.firmwareRead(a, FIRMWARE_READ);   // read whole: what this firmware lacks is not looked for again (addMissingFonts)
             if (deleteAfter != null) deleteAfter.delete();
             UI.post(() -> { fontsState = r == 0 ? null : "Firmware not added: " + err
                     + "\n" + KEYS_FIRMWARE_GUIDANCE; fontsLanded(a); });
@@ -424,13 +425,21 @@ public final class LibrarySettings {
     private static boolean triedMoreFonts;
 
     /**
-     * A firmware added before the app read its Chinese and Korean fonts too (cjk_sc.ttf and the others beside standard.ttf: a game in those languages drew "?"
-     * without them): read once more from the folder or zip it came from, when that is still there. Once per app process; nothing is asked, and a firmware that
-     * is gone leaves the two fonts as they are (choosing the firmware again adds the rest)
+     * What the importer takes from a firmware, counted up when it learns to take more: 1 the two fonts the games need, 2 the Chinese and Korean fonts and MiiModel
+     * too, 3 AvatarImage too (the console's profile pictures). Kept after each read that worked (PeanutsPrefs.firmwareRead)
+     */
+    static final int FIRMWARE_READ = 3;
+
+    /**
+     * A firmware added before the app read its Chinese and Korean fonts, MiiModel and AvatarImage too (cjk_sc.ttf and the others beside standard.ttf: a game in
+     * those languages drew "?" without them): read once more from the folder or zip it came from, when that is still there. Once per app process; nothing is
+     * asked, and a firmware that is gone leaves the two fonts as they are (choosing the firmware again adds the rest). A firmware this importer has read already
+     * is not read again, even when it lacks one of them (a firmware without AvatarImage was read at every cold start)
      */
     public static void addMissingFonts(Activity a) {
         if (triedMoreFonts) return;
         triedMoreFonts = true;
+        if (PeanutsPrefs.firmwareRead(a) >= FIRMWARE_READ) return;
         File d = PeanutsPrefs.fontsDir(a);
         String src = PeanutsPrefs.firmwareDir(a);
         boolean haveAll = new File(d, "cjk_sc.ttf").isFile() && new File(PeanutsPrefs.miiModelDir(a), "ShapeHigh.dat").isFile()   // PEANUTS: MiiModel too (the importer writes it beside the fonts)

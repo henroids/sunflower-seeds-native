@@ -29,5 +29,35 @@ class Sources(unittest.TestCase):
             self.assertNotIn('import android.', f.read_text(encoding='utf-8'), f.name)
 
 
+LIBRARY_SETTINGS = REPO / 'android/app/src/main/java/dev/peanuts/ui/LibrarySettings.java'
+
+
+class FirmwareReadOnce(unittest.TestCase):
+    """The firmware's profile pictures (AvatarImage) are read with the fonts. A firmware read before the app took them is read again once; one this importer has
+    read is not, even when it has no AvatarImage (it was read again at every cold start)"""
+
+    def setUp(self):
+        self.src = LIBRARY_SETTINGS.read_text(encoding='utf-8')
+
+    def body(self, signature):
+        start = self.src.index(signature)
+        return self.src[start:self.src.index('\n    }\n', start)]
+
+    def test_a_read_that_worked_is_kept(self):
+        b = self.body('private static void extractFonts(')
+        read = b.index('imp.firmwareFonts(source, out.getPath())')
+        mark = b.index('if (r == 0) PeanutsPrefs.firmwareRead(a, FIRMWARE_READ);')
+        self.assertLess(read, mark)
+
+    def test_a_firmware_read_whole_is_not_read_again(self):
+        b = self.body('public static void addMissingFonts(Activity a)')
+        self.assertLess(b.index('if (PeanutsPrefs.firmwareRead(a) >= FIRMWARE_READ) return;'), b.index('extractFonts(a, src, null);'))
+
+    def test_the_older_check_stays_for_a_firmware_read_before(self):
+        """Without the mark (a firmware read by an older app), the files decide: the pictures' folder missing reads it once more"""
+        b = self.body('public static void addMissingFonts(Activity a)')
+        self.assertIn('dev.peanuts.users.FirmwarePictures.dir(a).isDirectory()', b)
+
+
 if __name__ == '__main__':
     unittest.main()
