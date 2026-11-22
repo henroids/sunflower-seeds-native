@@ -67,51 +67,42 @@ public final class Cracked {
     // ---- Play time ----
 
     private static final String RUN = "cracked_run", SETTLED = "cracked_settled";
-    private static final long RUN_MATCH_MS = 120_000, SESSION_MAX_MS = 6 * 3_600_000L;
-    private static final java.util.concurrent.Executor BG = java.util.concurrent.Executors.newSingleThreadExecutor();
+    /** One worker, in order: a Play's settling and noting, then every settle after it (back in the launcher, About) */
+    private static final java.util.concurrent.Executor BG = java.util.concurrent.Executors.newSingleThreadExecutor(r -> new Thread(r, "peanuts-cracked"));
 
     /**
-     * The launcher starts a game (GameReturn.remember: Home's Play, a shortcut, a frontend): the run before it is settled (its play time counted) before the
-     * game's screen writes its own record over it, the title's first start counts, and this start is noted, so the record its screen writes is known as a
-     * player's run (a build's shader capture writes one too, and is not)
+     * The launcher starts a game (GameReturn.remember: Home's Play, a shortcut, a frontend): the run before it is settled (its play time counted), the
+     * title's first start counts, and this start is noted, so the record the game's screen writes is known as a player's run (a build's shader capture
+     * writes one too, and is not). Reading the record and asking Android for the processes happen on the worker, not at the Play's tap (igawa6's note on
+     * #315); the Play's time is taken here. Should the game's screen write its record before the worker gets to it, that record counts nothing until its
+     * start is noted (CrackedCount.toCount), and the run before it was settled when the launcher came back, before this Play
      */
     public static void starting(Context c, String titleId) {
         Context app = c.getApplicationContext();
-        settleNow(app);
-        started(app, titleId);
-        prefs(app).edit().putString(RUN, titleId.toUpperCase(java.util.Locale.ROOT) + "@" + System.currentTimeMillis()).apply();
+        String noted = titleId.toUpperCase(java.util.Locale.ROOT) + "@" + System.currentTimeMillis();
+        BG.execute(() -> {
+            settleNow(app);
+            started(app, titleId);
+            prefs(app).edit().putString(RUN, noted).apply();
+        });
     }
 
     /** Back in the launcher (or About shows): a run that has ended is counted, off the main thread */
     public static void settle(Context c) { Context app = c.getApplicationContext(); BG.execute(() -> settleNow(app)); }
 
     /**
-     * The game's run record (files/last-exit.txt: title, pid, start, written by its screen) against the start noted above: once its process has ended, the
-     * time from its start to the process's end (Android's exit record of that pid) is played time, at most six hours a run (a game left in the background
-     * keeps its process). Counted once per run
+     * The game's run record (files/last-exit.txt: title, pid, start, written by its screen) against the start noted above (CrackedCount.toCount): once its
+     * process has ended, the time from its start to the process's end (Android's exit record of that pid) is played time, at most six hours a run (a game
+     * left in the background keeps its process). Counted once per run. On the worker only: it reads a file and asks Android
      */
     private static synchronized void settleNow(Context c) {
-        java.util.Map<String, String> rec = record(new java.io.File(c.getFilesDir(), "last-exit.txt"));
-        String title = rec.get("title"), start = rec.get("start"), pid = rec.get("pid");
-        if (title == null || start == null || pid == null) return;
-        String key = title.toUpperCase(java.util.Locale.ROOT) + "@" + start;
         SharedPreferences p = prefs(c);
-        if (key.equals(p.getString(SETTLED, null))) return;
-        long startMs, noted;
-        int id;
-        try {
-            startMs = Long.parseLong(start);
-            id = Integer.parseInt(pid);
-            String run = p.getString(RUN, "");
-            int at = run.lastIndexOf('@');
-            if (at < 0 || !run.substring(0, at).equalsIgnoreCase(title)) return;   // not a run the launcher started (a build's shader capture)
-            noted = Long.parseLong(run.substring(at + 1));
-        } catch (NumberFormatException e) { return; }
-        if (Math.abs(startMs - noted) > RUN_MATCH_MS) return;
-        long end = ended(c, id);
+        CrackedCount.Run run = CrackedCount.toCount(record(new java.io.File(c.getFilesDir(), "last-exit.txt")), p.getString(RUN, null), p.getString(SETTLED, null));
+        if (run == null) return;
+        long end = ended(c, run.pid);
         if (end <= 0) return;   // still running, or not known yet
-        p.edit().putString(SETTLED, key).apply();
-        played(c, Math.min(SESSION_MAX_MS, Math.max(0, end - startMs)));
+        p.edit().putString(SETTLED, run.key).apply();
+        played(c, CrackedCount.playedMs(run.start, end));
     }
 
     /** When the process of that pid ended (Android's exit record), 0 when it runs or Android has no record of it */

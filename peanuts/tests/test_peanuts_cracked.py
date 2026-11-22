@@ -39,6 +39,24 @@ class Counting(unittest.TestCase):
         self.assertRegex(editor, r'MiiStore\.save\(getFilesDir\(\), all\); \}\n[^\n]*\n\s*Feel\.done\(this\);\n\s*if \(index < 0\) dev\.peanuts\.ui\.Cracked\.mii\(this\);')
         self.assertIn('Cracked.settle(x);', (UI / 'BottomScreen.java').read_text(encoding='utf-8'), 'play time is counted back in the launcher')
 
+    def test_a_play_reads_nothing_at_its_tap(self):
+        # GameReturn.remember runs at every Play on the main thread: Cracked.starting reads the run record and asks Android for the processes on its
+        # worker, in order with the settles after it (#315's review); the Play's own time is taken at the tap
+        cracked = (UI / 'Cracked.java').read_text(encoding='utf-8')
+        starting = cracked.split('public static void starting(Context c, String titleId) {')[1].split('\n    }\n')[0]
+        tap, worker = starting.split('BG.execute(() -> {')
+        self.assertIn('System.currentTimeMillis()', tap)
+        for read in ('settleNow(', 'started(', 'prefs(', 'record(', 'ended(', 'getRunningAppProcesses', 'getHistoricalProcessExitReasons'):
+            self.assertNotIn(read, tap, 'read at the Play: ' + read)
+        self.assertLess(worker.index('settleNow(app);'), worker.index('started(app, titleId);'))
+        self.assertLess(worker.index('started(app, titleId);'), worker.index('putString(RUN, noted)'), 'the run before is settled before this start is noted')
+        self.assertIn('BG = java.util.concurrent.Executors.newSingleThreadExecutor(', cracked, 'one worker: the settles keep their order')
+        settle = cracked.split('public static void settle(Context c) {')[1].split('\n')[0]
+        self.assertIn('BG.execute(() -> settleNow(app));', settle)
+        # the rule of which run counts is CrackedCount's (on the JVM above), Cracked only reads the record and Android's exit record
+        self.assertIn('CrackedCount.toCount(record(', cracked)
+        self.assertIn('played(c, CrackedCount.playedMs(run.start, end));', cracked)
+
     def test_the_old_count_carries_over(self):
         prefs = (UP / 'Prefs.java').read_text(encoding='utf-8')
         cracked = (UI / 'Cracked.java').read_text(encoding='utf-8')

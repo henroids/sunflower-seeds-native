@@ -45,6 +45,54 @@ public final class CrackedCount {
         return add;
     }
 
+    // ---- Play time: which run to count ----
+
+    /** A game's start and its run record at most this far apart: the run is the one the launcher started */
+    static final long RUN_MATCH_MS = 120_000;
+    /** A run counts at most this long: a game left in the background keeps its process */
+    static final long SESSION_MAX_MS = 6 * 3_600_000L;
+
+    /** A game's run, as its run record names it (files/last-exit.txt, written by the game's screen at its start) */
+    public static final class Run {
+        public final String key;   // "<TITLE ID>@<start>": a run is counted once
+        public final long start;
+        public final int pid;
+
+        Run(String key, long start, int pid) {
+            this.key = key;
+            this.start = start;
+            this.pid = pid;
+        }
+    }
+
+    /**
+     * The run to count once its process has ended (its play time then is {@link #playedMs}), or null when there is none: no record or one without its
+     * title, start or pid; a run the launcher did not start (a build's shader capture writes a record too, but the launcher noted no Play near its start);
+     * or the run counted last. rec: the run record's lines; noted: "&lt;title ID&gt;@&lt;ms&gt;" of the last Play; settled: the key counted last.
+     * <p>The record is read after the Play, on a worker: the next game's screen may have written its own record by then. That record counts nothing
+     * yet, since the launcher has not noted its start (another title, or a start too far from the one noted) or its process still runs; once its start
+     * is noted and its process has ended, it counts.
+     */
+    public static Run toCount(java.util.Map<String, String> rec, String noted, String settled) {
+        String title = rec.get("title"), start = rec.get("start"), pid = rec.get("pid");
+        if (title == null || start == null || pid == null || noted == null) return null;
+        String key = title.toUpperCase(Locale.ROOT) + "@" + start;
+        if (key.equals(settled)) return null;
+        try {
+            long startMs = Long.parseLong(start);
+            int id = Integer.parseInt(pid);
+            int at = noted.lastIndexOf('@');
+            if (at < 0 || !noted.substring(0, at).equalsIgnoreCase(title)) return null;
+            if (Math.abs(startMs - Long.parseLong(noted.substring(at + 1))) > RUN_MATCH_MS) return null;
+            return new Run(key, startMs, id);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** A run's play time: from its start to its process's end, at most SESSION_MAX_MS */
+    public static long playedMs(long start, long end) { return Math.min(SESSION_MAX_MS, Math.max(0, end - start)); }
+
     /** A game was played for ms: 5 points for every whole hour, the rest carried */
     public static long played(State s, long ms) {
         if (ms <= 0) return 0;

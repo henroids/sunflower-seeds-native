@@ -357,3 +357,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   running processes, all before the sheet showed, which on an SD card or a USB drive can stall the screen. `BuildLogUi` now reads all of that on a worker
   (`dev.peanuts.ui.OffMain`) and opens the sheet with what it found; a second tap meanwhile starts nothing, and a screen that went meanwhile gets nothing.
   Tests `peanuts/tests/test_share_log_choice.py` (OffMainJvmTest, and no read left in the tap's own code).
+  Peanuts cracked's play time: at every Play, `GameReturn` → `Cracked.starting` read `last-exit.txt` and asked Android for the running processes and its
+  exit records on the main thread. That now runs on Cracked's own worker, in order with the settles after it; the Play's time is still taken at the tap.
+  Which run counts is `CrackedCount.toCount` now (plain Java), so a record the next game's screen wrote before the worker read it counts nothing until its
+  own start is noted. Tests `peanuts/tests/test_peanuts_cracked.py` (the rule on the JVM, nothing read at the Play's tap).
