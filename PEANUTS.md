@@ -352,3 +352,8 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - 2026-11-22 (the review of PR #336): the steady and the user clock read the real-time clock once a run and advance it with `CLOCK_BOOTTIME`, so a correction of
   the phone's clock (network or carrier time) can no longer make a span within a run negative; it reaches the game at its next start. `hle_time.c` `host_rt_ns`;
   `t_peanuts_time` case 8. UPSTREAM-EDITS Round 54.
+- 2026-11-22 (igawa6's notes on the Settings pull requests #312 and #315, for after 0.1.7): Share log reads what it asks about off the main
+  thread. A tap read the launcher's list, the game's work folders, `job.json` (up to 1 MB), a log's tail and `last-exit.txt`, and asked Android for the
+  running processes, all before the sheet showed, which on an SD card or a USB drive can stall the screen. `BuildLogUi` now reads all of that on a worker
+  (`dev.peanuts.ui.OffMain`) and opens the sheet with what it found; a second tap meanwhile starts nothing, and a screen that went meanwhile gets nothing.
+  Tests `peanuts/tests/test_share_log_choice.py` (OffMainJvmTest, and no read left in the tap's own code).
