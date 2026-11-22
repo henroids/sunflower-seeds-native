@@ -1494,6 +1494,28 @@ log's and the GPU driver page's bars (which took `PUi.progress`) and the Prepare
 |---|---|---|---|
 | `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 1 | The Prepare card's progress bar is `dev.peanuts.ui.Strip.card`, the building cover's 6 dp rounded strip, in place of `Ui.progress` | `PEANUTS` |
 
+### Round 58, the build queue (2026-11-22, issue #348)
+
+A build asked while another runs waits its turn instead of being refused: `dev.peanuts.build.BuildQueue` keeps the games in order in the app's own storage
+(`files/build-queue.tsv`), and `BuildService` (now sticky) builds one after the other, also after Android ended the app's process. A game that fails or is
+stopped is marked and the next one starts. Before each game the queue waits while upstream's `PackPolicy` says so (heat, battery; read by reflection, with the packer's
+remembered Go on anyway, #93), while a game of the app runs and while a build with mods runs; a `.nup` that does not fit the free space, or less
+than 0.5 GB where the pack is made, stops that game before anything is written. The library shows the queue (the covers' "Queued, 3 of 5", the Building
+filter's Up next card, Remove, Stop all, Resume after a pause, Dismiss on a stopped card), the notification the place ("2 of 5"), Cancel all, and one alert
+at the queue's end. Build all… queues every game that needs a build (Build needed, stopped, or built by an earlier version of the app). `Prepare` waits while
+the packer still runs another job, and takes the packer's messages only of its own job. Upstream's own Prepare goes into the queue while it runs:
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 1 | `prepare()` asks `dev.peanuts.ui.Library.queuePrepare` first: while the library builds or its queue waits, the Prepare goes into the build queue | `PEANUTS` |
+
+Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/` (`build/BuildQueue.java` new; `build/BuildService`, `BuildPipeline`, `Prepare`,
+`Upstream`; `ui/Library`, `ui/GameSheet`, `ui/CtlPort`, `ui/BottomScreen`, `ui/BottomPanel`; `ctl/Ctl`, `ctl/Request`, `ctl/Status`; `settings/ModsSection`), `android/app/src/jvmtest/java/dev/peanuts/build/BuildQueueJvmTest.java`
+(new), `peanuts/tests/test_build_queue.py` (new), `peanuts/docs/FAQ.md`, `peanuts/docs/CONTROL.md`.
+
+Tests: `peanuts/tests/test_build_queue.py` (the JVM test: order, the file, a cut-off run, a failure that does not stop the queue, removing, Cancel all, the same
+game twice, the batch's places, a pause, a damaged file; and the wiring). Upstream candidate: no (Banana Native has no build service of its own).
+
 ### Round 29, compressed game files: .nsz and .xcz (2026-11-19, issue #149)
 
 The importer builds a game from NSP and XCI files compressed with nsz: an `.ncz` entry is an NCA stored as zstd with the keys and counters of its

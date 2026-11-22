@@ -199,7 +199,7 @@ public final class ModsSection {
 
     /** What a build with mods must wait for: another one, a normal build of any game (one packer serves them all), or an install or a delete, whose files it reads */
     private static boolean busy() {
-        return buildTitle != null || importTitle != null || deleteTitle != null || ModBuildPipeline.running() != 0 || dev.peanuts.build.BuildPipeline.running() != 0;
+        return buildTitle != null || importTitle != null || deleteTitle != null || ModBuildPipeline.running() != 0 || dev.peanuts.build.BuildPipeline.busy();   // busy(): a game builds or waits in the build queue (issue #348): they share one packer
     }
 
     /** Whether the app shows now: Android refuses a foreground service (the build) started by an app in the background */

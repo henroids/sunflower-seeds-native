@@ -343,6 +343,15 @@ final class Prepare {
         catch (IOException e) { Log.w(TAG, "prepare: the pack's note: " + e.getMessage()); }
     }
 
+    /**
+     * Whether a built game's pack fits this app as it is, as a build of it would find (Build all that need it, issue #348): not of a game file imported again
+     * since, main.orig.bin there, its code and shaders this app's ({@link #current}). A pack that cannot be judged counts as fitting: it is not offered
+     */
+    boolean upToDate(File packDir, File dump, String titleId) {
+        try { return packDir == null || !packDir.isDirectory() || !PackNote.stale(packDir) && !noOrig(packDir) && current(packDir, dump, titleId); }
+        catch (IOException | RuntimeException e) { return true; }
+    }
+
     /** Whether the pack fits this APK as it is: startable code of this rewriter (PackCheck.blocking / code) and this APK's shader library (PackCheck.shaders) */
     /** A pack whose main was rewritten before the rewriter kept the file's own bytes of what it changed (main.orig.bin) */
     private static boolean noOrig(File packDir) { return new File(packDir, "main.changed.tsv").isFile() && !new File(packDir, "main.orig.bin").isFile(); }

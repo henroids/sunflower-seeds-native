@@ -308,12 +308,15 @@ public final class Ctl {
         if (builds && id != null && !id.equalsIgnoreCase(String.valueOf(b.get("title_id")))) throw new Request.Bad("no_job", "The build that runs is " + b.get("title_id") + "'s.");
         Object job = Up.job(app);
         boolean prepares = job != null && "running".equals(Up.jobText(job, "state")) && (id == null || id.equalsIgnoreCase(Up.jobText(job, "titleId")));
-        if (builds && !(prepares && "prepare".equals(b.get("step")))) {
-            BuildPipeline.cancel(app);
-            res.ok("The build was asked to stop (the build card's Stop): what is written so far stays, and job with do=resume builds on.").put("what", "build");
+        // the build queue (issue #348): stop stops this game and the queue goes on with the next; pause pauses the queue, and do=resume goes on with this game
+        boolean stop = r.stopAsked();
+        if (builds && (stop || !(prepares && "prepare".equals(b.get("step"))))) {
+            if (stop) BuildPipeline.cancel(app); else BuildPipeline.pause(app);
+            res.ok(stop ? "The build was asked to stop (the build card's Stop): what is written so far stays; the build queue goes on with its next game."
+                    : "The build was asked to pause: the build queue keeps its games, and job with do=resume goes on with this one.").put("what", "build");
         } else if (prepares) {
             Up.pausePack(app);
-            res.ok("The Prepare job was asked to pause (its card's Pause)." + (builds ? " The build it belongs to stops with it; job with do=resume builds on." : "")).put("what", "prepare");
+            res.ok("The Prepare job was asked to pause (its card's Pause)." + (builds ? " The build queue pauses with it; job with do=resume goes on with this game." : "")).put("what", "prepare");
         } else throw new Request.Bad("no_job", "No build or Prepare job runs" + (id == null ? "." : " for " + id + "."));
     }
 
@@ -437,10 +440,12 @@ public final class Ctl {
     private static void build(Activity a, Result res, String id, boolean anyway) throws Request.Bad, ReflectiveOperationException {
         home(a);
         Object job = Up.job(app);
-        if (job != null && "running".equals(Up.jobText(job, "state")) && GameReturn.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
+        // upstream's own Prepare: the library's builds go into the build queue (issue #348), whose Prepare waits for the packer
+        if (!BuildPipeline.busy() && job != null && "running".equals(Up.jobText(job, "state")) && GameReturn.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
         String[] no = CtlPort.build(a, id, anyway);
         if (no != null) throw new Request.Bad(no[0], no[1]);
         if (CtlPort.building(a, id)) { res.ok("The build started. Its progress is under \"build\" and, while it prepares, under \"job\"."); return; }
+        if (queuedAnswer(res, id)) return;
         // the pipeline refused: its sentence comes through buildRefused in a moment
         buildWait = res;
         UI.postDelayed(() -> { if (buildWait == res) { buildWait = null; done(res.fail("refused", "The build did not start.")); } }, 1000);
@@ -454,12 +459,13 @@ public final class Ctl {
         String id = r.titleId(true);
         home(a);
         Object job = Up.job(app);
-        if (job != null && "running".equals(Up.jobText(job, "state")) && GameReturn.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
+        if (!BuildPipeline.busy() && job != null && "running".equals(Up.jobText(job, "state")) && GameReturn.processAlive(app, ":pack", -1)) throw new Request.Bad("busy", Up.jobText(job, "name") + " is being prepared now.");
         Map<String, Object> data = new LinkedHashMap<>();
         String[] no = CtlPort.reimport(a, id, r.on("confirm"), r.on("delete_first"), data);
         for (Map.Entry<String, Object> e : data.entrySet()) res.put(e.getKey(), e.getValue());
         if (no != null) throw new Request.Bad(no[0], no[1]);
         if (CtlPort.building(a, id)) { res.ok("The import started: the old .nup is replaced when the new one is complete, then the game is built. Its progress is under \"build\"."); return; }
+        if (queuedAnswer(res, id)) return;
         buildWait = res;
         UI.postDelayed(() -> { if (buildWait == res) { buildWait = null; done(res.fail("refused", "The import did not start.")); } }, 1000);
     }
@@ -477,6 +483,17 @@ public final class Ctl {
             done(res);
         });
         if (no != null) throw new Request.Bad(no[0], no[1]);
+    }
+
+    /** A build that went into the build queue (issue #348): ok, with its place ("queue": the place and the batch's total); false when it did not */
+    private static boolean queuedAnswer(Result res, String id) {
+        dev.peanuts.build.BuildQueue.Item qi = BuildPipeline.queued(id);
+        dev.peanuts.build.BuildQueue q = BuildPipeline.queueNow();
+        if (qi == null || q == null) return false;
+        String p = q.placeText(qi);
+        res.ok("Another game builds now: this one is in the build queue" + (p.isEmpty() ? "" : ", " + p) + ". Its state is under \"queue\", and under \"build\" once it starts.")
+                .put("queue_place", q.place(qi)).put("queue_total", q.total());
+        return true;
     }
 
     private static void watch() { dialog = null; watching = true; }
@@ -539,8 +556,14 @@ public final class Ctl {
         if (!Up.hasProfile(id)) throw new Request.Bad("not_in_app", "This app version does not include " + g.name + ".");
         File dump = new File(g.gameDir);
         if (!Up.isDump(dump)) throw new Request.Bad("not_a_dump", "Prepare again works from a dump or a .nup; " + dump.getName() + " is neither.");
-        if (BuildPipeline.running() != 0) throw new Request.Bad("busy", "A build is running now. Wait for it to finish.");
         home(a);
+        // while the library builds or its queue waits, Prepare again goes into the build queue (issue #348), as Storage › Prepare again does (Ondevice.prepare)
+        if (BuildPipeline.busy()) {
+            if (CtlPort.building(a, id)) throw new Request.Bad("busy", g.name + " is being built now.");
+            if (!dev.peanuts.ui.Library.queuePrepare(a, dump)) throw new Request.Bad("refused", "Prepare again could not be added to the build queue.");
+            if (!queuedAnswer(res, id)) throw new Request.Bad("refused", "Prepare again could not be added to the build queue.");
+            return;
+        }
         Object panel = Up.panel(a);
         if (panel == null) throw new Request.Bad("no_home", "Home's Prepare card is not there.");
         watch();
@@ -571,6 +594,14 @@ public final class Ctl {
     private static void job(Activity a, Request r, Result res) throws Request.Bad, ReflectiveOperationException {
         String id = r.titleId(false), act = r.action();
         home(a);
+        // a paused build queue (issue #348): resume goes on with its first game, where it stopped (the Up next card's Resume)
+        dev.peanuts.build.BuildQueue q = BuildPipeline.queueNow();
+        dev.peanuts.build.BuildQueue.Item first = q == null ? null : q.next();
+        if (act.equals("resume") && BuildPipeline.held() && first != null && (id == null || id.equalsIgnoreCase(first.titleId()))) {
+            BuildPipeline.release(app);
+            res.ok("The build queue goes on with " + first.name() + " (the Up next card's Resume).").put("what", "queue");
+            return;
+        }
         Map<String, Object> card = CtlPort.buildCard();
         String failed = card != null && Boolean.TRUE.equals(card.get("failed")) ? String.valueOf(card.get("title_id")) : null;
         if (failed != null && id != null && !id.equalsIgnoreCase(failed)) failed = null;
@@ -604,7 +635,7 @@ public final class Ctl {
 
     private static void screensOff(Activity a, Result res) throws Request.Bad, ReflectiveOperationException {
         Object job = Up.job(app);
-        boolean builds = BuildPipeline.running() != 0 || job != null && "running".equals(Up.jobText(job, "state"));
+        boolean builds = BuildPipeline.busy() || job != null && "running".equals(Up.jobText(job, "state"));   // busy: a game builds, or the build queue waits to build the next (issue #348), as Home shows the button
         if (!builds) throw new Request.Bad("nothing_builds", "Screens off is for a running build: nothing builds now.");
         ScreensOff.show(a);
         if (!ScreensOff.on()) throw new Request.Bad("refused", "The screens could not be covered.");

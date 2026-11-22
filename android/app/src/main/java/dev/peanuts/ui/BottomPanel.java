@@ -844,6 +844,12 @@ final class BottomPanel extends Presentation {
             LinearLayout.LayoutParams lp = PUi.wrap();
             lp.leftMargin = PUi.dp(c, 8);
             cardMark.addView(cardState, lp);
+        } else if (k.queued) {   // waits in the build queue (issue #348): the cover's quiet pill
+            TextView pill = PUi.text(c, k.state, 12, R.color.bn_text_2, 700);
+            pill.setSingleLine(true);
+            pill.setBackground(PUi.round(PUi.col(c, R.color.bn_card), PUi.dp(c, 999), PUi.col(c, R.color.bn_card_stroke), Math.max(1, PUi.dp(c, 1))));
+            pill.setPadding(PUi.dp(c, 10), PUi.dp(c, 5), PUi.dp(c, 10), PUi.dp(c, 5));
+            cardMark.addView(pill, PUi.wrap());
         } else {
             boolean danger = k.kind == BottomScreen.Card.K_NO_PROFILE || !"Build needed".equals(k.state);
             TextView pill = PUi.text(c, k.state, 12, danger ? R.color.bn_danger : R.color.bn_on_banana, 700);

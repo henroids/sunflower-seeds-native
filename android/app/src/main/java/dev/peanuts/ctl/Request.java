@@ -92,6 +92,9 @@ public final class Request {
         return null;
     }
 
+    /** job: whether do was stop (the build card's Stop: this game stops, the build queue goes on) rather than pause (the queue pauses), issue #348 */
+    public boolean stopAsked() { return cmd.equals("job") && "stop".equalsIgnoreCase(str("do")); }
+
     /** A game's companion against the catalog: none (the catalog has none and none is installed), not_installed, installed, update */
     public static String companionState(String catalog, String installed) {
         if (catalog == null) return installed == null ? "none" : "installed";
