@@ -470,6 +470,8 @@ Yes. **Settings › App** has two rows. **Haptics** is **System** or **Off**. **
 
 Saves are in the app's own storage, under `saves/<title ID>`. The **Saves** tab shows the path and has **Back up saves**, **Restore saves**, **Import save** (a `.zip` or a save folder) and **Delete save data**, which starts the game from the beginning. Stop the game first. Before a restore, an import or a delete, the app backs up the current save, so **Restore saves** can bring it back.
 
+Each user in **Settings › Users** has a save of their own: the first user's is `saves/<title ID>`, another user's is `saves/<title ID>_user_<their ID>` beside it. With two or more users the **Saves** tab shows a card for each user at its top, starting at the user playing now; tap one, and the rows work on that user's save: a backup, a restore or an import goes to them only, and every question names them. **Copy to another user** gives the picked user's save to another user (theirs is backed up first). A game's device save, which some games keep apart (Mario Kart 8 Deluxe), is every user's and stays as it is. A removed user's saves stay on the phone and show as **Removed user**: back them up, copy them to a user or delete them.
+
 ### Where is the game log?
 
 Every run of a game writes a log. To send it:

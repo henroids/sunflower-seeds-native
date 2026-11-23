@@ -430,6 +430,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         holdLock(dir);
         try {
             if (SaveStore.recoverLocked(dir)) saveNote = "a save restore or swap that was stopped was finished first";
+            { String users = UserSaveDirs.recoverUsers(dir); if (users != null) saveNote = users; }   // PEANUTS: each user's save (UserSaveDirs; one that cannot be finished stops no start)
         } catch (IOException e) {
             throw new IOException("The save folder has an unfinished restore that cannot be finished: " + e.getMessage());
         }

@@ -98,6 +98,12 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      line in it; too much for a one-line hook, as `pack_android.py`'s, so block-marked. `peanuts/UPSTREAM-EDITS.md` Round 49.
    - `android/app/src/main/java/dev/nxnative/android/MainActivity.java` — (2026-11-21, Home's first focus) `buildHome`'s header line (the rebrand's):
      `dev.peanuts.ui.Library.homeHeader` makes the build line plain text, so a controller's first focus is the first cover. Round 53.
+   - `android/app/src/main/java/dev/nxnative/android/SaveUi.java`, `SaveStore.java`, `MainActivity.java` (`gameTab`), `GameActivity.java` (`saveDir`) — (2026-11-23,
+     saves for each user, #422) the Saves tab works on the save of the user picked on it: `UserSaves` (a Peanuts file in this package, as `ResScale`) draws
+     the user cards above the rows and Copy to another user; SaveUi takes `UserSaves.save` for `Folders.save`, names the user in its dialogs and runs another
+     user's backup or restore under the game's lock (`UserSaves.locked`); SaveStore records a backup's user in its manifest and keeps the device save, every
+     user's, out of another user's save (its helpers in one marked block, so the class needs no other file); GameActivity finishes a stopped restore into any
+     user's save at the start (`UserSaveDirs.recoverUsers`; one it cannot finish is left and noted, it stops no start). `peanuts/UPSTREAM-EDITS.md` Round 60.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).

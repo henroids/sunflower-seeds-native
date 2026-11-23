@@ -268,8 +268,8 @@ public final class UsersPage {
     }
 
     private void remove(UsersPort.User u) {
-        PUi.confirmDanger(a, "Remove " + u.name + "?", "Games no longer offer this user. Their saves stay on the phone and come back if the user is added again with the same ID, "
-                + "which a new user never has.", "Remove", () -> {
+        PUi.confirmDanger(a, "Remove " + u.name + "?", "Games no longer offer this user. Their saves stay on the phone: each game's Saves tab shows them as a removed "
+                + "user's, to back up, copy to another user or delete.", "Remove", () -> {
             UsersPort.remove(a, u.uid);
             try { UserPictures.remove(a.getFilesDir(), u.uid); } catch (IOException ignored) { }
             UserImages.removed(a, u.uid);
