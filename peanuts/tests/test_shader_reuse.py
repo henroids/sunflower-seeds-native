@@ -759,7 +759,20 @@ class FullCheck(Base):
         self.assertIsNone(self.todo())
         self.assertEqual(self.library(lib_path), before)   # not replaced
         self.assertFalse((self.reuse / sr.FAILED).exists())
-        self.assertTrue(list((self.reuse / 'shaders').glob('*.tsv')))   # nor its records deleted
+        self.assert_dropped()
+
+    def assert_dropped(self):
+        """A check dropped: the records and the kept copy went with it, so the next build keeps none of the shaders only the sample checked, and translates every
+        one (found in review: the records stayed, and the next build kept the same entries again)"""
+        self.assertIsNone(self.todo())
+        self.assertFalse((self.reuse / sr.CHECK_DIR).exists())
+        self.assertFalse((self.reuse / sr.RECORDS_DIR).exists())
+        self.assertFalse((self.reuse / sr.KEEP_DIR).exists())
+        shutil.rmtree(self.res, ignore_errors=True)   # the check's job is done: the packer deleted its results
+        code, runs, lib = self.build()
+        self.assertEqual((code, len(runs), sorted(runs[0])), (0, 1, sorted(self.vs + self.ps)))
+        self.assertEqual(lib, self.full())
+        self.assertIsNone(self.todo())   # nothing kept: nothing due
 
     def test_another_translator_drops_the_check(self):
         self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
@@ -769,6 +782,33 @@ class FullCheck(Base):
         finally: sr.translator_tree = saved
         self.assertIsNone(self.todo())
         self.assertFalse((self.reuse / sr.FAILED).exists())
+        self.assert_dropped()
+
+    def test_a_library_of_another_version_drops_the_check(self):
+        self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
+        t = json.loads((self.reuse / sr.TODO).read_text()); t['version'] = 'aaaaaaaaaaaa'   # an app update that moved DMSH_VK_CHAIN
+        (self.reuse / sr.TODO).write_text(json.dumps(t))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): self.assertEqual(self.check(), (0, []))
+        self.assertIn(sr.DROPPED, out.getvalue())
+        self.assert_dropped()
+
+    def test_a_stop_while_a_check_is_dropped_leaves_it_due(self):
+        # the records go first: a stop after them leaves check.todo, and with no record nothing is kept from the library meanwhile
+        self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
+        saved = sr.shutil.rmtree
+
+        def stopped(p, *a, **k):
+            if Path(p).name == sr.KEEP_DIR: raise KeyboardInterrupt('the packer stopped')
+            return saved(p, *a, **k)
+        sr.shutil.rmtree = stopped
+        try:
+            with self.assertRaises(KeyboardInterrupt): sr.drop_check(str(self.reuse))
+        finally: sr.shutil.rmtree = saved
+        self.assertIsNotNone(self.todo())
+        self.assertFalse((self.reuse / sr.RECORDS_DIR).exists())
+        sr.drop_check(str(self.reuse))
+        self.assert_dropped()
 
     def test_storage_full_while_the_full_translation_takes_the_librarys_place(self):
         lib_path, wrong = self.kept_wrong()
@@ -829,7 +869,8 @@ class FullCheck(Base):
         out = io.StringIO()
         with contextlib.redirect_stdout(out): self.assertEqual(self.check(), (0, []))
         self.assertIn('the library to check is gone', out.getvalue())
-        self.assertIsNone(self.todo())
+        self.assertIn(sr.DROPPED, out.getvalue())
+        self.assert_dropped()   # were the library only out of reach (a card not mounted), a build that found it again could have kept from it unchecked
 
 
 class Parts(Base):

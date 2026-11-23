@@ -4,6 +4,7 @@ Android to run, so these tests read how they are wired, each for a fault a revie
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -67,6 +68,19 @@ class Due(unittest.TestCase):
     def test_the_packer_drops_a_check_an_app_update_made_impossible(self):
         s = PACK.read_text(encoding='utf-8')
         self.assertRegex(s, r'checkAsked && !check && j != null && "done"\.equals\(j\.state\(\)\) && j\.apkChanged\(\)[^\n]*\n[^\n]*CheckDue\.drop\(')
+
+    def test_a_dropped_check_takes_the_tools_records_and_kept_copy(self):
+        # CheckDue.drop deletes what shader_reuse.py keeps by and from, by its own names for them: a drop that left the records let the next build keep the same
+        # entries again, unchecked (found in review). The names must be the tool's, or a drop on the phone would leave them
+        sys.path.insert(0, str(REPO / 'dm/peanuts/reuse'))
+        try: import shader_reuse as sr
+        finally: sys.path.remove(str(REPO / 'dm/peanuts/reuse'))
+        s = (REPO / 'android/app/src/main/java/dev/peanuts/build/CheckDue.java').read_text(encoding='utf-8')
+        java = dict(re.findall(r'\b([A-Z]+) = "([^"]*)"', s))
+        self.assertEqual((java['TODO'], java['DIR'], java['RECORDS'], java['KEPT'], java['DROPPED']), (sr.TODO, sr.CHECK_DIR, sr.RECORDS_DIR, sr.KEEP_DIR, sr.DROPPED))
+        drop = s[s.index('    public static void drop(File reuseDir) {'):]
+        drop = drop[:drop.index('\n    }\n')]
+        self.assertLess(drop.index('RECORDS, KEPT'), drop.index('TODO, JOB'))   # the records first: a stop in between leaves the check due
 
     def test_a_check_that_cannot_be_made_or_fails_is_counted_at_its_end(self):
         body = check_kept()

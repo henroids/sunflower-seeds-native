@@ -18,6 +18,10 @@ public final class CheckDue {
     private CheckDue() {}
 
     static final String TODO = "check.todo", JOB = "check.job", FAILED = "check.failed", TRIES = "check.tries", DIR = "check", RUNNING = "check.running";
+    /** shader_reuse.py's RECORDS_DIR and KEEP_DIR: the records of the shaders, without which a build keeps nothing, and the kept copy of the last library */
+    static final String RECORDS = "shaders", KEPT = "library";
+    /** What a dropped check says in check.log, as shader_reuse.py DROPPED */
+    static final String DROPPED = "dropped, with the records of the kept shaders: the next build of this game translates every shader";
     /** A check that failed this many times (not stopped: the tool ended with an error) is dropped: it was started again every two minutes for good (found in review) */
     public static final int MAX_TRIES = 3;
 
@@ -27,8 +31,15 @@ public final class CheckDue {
         return t == null ? null : text(t, "library");
     }
 
-    /** The check is due no more: check.todo, check.job, the count of its tries and its own results go (the job's split goes with the packer's next look) */
+    /**
+     * The check will never run (its job cannot make it, it failed MAX_TRIES times, an app update since the build): the kept shaders were then checked by the
+     * sample alone, so every record of the game's shaders and the kept copy of its library go first, and the next build of the game keeps no shader and
+     * translates every one (shader_reuse.py drop_check, which does the same for the checks the tool drops). Before, the records stayed, the next build kept the
+     * same entries again, and a wrong one the sample missed could stay in the pack for good (found in review). Then check.todo, check.job, the count of its
+     * tries and its own results go (the job's split goes with the packer's next look). A stop in between leaves the check due, with no record left to keep by
+     */
     public static void drop(File reuseDir) {
+        for (String n : new String[] {RECORDS, KEPT}) deleteTree(new File(reuseDir, n));
         for (String n : new String[] {TODO, JOB, TRIES, RUNNING}) new File(reuseDir, n).delete();
         deleteTree(new File(reuseDir, DIR));
     }
@@ -45,7 +56,7 @@ public final class CheckDue {
         if (lib == null) return null;   // not due (the check ended it, or a build since)
         if (what.equals("no split to check with") || what.equals("the split holds another selection")) {
             drop(reuseDir);
-            return "the check cannot be made with this job: dropped";
+            return "the check cannot be made with this job: " + DROPPED;
         }
         File f = new File(reuseDir, TRIES);
         String had = read(f);
@@ -56,7 +67,7 @@ public final class CheckDue {
         }
         if (n >= MAX_TRIES) {
             drop(reuseDir);
-            return "the check failed " + n + " times: dropped";
+            return "the check failed " + n + " times: " + DROPPED;
         }
         write(f, lib + "\t" + n + "\n");
         return "the check failed (" + n + " of " + MAX_TRIES + " tries)";

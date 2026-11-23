@@ -59,6 +59,7 @@ SAMPLE_SHARE, SAMPLE_MIN, SAMPLE_MAX = 50, 16, 1000   # one key in SAMPLE_SHARE,
 SAMPLE_CLASS_MIN = 4   # and at least this many of each class of shader (sample_class), so a rule that misses one class is checked on it too
 KEY = re.compile(r'[0-9a-f]{16}')
 KEEP_DIR = 'library'   # <PN_REUSE_DIR>/library/v-<V>/dmsh_vk.lib: the copy of the last library of this title (keep_library)
+RECORDS_DIR = 'shaders'   # <PN_REUSE_DIR>/shaders/<library id>.tsv: the records (record_path), without which nothing is kept from a library
 SPLIT_DIR = 'split'    # <PN_REUSE_DIR>/split/: the split's kept results (split_reuse.py), the first to go when a copy needs room (room)
 KEEP_TOTAL_MB = 4096   # every title's copies together (the library's, the modules', the split's results), at most (PN_REUSE_KEEP_MB)
 KEEP_FREE_MB = 2048    # and no copy that would leave less than this free
@@ -194,7 +195,7 @@ def library_id(L):
     return h.hexdigest()[:32]
 
 
-def record_path(d, lib_id): return Path(d) / 'shaders' / f'{lib_id}.tsv'
+def record_path(d, lib_id): return Path(d) / RECORDS_DIR / f'{lib_id}.tsv'
 
 
 def read_record(d, lib_id):
@@ -588,6 +589,21 @@ def read_todo(reuse_dir):
     return t if isinstance(t, dict) and all(isinstance(t.get(k), str) for k in ('library', 'version', 'game')) else None
 
 
+DROPPED = 'dropped, with the records of the kept shaders: the next build of this game translates every shader'   # what a check that will never run says
+
+
+def drop_check(reuse_dir):
+    """A due full check that will never run (full_check: the library to check gone, an app update since the build): its kept shaders are then checked by the
+    sample alone, so every record of this title's shaders and the kept copy of its library go too, and the next build of the game keeps no shader and
+    translates every one. Before, only check.todo went: the records stayed, the next build kept the same entries again, and a wrong one the sample missed
+    could stay in the pack for good (found in review). PackService's CheckDue.drop does the same for a check its job cannot make and one that failed
+    CheckDue.MAX_TRIES times. The records go first: a stop in between leaves the check due, and the next start drops it again"""
+    d = Path(reuse_dir)
+    for n in (RECORDS_DIR, KEEP_DIR): shutil.rmtree(d / n, ignore_errors=True)
+    (d / TODO).unlink(missing_ok=True)
+    shutil.rmtree(d / CHECK_DIR, ignore_errors=True)
+
+
 def pack_library(roots, version, lib_id):
     """The pack's library file of this id among the app's DMSH_VK_DELTA_FROM folders (the kept copy is not one of them), None when the pack holds another"""
     delta = load_modules()[2]
@@ -607,7 +623,8 @@ def full_check(argv):
     (its own results: a check stopped by a game that starts, the battery or heat resumes from them; DMSH_VK_DELTA_FROM pointed at nothing, so no entry is kept),
     then each entry of the library compared with that translation. All the same: checked.tsv says so and the check's files go. One that differs, or a shader one
     of them lacks: the full translation is what the game should have, so it takes the checked library's place in the pack (as the pack step copies one: a
-    .partial, then a rename), and becomes the record and the kept copy; check.failed says which shaders differed, and the exit code is DIFFER.
+    .partial, then a rename), and becomes the record and the kept copy; check.failed says which shaders differed, and the exit code is DIFFER. A check that can
+    never run (its library gone, another app since the build) is dropped with the records of the kept shaders (drop_check).
     argv: the shaders step's (--target vulkan <pkg> <lib> [keys]); the caller runs it only while no game runs"""
     reuse_dir = os.environ.get('PN_REUSE_DIR', '')
     if not reuse_dir or len(argv) < 4 or argv[:2] != ['--target', 'vulkan']:
@@ -617,13 +634,13 @@ def full_check(argv):
     game, dmsh_chain, delta = load_modules()
     g, version, zstd = game.load(), vk_version(), zstd_module()
     if (todo['version'], todo['game']) != (version, g.id):
-        say(f'reuse full check: the library to check is of version {todo["version"]}, game {todo["game"]}: not this build\'s, dropped')
-        (Path(reuse_dir) / TODO).unlink(missing_ok=True); return 0
+        say(f'reuse full check: the library to check is of version {todo["version"]}, game {todo["game"]}: not this build\'s, {DROPPED}')
+        drop_check(reuse_dir); return 0
     now = (dmsh_chain.inputs(g), translator_tree())
     if (todo.get('inputs'), todo.get('tree')) != now or now[1] is None:   # an app update since the build: another profile, or another translator library
         say(f'reuse full check: the library was made from the profile inputs {todo.get("inputs")} and the translator {todo.get("tree")}, this app has {now[0]} '
-            f'and {now[1]}: a translation now says nothing of it, dropped (the next build of this game makes a library of this app)')
-        (Path(reuse_dir) / TODO).unlink(missing_ok=True); shutil.rmtree(Path(reuse_dir) / CHECK_DIR, ignore_errors=True); return 0
+            f'and {now[1]}: a translation now says nothing of it, {DROPPED}')
+        drop_check(reuse_dir); return 0
     roots = os.environ.get('DMSH_VK_DELTA_FROM', '')
     os.environ['DMSH_VK_DELTA_FROM'] = os.pathsep.join(p for p in (roots, str(Path(reuse_dir) / KEEP_DIR)) if p)
     root = Path(reuse_dir) / CHECK_DIR
@@ -633,7 +650,8 @@ def full_check(argv):
     for L in libs:
         if L is not target: L.close()
     if target is None:
-        say('reuse full check: the library to check is gone (a build since wrote another): nothing checked'); (Path(reuse_dir) / TODO).unlink(missing_ok=True); return 0
+        say(f'reuse full check: the library to check is gone (neither the pack nor the kept copy holds it): nothing checked, {DROPPED}')
+        drop_check(reuse_dir); return 0
     try:
         say(f'reuse full check: {target.path}: every shader translated again ({todo.get("kept", "?")} of them were kept from earlier builds)')
         code = run_build(argv[:3] + [str(root / 'lib')] + argv[4:], {'DMSH_VK_RESULTS': str(root / 'results'), 'DMSH_VK_DELTA_FROM': str(root / 'none')})
@@ -659,7 +677,7 @@ def full_check(argv):
         say(f'reuse full check: all {n} shaders of the library are a full translation\'s byte for byte ({todo.get("kept", "?")} of them kept from earlier builds)')
         return 0
     say(f'[RED] reuse full check: {len(differ)} of {n} shaders differ from a full translation ({", ".join(differ[:3])}), {len(missing)} are not in it, {len(extra)} only in it')
-    shutil.rmtree(Path(reuse_dir) / 'shaders', ignore_errors=True)   # the records that kept them are not trusted again
+    shutil.rmtree(Path(reuse_dir) / RECORDS_DIR, ignore_errors=True)   # the records that kept them are not trusted again
     # the kept copy is the checked library or one the same records made: gone before the pack's library is replaced, so a stop after that leaves none to keep
     # from (with the same sizes the new library has the old one's id, and the next check would find the pack's equal and end; a review found this)
     shutil.rmtree(Path(reuse_dir) / KEEP_DIR, ignore_errors=True)
@@ -758,7 +776,7 @@ def reuse(argv):
                        else f'only {compared} of the {len(sample)} shaders translated to check are in the library')
                 say(f'[RED] reuse check: {why}: the {len(kept)} kept shaders are translated again')
                 drop_unchecked(res)
-                if reuse_dir: shutil.rmtree(Path(reuse_dir) / 'shaders', ignore_errors=True)   # a record that led here is not trusted again
+                if reuse_dir: shutil.rmtree(Path(reuse_dir) / RECORDS_DIR, ignore_errors=True)   # a record that led here is not trusted again
                 kept = {}
                 code = run_build(argv, {})
             else:
