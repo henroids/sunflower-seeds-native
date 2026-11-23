@@ -1,165 +1,181 @@
-<h1 align="center">Peanuts Native</h1>
+<h1 align="center">Sunflower Seeds Native</h1>
 
 <p align="center">
-  Nintendo Switch games running natively on Android dual-screen handhelds, with a live companion on the second screen.
+  MLB The Show 26 (Nintendo Switch) running natively on an Android handheld, from your own dump.
 </p>
 
 <p align="center">
-  <img alt="status" src="https://img.shields.io/badge/release-0.1.4-brightgreen">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
+  <img alt="device" src="https://img.shields.io/badge/tested%20on-AYN%20Thor-orange">
 </p>
 
-<div align="center">
-  <a href="https://discord.gg/r6vBWKAqCK"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>&nbsp;<a href="https://ko-fi.com/igawa6"><img src="https://img.shields.io/badge/Support_me_on_Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"></a>
-</div>
-
 > [!NOTE]
-> Peanuts Native is in development. The current release is on the [releases page](https://github.com/igawa6/peanuts-native/releases). It is not affiliated with Nintendo.
+> An unofficial, personal fork of [Peanuts Native](https://github.com/igawa6/peanuts-native), made to play one game:
+> MLB The Show 26. Not affiliated with Nintendo, Sony Interactive Entertainment, MLB, Peanuts Native, Banana Native or
+> nxnative. It contains no game code, firmware or keys. Almost all of the code changes were written by an AI coding
+> assistant; see [AI use](#ai-use).
 
 ## What it is
 
-Peanuts Native turns a dump of a Switch 1 game you own into an Android app on your phone. It is not an emulator. The
-game's own ARM64 code is rewritten to run directly on the phone's CPU, its graphics are replayed on Vulkan, and its
-shaders are translated on the device. Everything happens on the phone: you pick the game file, tap Build, and play.
+Sunflower Seeds Native runs the Switch version of MLB The Show 26 on an Android handheld without an emulator. As in
+Peanuts Native, the game's own ARM64 code is rewritten once to run directly on the phone's CPU, the system services it
+calls are answered by the app, and its graphics (NVN) are replayed on Vulkan with its shaders translated ahead of time.
 
-On a dual-screen handheld such as the AYN Thor, the game plays on the top screen and the bottom screen shows a
-companion for that game: a map, your party, items or quests, read live from the running game and touchable. Companions
-use the same package format as [Eden Duo](https://github.com/igawa6/eden-duo), so every Eden Duo companion works here
-too.
+The fork adds the game's profile (`dm/games/0100AA7024094000`) and the host fixes the game needed. The main one, and the
+reason for the project, was that players made in the game (create-a-player, Road to the Show) had black faces, black
+skin and hair without colour. How that was tracked down and fixed is written up in detail in
+**[docs/mlb-the-show-26-skin-and-hair.md](docs/mlb-the-show-26-skin-and-hair.md)**, for anyone porting a game that
+draws into memory through one texture and reads it through another.
 
-## Supported games
+## Status
 
-These are the Switch 1 games this app version includes. The last column says what was seen on an AYN Thor: a game
-marked "new" was played there for a short time only; rows marked untested have no device run. Kirby's
-Return to Dream Land Deluxe and Super Mario 3D World + Bowser's Fury were run by their contributor on their own
-AYN Thor only. The
-Companion column says whether the game has a companion that was checked with it. Use the game update listed. The app
-shows which update you have and which one a game supports, and asks before building any other.
-
-| Game | Title ID | Game update | Companion | Runs at |
-|---|---|---|---|---|
-| The Legend of Zelda: Link's Awakening | `01006BB00C6F0000` | 1.1.0 | Yes | 60 fps |
-| The Legend of Zelda: Echoes of Wisdom | `01008CF01BAAC000` | 1.1.0 | Yes | 60 fps |
-| Fire Emblem: Three Houses | `010055D009F78000` | 1.2.0 | Yes | 60 fps |
-| Fire Emblem Engage | `0100A6301214E000` | 2.0.0 | Yes | 60 fps |
-| Metroid Dread | `010093801237C000` | 2.1.0 | Yes | 60 fps |
-| Super Mario Odyssey | `0100000000010000` | 1.4.1 | Yes | 60 fps |
-| Mario Kart 8 Deluxe | `0100152000022000` | 4.0.0, 4.0.1 | Yes | 60 fps |
-| Animal Crossing: New Horizons | `01006F8002326000` | 3.0.3 | Yes | 30 fps, as on Switch |
-| Persona 5 Royal | `01005CA01580E000` | 1.0.2 | Yes | 60 fps |
-| Castlevania: Belmont's Curse | `0100BA4026E94000` | 1.1.0 | Yes | 60 fps |
-| OCTOPATH TRAVELER 0 | `01005270232F2000` | 1.0.5 | Yes | 60 fps |
-| Pokémon Brilliant Diamond | `0100000011D90000` | 1.3.0 | Yes | 60 fps |
-| Pokémon Shining Pearl | `010018E011D92000` | 1.3.0 | Not checked | 60 fps; new, little tested |
-| Pokémon Sword | `0100ABF008968000` | 1.3.2 | Yes | 60 fps (30 on Switch) |
-| Pokémon Shield | `01008DB008C2C000` | 1.3.2 | Yes | 60 fps (30 on Switch); new, little tested |
-| The Legend of Zelda: Breath of the Wild | `01007EF00011E000` | 1.9.0 | Yes | 60 fps (30 on Switch); new, little tested |
-| FINAL FANTASY RESONANCE | `0100606026F12000` | 1.0.1 | No | 45 to 60 fps; new, little tested |
-| The Legend of Zelda: Skyward Sword HD | `01002DA013484000` | 1.0.1 | Not checked | 60 fps; new: right indoors, the fog outdoors is not checked and may draw wrong |
-| Pokémon Legends: Arceus | `01001F5010DFA000` | 1.1.1 | No | 30 fps, as on Switch; new, little tested |
-| Resident Evil 4 | `010099A00BC1E000` | v131072 | Not checked | 60 fps; new, a first profile: the first scenes only |
-| Kirby and the Forgotten Land | `01004D300C5AE000` | 1.1.0 | Not checked | 30 fps, as on Switch, with dips to 15 to 20; new, little tested: the start of the game, by its contributor |
-| Kirby's Return to Dream Land Deluxe | `01006B601380E000` | 1.0.0 (base game) | Yes | 50 to 60 fps; new, little tested: its first stage, by its contributor |
-| Super Mario 3D World + Bowser's Fury | `010028600EBDA000` | 1.2.2 | Not checked | 60 fps; new, little tested: the start of the game, by its contributor |
-| Super Mario Bros. Wonder | `010015100B514000` | 1.2.1 only | Yes | 1.2.1 on AYN Thor: title, menus and map reached; first course at 56 to 60 fps (average 58), occasional doubled frames; sound, saving and later courses untested |
-| DRAGON QUEST III HD-2D Remake | `01003E601E324000` | 1.1.2 only | Not checked | Packs on Linux; device validation pending |
-| Chained Echoes | `0100C510166F0000` | 1.41 | Not checked | AYN Thor, Turnip: title and opening scenes at about 60 fps with a 2 GB application pool; battles, saving/loading, sound and extended play untested |
-| Yoru, Tomosu | `0100C2901153C000` | Base game | Log unreadable | Opening at 60 fps on AYN Thor; companion log text is unreadable |
-| Crash Team Racing Nitro-Fueled | `0100F9F00C696000` | 1.0.15 | Yes | 60 fps on AYN Thor in single races; with the 120 fps limit, 118 to 120 in the menus and 81 to 97 in a race; new, little tested |
-| Xenoblade Chronicles X: Definitive Edition | `0100453019AA8000` | 1.0.2 only | No | Experimental. On AYN Thor, Turnip: the title and the opening at 30 fps; 57 to 60 fps with the 60 fps limit in two sessions of 5 and 10 minutes; little tested beyond that |
-| My Time at Sandrock | `0100B63016916000` | 1.4.2.0 | Yes | 30 fps on AYN Thor: a 15-minute session through the opening, the town and the menus; new, little tested |
-| Monster Sanctuary | `0100A0F00DA68000` | 2.1.0 | Not checked | Runs on AYN Thor; new, little tested |
+| | |
+|---|---|
+| Game | MLB The Show 26, title ID `0100AA7024094000`, **update 1.0.19 (v1245184) only** |
+| Device | AYN Thor (Snapdragon 8 Gen 2), Turnip driver. Other devices are untested |
+| Works | Boot, menus, exhibitions, Road to the Show (new and loaded careers), create-a-player with correct skin, faces, hair colour and beards (since 1.0.24) |
+| Known issues | Some hair styles look wrong in the player editor's close-up; frame rate is not yet tuned; once, real players' skin was black in one session and right in the next (not reproduced). The full list is in the [game's note](dm/games/0100AA7024094000/README.md#open) |
 
 ## What you need
 
-- A dual-screen Android handheld. Peanuts Native is developed and tested on the AYN Thor. On a single-screen phone the
-  game still runs, without the companion.
-- Android 13 or later, a Snapdragon GPU with Vulkan 1.3, and 12 GB of RAM or more. A Turnip Vulkan driver is
-  recommended; the app can download one.
-- Free storage for the game and its build. Plan for the size of the game plus a few GB.
-- Your own `prod.keys`, your own firmware dump (a folder or a `.zip`) and your own game dump (NSP, XCI or a dump
-  folder), with its update.
+- An Android 13+ handheld with a Snapdragon (Adreno) GPU, Vulkan 1.3 and at least 12 GB of RAM. Developed and tested on
+  the AYN Thor.
+- **Your own** dump of MLB The Show 26 from your own Switch: the base game and update 1.0.19, as `.nsp` or `.xci` files.
+- **Your own** `prod.keys` and firmware dump from the same console.
+- A PC to prepare the game (Linux, or Windows with WSL; macOS also works), with a USB cable and `adb` to copy it to the
+  handheld. The official app does not prepare this game on the phone.
 
-## Your keys and games
+Nobody from this project will ask you for keys or game files, and none are linked from here. Do not share a `.nup`,
+a pack or anything else made from your game.
 
-Peanuts Native only runs games you dumped from your own console, with keys from that console. It contains no Nintendo
-code, firmware or keys, never downloads any, and does not link to places that offer them. Nobody from this project
-will ever ask you for money, keys or game files.
+## Install
 
-## Getting started
+### 1. Install the app
 
-1. Install the APK and allow All files access when asked.
-2. On the first screen, add your **Keys** (`prod.keys`), pick your **Game folder**, and add your **Firmware**. Both
-   keys and firmware are needed before the first build. A build folder is optional (Settings, Library, **Build
-   folder**): pick one, on the phone or the microSD card, to keep every build there, organized by title ID.
-3. Open a game from the library and tap **Build**. The app imports the game, rewrites its code, translates its
-   shaders and installs its companion. Most games take 5 to 40 minutes on the Thor.
-4. Tap the game to play. The companion starts on the bottom screen.
+Download the newest `sunflower-seeds-<version>.apk` from the
+[Releases](https://github.com/henroids/sunflower-seeds-native/releases) page (tags `sunflower-v1.0.N`) and open it on
+the handheld. Android asks to allow installs from your browser or file manager: **Settings** › **Apps** › your browser
+› **Install unknown apps** › on.
 
-Hold a game's cover to open its own page: picture and speed settings, mods, the companion, saves and storage.
-After an app update, rebuilding every game is strongly recommended: hold the cover, open **Storage**, tap
-**Build again**, then **Rebuild**.
+After that the app checks for new releases itself and shows a page with the notes and an **Update** button.
 
-## Settings worth knowing
+### 2. Set up the app once
 
-- **Console mode**: Docked or Handheld, for all games in Settings and per game on its page. It can also be changed
-  while the game runs, from the in-game panel.
-- **Resolution scale** (first version): 0.5x to 2x of the size the game draws at. Not every effect follows it.
-- **Mods** (first version): hold the cover, **Game** tab, **Mods**. Install a mod from a folder or a zip. It is on
-  from the game's next start, and each mod has a switch and a delete button. A mod that changes the game's code gets
-  a build with mods, which starts by itself (it waits while another build runs). Until that build is ready, the game
-  starts without that mod. After a failed build, tap **Build with mods** to try again.
-- **Saves**: back up, restore, import and **Delete save data** on the game's **Saves** tab.
+Open **Sunflower Seeds**. The first screen, **Set up your games**, has four steps:
 
-A game can also be built on a computer and pushed to the device: see [BUILDER.md](peanuts/docs/BUILDER.md). The builder is tested
-on macOS and Linux. Windows is written but not tested yet. On Linux it also builds four games whose shaders are
-Oodle-compressed or in Unreal archives; for the Oodle ones it compiles a separate open-source decoder (ooz,
-GPL-3.0-or-later), which is used on the computer only and is not part of the app.
+1. **Keys**: pick your `prod.keys`.
+2. **Game folder**: pick the folder the prepared game will go into (the default the PC builder uses is
+   `/sdcard/Peanut Roms`). When **Allow file access** appears, tap **Open settings**, turn on **All files access**, and
+   go back.
+3. **Updates & DLC**: skip; the update is inside the `.nup` (below).
+4. **Firmware**: pick your firmware folder or `.zip`. The app takes the system fonts from it.
 
-## Companions
+Then **Settings** › **GPU driver**: install and pick **Turnip**. The game was tested with Turnip only. Run **Settings**
+› **Readiness check** afterwards.
 
-Open Settings, then Companions, to see every companion and every release of it. You can install, update, remove or
-roll back to an earlier release, and each download is checked against its published checksum before it is used. A
-game without a companion leaves the bottom screen free for Android. Companion screens give haptic feedback when you
-tap them.
+### 3. Make a `.nup` from your NSP or XCI files
 
-The companions themselves are published in
-[eden-duo-companions](https://github.com/igawa6/eden-duo-companions), with screenshots and what each one shows.
+The app reads a game as a **`.nup`**: one file that holds the game's files already decrypted, with the base game and
+its update together. You make it on the PC, from your `.nsp` or `.xci` files, with the importer in this repository.
+Nothing is uploaded anywhere.
 
-## FAQ
+Combining the base game and the update **is part of this step**: give the importer both files and the `.nup` holds
+both, the update's files over the base's. You do not need a separate merge first. If you already merged the base and
+the update into one `.nsp` or `.xci` with another tool, give that one file instead; the importer reads every title in
+a file. Either way the merge happens before (or as part of) the conversion, never after.
 
-**Is this piracy?** No. It runs only a dump of a game you own, made from your own console, and ships no game code,
-firmware or keys.
+On Linux or WSL, from a clone of this repository:
 
-**My game update is different from the table. Will it work?** The game's page tells you. Some games support more than
-one update; others need the exact one listed. For an unsupported update the app asks before building, and the result
-may not start.
+```sh
+sudo apt install cmake gcc zlib1g-dev adb          # once (Debian/Ubuntu names)
+cmake -S dm/peanuts/import -B peanuts/.build/nximport -DCMAKE_BUILD_TYPE=Release
+cmake --build peanuts/.build/nximport --target nximport_cli
 
-**Can I share my built game or its shaders?** No. Both are made from your own game's files. Share nothing derived
-from a game, and point other players to their own dump instead.
+# check what is in your files: you should see "kind base" and "kind update  version 1245184"
+peanuts/.build/nximport/nximport_cli --keys ~/prod.keys probe "MLB26.nsp" "MLB26-update.nsp"
 
-**Does the companion slow the game down?** Very little. The games above hold their frame rate with the companion
-running.
+# base + update -> one .nup (the order of the files does not matter)
+peanuts/.build/nximport/nximport_cli --keys ~/prod.keys nup \
+  "MLB The Show 26 [0100AA7024094000][v1245184].nup" 0100AA7024094000 \
+  "MLB26.nsp" "MLB26-update.nsp"
 
-More questions and troubleshooting: [FAQ.md](peanuts/docs/FAQ.md).
+# optional: check the .nup; it ends in "ok, <files>, <size> GiB"
+peanuts/.build/nximport/nximport_cli verify "MLB The Show 26 [0100AA7024094000][v1245184].nup"
+```
 
-## Contributing
+The `.nup` is about the size of the game plus its update. You only make it once; keep it for later builds.
 
-See [CONTRIBUTING.md](peanuts/docs/CONTRIBUTING.md) for adding a game, fixing a bug and testing on a device. Run
-`sh peanuts/scripts/install-hooks.sh` once after cloning.
+### 4. Prepare the game and copy it to the handheld
+
+The PC builder rewrites the game's code, translates its shaders, and with `--push` copies the `.nup`, the pack and the
+icon to the handheld over USB. Step 3 is done for you if you give it the `.nsp` / `.xci` files instead of a `.nup`
+(it makes the `.nup` the same way, beside the first file). Set up its Python environment once as described in
+[peanuts/docs/BUILDER.md](peanuts/docs/BUILDER.md#linux) (Python 3.14, Capstone, lz4, `zbic`, SPIRV-Tools and .NET 10),
+turn on **USB debugging** on the handheld (**Settings** › **About phone** › tap **Build number** seven times, then
+**Settings** › **System** › **Developer options** › **USB debugging**), connect it, and run:
+
+```sh
+PEANUTS_PYTHON=~/peanuts-env/bin/python peanuts/scripts/peanuts-build.sh \
+  "MLB The Show 26 [0100AA7024094000][v1245184].nup" --keys ~/prod.keys --push
+```
+
+It takes a while (most of it is the shader translation). The game lands in
+`/sdcard/Peanut Roms/MLB The Show 26/` on the handheld. To use another folder, add `--dest "/sdcard/<folder>"` and pick
+that folder as the **Game folder** in the app.
+
+### 5. Play
+
+In the app, **Settings** › **Library** › **Rescan**. MLB The Show 26 appears in the library; tap it to play. Hold its
+cover for its own page (picture, saves, storage).
+
+After an app update that changes the shader chain, the release notes say so: run step 4 again with the same `.nup`
+(no need to repeat step 3).
+
+## Test builds
+
+The branch `mlb-the-show-26` builds a separate test app (`v0.2.N`) on every push, from the
+[Actions](https://github.com/henroids/sunflower-seeds-native/actions) tab. It installs beside the official app and
+has the diagnostic switches used in the write-up. `main` builds the official app.
+
+## Documentation
+
+- [docs/mlb-the-show-26-skin-and-hair.md](docs/mlb-the-show-26-skin-and-hair.md): the black skin and hair, and how
+  they were fixed.
+- [dm/games/0100AA7024094000/README.md](dm/games/0100AA7024094000/README.md): the game's note (what was found, what is
+  open).
+- [docs/reference/nvn-objects.md](docs/reference/nvn-objects.md): the general mechanisms, with the other games they
+  apply to.
+- [peanuts/docs/BUILDER.md](peanuts/docs/BUILDER.md) and [peanuts/docs/FAQ.md](peanuts/docs/FAQ.md): the PC builder and
+  the app, from Peanuts Native.
+- [docs/peanuts-native-README.md](docs/peanuts-native-README.md): the upstream README this fork started from.
+
+## AI use
+
+This project was made with heavy use of AI, and it is written down here so nobody has to guess:
+
+- **Who did what.** The project's owner, Henry Bradley ([@henroids](https://github.com/henroids)), chose the goal,
+  directed the work, tested every build on his AYN Thor, and sent back logs and screenshots. The code changes, the
+  analysis (logs, the game's disassembly and shaders) and the documentation, this README included, were written by
+  **Claude**, an AI model by Anthropic, used through Claude Code (mainly Claude Opus and Claude Fable models). Commits
+  it wrote carry a `Co-Authored-By: Claude …` line.
+- **Review.** Changes were checked by building them, by the repository's tests, and by playing the game on the device.
+  They were not reviewed line by line by an experienced human C or graphics programmer.
+- **Mistakes.** The AI shipped several fixes based on wrong guesses before finding the real causes; they are listed
+  honestly in the [write-up](docs/mlb-the-show-26-skin-and-hair.md#the-wrong-turns) and were removed again.
+- **Upstream.** Peanuts Native, Banana Native and nxnative are separate projects with their own authors; their own
+  READMEs say how they were made (Banana Native's, for example, also says most of its code was written with Claude).
+
+If you use code from here, treat it as you would any untested contribution: read it, and test it.
 
 ## Credits and license
 
-Peanuts Native is a fork of [Banana Native](https://git.eden-emu.dev/moceure/BananaNative) by moceure, which does the
-real work of running Switch games natively on Android and is built on [nxnative](https://github.com/seedds/nxnative)
-by seedds (MIT). Some fixes are adapted from [nx2android](https://github.com/shirai91/nx2android) (MIT).
+- [Peanuts Native](https://github.com/igawa6/peanuts-native) by igawa6 and its contributors: the app, the library, the
+  importer and the PC builder this fork uses (builder by intermission88).
+- [Banana Native](https://git.eden-emu.dev/moceure/BananaNative) by moceure: running Switch games natively on Android.
+- [nxnative](https://github.com/seedds/nxnative) by seedds (MIT): the base of it all.
+- [nx2android](https://github.com/shirai91/nx2android) (MIT): fixes adapted upstream.
 
-The companion runtime and package format come from [Eden Duo](https://github.com/igawa6/eden-duo).
-
-Contributors: the builder for PC, Mac and Linux (`peanuts/docs/BUILDER.md`) is by [intermission88](https://github.com/intermission88)
-(pull request #13), and so are the profile of Kirby's Return to Dream Land Deluxe and the guide for adding a game
-(`peanuts/docs/NEW-GAME.md`, pull request #34). The issue and discussion forms were set right by [ArchOwlen](https://github.com/ArchOwlen) (pull request #5).
-
-The project as a whole is licensed GPL-3.0-or-later. Frame generation (ported from Eden and lsfg-vk) and other
-components carry their own licenses; see `android/NOTICE.md` and `dm/third_party/README.md`.
+Licensed GPL-3.0-or-later, like Peanuts Native ([LICENSE](LICENSE)). Some components carry their own licenses; see
+`android/NOTICE.md` and `dm/third_party/README.md`. MLB The Show is a trademark of its owners; it is named here only to
+say which game this is for.

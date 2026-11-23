@@ -471,9 +471,10 @@ final class Prefs {
     static boolean instancedDraws(Context c, String titleId) { return of(c).getBoolean(gameKey("vk_instance", titleId), false); }
     static void instancedDraws(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("vk_instance", titleId), on).commit(); }
     /** Game settings › Background pipelines (DM_VK_PSO_ASYNC): a pipeline the cache doesn't have yet is made on two background threads instead of on the frame,
-     *  so a cold cache gives a short pop-in instead of a freeze (Bananza's heaviest area with an empty cache: worst frame 8.1 s → 3.7 s). On by default, except MLB The Show 26:
-     *  it bakes skin, faces and hair once into textures it keeps, and a bake skipped while its pipeline was being made stays black (every run on an empty pipeline
-     *  cache: a fresh install, cleared data). Its own key, so an older saved "on" does not carry over */
+     *  so a cold cache gives a short pop-in instead of a freeze (Bananza's heaviest area with an empty cache: worst frame 8.1 s → 3.7 s). On by default, except MLB The Show 26
+     *  (PEANUTS): it bakes skin, faces and hair once into textures it keeps, and a bake whose pipeline is still being made is skipped and not drawn again. It was turned
+     *  off while chasing the black skin, which had another cause (vka_tex.c linger_keep), and the game has been played this way since. Its own key, so an older saved
+     *  "on" does not carry over */
     static final String MLB26 = "0100AA7024094000";
     static boolean psoAsync(Context c, String titleId) {
         return MLB26.equalsIgnoreCase(titleId) ? of(c).getBoolean(gameKey("vk_pso_async2", titleId), false) : of(c).getBoolean(gameKey("vk_pso_async", titleId), true);
