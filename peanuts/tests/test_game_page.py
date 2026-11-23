@@ -25,6 +25,14 @@ class Jvm(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertRegex(r.stdout, r'^ok \d+')
 
+    def test_help_jvm(self):
+        with tempfile.TemporaryDirectory(prefix='gamehelp_') as t:
+            subprocess.run(['javac', '-encoding', 'UTF-8', '-Xlint:all', '-Werror', '-d', t, str(UI / 'GameAreas.java'), str(UI / 'GameHelp.java'),
+                            str(APP / 'jvmtest/java/dev/peanuts/ui/GameHelpJvmTest.java')], check=True)
+            r = subprocess.run(['java', '-cp', t, 'dev.peanuts.ui.GameHelpJvmTest'], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertRegex(r.stdout, r'^ok \d+')
+
 
 class Wiring(unittest.TestCase):
     def test_hooks_in_game_settings(self):
@@ -69,7 +77,8 @@ class Wiring(unittest.TestCase):
     def test_y_plays_but_not_in_mods_and_cheats(self):
         page = (UI / 'GamePage.java').read_text(encoding='utf-8')
         self.assertIn('e.getKeyCode() != KeyEvent.KEYCODE_BUTTON_Y || GameAreas.MODS.equals(area)', page)
-        self.assertNotIn('"Y"', page, 'no Y glyph on the Play button (keys show on the bottom screen only)')
+        ys = [l.strip() for l in page.splitlines() if '"Y"' in l]
+        self.assertTrue(all('PLAY = {"Y", "Play"}' in l for l in ys), f'Y only in the keys of the second screen, no Y glyph on the Play button: {ys}')
 
     def test_every_icon_has_a_drawable(self):
         src = (UI / 'GameAreas.java').read_text(encoding='utf-8')
@@ -90,8 +99,23 @@ class Wiring(unittest.TestCase):
         self.assertIn('if (!wide) h.addView(PUi.back(a, v -> backKey(a)));', page, 'a phone: an area is a page of its own, with Back')
         self.assertIn('boolean upright = !wide;', page, 'a phone: upright tiles in two columns')
 
+    def test_the_second_screen_explains_the_page(self):
+        page = (UI / 'GamePage.java').read_text(encoding='utf-8')
+        self.assertIn('if (now != null) explain(now);', page, 'what the focus is on is explained')
+        for f in ('private static void explainGame()', 'private static void explainArea(String key)', 'private static void explainPlay()',
+                  'private static void explainRow(View row, String title, String areaKey)'):
+            self.assertIn(f, page)
+        self.assertIn('e.flip = () -> { if (sw.isEnabled()) { sw.toggle(); explainRow(row, title, areaKey); } };', page, 'a switch flips from the second screen')
+        self.assertIn('if (v.getOnFocusChangeListener() != null) return true;', page, "Mods & Cheats' rows explain themselves")
+        screen = (UI / 'BottomScreen.java').read_text(encoding='utf-8')
+        self.assertIn('public java.util.List<String[]> keys;', screen)
+        panel = (UI / 'BottomPanel.java').read_text(encoding='utf-8')
+        self.assertIn('boolean show = pad && e != null && e.keys != null && !e.keys.isEmpty();', panel, 'the keys only while a controller is connected')
+        self.assertIn('if (page == EXPLAIN) bindKeys(shownExplain);', panel, 'a controller that comes or goes shows or hides them')
+        self.assertIn('exCard.animate().cancel();', panel, 'a fade still running does not take the card back to nothing')
+
     def test_no_separator_glyphs_in_the_pages_words(self):
-        for f in ('GamePage.java', 'GameAreas.java'):
+        for f in ('GamePage.java', 'GameAreas.java', 'GameHelp.java'):
             src = (UI / f).read_text(encoding='utf-8')
             for s in re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"', src):
                 self.assertNotIn('·', s, f'{f}: {s}')

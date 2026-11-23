@@ -43,6 +43,9 @@ import dev.nxnative.android.R;
  *     it; B goes back to the tiles, on the tile of the area it came from, and from the tiles to Home. Y plays, except in Mods &amp; Cheats, whose
  *     rows keep Y for their details. Settings › Users opens the page in Saves (GamePagePort.at).</li>
  * <li>Mods &amp; Cheats is the page of Mods &amp; Cheats (dev.peanuts.mods.CheatsPage) inside the area; Saves has the user cards of #422.</li>
+ * <li>On a device with a second screen, that screen explains what the focus is on (BottomScreen.explain, as Settings does): the game and what is set
+ *     in each area, an area and its rows with their values, Play, or a row with what it does (GameHelp), its value now and, for a switch, Off | On to
+ *     flip it by touch. While a controller is connected, the keys for it are at the bottom.</li>
  * </ul>
  * A window 600 dp wide or more (the Thor's top screen, a tablet, a phone on its side) has the game in a panel at the left of the page; a narrower one
  * (a phone) has it at the top of the tiles (cover, name, facts, Play across the width) and each area as a page of its own, with Back to the tiles.
@@ -74,7 +77,10 @@ public final class GamePage {
     private static Activity owner;
     private static Facts facts;
     private static LinearLayout pane;  // the right side (the page's column)
-    private static View play, paneLast;
+    private static View play, paneLast, panelView, modsBody;
+    private static Got got;
+    private static Object explained;   // what the second screen explains now (a row, an area's key, "play", "game")
+    private static final android.os.Handler UI = new android.os.Handler(android.os.Looper.getMainLooper());
     private static final List<String> shown = new ArrayList<>();
     private static final Map<String, TextView> tileLines = new HashMap<>();   // the tiles' lines, for the ones that change while the page shows (Companion)
 
@@ -145,7 +151,11 @@ public final class GamePage {
         if (!f.titleId.equals(areaFor)) { areaFor = f.titleId; area = null; cameFrom = null; }
         if (pending != null) { area = pending; pending = null; entering = true; }
         tileLines.clear();
+        modsBody = null;
+        panelView = null;
+        explained = null;
         Got got = new Got(a, f);
+        GamePage.got = got;
         shown.clear();
         for (GameAreas.Area ar : GameAreas.ALL) if (got.has(ar.key)) shown.add(ar.key);
         if (area != null && !shown.contains(area)) area = null;
@@ -181,6 +191,8 @@ public final class GamePage {
             View t = tileOf(p, shown.isEmpty() ? "" : shown.get(0));
             if (t != null) t.requestFocus();
         });
+        explainRows(got);
+        p.post(() -> { if (pane == p && p.isAttachedToWindow() && (a.getCurrentFocus() == null || !isIn(a.getCurrentFocus(), p) && !isIn(a.getCurrentFocus(), panelView))) explainNothing(); });   // the focus on the page explains itself (watchFocus)
         dev.peanuts.ctl.Ctl.screen();
     }
 
@@ -263,6 +275,7 @@ public final class GamePage {
         View scrim = at + 1 < frame.getChildCount() ? frame.getChildAt(at + 1) : null;   // Ui.page's scrim under the status bar, above both
         Panel side = new Panel(a);
         side.setOrientation(LinearLayout.VERTICAL);
+        panelView = side;
         ImageView back = PUi.back(a, v -> backKey(a));
         side.addView(back, new LinearLayout.LayoutParams(PUi.dp(a, 40), PUi.dp(a, 40)));
         ImageView cover = coverView(a);
@@ -432,6 +445,7 @@ public final class GamePage {
         a.getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((was, now) -> {
             LinearLayout p = pane;
             if (now != null && p != null && isIn(now, p)) paneLast = now;
+            if (now != null) explain(now);
             // the row the focus was on went (an area's rows drawn again, the Companion's once its catalog is read): the page's scroll took it, the area gets it back
             if (now instanceof ScrollView && p != null && p.isAttachedToWindow() && p.getParent() != null && p.getParent().getParent() == now && !now.isInTouchMode())
                 p.post(() -> { View t = paneTarget(); if (t != null && t.isShown()) t.requestFocus(); });
@@ -567,6 +581,7 @@ public final class GamePage {
         PUi.add(p, body, 4);
         switch (key) {
             case GameAreas.MODS:
+                modsBody = body;   // its rows explain themselves on the second screen (CheatsPage)
                 dev.peanuts.mods.CheatsPage.area(a, body, f.titleId, f.name, f.gameDir, f.packDir, f.again);
                 return;
             case GameAreas.COMPANION:
@@ -648,6 +663,7 @@ public final class GamePage {
         final Map<String, String> info = new HashMap<>();     // a group's line under its card (upstream's section line)
         final Map<View, Integer> orderOf = new HashMap<>();   // a row's place in its group (GameAreas), for the order of the page
         final List<View> saves = new ArrayList<>(), gameFiles = new ArrayList<>();
+        final Map<View, String[]> placeOf = new HashMap<>();   // a row: its title and its area (the second screen's explanation)
         View recommend, shader, reset, details, remove, companion;
         final Activity a;
         final Facts f;
@@ -764,12 +780,26 @@ public final class GamePage {
             for (View k : children(card)) l.onChildViewAdded(card, k);
         }
 
+        /** The rows of an area as the second screen lists them: each title and its value or switch as it is now */
+        List<CharSequence[]> listed(String key) {
+            List<CharSequence[]> out = new ArrayList<>();
+            for (Map.Entry<View, String[]> e : placeOf.entrySet()) if (e.getValue()[1].equals(key) && e.getKey().getVisibility() == View.VISIBLE) out.add(new CharSequence[] {e.getValue()[0], shown(e.getKey())});
+            List<String> groups = GameAreas.groups(key);   // in the page's order: its groups, then each group's rows
+            out.sort((x, y) -> {
+                GameAreas.Place px = GameAreas.place(String.valueOf(x[0]), null, null), py = GameAreas.place(String.valueOf(y[0]), null, null);
+                int g = Integer.compare(groups.indexOf(px.group), groups.indexOf(py.group));
+                return g != 0 ? g : Integer.compare(px.order, py.order);
+            });
+            return out;
+        }
+
         /** A row into its area and group, its icon on its tile; false when a row of that title is placed already (the other tab built it too) */
         private boolean add(View row, String title, String heading) {
             if (values.containsKey(title)) return false;
             GameAreas.Place p = GameAreas.place(title, heading, tileText(row));
             rows.computeIfAbsent(p.area, k -> new LinkedHashMap<>()).computeIfAbsent(p.group, k -> new ArrayList<>()).add(row);
             orderOf.put(row, p.order);
+            placeOf.put(row, new String[] {title, p.area});
             TextView v = value(row);
             android.widget.Switch sw = toggle(row);
             values.put(title, v != null && v.getVisibility() == View.VISIBLE ? String.valueOf(v.getText()) : "");
@@ -801,6 +831,7 @@ public final class GamePage {
             String t = SettingsPage.title(v);
             if (t != null) {
                 GameAreas.Place p = GameAreas.place(t, null, tileText(v));
+                placeOf.put(v, new String[] {t, area});
                 TextView val = value(v);
                 android.widget.Switch sw = toggle(v);
                 String icon = GameAreas.icon(p, t, val == null ? null : val.getText(), sw == null ? null : sw.isChecked());
@@ -854,6 +885,157 @@ public final class GamePage {
         }
 
         private String sv(String title) { return GameAreas.shortValue(values.get(title)); }
+    }
+
+    // ---- The second screen: what the focus is on (BottomScreen.explain) ----
+
+    private static final String[] PLAY = {"Y", "Play"};
+
+    /** What the focus is on, explained; false when it is on nothing of the page (or on Mods &amp; Cheats' rows, which explain themselves) */
+    private static boolean explain(View now) {
+        Activity a = owner;
+        Got g = got;
+        if (a == null || g == null || now == null || pane == null || !pane.isAttachedToWindow()) return false;
+        if (!isIn(now, pane) && (panelView == null || !isIn(now, panelView))) return false;
+        if (modsBody != null && isIn(now, modsBody)) {   // Mods & Cheats' rows explain themselves (a focus listener of their own); its other views: the area
+            for (View v = now; v != null && v != modsBody; v = v.getParent() instanceof View ? (View) v.getParent() : null) if (v.getOnFocusChangeListener() != null) return true;
+            explainArea(GameAreas.MODS);
+            return true;
+        }
+        if (now == play) { explainPlay(); return true; }
+        for (View v = now; v != null && v != pane; v = v.getParent() instanceof View ? (View) v.getParent() : null) {
+            if (v.getTag() instanceof Tile) { explainArea(((Tile) v.getTag()).key); return true; }
+            String[] place = g.placeOf.get(v);
+            if (place != null) { explainRow(v, place[0], place[1]); return true; }
+        }
+        explainNothing();
+        return true;
+    }
+
+    /** Nothing in particular: in an area, the area; on the tiles, the game */
+    private static void explainNothing() {
+        if (area != null) explainArea(area); else explainGame();
+    }
+
+    private static BottomScreen.Explain start(Object key, String icon, String title, String place, String text) {
+        BottomScreen.Explain e = new BottomScreen.Explain();
+        e.key = key;
+        e.icon = icon;
+        e.title = title;
+        e.place = place;
+        e.text = text;
+        return e;
+    }
+
+    private static List<String[]> keys(String[]... k) {
+        List<String[]> out = new ArrayList<>();
+        for (String[] x : k) if (x != null) out.add(x);
+        return out;
+    }
+
+    private static String[] playKeyIf() { return play != null && !GameAreas.MODS.equals(area) ? PLAY : null; }
+
+    /** The game: what is set in each of its areas */
+    private static void explainGame() {
+        Facts f = facts;
+        Got g = got;
+        if (f == null || g == null) return;
+        CharSequence played = dev.peanuts.launch.PlayTime.line(owner, f.titleId);
+        BottomScreen.Explain e = start("game:" + f.titleId, "game", f.name, f.edition ? "Switch 2 Edition" : "", f.missing != null ? f.missing : null);
+        e.rows = new ArrayList<>();
+        if (played != null) e.rows.add(new CharSequence[] {"Played", played});   // a row: its bar between the time and the date is a span (PUi.joined)
+        for (String k : shown)   // what a player looks at before a start (the others are a tile away): fits the screen
+            if (k.equals(GameAreas.GRAPHICS) || k.equals(GameAreas.MODS) || k.equals(GameAreas.SAVES) || k.equals(GameAreas.OPTIONS) || k.equals(GameAreas.CONTROLS))
+                e.rows.add(new CharSequence[] {GameAreas.area(k).label, g.line(k)});
+        e.keys = keys(new String[] {"A", "Open"}, playKeyIf(), new String[] {"B", "Home"});
+        show(e);
+    }
+
+    /** An area: its line, and its rows with their values (an area whose rows are not built yet: what its tile says) */
+    private static void explainArea(String key) {
+        Facts f = facts;
+        Got g = got;
+        GameAreas.Area ar = GameAreas.area(key);
+        if (f == null || g == null || ar == null) return;
+        BottomScreen.Explain e = start("area:" + key + (key.equals(area) ? ":in" : ""), ar.icon, ar.label, f.name, ar.line);
+        e.rows = g.listed(key);
+        if (e.rows.isEmpty()) e.rows.add(new CharSequence[] {ar.label, g.line(key)});
+        e.keys = key.equals(area) ? keys(playKeyIf(), new String[] {"B", "Back"}, new String[] {"L", ""}, new String[] {"R", "Areas"})
+                : keys(new String[] {"A", "Open"}, playKeyIf(), new String[] {"B", "Home"});
+        show(e);
+    }
+
+    private static void explainPlay() {
+        Facts f = facts;
+        Got g = got;
+        if (f == null || g == null) return;
+        BottomScreen.Explain e = start("play", "play", "Play", f.name, f.edition ? "Starts the game's Switch 2 Edition with what is set on this page." : "Starts the game with what is set on this page.");
+        e.rows = new ArrayList<>();
+        if (shown.contains(GameAreas.GRAPHICS)) e.rows.add(new CharSequence[] {"Graphics", g.line(GameAreas.GRAPHICS)});
+        if (shown.contains(GameAreas.MODS)) e.rows.add(new CharSequence[] {"Mods & Cheats", g.line(GameAreas.MODS)});
+        CharSequence played = dev.peanuts.launch.PlayTime.line(owner, f.titleId);
+        if (played != null) e.rows.add(new CharSequence[] {"Played", played});
+        e.keys = keys(new String[] {"A", "Play"}, new String[] {"B", area == null ? "Home" : "Back"});
+        show(e);
+    }
+
+    /** A row: what it does, its value now, or for a switch Off | On (a touch flips it on the top screen too) */
+    private static void explainRow(View row, String title, String areaKey) {
+        Facts f = facts;
+        if (f == null) return;
+        GameAreas.Area ar = GameAreas.area(areaKey);
+        TextView v = value(row);
+        android.widget.Switch sw = toggle(row);
+        String icon = GameAreas.icon(GameAreas.place(title, null, tileText(row)), title, v == null ? null : v.getText(), sw == null ? null : sw.isChecked());
+        String help = GameHelp.of(title);
+        BottomScreen.Explain e = start(row, icon != null ? icon : ar != null ? ar.icon : "game", title, (ar != null ? ar.label + ", " : "") + f.name, help != null ? help : "");
+        if (sw != null) {
+            e.on = sw.isChecked();
+            e.flip = () -> { if (sw.isEnabled()) { sw.toggle(); explainRow(row, title, areaKey); } };
+        } else if (v != null && v.getVisibility() == View.VISIBLE && !GameHelp.action(title)) e.value = v.getText();   // an action's line says what it does: no "Now"
+        String a = !row.isClickable() ? null : sw != null ? (sw.isChecked() ? "Turn off" : "Turn on") : GameHelp.action(title) ? "Open" : "Change";   // Played: nothing to press
+        e.keys = keys(a == null ? null : new String[] {"A", a}, playKeyIf(), new String[] {"B", area == null ? "Home" : "Back"},
+                area == null ? null : new String[] {"L", ""}, area == null ? null : new String[] {"R", "Areas"});
+        boolean fresh = explained != row;
+        show(e);
+        if (sw != null && fresh) UI.postDelayed(new Runnable() {   // a switch flipped on the top screen (A, a tap) changes no text: looked at while it is explained
+            boolean was = sw.isChecked();
+            @Override public void run() {
+                if (explained != row || !row.isAttachedToWindow()) return;
+                if (sw.isChecked() != was) { was = sw.isChecked(); explainRow(row, title, areaKey); }
+                UI.postDelayed(this, 250);
+            }
+        }, 250);
+    }
+
+    private static void show(BottomScreen.Explain e) {
+        if (owner == null) return;
+        explained = e.key;
+        BottomScreen.explain(owner, e);
+    }
+
+    /** The rows of the area that shows: a tap explains its row, a value that changes explains it again */
+    private static void explainRows(Got g) {
+        for (Map.Entry<View, String[]> en : g.placeOf.entrySet()) {
+            View row = en.getKey();
+            String[] place = en.getValue();
+            if (area == null || !area.equals(place[1])) continue;
+            row.setOnTouchListener((x, ev) -> { if (ev.getActionMasked() == android.view.MotionEvent.ACTION_UP) explainRow(row, place[0], place[1]); return false; });
+            TextView v = value(row);
+            if (v != null) v.addTextChangedListener(new android.text.TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence x, int st, int c, int af) {}
+                @Override public void onTextChanged(CharSequence x, int st, int b, int c) {}
+                @Override public void afterTextChanged(android.text.Editable x) { if (explained == row) explainRow(row, place[0], place[1]); }
+            });
+        }
+    }
+
+    /** A row's value as the second screen lists it: On / Off for a switch, else its value line */
+    private static CharSequence shown(View row) {
+        android.widget.Switch sw = toggle(row);
+        if (sw != null) return sw.isChecked() ? "On" : "Off";
+        TextView v = value(row);
+        return v != null && v.getVisibility() == View.VISIBLE ? v.getText() : "";
     }
 
     private static List<View> children(ViewGroup g) {

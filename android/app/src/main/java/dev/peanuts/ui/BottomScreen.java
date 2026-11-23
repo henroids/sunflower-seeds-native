@@ -73,6 +73,7 @@ public final class BottomScreen {
         public Object key;                   // what is explained (an equal key: updated in place, no fade)
         public java.util.function.Function<android.content.Context, View> view;   // a view of its own instead (built with this display's context); the fields above unused
         public long cracked = -1;            // About: Peanuts cracked, shown big (its own page); -1: not About
+        public java.util.List<String[]> keys;   // the controller's keys for what the focus is on ({key, what it does}; the label "" for a key that shares the next one's), shown only while a controller is connected; null: none
     }
 
     /** Play pressed: the panel stays until the game says what it shows there (Companion.STATE) */
@@ -106,6 +107,11 @@ public final class BottomScreen {
     private static Runnable pops;
 
     private BottomScreen() {}
+
+    /** A face button's glyph as the bottom screen draws it (Settings' X): the key in the page's colour on an accent disc */
+    static Drawable keyGlyph(Context c, String key, int diameterDp) {
+        return new BottomPanel.KeyGlyph(c, key, PUi.col(c, R.color.bn_accent), PUi.col(c, R.color.bn_bg), diameterDp);
+    }
 
     public static Drawable settingsGlyph(Context c, int diameterDp) {
         return new BottomPanel.KeyGlyph(c, "X", PUi.col(c, R.color.bn_accent), PUi.col(c, R.color.bn_bg), diameterDp);

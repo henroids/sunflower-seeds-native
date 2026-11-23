@@ -2446,3 +2446,15 @@ play time beside it, Play across the width, then the areas as upright tiles in t
 of its own with Back, its name and the game's under it; Back goes to the tiles. No upstream file changes: `GamePage.used` is true for every window.
 
 Tests: `peanuts/tests/test_game_page.py` (the phone's top, the area's Back, the upright tiles).
+
+### Game page Part C: the second screen explains the area and the row (2026-11-23, on Part B)
+
+On a device with a second screen (the AYN Thor), that screen follows the game's page as it follows Settings (`BottomScreen.explain`): with nothing in
+focus the game, its play time and what is set in its main areas; a tile its area, its line and its rows with their values; Play what it starts; a row
+what it does (`GameHelp`, one line for every row the areas know), its value now and, for a switch, Off | On, which flips it on the top screen too. A
+value that changes (after its dialog) updates the explanation in place. Mods & Cheats' rows keep their own explanation. While a controller is
+connected the explanation ends with its keys (A, Y, B, L R), as the bottom screen's own face buttons look; without one, none
+(`BottomScreen.Explain.keys`, `BottomPanel.bindKeys`). `BottomPanel.bindExplain` now ends a fade still running, which took the card back to nothing when
+two explanations came within a fade. No upstream file changes.
+
+Tests: `peanuts/tests/test_game_page.py` (`GameHelpJvmTest`; the explanation, the keys only with a controller, the fade).
