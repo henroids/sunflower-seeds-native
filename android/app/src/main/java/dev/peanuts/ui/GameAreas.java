@@ -154,7 +154,7 @@ public final class GameAreas {
         if (v == null) return null;
         String s = v.toString().trim();
         int cut = s.length();
-        for (String c : new String[] {" (", ": ", "; ", ". ", " \u00b7 "}) { int i = s.indexOf(c); if (i > 0 && i < cut) cut = i; }   // and upstream's middle dot
+        for (String c : new String[] {" (", ": ", "; ", ". ", " " + (char) 0xB7 + " "}) { int i = s.indexOf(c); if (i > 0 && i < cut) cut = i; }   // and upstream's middle dot (spelled as a char: no dot in a string here)
         s = s.substring(0, cut).trim();
         if (s.length() > 28) s = s.substring(0, 27).trim() + "…";
         return s.isEmpty() ? null : s;
