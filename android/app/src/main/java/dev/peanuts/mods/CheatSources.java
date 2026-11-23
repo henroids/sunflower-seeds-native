@@ -369,7 +369,10 @@ public final class CheatSources {
     }
 
     /** The merged file of these blocks (CheatSources.blocks, then the mods' blocks) */
-    public static Merged merge(List<Block> blocks) {
+    public static Merged merge(List<Block> blocks) { return merge(blocks, java.util.Collections.emptyMap()); }
+
+    /** The same, a Value cheat with the player's number when values has its key in lower case (CheatValues.read: the in-game Mods tab's number field) */
+    public static Merged merge(List<Block> blocks, Map<String, CheatValues.Kept> values) {
         Set<String> taken = new HashSet<>();   // lower case: the host compares keys without case (dm_cheat_set)
         List<Row> rows = new ArrayList<>();
         for (Block b : blocks) {
@@ -402,7 +405,8 @@ public final class CheatSources {
                         open = sec;
                     }
                     sb.append(r.cheat.master ? "{" : "[").append(r.key).append(r.cheat.master ? "}" : "]").append('\n');
-                    for (String l : r.cheat.lines) sb.append(l).append('\n');
+                    List<String> set = CheatValues.apply(r.cheat, values.get(r.key.toLowerCase(Locale.ROOT)));
+                    for (String l : set != null ? set : r.cheat.lines) sb.append(l).append('\n');
                     if (r.cheat.master) masters++; else cheats++;
                 }
             }

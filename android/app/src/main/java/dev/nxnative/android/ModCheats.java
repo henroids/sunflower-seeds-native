@@ -134,7 +134,7 @@ final class ModCheats {
         List<ModFile> mods = of(modCheatDirs, build, notes);
         List<CheatSources.Source> moved = CheatSources.migrate(folder, System.currentTimeMillis());
         String s = shipped != null ? new String(Files.readAllBytes(shipped.toPath()), StandardCharsets.UTF_8) : "";
-        CheatSources.Merged m = CheatSources.merge(blocks(s, folder, build, mods, -1));
+        CheatSources.Merged m = CheatSources.merge(blocks(s, folder, build, mods, -1), dev.peanuts.mods.CheatValues.read(folder));   // with the numbers set in the game's Mods tab
         legacyKeys(on, moved, m);
         if (!folder.isDirectory() && !folder.mkdirs()) throw new IOException("cannot create " + folder);
         File[] old = folder.listFiles((d, n) -> n.endsWith(".txt") || n.endsWith(".enabled"));

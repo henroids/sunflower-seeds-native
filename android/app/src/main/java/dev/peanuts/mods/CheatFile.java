@@ -367,7 +367,10 @@ public final class CheatFile {
     private static String places(int n) { return n == 1 ? "1 place" : n + " places"; }
 
     /** What a cheat changes, in the player's words, for the bottom screen and its details (no developer terms: UI-RULES 5) */
-    public static String describe(Cheat c) {
+    public static String describe(Cheat c) { return describe(c, c.value()); }
+
+    /** The same, a Value cheat writing value (the number set in the in-game Mods tab, CheatValues) */
+    public static String describe(Cheat c, long value) {
         String hold = c.hold.isEmpty() ? null : String.join(" or ", c.hold);
         switch (c.kind) {
             case UNSUPPORTED:
@@ -377,7 +380,7 @@ public final class CheatFile {
                 return "Changes " + places(c.codePlaces) + " in the game's code. Off puts the original code back.";
             case VALUE:
                 return (hold != null ? "While you hold " + hold + ", it writes" : "Writes") + " one number into the game's data" + (c.pointers ? ", found through a chain of pointers" : "")
-                        + ": " + c.value() + ". No code is changed.";
+                        + ": " + value + ". No code is changed.";
             default:
                 return (hold != null ? "While you hold " + hold + ", it changes" : "Changes") + " the game's data" + (c.pointers ? " through a chain of pointers" : "") + ". No code is changed.";
         }

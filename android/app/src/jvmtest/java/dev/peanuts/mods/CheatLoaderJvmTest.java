@@ -107,6 +107,7 @@ public final class CheatLoaderJvmTest {
         sources(new File(root, "sources-case"));
         merge(new File(root, "merge-case"));
         status();
+        values(new File(root, "values-case"));
         if (a.length > 1 && !a[1].isEmpty()) real(new File(a[1]));
         System.out.println("ok");
     }
@@ -154,6 +155,54 @@ public final class CheatLoaderJvmTest {
         check(CheatStatus.line(c1, false, true, num.reason).endsWith("Its change waits for a moment when the game can be stopped."), "wait on a running cheat");
         check(CheatStatus.line(c1, false, false, "").endsWith("It is in the game from the next start."), "Next start in its line");
         check(CheatStatus.line(c1, false, true, "").equals(CheatFile.describe(c1)), "else what it changes");
+    }
+
+    // ---- A Value cheat's number, set in the in-game Mods tab (Part F: CheatValues) ----
+
+    static void values(File folder) throws Exception {
+        CheatFile.Parsed p = CheatFile.parse(SITE, 0x200000);
+        CheatFile.Cheat num = cheat(p, "3. Coins as a number"), coins = cheat(p, "1. Lots of coins");
+        check(CheatValues.plain(num) && !CheatValues.plain(coins), "a Value cheat has a number field, a code cheat keeps its words");
+        check(!CheatValues.plain(CheatFile.parse("[F]\n04100000 F0000030 3FC00000\n", 0x200000).cheats.get(0)), "1.5 as a float keeps its words");
+        check(CheatValues.plain(CheatFile.parse("[N]\n04100000 F0000030 0001869F\n", 0x200000).cheats.get(0)), "99999 is a plain number");
+        List<String> l500 = CheatValues.lines(num, 500);
+        check(l500.equals(List.of("580F0000 00300000", "580F1000 00000010", "640F0000 00000000 000001F4")), "500 in its word, the other words as written: " + l500);
+        check(CheatValues.lines(num, -5).get(2).endsWith(" 00000000") && CheatValues.lines(num, 1L << 40).get(2).endsWith(" FFFFFFFF"), "kept inside its width");
+        CheatFile.Cheat wide = CheatFile.parse("[W]\n680F0000 0000000000000005\n", 0x200000).cheats.get(0);
+        check(wide.kind == CheatFile.Kind.VALUE && wide.valueWidth == 8 && wide.value() == 5, "an 8-byte number in one token of two words: " + wide + " " + wide.value());
+        List<String> lw = CheatValues.lines(wide, 0x100000002L);
+        check(lw.equals(List.of("680F0000 0000000100000002")), "both words of the token: " + lw);
+
+        // While the game runs: that cheat's block of the merged file
+        String merged = "[Other]\n04100000 F0000000 00000001\n[3. Coins as a number]\n580F0000 00300000\n580F1000 00000010\n640F0000 00000000 0001869F\n[Next]\n04100000 F0000004 00000002\n";
+        String patched = CheatValues.patch(merged, "3. Coins as a number", num, 7);
+        check(patched != null && patched.equals(merged.replace("640F0000 00000000 0001869F", "640F0000 00000000 00000007")), "only its number changes: " + patched);
+        check(CheatValues.patch(merged, "Missing", num, 7) == null, "no such block: null");
+
+        // Kept for the next start: the merge writes it while the cheat still has the original number there
+        check(folder.mkdirs(), "the folder");
+        CheatValues.keep(folder, "3. Coins as a number", num, 500);
+        Map<String, CheatValues.Kept> kept = CheatValues.read(folder);
+        CheatValues.Kept k = kept.get("3. coins as a number");
+        check(kept.size() == 1 && k != null && k.number == 500 && k.original == 99999 && k.word == 6 && k.width == 4, "kept with its place and original");
+        check(CheatValues.of(kept, "3. Coins as a number", num) == 500 && CheatValues.of(kept, "1. Lots of coins", coins) == coins.value(), "the number now");
+        CheatSources.Merged m = CheatSources.merge(List.of(new CheatSources.Block("app", "app", true, CheatFile.parse(SITE, -1))), kept);
+        check(m.text.contains("[3. Coins as a number]\n580F0000 00300000\n580F1000 00000010\n640F0000 00000000 000001F4\n"), "a start writes the kept number");
+        check(CheatSources.merge(List.of(new CheatSources.Block("app", "app", true, CheatFile.parse(SITE, -1)))).text.contains("0001869F"), "without values: the file's own");
+
+        // A number in main's data: the start reads it without main's code size (as code), the kept place still applies; another original does not
+        String mainFile = "[M]\n040A0000 00500000 00000063\n";
+        CheatFile.Cheat mainVal = CheatFile.parse(mainFile, 0x200000).cheats.get(0);
+        check(mainVal.kind == CheatFile.Kind.VALUE && CheatFile.parse(mainFile, -1).cheats.get(0).kind == CheatFile.Kind.CODE, "Value with the code size, Code without it");
+        File f2 = new File(folder, "main");
+        check(f2.mkdirs(), "the second folder");
+        CheatValues.keep(f2, "M", mainVal, 1000);
+        String m2 = CheatSources.merge(List.of(new CheatSources.Block("app", "app", true, CheatFile.parse(mainFile, -1))), CheatValues.read(f2)).text;
+        check(m2.contains("040A0000 00500000 000003E8"), "the start applies it without main's code size: " + m2);
+        String m3 = CheatSources.merge(List.of(new CheatSources.Block("app", "app", true, CheatFile.parse("[M]\n040A0000 00500000 00000064\n", -1))), CheatValues.read(f2)).text;
+        check(m3.contains("00000064") && !m3.contains("000003E8"), "a file with another number there keeps its own: " + m3);
+        CheatValues.keep(f2, "M", mainVal, 0x63);
+        check(CheatValues.read(f2).isEmpty(), "the file's own number again forgets it");
     }
 
     // ---- Reading a file ----

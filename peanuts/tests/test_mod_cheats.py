@@ -43,7 +43,7 @@ class ModCheats(unittest.TestCase):
         src = cls.tmp / 'src/dev/nxnative/android'; src.mkdir(parents=True)
         (src / 'ModCheatsTest.java').write_text(RUNNER, encoding='utf-8')
         cls.out = cls.tmp / 'out'
-        subprocess.run(["javac", "-nowarn", "-encoding", "UTF-8", "-d", str(cls.out), str(PKG / "Cheats.java"), str(PKG / "Json.java"), str(PKG / "ModCheats.java"), *[str(MODS / f) for f in ("CheatFile.java", "CheatImport.java", "CheatSources.java")], str(src / "ModCheatsTest.java")], check=True)
+        subprocess.run(["javac", "-nowarn", "-encoding", "UTF-8", "-d", str(cls.out), str(PKG / "Cheats.java"), str(PKG / "Json.java"), str(PKG / "ModCheats.java"), *[str(MODS / f) for f in ("CheatFile.java", "CheatImport.java", "CheatSources.java", "CheatValues.java")], str(src / "ModCheatsTest.java")], check=True)
 
     @classmethod
     def tearDownClass(cls):

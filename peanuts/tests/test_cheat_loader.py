@@ -16,7 +16,7 @@ APP = REPO / 'android/app/src'
 MODS = APP / 'main/java/dev/peanuts/mods'
 LAUNCHER = APP / 'main/java/dev/nxnative/android'
 TEST = APP / 'jvmtest/java/dev/peanuts/mods/CheatLoaderJvmTest.java'
-CORE = [MODS / 'CheatFile.java', MODS / 'CheatImport.java', MODS / 'CheatSources.java', MODS / 'CheatStatus.java']
+CORE = [MODS / 'CheatFile.java', MODS / 'CheatImport.java', MODS / 'CheatSources.java', MODS / 'CheatStatus.java', MODS / 'CheatValues.java']
 UI_FILES = [MODS / 'CheatPick.java', LAUNCHER / 'CheatsBridge.java', MODS / 'CheatsPage.java', MODS / 'CheatImportUi.java',
             MODS / 'ModsTab.java', LAUNCHER / 'ModsPanel.java']   # the words the player reads
 
@@ -86,6 +86,16 @@ class Sources(unittest.TestCase):
         self.assertIn('android.R.attr.dialogPreferredPadding', tab, "the details' text starts under the sheet's title, as a message does")
         sections = (APP / 'main/java/dev/peanuts/ui/SettingsSections.java').read_text(encoding='utf-8')
         self.assertIn('r("Mods tab", "mods")', sections, 'Settings › Controls has the Mods tab row')
+
+    def test_a_value_cheat_has_a_number(self):   # Part F
+        mc = (LAUNCHER / 'ModCheats.java').read_text(encoding='utf-8')
+        self.assertIn('CheatSources.merge(blocks(s, folder, build, mods, -1), dev.peanuts.mods.CheatValues.read(folder))', mc, 'a start writes the kept numbers')
+        tab = (MODS / 'ModsTab.java').read_text(encoding='utf-8')
+        self.assertRegex(tab, r'public View focusSearch\(int direction\)', "the field steps on SidePanel's left / right (its focusSearch)")
+        self.assertIn('CheatValues.plain(b.cheat)', tab, 'only a Value cheat with a plain number has the field; a code cheat keeps its words')
+        self.assertIn('CheatsBridge.reload()', tab, 'the host reads the merged file again after a new number')
+        self.assertIn('setNeutralButton("Reset"', tab, "the details give the file's own number back")
+        self.assertIn('"File: " + b.cheat.value()', tab, "a set number is marked with the file's own beside it")
 
     def test_the_start_merges_the_sources(self):
         mc = (LAUNCHER / 'ModCheats.java').read_text(encoding='utf-8')

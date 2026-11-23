@@ -77,9 +77,12 @@ public final class CheatStatus {
     }
 
     /** What a row says while it has the focus (and its details): why it is not possible, else what it changes, and when it waits */
-    public static String line(CheatFile.Cheat c, boolean bad, boolean inHost, String reason) {
+    public static String line(CheatFile.Cheat c, boolean bad, boolean inHost, String reason) { return line(c, bad, inHost, reason, c.value()); }
+
+    /** The same, a Value cheat writing number (the one set in the tab) */
+    public static String line(CheatFile.Cheat c, boolean bad, boolean inHost, String reason, long number) {
         if (bad) return why(reason, c);
-        String d = CheatFile.describe(c);
+        String d = CheatFile.describe(c, number);
         if (!inHost) return d + " It is in the game from the next start.";
         if (reason.startsWith("wait:")) return d + " Its change waits for a moment when the game can be stopped.";
         if (reason.startsWith("access:")) return d + " It found nothing to change yet: the game has not made that part.";

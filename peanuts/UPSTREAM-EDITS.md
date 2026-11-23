@@ -2381,3 +2381,13 @@ The in-game panel gets a Mods tab between Controls and General when the game has
 | `android/app/src/main/java/dev/nxnative/android/CheatsBridge.java` | (Peanuts' own, Part C) | `status`, `reload`, `set` and `restart` for the tab (`Native` is package-private) | Peanuts' own file |
 
 Peanuts-owned: `ModsTab`, `CheatStatus`, `PeanutsPrefs.modsTabAll` (Settings) and `panelTab` (the tab shown last, in a prefs file of its own, `peanuts_panel`, because the game's process writes it), the Mods tab row in `LibrarySettings`, `SettingsSections` and `SettingsHelp`. Tests: `peanuts/tests/test_cheat_loader.py` (the hooks, `CheatStatus` in `CheatLoaderJvmTest`, the tab's text against UI-RULES.md).
+
+### Mod menu Part F: a number field for Value cheats (2026-11-23, SPEC-mod-menu.md Package C)
+
+A cheat that writes one plain number into the game's data (a Value cheat of `CheatFile`; a float keeps its words, a code cheat keeps its value) gets a number field in the in-game Mods tab: − and + by touch, left / right with the controller (held, the steps grow), A or a tap types a number in the app's dialog sheet. A number that differs from the file's is yellow with the file's own beside it, and the cheat's details (Y) have Reset. The player's source files are never changed. The number is kept per game in `<files>/cheats/<title ID>/values.tsv` (`dev.peanuts.mods.CheatValues`: the merged key, the number, its place in the cheat's words and the number the file had there). While the game runs, the cheat's block of the merged file is patched and the host reads the file again (Part B's `cheatsReload`, the switches kept); a start writes the kept number where the cheat still has the original one (`CheatSources.merge`). No upstream file changes, and no new native call.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/ModCheats.java` | (Peanuts' own, Part C) | `install` merges with the kept numbers (`CheatValues.read`) | Peanuts' own file |
+
+Peanuts-owned: `CheatValues`, `CheatSources.merge(blocks, values)`, `CheatFile.describe(cheat, value)`, `CheatStatus.line(..., number)`, the field in `ModsTab` (its `focusSearch` steps on SidePanel's left / right). Tests: `peanuts/tests/test_cheat_loader.py` (`CheatValues` in `CheatLoaderJvmTest`), `peanuts/tests/test_mod_cheats.py`.

@@ -79,6 +79,11 @@ public final class ModsTab {
         Switch sw;
         boolean inHost = true;   // the host has the key (else it is listed for the next start)
         String state = "off", flags = "", reason = "";
+        Field field;             // a Value cheat's number (Part F), else null
+        TextView mark;           // beside a number set in the tab: the file's own number
+        long number;             // the number it writes now
+        boolean later;           // the host did not read the new number again: it is in the game from the next start
+        Runnable apply;          // the number to the files and the host, a moment after the last step
     }
 
     static final class Shown {
@@ -91,6 +96,11 @@ public final class ModsTab {
         boolean updating, polled;
         final Runnable poll = new Runnable() { @Override public void run() { ModsTab.poll(Shown.this); } };
         View firstMod;   // the first mod's row (the controller's first focus when there is no cheat)
+        File folder;                                   // the game's cheats folder (the merged file, values.tsv)
+        String build;                                  // the merged file's build: <folder>/<build>.txt
+        Map<String, CheatValues.Kept> kept = new java.util.HashMap<>();
+        long lastStep;                                 // a held left / right: the steps grow (1, 10, 100, ...)
+        int run;
     }
 
     // ---- Whether there is a tab, and which tab shows last ----
@@ -179,6 +189,10 @@ public final class ModsTab {
             groups = new ArrayList<>(); mods = new ArrayList<>();
         }
         Set<String> on = CheatsBridge.on(a, s.titleId);
+        s.folder = CheatsBridge.folder(a, s.titleId);
+        Set<String> builds = CheatsBridge.builds(s.titleId, packDir);
+        s.build = builds.isEmpty() ? null : builds.iterator().next();
+        s.kept = CheatValues.read(s.folder);
         int cheats = 0;
         for (Group g : groups) cheats += g.binds.size();
 
@@ -306,6 +320,7 @@ public final class ModsTab {
         b.desc.setTextColor(Color.LTGRAY);
         b.desc.setVisibility(View.GONE);
         col.addView(b.desc);
+        if (b.key != null && CheatValues.plain(b.cheat)) col.addView(valueBar(s, b));
         r.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         b.sw = new Switch(c);
@@ -321,7 +336,7 @@ public final class ModsTab {
         b.sw.setOnCheckedChangeListener((v, x) -> { if (!s.updating) switched(s, b, x); });
         r.setOnClickListener(v -> { if (b.sw.isEnabled()) b.sw.toggle(); else details(s, b); });
         r.setOnLongClickListener(v -> { details(s, b); return true; });
-        r.setOnFocusChangeListener((v, has) -> { b.desc.setVisibility(has ? View.VISIBLE : View.GONE); });
+        r.setOnFocusChangeListener((v, has) -> { b.desc.setText(line(b)); b.desc.setVisibility(has ? View.VISIBLE : View.GONE); });
         show(b);
         return r;
     }
@@ -412,15 +427,243 @@ public final class ModsTab {
         d.setColor(bg);
         d.setStroke(look == CheatStatus.Look.RUNNING ? Math.max(1, Math.round(b.chip.getResources().getDisplayMetrics().density)) : 0, 0x66FFD54F);
         b.sw.setEnabled(!bad);
+        if (b.field != null) { b.field.setEnabled(!bad); b.field.setFocusable(!bad); }
         b.row.setAlpha(bad ? 0.75f : 1f);
-        b.desc.setText(line(b));
+        b.desc.setText(b.field != null && b.field.isFocused() ? FIELD_LINE : line(b));
     }
 
     /** Refused or never run by the host, or given no key by the merge: no switch */
     private static boolean bad(Bind b) { return b.key == null || CheatStatus.bad(b.state); }
 
-    /** What a row says while it has the focus (CheatStatus.line) */
-    static String line(Bind b) { return CheatStatus.line(b.cheat, bad(b), b.inHost, b.reason); }
+    /** What a row says while it has the focus (CheatStatus.line), a Value cheat with the number set now */
+    static String line(Bind b) {
+        if (b.field == null) return CheatStatus.line(b.cheat, bad(b), b.inHost, b.reason);
+        String l = CheatStatus.line(b.cheat, bad(b), b.inHost, b.reason, b.number);
+        if (bad(b)) return l;
+        if (changed(b)) l += " The file's own number is " + b.cheat.value() + ".";
+        return b.later ? l + " The new number is in the game from the next start." : l;
+    }
+
+    // ---- A Value cheat's number (Part F) ----
+
+    static final String FIELD_LINE = "Left and right change the number, A types one.";
+    private static final java.util.concurrent.ExecutorService IO = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    /**
+     * The number field: left / right step it, A (a click) types it. SidePanel moves the focus with the D-pad by asking the focused view's focusSearch; this one
+     * steps its number and answers with itself, so the focus stays and a held direction repeats (SidePanel's own repeat)
+     */
+    static final class Field extends TextView {
+        Runnable left, right;
+
+        Field(Context c) {
+            super(c);
+            setDefaultFocusHighlightEnabled(false);   // SidePanel's frame shows the focus; Android's grey square would sit over the round field
+        }
+
+        /** SidePanel's focus frame, round as the field is */
+        @Override public void setForeground(android.graphics.drawable.Drawable d) {
+            if (d instanceof GradientDrawable) ((GradientDrawable) d).setCornerRadius(999);
+            super.setForeground(d);
+        }
+
+        @Override public View focusSearch(int direction) {
+            if (direction == View.FOCUS_LEFT && left != null && isEnabled()) { left.run(); return this; }
+            if (direction == View.FOCUS_RIGHT && right != null && isEnabled()) { right.run(); return this; }
+            return super.focusSearch(direction);
+        }
+    }
+
+    /** Under a Value cheat's name: − and + by touch, the number between them (a field of its own for the controller's focus) */
+    private static View valueBar(Shown s, Bind b) {
+        Context c = s.a;
+        float dp = c.getResources().getDisplayMetrics().density;
+        b.number = CheatValues.of(s.kept, b.key, b.cheat);
+        LinearLayout bar = new LinearLayout(c);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(0, Math.round(6 * dp), 0, Math.round(2 * dp));
+        b.field = new Field(c);
+        b.field.setTextSize(15);
+        b.field.setTextColor(TEXT);
+        b.field.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        b.field.setGravity(Gravity.CENTER);
+        b.field.setMaxLines(1);   // not setSingleLine: its horizontal scrolling moves the foreground (the focus frame) out of sight
+        b.field.setMinWidth(Math.round(112 * dp));
+        b.field.setMinHeight(Math.round(36 * dp));
+        b.field.setPadding(Math.round(14 * dp), 0, Math.round(14 * dp), 0);
+        GradientDrawable fb = new GradientDrawable();
+        fb.setColor(0xFF202124);
+        fb.setStroke(Math.max(1, Math.round(dp)), 0xFF5F6368);
+        fb.setCornerRadius(999);
+        b.field.setBackground(fb);
+        b.field.setFocusable(true);
+        b.field.setClickable(true);
+        // The field lies inside its row, so the D-pad's search does not find it below the row (nor the row above the field): down and up say so
+        b.field.setId(View.generateViewId());
+        if (b.row.getId() == View.NO_ID) b.row.setId(View.generateViewId());
+        b.row.setNextFocusDownId(b.field.getId());
+        b.field.setNextFocusUpId(b.row.getId());
+        b.field.left = () -> step(s, b, -1);
+        b.field.right = () -> step(s, b, 1);
+        b.field.setOnClickListener(v -> type(s, b));
+        b.field.setOnFocusChangeListener((v, has) -> {
+            b.desc.setText(has ? FIELD_LINE : line(b));
+            b.desc.setVisibility(has || b.row.isFocused() ? View.VISIBLE : View.GONE);
+        });
+        b.apply = () -> applyNumber(s, b);
+        shownNumber(b);
+        bar.addView(stepper(c, "−", v -> step(s, b, -1)));
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        fl.leftMargin = fl.rightMargin = Math.round(8 * dp);
+        bar.addView(b.field, fl);
+        bar.addView(stepper(c, "+", v -> step(s, b, 1)));
+        b.mark = new TextView(c);   // the marker of a set number: the file's own beside it (Reset in the details brings it back)
+        b.mark.setTextSize(11);
+        b.mark.setTextColor(QUIET);
+        b.mark.setMaxLines(1);
+        b.mark.setEllipsize(TextUtils.TruncateAt.END);
+        b.mark.setPadding(Math.round(10 * dp), 0, 0, 0);
+        bar.addView(b.mark, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        shownNumber(b);
+        return bar;
+    }
+
+    /** Whether the number differs from the file's own (the player set it in the tab) */
+    private static boolean changed(Bind b) { return b.field != null && b.number != b.cheat.value(); }
+
+    /** A round − or + for touch (not focusable: the controller's left and right step the field) */
+    private static TextView stepper(Context c, String sign, View.OnClickListener click) {
+        float dp = c.getResources().getDisplayMetrics().density;
+        TextView t = new TextView(c);
+        t.setText(sign);
+        t.setTextSize(18);
+        t.setTextColor(TEXT);
+        t.setGravity(Gravity.CENTER);
+        int d = Math.round(36 * dp);
+        t.setLayoutParams(new LinearLayout.LayoutParams(d, d));
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(CHIP);
+        g.setShape(GradientDrawable.OVAL);
+        t.setBackground(g);
+        t.setFocusable(false);
+        t.setClickable(true);
+        t.setContentDescription(sign.equals("+") ? "One more" : "One less");
+        t.setOnClickListener(click);
+        return t;
+    }
+
+    /** The number, in yellow with the file's own beside it when it was set in the tab */
+    private static void shownNumber(Bind b) {
+        boolean set = changed(b);
+        b.field.setText(Long.toString(b.number));
+        b.field.setTextColor(set ? YELLOW : TEXT);
+        b.field.setContentDescription(b.cheat.name + ", number " + b.number + (set ? ", the file has " + b.cheat.value() : ""));
+        if (b.mark == null) return;
+        b.mark.setText("File: " + b.cheat.value());
+        b.mark.setVisibility(set ? View.VISIBLE : View.GONE);
+    }
+
+    /** One step: 1 at first; held (steps less than 0.4 s apart), 10 after ten steps, 100 after twenty, and so on */
+    private static void step(Shown s, Bind b, int dir) {
+        long now = android.os.SystemClock.uptimeMillis();
+        s.run = now - s.lastStep < 400 ? s.run + 1 : 0;
+        s.lastStep = now;
+        long size = 1;
+        for (int i = 0; i < Math.min(s.run / 10, 9); i++) size *= 10;
+        long max = CheatValues.max(b.cheat.valueWidth);
+        long v = dir > 0 ? (b.number > max - size ? max : b.number + size) : Math.max(0, b.number - size);
+        setNumber(s, b, v, false);
+    }
+
+    /** The number shown at once; to the files and the host a moment after the last change (now: at once) */
+    private static void setNumber(Shown s, Bind b, long v, boolean now) {
+        b.number = Math.max(0, Math.min(v, CheatValues.max(b.cheat.valueWidth)));
+        shownNumber(b);
+        s.box.removeCallbacks(b.apply);
+        s.box.postDelayed(b.apply, now ? 0 : 500);
+    }
+
+    /**
+     * The number kept for the next start (CheatValues.keep), written into the cheat's block of the merged file the host runs, and the host told to read it again
+     * (CheatsBridge.reload: the switches stay as they are). A host that cannot read it again has it at the next start
+     */
+    private static void applyNumber(Shown s, Bind b) {
+        long v = b.number;
+        String key = b.key, build = s.build;
+        CheatFile.Cheat ch = b.cheat;
+        File folder = s.folder;
+        IO.execute(() -> {
+            int r = -3;
+            try {
+                CheatValues.keep(folder, key, ch, v);
+                File merged = build == null ? null : new File(folder, build + ".txt");
+                if (merged != null && merged.isFile()) {
+                    String p = CheatValues.patch(new String(java.nio.file.Files.readAllBytes(merged.toPath()), java.nio.charset.StandardCharsets.UTF_8), key, ch, v);
+                    if (p != null) {
+                        CheatValues.write(merged, p);
+                        r = CheatsBridge.reload();
+                    }
+                }
+            } catch (IOException e) {
+                android.util.Log.w("peanuts", "mods tab: the number of " + key + ": " + e);
+            }
+            int got = r;
+            android.util.Log.i("peanuts", "mods tab: " + key + " writes " + v + (got >= 0 ? " (the host read the cheats again: " + got + " entries)" : " from the next start (" + got + ")"));
+            UI.post(() -> {
+                b.later = got < 0;
+                if (shown == s) { show(b); s.box.removeCallbacks(s.poll); s.box.postDelayed(s.poll, 250); }
+            });
+        });
+    }
+
+    /** A or a tap on the number: type one, in the app's dialog sheet */
+    private static void type(Shown s, Bind b) {
+        AlertDialog.Builder db = dialog(s.a);
+        Context c = db.getContext();
+        float dp = c.getResources().getDisplayMetrics().density;
+        long max = CheatValues.max(b.cheat.valueWidth);
+        android.widget.FrameLayout box = new android.widget.FrameLayout(c);   // as upstream's text dialog (TextInput): the field in the sheet's margins
+        box.setPadding(Math.round(20 * dp), 0, Math.round(20 * dp), 0);
+        EditText e = new EditText(c);
+        e.setHint("0 to " + max);   // no message line: in landscape the keyboard leaves room for the title, the field and the buttons only
+        e.setInputType(InputType.TYPE_CLASS_NUMBER);
+        e.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN);
+        e.setSingleLine(true);
+        e.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(Long.toString(max).length())});
+        e.setText(Long.toString(b.number));
+        e.setSelection(0, e.getText().length());   // typing replaces it
+        box.addView(e);
+        AlertDialog d = db.setTitle(b.cheat.name).setView(box)
+                .setPositiveButton("Set", (x, w) -> typed(s, b, e.getText().toString())).setNegativeButton("Cancel", null).create();
+        e.setOnEditorActionListener((v, id, ev) -> {
+            boolean enter = ev != null && ev.getKeyCode() == KeyEvent.KEYCODE_ENTER && ev.getAction() == KeyEvent.ACTION_DOWN;
+            if (id != EditorInfo.IME_ACTION_DONE && !enter) return false;
+            typed(s, b, e.getText().toString());
+            d.dismiss();
+            return true;
+        });
+        d.setOnKeyListener((di, k, ev) -> {
+            if (k != confirmKey && k != backKey) return false;
+            if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0) {
+                if (k == backKey) di.cancel();
+                else { d.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER)); d.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER)); }
+            }
+            return true;
+        });
+        if (d.getWindow() != null) d.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        d.show();
+        e.requestFocus();
+    }
+
+    /** The typed number, kept inside the cheat's width (a number too long for it is its largest) */
+    private static void typed(Shown s, Bind b, String text) {
+        String t = text.trim();
+        if (t.isEmpty() || !t.chars().allMatch(Character::isDigit)) return;
+        long v;
+        try { v = Long.parseLong(t); } catch (NumberFormatException e) { v = Long.MAX_VALUE; }
+        setNumber(s, b, v, true);
+    }
 
     // ---- Details ----
 
@@ -448,18 +691,30 @@ public final class ModsTab {
         from.setPadding(0, Math.round(8 * c.getResources().getDisplayMetrics().density), 0, 0);
         box.addView(from);
         TextView code = new TextView(c);
-        code.setText(String.join("\n", b.cheat.lines));
+        code.setText(String.join("\n", changed(b) ? CheatValues.lines(b.cheat, b.number) : b.cheat.lines));   // with the number set in the tab
         code.setTypeface(Typeface.MONOSPACE);
         code.setTextSize(12);
         code.setPadding(0, Math.round(10 * c.getResources().getDisplayMetrics().density), 0, 0);
         box.addView(code);
         android.widget.ScrollView sv = new android.widget.ScrollView(c);
+        sv.setFocusable(false);   // as AlertDialog's own message: the controller's focus goes to the buttons
         sv.addView(box);
-        AlertDialog d = db.setTitle(b.cheat.name).setView(sv).setNegativeButton("Close", null).create();
-        d.setOnKeyListener((di, k, e) -> {
+        db.setTitle(b.cheat.name).setView(sv).setNegativeButton("Close", null);
+        if (changed(b)) db.setNeutralButton("Reset", (x, w) -> setNumber(s, b, b.cheat.value(), true));   // the file's own number again (its kept one is forgotten)
+        AlertDialog d = db.create();
+        d.setOnKeyListener((di, k, e) -> {   // B closes; A presses the focused button (Close first), or closes when none has the focus
             if (k != confirmKey && k != backKey) return false;
-            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) di.cancel();
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                if (k == confirmKey && d.getCurrentFocus() instanceof Button) {
+                    d.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER));
+                    d.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER));
+                } else di.cancel();
+            }
             return true;
+        });
+        d.setOnShowListener(x -> {   // Close first (A on it does nothing that cannot be undone); after the window's own first focus
+            Button close = d.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (close != null) close.post(() -> { if (!close.isInTouchMode()) close.requestFocus(); });
         });
         d.show();
     }
