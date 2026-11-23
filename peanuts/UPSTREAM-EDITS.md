@@ -2356,3 +2356,146 @@ screens the GPU ran 401 MHz with the beat off and 680 MHz with it on, switched l
 | `dm/games/0100000000010000/README.md` | 1 line | under "Found on this game" | `PEANUTS` in the line |
 
 Peanuts' own files, no marker: `dm/peanuts/peanuts_gpufloor.c` (new). Upstream candidate: yes, general (`vka_dev.c`'s KGSL floor on every host-DCVS Adreno).
+
+### Mod menu Part A: code cheats on Android (2026-11-23)
+
+Atmosphère cheat files write main's code (a community cheat file for Pokémon Legends: Z-A: 164 of its lines). `hle_cheats.c` writes code through a writable alias of main, which Android does not have (`plat_mem_alias`), so every code cheat was turned off there ("code write without the writable alias of main"). The writes now go the way `peanuts_patches.cpp` writes a package's patches: the game's threads stopped (`hle_thread.c` `dm_guest_stop_all`), the page made writable, the words stored, the instruction cache flushed, the protection put back. A pass queues a word only when its value differs from main's (a steady code cheat costs a compare a pass, a key-conditional one a stop only when its key changes; a word one cheat of the pass puts back and a later one writes again is no write), all words of a pass go in one stop (20 ms at most; when the threads do not stop in time, later passes try again with a growing wait), a run of neighbouring words is not written while a stopped thread stands inside it, and a cheat that stops running (switched off, refused, gone from a newly loaded file) puts back the original words no other running cheat writes. Rewritten words stay refused per cheat, as on the Mac (`main.changed.tsv`).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/host/hle_cheats.c` | 10 | the include of `dm/peanuts/peanuts_cheats.h`; `main_rx_end` rounds to the loader's 16 KB (a 4 KB phone took its text's last 12 KB for data); `main_write_check` lets code through on Android; `mem_read` sees the pass's queued words; `cheat_write` sends main's code to `pn_code_write`; `cheats_pass` begins and ends the code pass; `load_all` notes the cheats' keys, logs the Android path instead of mapping an alias, and reads `main.changed.tsv` there too; the include of `peanuts_cheats.inc` at the end | `// PEANUTS` per line (`main_rx_end`: `PEANUTS(upstream-candidate)`) |
+| `dm/peanuts/peanuts_cheats.h`, `dm/peanuts/peanuts_cheats.inc` | new | the queue, the original words and their owners, the stop, the owners following their cheats through a load | Peanuts' own files |
+| `dm/host/tests/t_cheats.c` | 6 | stand-ins for the stop, the case "code cheats on Android" (both under `#if PN_CODE`); the alias and safe-mode checks hold on the Mac only | `// PEANUTS` per line, `// PEANUTS begin` / `end` |
+| `dm/host/tests/Makefile` | 1 | `peanuts-cheats`: `t_cheats.c` as if for Android over `t_peanuts_cheats_plat.c` (new); `peanuts-cheats-alias`: the same with `PN_CODE=0` and a test alias of main (a memfd mapped twice), the path every other platform takes; both in `peanuts-host` | inside the `# PEANUTS begin` / `end` span |
+| `docs/reference/cheats.md`, `docs/development.md` | 1 each | Android in "Writes into main's code" and in the Cheats paragraph | `<!-- PEANUTS -->` |
+
+Tests: `make GAME=<id> peanuts-cheats` (Linux, `CLANG=gcc`): 193 checks pass, 27 of them the new case (one stop to write and none while the word holds the value, the page read + execute again, off puts the original back unless another running cheat writes the word, "Restore Code" left on before the cheat it undoes: no stop a pass, a read of a word queued earlier in the pass, ZL held and released twice: four stops, a rewritten site refused with its reason while another cheat is written, threads that do not stop: not written, then written two passes later, a thread inside a two-word cave, a cheat that dies after its write, a new file: the owners follow by key and a gone cheat's word goes back). `make GAME=<id> peanuts-cheats-alias`: upstream's 166 checks pass with `PN_CODE` 0, code written through the alias as on the Mac (the host itself builds only for Apple and Android; with `PN_CODE` 0 every hook is a constant-false branch and `peanuts_cheats.inc` holds only empty stubs). Upstream candidate: `main_rx_end`'s rounding; the rest is Android's.
+
+### Mod menu Part B: cheat status and reload in a running game (2026-11-23)
+
+On Part A. The launcher reads each cheat's state while the game runs and reloads the merged cheat file after an import in the game. The format is the one agreed with the loader (Part C).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/peanuts/peanuts_cheats.inc` | (Peanuts' own) | `nxhost_cheat_status`, `nxhost_cheats_reload` | Peanuts' own file |
+| `android/app/src/main/java/dev/nxnative/android/Native.java` | 1 | `cheatStatus()` (UTF-8 bytes decoded, null without cheats), `cheatsReload()` | `// PEANUTS begin` / `end` |
+| `android/app/src/main/cpp/nxlaunch.c` | 1 | weak forwarders `Native_cheatStatusUtf8`, `Native_cheatsReload` | `// PEANUTS begin` / `end` |
+| `dm/host/tests/t_cheats.c` | (in Part A's span) | the status and the reload in the case "code cheats on Android" | inside the `// PEANUTS begin` / `end` span |
+
+The status, polled by the in-game panel: a line per entry of the loaded file, labels too, `<key>\t<state>\t<flags>\t<reason>`: state `on`, `off`, `master`, `label`, `refused` (turned off while the game ran: a rewritten site, a write past the image, a runaway loop), `unsupported`; flags a comma list of `code` (it wrote main's code this run), `hold` (opcode 8 or C4), `wait` (a code write waits for a stop); reason empty or `<token>:<detail>`, tokens `rewritten`, `nolist`, `region`, `unsupported`, `other`, and on a running cheat `access` (failed accesses) or `wait`. No file loaded: empty, and `Native.cheatStatus` gives null. The reload reads `<build>.txt` and `<build>.enabled` again: a cheat already loaded keeps its switch by key, a new key takes `<build>.enabled`'s state, a key that is gone puts its code back at the next pass; a loaded file that cannot be read now leaves everything as it was (-1).
+
+Tests: `make GAME=<id> peanuts-cheats`: 199 checks pass, 33 of them the case "code cheats on Android" (Part A's, and the status's lines, flags and reason tokens, a reload by key with a new key from `<build>.enabled` and section markers as labels, a file that cannot be read, no file: an empty status); `make GAME=<id> peanuts-cheats-alias`: 166, unchanged (the status and the reload exist only with `PN_CODE`). `peanuts/tests/test_cheat_status.py`: the JNI block against a stand-in host (a status longer than the first buffer, no host) and the UTF-8 decoding (a name outside the BMP, null without cheats).
+
+### Mod menu Part C: cheats for every game, imported from zip, txt or folder (2026-11-23, SPEC-mod-menu.md Package B 1-5)
+
+Only games whose profile had `cheats` rows had cheat rows on their page, and an import was one `.txt` kept in `<files>/cheats/<title ID>/imported/`. Now every game has the rows (`Prefs.cheatsGame`). Their Cheat files sheet works on the game's cheat sources (`dev.peanuts.mods.CheatSources`, `<files>/cheats/<title ID>/sources/`): Import cheat file… takes a `.txt` or a `.zip`, the new Import cheat folder… a folder, in the Atmosphère, Eden / Yuzu or Ryujinx layout or as a bare build file (`dev.peanuts.mods.CheatImport`, read off the UI thread by `CheatPick`); a source is switched off or removed as a whole; Export cheats… writes the sources in upstream's export format, and Import cheats… reads one as before. A start merges the sources that are on (`ModCheats.install` through `CheatSources.merge`). The reader (`dev.peanuts.mods.CheatFile`) knows groups (cheatslips' headings over end / else words, EdiZon's markers), masters, credits, titles and "Restore Code" entries, and gives each cheat a kind from its opcodes (Code, Data, Value, Not supported) and its hold buttons. Upstream's imported files become sources the first time (`CheatSources.migrate`). Part D replaces these rows with the Mods & Cheats page.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `cheatsGame` is true for every game | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/CheatsUi.java` | 1 | `rows`: the Cheat files row is `CheatsBridge.filesRow` (the sources; the sheet, its pickers and their results are there) | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/CheatsBridge.java` | new | Peanuts-owned, in upstream's package (as `ModCheats.java`): the row, the sheet, request codes 83 to 86 through `LibrarySettings.result` | Peanuts' own file |
+| `android/app/src/main/java/dev/nxnative/android/ModCheats.java` | (Peanuts' own) | `install` merges through `CheatSources`, upstream's imported files moved into sources first; a mod's own toggles are told by key; `\r` in a mod's `.enabled` is dropped | Peanuts' own file |
+
+`CheatsUi.sheet` and `documentResult`'s branches are not changed; nothing opens the old sheet now. Peanuts-owned, new: `dev.peanuts.mods.CheatFile`, `CheatImport`, `CheatSources`, `CheatPick`; one line in `dev.peanuts.ui.LibrarySettings.result`. Tests: `peanuts/tests/test_cheat_loader.py` (`CheatLoaderJvmTest`), `peanuts/tests/test_mod_cheats.py`, `dm/tools/tests/test_android_cheats.py`.
+
+### Mod menu Part D: Mods & Cheats on a game's page (2026-11-23, SPEC-mod-menu.md Package B 6)
+
+Part C's Cheats rows and the Game tab's Mods section become one row, "Mods & Cheats", which opens a page in place of the game's page (`dev.peanuts.mods.CheatsPage`; Back returns, L1 / R1 switch its Cheats and Mods; its top stays while the rest scrolls under it): Show in the game (the in-game Mods tab of Part E), each cheat source with its credit, masters and the Restore Code line, its cheats in their groups with a switch and their kind and hold buttons as chips, and the Mods section (`dev.peanuts.settings.ModsSection`, each mod with "Next start", "Needs a build" or "Built"). Add takes a file or a folder (`dev.peanuts.mods.CheatImportUi` over Part C's `CheatPick`): one dialog for the game's version, another version, another game, a file without a build, or nothing found; a pick with romfs or exefs goes to the mod import. On the Thor the bottom screen explains the focused row. A start now passes cheats when a source is on (`CheatsBridge.wanted`); the game's old Cheats switch is the first state of the cheats that come with the app.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `cheats` asks `CheatsBridge.wanted` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 4 | `build`: Mods & Cheats open builds its page instead (`CheatsPage.build`); `stepTab`: L1 / R1 switch its Cheats and Mods; the Game tab's `CheatsUi.rows` line is out (a comment says what it was); the Mods section's line opens `CheatsPage.entry` instead | `// PEANUTS:` |
+| `android/app/src/main/java/dev/nxnative/android/CheatsBridge.java` | (Peanuts' own, Part C) | for the page: main's code size (`main.fixups.tsv` TEXT_END), the merge with every cheat's key, the toggles, `wanted` | Peanuts' own file |
+
+Peanuts-owned: `CheatsPage`, `CheatImportUi` (request codes 83 and 84 when it started the pick, asked before `CheatsBridge` in `LibrarySettings.result`), `PeanutsPrefs.modsTab` (Show in the game), `SectionUi` made public, `ModsSection` (`view(..., install)`, `due`, `installPicked`, `listChanged`, the chips, Peanuts icons for its tiles and the bin), one line each in `SettingsPage.onBack`, `SettingsPage.lay` and `BottomScreen.home`, three icons from `design/peanuts-native/icons` (`pi_add`, `pi_mods`, `pi_warning`). Tests: `peanuts/tests/test_cheat_loader.py` (the hooks, the page's text against UI-RULES.md), `peanuts/tests/test_mod_cheats.py`.
+
+### Mod menu Part E: the in-game panel's Mods tab (2026-11-23, SPEC-mod-menu.md Package C)
+
+The in-game panel gets a Mods tab between Controls and General when the game has cheats or mods, unless Settings › Controls › Mods tab is off or the game's Show in the game (Part D) hides it. The tab (`dev.peanuts.mods.ModsTab`) has the merged cheats in their groups, each with a switch and a chip from the host's status, read twice a second while the tab shows (Part B's `Native.cheatStatus`, parsed by `dev.peanuts.mods.CheatStatus`): Running, the hold buttons, Not possible here (refused or never run, why on focus and in the details), Next start. It also has search from 15 cheats on, All off, a cheat's details (Y or a long press) in the app's dialog sheet, and the game's mods with "Restart the game" after a change. A switch goes to the host at once (`Native.cheatSet`) and is kept for the next start. The panel opens on the tab shown last. General keeps upstream's cheat switches only when there is no Mods tab. Controller: A switches, Y details, X All off, L / R tabs, B closes.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/SidePanel.java` | 7 | `TAB_NAMES` and `TAB_GENERAL` not final (`ModsPanel.opening` sets them); `open`: the tabs and the tab to open on (`ModsPanel.opening`); `build`: the Mods tab (`ModsPanel.build`); `general`: `cheatRows` only without the Mods tab; `padKey`: Y and X on the Mods tab (`ModsPanel.padKey`); `tabBar`: with five tabs each as wide as its label, and the tab text fit after the bar's layout (`ModsPanel.afterLayout`): a fifth of the panel left "Performance" too wide even at the fit's 10 sp, and the posted fit ran before the bar had its width at the first opening | `// PEANUTS:` |
+| `android/app/src/main/java/dev/nxnative/android/ModsPanel.java` | new | Peanuts-owned, in upstream's package (as `CheatsBridge.java`): the tabs, the tab's build, the controller's Y and X, the restart of the game after a mod change | Peanuts' own file |
+| `android/app/src/main/java/dev/nxnative/android/CheatsBridge.java` | (Peanuts' own, Part C) | `status`, `reload`, `set` and `restart` for the tab (`Native` is package-private) | Peanuts' own file |
+
+Peanuts-owned: `ModsTab`, `CheatStatus`, `PeanutsPrefs.modsTabAll` (Settings) and `panelTab` (the tab shown last, in a prefs file of its own, `peanuts_panel`, because the game's process writes it), the Mods tab row in `LibrarySettings`, `SettingsSections` and `SettingsHelp`. Tests: `peanuts/tests/test_cheat_loader.py` (the hooks, `CheatStatus` in `CheatLoaderJvmTest`, the tab's text against UI-RULES.md).
+
+### Mod menu Part F: a number field for Value cheats (2026-11-23, SPEC-mod-menu.md Package C)
+
+A cheat that writes one plain number into the game's data (a Value cheat of `CheatFile`; a float keeps its words, a code cheat keeps its value) gets a number field in the in-game Mods tab: − and + by touch, left / right with the controller (held, the steps grow), A or a tap types a number in the app's dialog sheet. A number that differs from the file's is yellow with the file's own beside it, and the cheat's details (Y) have Reset. The player's source files are never changed. The number is kept per game in `<files>/cheats/<title ID>/values.tsv` (`dev.peanuts.mods.CheatValues`: the merged key, the number, its place in the cheat's words and the number the file had there). While the game runs, the cheat's block of the merged file is patched and the host reads the file again (Part B's `cheatsReload`, the switches kept); a start writes the kept number where the cheat still has the original one (`CheatSources.merge`). No upstream file changes, and no new native call.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/ModCheats.java` | (Peanuts' own, Part C) | `install` merges with the kept numbers (`CheatValues.read`) | Peanuts' own file |
+
+Peanuts-owned: `CheatValues`, `CheatSources.merge(blocks, values)`, `CheatFile.describe(cheat, value)`, `CheatStatus.line(..., number)`, the field in `ModsTab` (its `focusSearch` steps on SidePanel's left / right). Tests: `peanuts/tests/test_cheat_loader.py` (`CheatValues` in `CheatLoaderJvmTest`), `peanuts/tests/test_mod_cheats.py`.
+
+### Round 60, saves for each user: the Saves tab works on the save of the user picked on it (2026-11-23, issue #422)
+
+Each user has a save of their own (`Users.saveDir`: the first user's is the game's save folder, another user's is `<save>_user_<uid>` beside it; the host's `dm_account_save_dir`), but Back up saves, Restore saves, Import save and Delete save data took `Folders.save`, the first user's folder, so an import meant for a second user replaced the first user's save (#422). With two or more users, or the save of a removed user, the Saves tab now shows a card for each above its rows, starting at the user playing now; the rows work on the picked user's save and their dialogs name the user. Copy to another user gives one user's save to another (theirs is backed up first). The device save (`<save>_device`) is the game's, every user's, as on the console: another user's save is their account save alone, a backup of it has no device part, a restore into it leaves the device save as it is, and the first user's save may take another user's and keep its device save (a plain folder without one is still refused, as before). Another user's backup or restore holds the game's own save lock, which a game start takes too, and a game start finishes a stopped restore into any user's save (one it cannot finish is left as it is and noted in the log: it stops no start). A backup's manifest gets a `user <uid> <name>` line, which older readers skip; Restore saves lists the picked user's backups first and says whose each is. With one user nothing changes.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/UserSaves.java` | new | the user cards, the picked user's folder (`save`), the words (`saveOf`, `noSave`, `yours`, `forWhom`, `deleteNote`, `restoreNote`, `label`), the order of Restore saves, the zip name, `ready` (a removed user's save is not restored or imported into), `locked` (the game's lock), Copy to another user | `// PEANUTS: new file` (in this package because SaveUi, SaveStore, Users, Folders and Ui are package-private, as `ResScale`) |
+| `android/app/src/main/java/dev/nxnative/android/UserSaveDirs.java` | new | the users' folders beside a save (`others`), removed users' saves (`removed`), `recoverUsers`, a name in a file name; no Android classes | `// PEANUTS: new file` |
+| `android/app/src/main/java/dev/nxnative/android/SaveUi.java` | 15 | `ready` and `run` package-private (Copy to another user); `UserSaves.save` for `Folders.save` in `ready`, `backup`, `exportTo`, `confirm` and Delete save data; `UserSaves.locked` around each backup and restore; the user named in the texts; `UserSaves.changed` after each operation; Restore saves' order and lines; the zip name. `gameRunning` keeps `Folders.save`: the game's lock | `// PEANUTS` per line; Delete save data inside its `PEANUTS begin`/`end` span |
+| `android/app/src/main/java/dev/nxnative/android/SaveStore.java` | 8 | `Manifest.user` / `who`, written and read as the `user` line (the name with no control characters); `Backup.user` / `who`; `backupLocked` records the user; `restore` leaves the device part out of another user's save (a backup that holds only the device save is refused there) and lets the first user's save take another user's without one (`fromUser`); a block of helpers at the end (`userOf`, `accountOnly`, `fromUser`, the names), so the class still needs no other file (`dm/tools/tests`' saves, saf and packzip tests compile it alone) | `// PEANUTS` per line; the block `PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/MainActivity.java` | 2 | `gameTab`'s Saves tab: `UserSaves.picker` before the rows, `UserSaves.copyRow` above Delete save data, the folder line from `UserSaves.save` and kept on the picked user's (`UserSaves.where`) | `// PEANUTS` per line |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 1 | `saveDir`: after the game's own save, `UserSaveDirs.recoverUsers(dir)` under the lock just taken; its note goes to the log. Another user's save whose restore cannot be finished is left as it is, as SaveStore leaves it, and stops no start (the game may never open it, a removed user's never); the game's own still stops it | `// PEANUTS` |
+| `dm/tools/tests/test_wiki.py` | 1 | Copy to another user in `UNDOCUMENTED`, as Delete save data: Peanuts Native's row, described in `peanuts/docs/FAQ.md` | inside its `PEANUTS` span |
+| `android/app/src/jvmtest/java/dev/nxnative/android/UserSavesJvmTest.java` | new | whose a folder and a backup are, the user line read back and older manifests, the folders, the device save rules, stopped restores finished, the lock | `// PEANUTS: new file` |
+
+Tests: `peanuts/tests/test_user_saves.py` (the JVM test, then the hooks and the words from the sources; the JVM half needs a JDK and is skipped on Windows, whose `File.renameTo` does not replace a file). `dm/tools/tests/test_android_saves.py`, `test_android_saf.py`, `test_android_packzip.py` and `test_android_users.py` are unchanged; `test_wiki.py` passes.
+
+### Round 61, a user's saves in Settings › Users (2026-11-23, issue #422, part 2 on Round 60)
+
+Settings › Users counted a user's saves from the app's own `saves/` folder by name, and Who's playing? looked there too, so a save in a folder picked in a game's Folders was not seen. Both now ask `UserSaves`, which looks in each game's real save folder (`Folders.save`, then `Users.saveDir`). The focused user's card has **Show saves** when they have any: the games with their save and its size; one opens that game's page on its Saves tab with this user picked (Round 60's cards).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 1 | `openOn(a, g, tab)`: the game's page at a tab (upstream's `open` always starts at its first) | `// PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/UserSaves.java` | Round 60's file | public now, with `of` (a user's saves across the library), `has`, `bytes`, `size` and `open` | its `// PEANUTS: new file` |
+
+Peanuts' own files: `dev/peanuts/users/UsersPage.java` (`saves` from `UserSaves.of`, Show saves), `WhoPlaysActivity.java` (`hasSave` from `UserSaves.has`), `peanuts/tests/test_user_saves.py`, `peanuts/docs/FAQ.md`.
+
+### Game page Part A: the game at the left, its areas at the right (2026-11-23, design canvas page "Spielseite", variant A)
+
+A game's page had four tabs cut by how the code is split (Performance, Game, Saves, Storage) and, on a wide window, a rail of sections inside a tab. On a
+window 600 dp wide or more (the Thor's top screen, a tablet, a phone on its side) it is now the game at the left (cover, name, version, publisher, play
+time, Play) and nine areas at the right as tiles that say what is set: Graphics, Mods & Cheats, Saves, Game options, Controls, Companion, Files, Help,
+Advanced. A opens an area at the right, L1 / R1 step the areas, B goes back to the tiles (on the tile it came from) and to Home, Y plays (Mods &
+Cheats keeps Y for a cheat's details). Every row gets a Peanuts icon of its own. Upstream still builds every row, value, dialog and switch: the port
+builds its tabs off the page and the page moves their views into the areas by title (`GameAreas`; a row it does not know goes to the area of the heading
+it was built under, with its emoji).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 5 | `build`'s first line: `GamePagePort.build`; its `wide` line: `&& !GamePagePort.harvesting()`; its sections line: every section while harvesting (one build has every row); `stepTab`: `GamePagePort.step` after Mods & Cheats' line; `openOn` (Round 61's line): `GamePagePort.at(t)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/GamePagePort.java` | new | Peanuts-owned, in upstream's package (as `CheatsBridge.java`): the harvest of the Performance and Game tabs (and Saves, Storage when their area shows), the facts the page shows, L1 / R1, the tab `openOn` names | Peanuts' own file |
+
+Peanuts-owned: `dev.peanuts.ui.GamePage` (the layout, the game's panel beside the page's column as Settings' sidebar, the tiles, an area's groups, the D-pad between panel and page, Y), `GameAreas` (the areas, every row's area, group and icon), `CheatsPage.area` / `leaveArea` / `tileLine` (Mods & Cheats inside the area: its bar of Cheats | Mods and Add, no Back, no top that stays), `SettingsPage.onBack` and `lay` and `BottomScreen.home` call `GamePage.onBack` / `left`, 44 icons in `android/app/src/peanuts/res/drawable` (drawn in `design/peanuts-native/icons/icons.py`). A narrower window keeps upstream's page (Part B).
+
+Tests: `peanuts/tests/test_game_page.py` (`GameAreasJvmTest`: the areas, the rows' places and icons, the tiles' lines; the hooks; a drawable for every icon).
+
+### Game page Part B: the same areas on a phone (2026-11-23, on Part A)
+
+A window narrower than 600 dp (a phone held upright) gets the page in areas too: Back, the cover with the name, the version, the publisher and the
+play time beside it, Play across the width, then the areas as upright tiles in two columns (icon, name, two lines of what is set). An area is a page
+of its own with Back, its name and the game's under it; Back goes to the tiles. No upstream file changes: `GamePage.used` is true for every window.
+
+Tests: `peanuts/tests/test_game_page.py` (the phone's top, the area's Back, the upright tiles).
+
+### Game page Part C: the second screen explains the area and the row (2026-11-23, on Part B)
+
+On a device with a second screen (the AYN Thor), that screen follows the game's page as it follows Settings (`BottomScreen.explain`): with nothing in
+focus the game, its play time and what is set in its main areas; a tile its area, its line and its rows with their values; Play what it starts; a row
+what it does (`GameHelp`, one line for every row the areas know), its value now and, for a switch, Off | On, which flips it on the top screen too. A
+value that changes (after its dialog) updates the explanation in place. Mods & Cheats' rows keep their own explanation. While a controller is
+connected the explanation ends with its keys (A, Y, B, L R), as the bottom screen's own face buttons look; without one, none
+(`BottomScreen.Explain.keys`, `BottomPanel.bindKeys`). `BottomPanel.bindExplain` now ends a fade still running, which took the card back to nothing when
+two explanations came within a fade. No upstream file changes.
+
+Tests: `peanuts/tests/test_game_page.py` (`GameHelpJvmTest`; the explanation, the keys only with a controller, the fade).

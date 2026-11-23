@@ -900,13 +900,16 @@ public final class MainActivity extends Activity {
     void gameTab(LinearLayout content, Game g, boolean savesTab) {
         String noProfile = Profile.missing(g.titleId, g.name);
         if (savesTab) {
+            UserSaves.picker(this, content, g);   // PEANUTS: whose save the rows work on, with two or more users (UserSaves, #422)
             LinearLayout saves = Ui.add(content, Ui.listCard(this), 16);
             saves.addView(new Ui.Setting(this, "💾", "Back up saves", v -> SaveUi.backup(this, g)).value(SaveUi.backupLine(this, g)).chevron(this).view);
             saves.addView(new Ui.Setting(this, "♻️", "Restore saves", v -> SaveUi.restoreList(this, g)).value("From a backup; the current save is backed up first").chevron(this).view);
             saves.addView(new Ui.Setting(this, "📥", "Import save", v -> SaveUi.importPick(this, g)).value("A .zip or a save folder").chevron(this).view);
+            UserSaves.copyRow(this, saves, g);   // PEANUTS: Copy to another user
             saves.addView(new Ui.Setting(this, "🗑", "Delete save data", v -> SaveUi.delete(this, g)).value("Backed up first; the game starts from the beginning").chevron(this).view);   // PEANUTS
-            File save = Folders.save(this, g);
+            File save = UserSaves.save(this, g);   // PEANUTS: the picked user's save (upstream: Folders.save)
             TextView where = Ui.add(content, Ui.small(this, "The save: " + (save != null ? save.getPath() : "not set")), 6);
+            UserSaves.where(where, g);   // PEANUTS: kept on the picked user's
             where.setTextSize(12);
             where.setTextIsSelectable(true);
             where.setPadding(dp(4), 0, dp(4), 0);

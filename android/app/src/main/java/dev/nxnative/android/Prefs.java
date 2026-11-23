@@ -464,8 +464,8 @@ final class Prefs {
     static void skipLayers(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("vk_skip_layers", titleId), on).commit(); }
     /** Game settings › Cheats (Experimental), for a game whose profile has cheat files (Profile.cheats): off by default; while off the launcher passes no DM_CHEATS and the
      *  in-game panel has no Cheats section (Cheats.env, Cheats.panel). Reset to defaults turns it off; the toggles below stay */
-    static boolean cheatsGame(String titleId) { Profile p = Profile.of(titleId); return p != null && p.cheats; }
-    static boolean cheats(Context c, String titleId) { return cheatsGame(titleId) && of(c).getBoolean(gameKey("cheats", titleId), false); }
+    static boolean cheatsGame(String titleId) { return true; }   // PEANUTS: every game takes cheats (dev.peanuts.mods, Mods & Cheats); was: its profile has cheats rows (Profile.cheats)
+    static boolean cheats(Context c, String titleId) { return CheatsBridge.wanted(c, titleId, of(c).getBoolean(gameKey("cheats", titleId), false)); }   // PEANUTS: on when a cheat source is (CheatsBridge.wanted); the old switch is the app's own cheats' first state
     static void cheats(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("cheats", titleId), on).commit(); }
     /** The cheats turned on in the in-game panel, by key (Cheats.Entry.key), kept per game and written into &lt;build&gt;.enabled before each start (Cheats.install) */
     static java.util.Set<String> cheatsOn(Context c, String titleId) { return Cheats.decodeOn(of(c).getString(gameKey("cheats_on", titleId), "")); }

@@ -46,6 +46,8 @@ final class GameSettings {
         a.gameSettings(g);
     }
 
+    static void openOn(MainActivity a, Game g, String t) { tab = t; GamePagePort.at(t); a.gameSettings(g); }   // PEANUTS: at a tab: a user's save in Settings › Users opens its game's Saves tab (UserSaves.open); the page in areas opens at Saves
+
     /**
      * An optional shader update (Pack.shaderUpdateAvailable): this app version makes its games' shaders in a newer way; the game plays with the ones it has until the player
      * updates them. Shown on every tab of the game's page, under the tabs, with the button and no time promised (a game's whole shader set is made again on the phone)
@@ -63,6 +65,8 @@ final class GameSettings {
 
     /** A controller's L1 / R1: the next (+1) or previous (-1) tab of the game's page, round; false when there is nothing to switch to */
     static boolean stepTab(Game g, int delta) {
+        if (dev.peanuts.mods.CheatsPage.stepTab(g.titleId, delta)) return true;   // PEANUTS: on Mods & Cheats, L1 / R1 switch Cheats and Mods
+        { Boolean s = GamePagePort.step(g, delta); if (s != null) return s; }   // PEANUTS: the page in areas: L1 / R1 step its areas (dev.peanuts.ui.GamePage)
         String[] keys = Profile.missing(g.titleId, g.name) == null ? new String[] {PERFORMANCE, GAME, SAVES, STORAGE} : new String[] {SAVES, STORAGE};
         int cur = Math.max(0, Arrays.asList(keys).indexOf(tab));
         int next = PadPanel.tab(cur, delta, keys.length);
@@ -87,9 +91,11 @@ final class GameSettings {
 
     /** Builds the page into content (Ui.page's column); again builds it once more after a choice (keeping the place), close returns to Home */
     static void build(MainActivity a, LinearLayout content, Game g, Runnable again, Runnable close) {
+        if (GamePagePort.build(a, content, g, again, close)) return;   // PEANUTS: the page in areas: the game at the left, its areas at the right (dev.peanuts.ui.GamePage)
+        if (dev.peanuts.mods.CheatsPage.build(a, content, g.titleId, g.name, g.gameDir, g.packDir, again, close)) return;   // PEANUTS: Mods & Cheats open: its page here (Back returns)
         String id = g.titleId;
         if (!id.equals(customFor)) { customFor = id; custom = false; }
-        boolean wide = a.getResources().getConfiguration().screenWidthDp >= 600;
+        boolean wide = a.getResources().getConfiguration().screenWidthDp >= 600 && !GamePagePort.harvesting();   // PEANUTS: its rows taken for the page in areas: the column with every section
         String missing = Profile.missing(id, g.name);
         content.addView(header(a, g, missing == null, wide, close));
         String[] keys = missing == null ? new String[] {PERFORMANCE, GAME, SAVES, STORAGE} : new String[] {SAVES, STORAGE};
@@ -270,7 +276,7 @@ final class GameSettings {
             updateRows.run();
         }
 
-        if (Prefs.cheatsGame(id)) CheatsUi.rows(a, g, options::add, again);   // a profile with cheat files (game.tsv cheats): the switch, off by default, and the files
+        // PEANUTS: was "if (Prefs.cheatsGame(id)) CheatsUi.rows(a, g, options::add, again);": every game's cheats are on Mods & Cheats (the row below, dev.peanuts.mods.CheatsPage)
         if (LinkPlay.has(id))
             options.add(new Ui.Setting(a, "🔗", "Link Play", v -> LinkPlay.dialog(a, g, again)).value(LinkPlay.label(a, id)).chevron(a));
         options.add(new Ui.Setting(a, "🌐", "Game language", v -> language(a, g, again)).value(GameLanguage.label(Prefs.gameLang(a, id), phoneTag())).chevron(a));   // not a tester's knob: with the game's options, never folded
@@ -308,9 +314,9 @@ final class GameSettings {
         advanced.add(new Ui.Setting(a, "📝", "Extra environment", v -> env(a, g, again))
                 .value(envLines == 0 ? "None" : envLines + (envLines == 1 ? " line: " : " lines: ") + env.replace('\n', ' ')).chevron(a));
 
-        options.rows.addView(dev.peanuts.settings.ModsSection.view(a, id, g.name, g.gameDir, g.packDir));   // PEANUTS: the Mods section, above Companion (install, on/off, delete; a code mod's build with mods)
+        options.rows.addView(dev.peanuts.mods.CheatsPage.entry(a, id, g.name, g.gameDir, g.packDir, again));   // PEANUTS: Mods & Cheats, above Companion: its page has the cheats and the Mods section (install, on/off, delete; a code mod's build with mods)
         options.rows.addView(dev.peanuts.settings.CompanionSection.view(a, id, dev.peanuts.settings.CompanionSection.root(g.packDir)));   // PEANUTS: the Companion section (install/update/remove, second screen)
-        Section[] all = perf ? new Section[] {picture, speed, advanced} : new Section[] {options, controls};   // Performance: what changes speed and picture; Game: the game's own options, language and controls
+        Section[] all = GamePagePort.harvesting() ? new Section[] {picture, speed, options, controls, advanced} : perf ? new Section[] {picture, speed, advanced} : new Section[] {options, controls};   // Performance: what changes speed and picture; Game: the game's own options, language and controls   // PEANUTS: the page in areas takes every section's rows from one build
         View reset = recLine != null ? null : Ui.button(a, "Reset to defaults", Ui.Kind.SOFT, v -> new PadFocus.Builder(a).setTitle("Reset to defaults · " + g.name)
                 .setMessage("The game will follow global settings. Extra environment lines are kept.")
                 .setPositiveButton("Reset", (x, w) -> { Prefs.resetGame(a, id); again.run(); }).setNegativeButton("Cancel", null).show());
