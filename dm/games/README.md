@@ -223,6 +223,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [Unicorn Overlord, Asian release](010054B01AD92000/README.md) | `010054B01AD92000` | 1.05 | 16.2.4 | Vanillaware's engine | NVN |
 | [WarioWare: Get It Together!](0100563010E0C000/README.md) | `0100563010E0C000` | 1.0.0 | 10.4.1 | NintendoWare Bezel Engine 1.50 | NVN <!-- PEANUTS: Peanuts-only profile; plays on an AYN Thor (Turnip) -->
 | [Well Dweller](0100217023F6C000/README.md) | `0100217023F6C000` | 1.0.0 | 22.2.0 | GameMaker Studio 2 (its runner) | OpenGL |
+| [Viewfinder](0100F9D023176000/README.md) | `0100F9D023176000` | 1.0.0 (base) | 19.3.9 | Unity 2022.3.61f1 IL2CPP, FMOD | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Xenoblade Chronicles: Definitive Edition](0100FF500E34A000/README.md) | `0100FF500E34A000` | 1.1.2 | 9.3.1 | Monolith's engine | NVN |
 | [Xenoblade Chronicles 2](0100E95004038000/README.md) | `0100E95004038000` | 2.1.0 | 3.5.0 | Monolith's engine | NVN |
 | [Xenoblade Chronicles 3](010074F013262000/README.md) | `010074F013262000` | 2.2.1 | 12.3.9 | Monolith's engine | NVN |
