@@ -71,7 +71,8 @@
     "0100F9D023176000",
     "010089B01AB44000",
     "0100BC0018138000",
-    "0100563010E0C000"
+    "0100563010E0C000",
+    "0100739018020000"
   ],
   "games": [
     {
@@ -599,6 +600,27 @@
       ],
       "profile": "dm/games/01006B601380E000/game.tsv",
       "note": "dm/games/01006B601380E000/README.md"
+    },
+    {
+      "title_id": "0100739018020000",
+      "name": "LEGO 2K Drive",
+      "profile_name": "LEGO 2K Drive",
+      "builds": [
+        {
+          "version": "v1114112",
+          "number": 1114112,
+          "display": "1.17"
+        }
+      ],
+      "readme_update": "1.17",
+      "package": "v1114112",
+      "companion": false,
+      "since": "0.1.8",
+      "contributors": [
+        "intermission88"
+      ],
+      "profile": "dm/games/0100739018020000/game.tsv",
+      "note": "dm/games/0100739018020000/README.md"
     },
     {
       "title_id": "0100DCA0064A6000",
