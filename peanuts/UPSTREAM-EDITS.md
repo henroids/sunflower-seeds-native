@@ -2500,3 +2500,18 @@ connected the explanation ends with its keys (A, Y, B, L R), as the bottom scree
 two explanations came within a fade. No upstream file changes.
 
 Tests: `peanuts/tests/test_game_page.py` (`GameHelpJvmTest`; the explanation, the keys only with a controller, the fade).
+
+## A pack made on Windows on every thread
+
+[Packing](../docs/reference/packing.md#a-pack-made-on-windows-keeps-most-of-the-pcs-threads-idle). Upstream hunks, each `PEANUTS(upstream-candidate)`-marked; nothing changes on macOS or Linux output, and no Vulkan chain file changed:
+
+| File | Hunk |
+|---|---|
+| `dm/tools/patch_nso.py` | `in_parallel` starts spawned workers where there is no fork (`in_spawned`, with the new `dm/tools/rewrite_pool.py`); the pool helpers moved before the data blocks; the data block count, the scan (`scan_piece`) and the function analysis (`analyse_fn`, `Tracked`) through `in_parallel`. Output byte-identical (Minecraft Dungeons II's three modules); the file before is `rewriter_equiv/patch_nso.py.54b9ce16465e` |
+| `dm/tools/nso_code.py` | `count_undecodable` (runs of `disasm_lite`), `data_blocks(map_pieces=)`; the file before is `rewriter_equiv/nso_code.py.11ae83f31593` |
+| `scripts/pack_android.py` | each module's rewrite workers by its share of the code; `windows_shader_workers()` sets `DMSH_VK_WORKER` / `DMSH_VK_WORKERS` on Windows |
+| `dm/gfx/tools/vk_android_win.py` | `--pool-worker`: the Windows adaptations in each shader worker |
+| `dm/tools/docs_symptoms.py` | writes LF on Windows (it wrote CR LF, every line a change) |
+| `dm/tools/tests/test_rewrite_parallel.py` | the SIGTERM test skipped without `os.killpg` (POSIX only) |
+
+`dm/gfx/tools/split_pool.py` (Peanuts-owned) passes the pipes as handles on Windows. New: `dm/tools/rewrite_pool.py`, `dm/tools/tests/test_windows_parallel.py`.
