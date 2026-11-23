@@ -1583,12 +1583,28 @@ static void *pl_slurp(const char *path, size_t *n) {
 // PEANUTS: the depth mode the profile's seed was made in (its graphics keys' gl_depth, the majority; 1 = near = 0), -1 without a seed or graphics keys. Before a first
 // start's stamp says it, the parts were prepared for near = -w and pf_main threw them away when the game set near = 0: 18 of the 24 seeds of 2026-11-21 are near = 0
 // (Hyrule Warriors: Age of Calamity: 3,441 programs prepared in 77 s for nothing, 1,182 compiled again in the session), Super Mario Odyssey's is near = -w
-static int prep_depth_seed(void) {
-    size_t o = 0; uint32_t n = 0; long zero = 0, gl = 0;
-    if (!dm_vk_prewarm_seed_len || vka_pw_header(dm_vk_prewarm_seed, dm_vk_prewarm_seed_len, &o, &n) != VKA_PW_OK) return -1;
+// PEANUTS: a list's graphics keys counted by gl_depth (zero: near = 0 keys, gl: near = -w keys); a list that does not read adds nothing
+static void prep_depth_count(const uint8_t *d, size_t len, long *zero, long *gl) {
+    size_t o = 0; uint32_t n = 0;
+    if (!d || !len || vka_pw_header(d, len, &o, &n) != VKA_PW_OK) return;
     pwrec r; const uint8_t *kb; int ok;
-    while (vka_pw_next(dm_vk_prewarm_seed, dm_vk_prewarm_seed_len, &o, &r, &kb, &ok))
-        if (ok && r.kind != VKA_PW_CS && r.klen > offsetof(vka_gkey, gl_depth)) { if (kb[offsetof(vka_gkey, gl_depth)]) gl++; else zero++; }
+    while (vka_pw_next(d, len, &o, &r, &kb, &ok))
+        if (ok && r.kind != VKA_PW_CS && r.klen > offsetof(vka_gkey, gl_depth)) { if (kb[offsetof(vka_gkey, gl_depth)]) (*gl)++; else (*zero)++; }
+}
+static int prep_depth_seed(void) {
+    long zero = 0, gl = 0;
+    prep_depth_count(dm_vk_prewarm_seed, dm_vk_prewarm_seed_len, &zero, &gl);
+    return zero + gl ? zero > gl : -1;
+}
+// PEANUTS: the same from this device's prewarm list (<cache>.keys of earlier runs, or the file DM_VK_PREWARM_FILE names: a seed tried without a reinstall), -1 without
+// one or graphics keys. Yoshi's Crafted World run with its seed from DM_VK_PREWARM_FILE (2026-11-22) still prepared for near = -w: only the compiled-in seed was read
+static int prep_depth_list(void) {
+    if (!g_pw_path[0]) return -1;
+    FILE *f = fopen(g_pw_path, "rb"); if (!f) return -1;
+    long zero = 0, gl = 0, sz = 0; uint8_t *d = NULL;
+    if (!fseek(f, 0, SEEK_END) && (sz = ftell(f)) > 0 && sz < (64l << 20) && !fseek(f, 0, SEEK_SET) && (d = malloc((size_t)sz)) && fread(d, 1, (size_t)sz, f) == (size_t)sz)
+        prep_depth_count(d, (size_t)sz, &zero, &gl);
+    free(d); fclose(f);
     return zero + gl ? zero > gl : -1;
 }
 static void pcl_open(void) {
@@ -1631,9 +1647,11 @@ static void pcl_open(void) {
         else n = 0;   // another library's or another list's parts: started empty
     } else n = 0;
     free(st);
-    if (atomic_load(&g_prep_depth_zero) < 0) {   // PEANUTS: a first start: the depth mode from the profile's seed, so the parts are not prepared for the other one (prep_depth_seed)
+    if (atomic_load(&g_prep_depth_zero) < 0) {   // PEANUTS: a first start: the depth mode from this device's prewarm list or the profile's seed, else near = 0, so the parts are not prepared for the other one
         int dz = VKA_ENV("DM_VK_PSO_PREP_DEPTH0", -1); const char *src = "DM_VK_PSO_PREP_DEPTH0";
+        if (dz < 0) { dz = prep_depth_list(); src = "this device's prewarm list"; }   // PEANUTS: then the list, the seed, else near = 0 (the mode of most games)
         if (dz < 0) { dz = prep_depth_seed(); src = "the profile's seed"; }
+        if (dz < 0) { dz = 1; src = "no list or seed says: near = 0, the mode of 18 of the 24 seeded games; DM_VK_PSO_PREP_DEPTH0=0 for near = -w"; }   // PEANUTS
         if (dz >= 0) { atomic_store(&g_prep_depth_zero, dz ? 1 : 0); VLOG("shader parts: prepared for depth mode %s (%s)", dz ? "near = 0" : "near = -w", src); }
     }
     if (pdone > g_npairs) pdone = (uint32_t)g_npairs;
