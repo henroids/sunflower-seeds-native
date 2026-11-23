@@ -60,7 +60,8 @@
     "0100F4300BF2C000",
     "010062E01FE0C000",
     "0100F7E00C70E000",
-    "010065301A2E0000"
+    "010065301A2E0000",
+    "010075101EF84000"
   ],
   "games": [
     {
@@ -921,6 +922,27 @@
       ],
       "profile": "dm/games/0100DAE01E4C8000/game.tsv",
       "note": "dm/games/0100DAE01E4C8000/README.md"
+    },
+    {
+      "title_id": "010075101EF84000",
+      "name": "Stray",
+      "profile_name": "Stray",
+      "builds": [
+        {
+          "version": "v0",
+          "number": 0,
+          "display": "1.0.0"
+        }
+      ],
+      "readme_update": "1.0.0",
+      "package": "v0",
+      "companion": false,
+      "since": "0.1.8",
+      "contributors": [
+        "dnyan007"
+      ],
+      "profile": "dm/games/010075101EF84000/game.tsv",
+      "note": "dm/games/010075101EF84000/README.md"
     },
     {
       "title_id": "010028600EBDA000",

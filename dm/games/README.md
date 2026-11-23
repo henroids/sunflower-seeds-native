@@ -97,6 +97,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [DRAGON QUEST VII Reimagined](0100A9D01C446000/README.md) | `0100A9D01C446000` | 1.2.0 | 19.3.1 | Unreal Engine 4.27 | NVN |
 | [DRAGON QUEST XI S: Echoes of an Elusive Age – Definitive Edition](01006C300E9F0000/README.md) | `01006C300E9F0000` | 1.0.4 | 7.3.2 | Unreal Engine 4.18 | NVN |
 | [EA SPORTS FC 27](0100C49025D3E000/README.md) | `0100C49025D3E000` | 1.8d.6523 | 22.2.0 | Frostbite 2025.1.2 (its NVN renderer in an NRO) | NVN |
+| [FANTASY LIFE i: The Girl Who Steals Time](0100755017EE0000/README.md) | `0100755017EE0000` | 1.5.0 | 18.3.7 | Unreal Engine 4 | NVN | <!-- PEANUTS -->
 | [FINAL FANTASY CRYSTAL CHRONICLES Remastered Edition](0100CE4010AAC000/README.md) | `0100CE4010AAC000` | 1.0.3 | 8.2.1 | Unity 2018.4.2f1 IL2CPP, FMOD | NVN |
 | [FINAL FANTASY RESONANCE](0100606026F12000/README.md) | `0100606026F12000` | 1.0.1 | 20.5.17 | Unreal Engine 5.6.1 | NVN |
 | [FINAL FANTASY RESONANCE, Asian release](0100B8A026F14000/README.md) | `0100B8A026F14000` | 1.0.1 | 20.5.17 | Unreal Engine 5.6.1 | NVN |
@@ -152,6 +153,8 @@ One row per profile; the notes are each profile's `README.md`.
 | [Pokémon Brilliant Diamond](0100000011D90000/README.md) | `0100000011D90000` | 1.3.0 | 11.4.3 | Unity 2019.4.27f1 IL2CPP | NVN |
 | [Pokémon Legends: Arceus](01001F5010DFA000/README.md) | `01001F5010DFA000` | 1.1.1 | 11.4.0 | Game Freak's engine (between Sword's and Trinity) | NVN |
 | [Pokémon Legends: Z-A](0100F43008C44000/README.md) | `0100F43008C44000` | 2.0.2 | 19.3.11 | Game Freak's Trinity engine | NVN · [AYN Thor](0100F43008C44000/README.md#peanuts-native-on-android) | <!-- PEANUTS -->
+| [Pokémon: Let's Go, Eevee!](0100187003A36000/README.md) | `0100187003A36000` | 1.0.2 | 5.4.151 | Game Freak's engine (before Sword's) | NVN <!-- PEANUTS: Peanuts-only profile --> |
+| [Pokémon: Let's Go, Pikachu!](010003F003A34000/README.md) | `010003F003A34000` | 1.0.2 | 5.4.151 | Game Freak's engine (before Sword's) | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Pokémon Pokopia](0400A3A01EE4C000/README.md) | `0400A3A01EE4C000` | v655360 (Switch 2) | 20.5.25 (Ounce) | Koei Tecmo's KTGL | NVN2 |
 | [Pokémon Scarlet](0100A3D008C5C000/README.md) | `0100A3D008C5C000` | 1.0.0, 4.0.0 | 13.3.5, 13.3.13 | Game Freak's Trinity engine | NVN <!-- PEANUTS: Android bring-up on 4.0.0 --> |
 | [Pokémon Shining Pearl](010018E011D92000/README.md) | `010018E011D92000` | 1.3.0 | 11.4.3 | Unity 2019.4.27f1 IL2CPP | NVN |
@@ -184,12 +187,19 @@ One row per profile; the notes are each profile's `README.md`.
 | [Streets of Rage 4](0100EC9010258000/README.md) | `0100EC9010258000` | 1.0.9 | 9.3.1 | MonoGame (C# → C++ by BRUTE) | NVN |
 | [Subnautica](0100429011144000/README.md) | `0100429011144000` | 1.23.83358 | 13.3.5 | Unity 2019.4.36f1 IL2CPP, FMOD | NVN |
 | [Subnautica: Below Zero](010014C011146000/README.md) | `010014C011146000` | 1.23.55063 | 13.3.5 | Unity 2019.4.36f1 IL2CPP, FMOD | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario 3D World + Bowser's Fury](010028600EBDA000/README.md) | `010028600EBDA000` | 1.2.2 | 10.4.0 | Nintendo EPD (sead / agl, NintendoWare) | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Bros. Wonder](010015100B514000/README.md) | `010015100B514000` | 1.2.1 (and 1.0.0) | 16.2.12 (1.0.0: 16.2.0) | Nintendo EPD (sead / agl) | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Bros. Wonder - Nintendo Switch 2 Edition](040015100B514001/README.md) | `040015100B514001` | 1.2.1 (program 1) | 21.4.1 (Ounce) | Nintendo EPD (sead / agl) | NVN2 |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Galaxy](010099C022B96000/README.md) | `010099C022B96000` | 1.3.1 | 18.3.5 | NERD's Hagi Wii layer (recompiled PowerPC) | Vulkan |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Galaxy 2](0100FD8022DAA000/README.md) | `0100FD8022DAA000` | 1.4.0 | 18.3.5 | NERD's Hagi Wii layer (recompiled PowerPC) | Vulkan |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Odyssey](0100000000010000/README.md) | `0100000000010000` | 1.4.1 | 7.3.2 | Nintendo EPD (sead / agl, NintendoWare) | NVN |
+| [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Party Jamboree](0100965017338000/README.md) | `0100965017338000` | 2.3.0 | 17.5.9 | NintendoWare Bezel Engine 2.9 | NVN |
 | [Super Monkey Ball Banana Rumble](010031F019294000/README.md) | `010031F019294000` | 2.20 | 17.5.8 | Unity 2022.3.30f1 IL2CPP, CRIWARE, FMOD | NVN |
 | [SUPER ROBOT WARS Y](010063301BD50000/README.md) | `010063301BD50000` | 1.4.1 | 18.3.5 | Unity 2022.3.44f1 IL2CPP, CRIWARE | NVN |
