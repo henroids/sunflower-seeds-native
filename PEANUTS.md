@@ -40,6 +40,8 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      (2026-11-17) shader-map validation and selection call `RuntimeShaderMap.missingRuntime`: a deficit containing only boot-generated shaders is prepared for Build’s internal capture, while missing file-based keys still stop.
    - `android/app/src/main/java/dev/nxnative/android/ExitWatch.java` — game exit notices and on-device pack retries use the same Android exit lookup by process name, PID and timestamp. `Job` saves the pack PID when its service marks a job running.
    - `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` — (2026-11-18) the Prepare card's progress bar is `dev.peanuts.ui.Strip.card` (the app's one bar: 6 dp, rounded, as the building cover's strip), one line.
+     (2026-11-22, the build queue, #348) `prepare()` first asks `dev.peanuts.ui.Library.queuePrepare`: while the library builds or its queue waits, the
+     Prepare goes into the build queue as a build of that `.nup` or dump (the packer runs one job), one line.
    - `android/app/src/ondevice/AndroidManifest.xml` — (2026-11-13, code mods) one new `<service>` line, `dev.peanuts.build.ModBuildService`
      (the modded-variant build, the Mods section's "Build with mods"), beside the existing `BuildService` line.
    - `scripts/pack_android.py` — (2026-11-13, code mods) `--modules`/`--mod-exefs`/`--mod-patches`, block-marked (too much logic for a one-line
@@ -317,11 +319,11 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   `MainActivity.bananaTaps`), pops the peanut there, with a light tick, and `BottomScreen.popped` counts it through MainActivity's own counter. The start
   page is not a background. The pop's look and the counter are upstream's, unchanged. UPSTREAM-EDITS Round 43; test
   `peanuts/tests/test_bottom_screen_peanuts.py`.
-- 2026-11-21 (Settings in ten sections, the canvas "Peanuts Settings Redesign", page App-Look): Settings shows one of ten sections at a time, Library,
+- 2026-11-21 (Settings in ten sections): Settings shows one of ten sections at a time, Library,
   Console, Graphics, Controls, Screens, Users, App, Help, Developer and About, instead of one long page whose Library card mixed folders, keys, haptics,
   both screens and Miis. A window 600 dp wide or more (the Thor's top screen, a phone held sideways) has the sections in a sidebar at the left, the
   selected one on banana yellow, and the rows at the right; a tablet (its smaller side 600 dp or more) opens Settings on the ten sections as tiles across
-  the screen (the canvas's board "Variante B, wie Eden"), a tile opens its section's page and Back goes to the tiles again; a narrow phone has the
+  the screen (an overview of the sections on a page of its own), a tile opens its section's page and Back goes to the tiles again; a narrow phone has the
   section's page with a button of three lines that opens a drawer of the sections. Every row keeps upstream's look and listener; its tile and each section
   show the Peanuts icons (`android/app/src/peanuts/res/drawable/pi_*.xml`, the kernel in the accent). Console's icon is a console with its two
   controllers; Screens' is two screens on a device with a second screen, one screen on any other. The rows of Screens and Console mode show what they
@@ -352,3 +354,29 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - 2026-11-22 (the review of PR #336): the steady and the user clock read the real-time clock once a run and advance it with `CLOCK_BOOTTIME`, so a correction of
   the phone's clock (network or carrier time) can no longer make a span within a run negative; it reaches the game at its next start. `hle_time.c` `host_rt_ns`;
   `t_peanuts_time` case 8. UPSTREAM-EDITS Round 54.
+- 2026-11-22 (igawa6's notes on the Settings pull requests #312 and #315, for after 0.1.7): Share log reads what it asks about off the main
+  thread. A tap read the launcher's list, the game's work folders, `job.json` (up to 1 MB), a log's tail and `last-exit.txt`, and asked Android for the
+  running processes, all before the sheet showed, which on an SD card or a USB drive can stall the screen. `BuildLogUi` now reads all of that on a worker
+  (`dev.peanuts.ui.OffMain`) and opens the sheet with what it found; a second tap meanwhile starts nothing, and a screen that went meanwhile gets nothing.
+  Tests `peanuts/tests/test_share_log_choice.py` (OffMainJvmTest, and no read left in the tap's own code).
+  Peanuts cracked's play time: at every Play, `GameReturn` → `Cracked.starting` read `last-exit.txt` and asked Android for the running processes and its
+  exit records on the main thread. That now runs on Cracked's own worker, in order with the settles after it; the Play's time is still taken at the tap.
+  Which run counts is `CrackedCount.toCount` now (plain Java), so a record the next game's screen wrote before the worker read it counts nothing until its
+  own start is noted. Tests `peanuts/tests/test_peanuts_cracked.py` (the rule on the JVM, nothing read at the Play's tap).
+  `SettingsPage` kept the activity, its rows, the section pages, the drawer and the search sheet in static fields after the activity was destroyed, until
+  the next `lay()`: the activity's own lifecycle callback (`Gone`, registered once per activity) now lets go of all of them; the section that shows is
+  kept for the activity made again. Test `peanuts/tests/test_settings_sections.py` (every such field is let go).
+  On a tablet, Back from Advanced landed on the tiles of the sections instead of the section it was opened from: Advanced replaces Settings' column, and
+  its detaching was taken for Settings closing. Now only Back from a section's page and Home's build (`SettingsPage.homeBuilt`, from
+  `BottomScreen.home`) put a tablet's Settings on its tiles. Test `peanuts/tests/test_settings_sections.py`.
+  The icons' generator is in the repository: the `pi_*.xml` files said they came from an `icons.py` that was not there. `peanuts/scripts/icons.py` holds
+  all 41 icons (shell, kernel and ink dots, the same paths byte for byte) and writes them; `--check` says which file differs. Test `peanuts/tests/test_icons.py`.
+  Comments and notes that pointed at a board or page of the owner's design canvas say what they mean in words; readers of the repository cannot see
+  the canvas. Test `peanuts/tests/test_no_canvas_pointers.py` keeps such pointers out of Peanuts' code and notes.
+  About › Licenses names Banana Native and Frame generation GPL-3.0-or-later, as the README, `android/NOTICE.md` and the LSFG folder's LICENSE.md do
+  (it said GPL-3.0). Test `peanuts/tests/test_peanuts_cracked.py`.
+  Peanuts cracked takes its hours from the play-time ledger now (`dev.peanuts.launch.PlayTime`, `files/peanuts-playtime.tsv`, which came in 0.1.7):
+  what the ledger's total gained since the last look counts (`CrackedCount.fromLedger`), so a game's time counts only while it runs, and never while Build
+  prepares its shaders. 0.1.7 measured each run itself, from `last-exit.txt` to the process's end in Android's exit records; that is gone, and with it
+  the file read and the binder calls. On the first look after an update from 0.1.7 the ledger so far counts as counted (`seenAtFirstLook`), so no hour
+  counts twice. Tests `peanuts/tests/test_peanuts_cracked.py` (the rule on the JVM, the wiring).

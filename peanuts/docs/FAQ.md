@@ -154,7 +154,7 @@ Later, change the folders in Settings › Library. **Rescan** reads them again.
 
 ### Where does the app look for my games?
 
-In the **Game folder**, the **Update folder**, the **DLC folder** and the **Build folder**, each up to two folders deep. It finds `.nsp`, `.xci`, `.nsz`, `.xcz` and `.nup` files and dump folders. Updates and DLC are matched to their game by title ID, wherever they are in those folders. A file deeper than two folders is not found: move it up, or point the folder setting at it. Mods for other emulators are skipped: folders named `mods`, `load` or `atmosphere`, and folders whose `exefs` has no `main`. To use a mod here, add it on the game's page, see [Mods](#mods).
+In the **Game folder**, the **Update folder**, the **DLC folder** and the **Build folder**, each up to two folders deep. It finds `.nsp`, `.xci`, `.nsz`, `.xcz` and `.nup` files and dump folders: in the dump tools' layout (`base/`, `updates/<version>/`), in the console's layout as OunceCake serves it (`base/program/0/`), and one version's folder (`exefs` and `romfs` at its top). A dump folder's version is its `updates/<version>/`, else the version its `main` was built for, so a game updated on a PC shows as that update. Build prepares a dump from `base/` or `updates/<version>/`: for one version's folder, make a folder named `base` in it and move `exefs` and `romfs` there. Updates and DLC are matched to their game by title ID, wherever they are in those folders. A file deeper than two folders is not found: move it up, or point the folder setting at it. Mods for other emulators are skipped: folders named `mods`, `load` or `atmosphere`, and one version's folder whose `exefs` lacks the game's `main`, `main.npdm` or `sdk` (a mod may bring its own `main`, never `sdk`). To use a mod here, add it on the game's page, see [Mods](#mods).
 
 If the home screen says **No games found in …**, put your files in that folder and tap Settings › Library › **Rescan**.
 
@@ -268,14 +268,26 @@ The app rewrites all of the game's code and translates every shader on the devic
 
 ### Can I use the device while it builds?
 
-Yes. The build goes on if you leave the app. You cannot build a second game at the same time. Some builds start the game once to capture shaders, so close any running game first.
+Yes. The build goes on if you leave the app. A second game you build waits in the build queue until the first one is done (see the next question). Some builds start the game once to capture shaders, so close any running game first.
 
 While a build runs or waits, the home screen has a **Screens off** button left of the Settings gear. It makes every screen black at the lowest brightness and keeps the device awake, so a long build does not wear an OLED panel. A tap on a screen brings the app back, and the cover goes away by itself when the build ends. It is new in 0.1.2 and little tested.
 
+### Can I build several games one after the other?
+
+Yes. While a game builds, the sheet's button says **Add to queue**: the game waits in the build queue and starts when the games before it are done, one at a time. You can queue your games, put the device on its charger and go to sleep. **Build all…** on the home screen (beside Find) asks first, then queues every game that needs a build: those that say **Build needed**, those whose build stopped, and built games whose build is of an earlier version of the app. Games whose file is gone or whose version this app does not list are left out: their sheet asks first.
+
+- A waiting game's cover says **Queued** and its place, such as **Queued, 3 of 5**. The **Building** filter lists them under **Up next**, each with **Remove**; the game's sheet (hold the cover, or Y) has **Remove from queue** too. Removing changes none of its files.
+- Before each game the queue waits while the device is hot, while the battery is below 20 % and not charging, while you play a game, while a build with mods runs, and while a pack of the next game is being imported (Import pack…). It goes on by itself. The notification says what it waits for.
+- A game whose build fails or that you stop is marked **Build stopped**, and the next game starts. Its card says why and offers **Resume** or **Retry**, and **Dismiss** removes the card.
+- Before a game starts, the app checks that its `.nup` fits the free space, and that the pack has at least 0.5 GB to be made in. If not, it stops that game before writing anything and goes on with the next.
+- **Stop** on the card, or **Cancel** in the notification, stops the game that builds; the queue goes on. **Cancel all** in the notification, or **Stop all** on the Up next card, stops everything. **Pause** on the Prepare card pauses the whole queue; **Resume** on the Up next card goes on where it stopped.
+- If Android ends the app, or you restart the device, the queue goes on when Android starts the app's build service again or when you next open the app. The game that was building starts again where it stopped.
+
 ### What notifications does a build show?
 
-- While it builds: **Building** and the game's name, with the current step, a progress bar and a **Cancel** action. It is silent.
-- When it ends while the app is not in front: **… is ready to play**, or **Building … stopped** with the reason. This one vibrates.
+- While it builds: **Building** and the game's name, with the current step, a progress bar and a **Cancel** action. With more games in the build queue it says the game's place (**2 of 5**) and has **Cancel all**. It is silent.
+- While the queue waits between two games: **Waiting to build** and the next game's name, with the reason. A wait for heat has **Go on anyway**.
+- When it ends while the app is not in front: **… is ready to play**, or **Building … stopped** with the reason. A queue of several games sends one notification at its end instead, saying which games are ready and which stopped. This one vibrates.
 
 The app asks for the notification permission at your first build. Without it the build still runs, but you see no progress outside the app. Android lists the two kinds as **Building games** and **Build finished**, so you can silence either one.
 
@@ -414,7 +426,7 @@ Most supported games run at 60 fps on the Thor. Animal Crossing: New Horizons ru
 
 ### What is Peanuts cracked?
 
-The count on Settings › **About**. A peanut cracks open each time you tap one on the drifting background, and the count also grows as you use the app: 25 for building a game version you had not built before, 1 for every 1,000 shaders that build prepared, 5 for every hour you play, 10 for a game's first start and 5 for your first own Mii. Building the same version again (**Import again**, **Rebuild**) adds nothing. The bananas you popped before are part of it. On a dual-screen device the second screen shows the count and the next milestone while About is open.
+The count on Settings › **About**. A peanut cracks open each time you tap one on the drifting background, and the count also grows as you use the app: 25 for building a game version you had not built before, 1 for every 1,000 shaders that build prepared, 5 for every hour you play (the time a game's **Played** row shows, which counts only while the game runs), 10 for a game's first start and 5 for your first own Mii. Building the same version again (**Import again**, **Rebuild**) adds nothing. The bananas you popped before are part of it. On a dual-screen device the second screen shows the count and the next milestone while About is open.
 
 ### How do I find a setting?
 

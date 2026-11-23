@@ -48,6 +48,7 @@ public final class BottomScreen {
         long played;                    // ready: last Play, 0 if never
         dev.peanuts.launch.PlayLedger.Entry play;   // ready: its play time (dev.peanuts.launch.PlayTime), null if never played with this app
         String found = "", space = "";  // to build: what the scan found
+        boolean queued;                 // to build: it waits in the build queue (its state is its place, in the cover's quiet pill)
         Runnable primary, second;       // A and Y, null if none
         String primaryLabel = "", secondLabel = "";
         int primaryIcon;
@@ -116,6 +117,7 @@ public final class BottomScreen {
 
     /** MainActivity.buildHome (PEANUTS hook) */
     public static void home(Activity a, Runnable settings) {
+        SettingsPage.homeBuilt();   // a tablet's Settings opens on its tiles again
         watch(a);
         openSettings = settings;
         explain = null;

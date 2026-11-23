@@ -92,6 +92,9 @@ public final class Request {
         return null;
     }
 
+    /** job: whether do was stop (the build card's Stop: this game stops, the build queue goes on) rather than pause (the queue pauses), issue #348 */
+    public boolean stopAsked() { return cmd.equals("job") && "stop".equalsIgnoreCase(str("do")); }
+
     /** A game's companion against the catalog: none (the catalog has none and none is installed), not_installed, installed, update */
     public static String companionState(String catalog, String installed) {
         if (catalog == null) return installed == null ? "none" : "installed";
@@ -115,8 +118,8 @@ public final class Request {
                 break;
             }
             case "build": case "prepare": case "play": case "share_build_log": titleId(true); break;
-            case "reimport": titleId(true); flag("confirm"); flag("delete_first"); break;
-            case "import_pack": titleId(true); need("path"); break;   // the question itself is answered where the plan is known (CtlPort.reimport: needs_confirm)
+            case "reimport": titleId(true); flag("confirm"); flag("delete_first"); break;   // the question itself is answered where the plan is known (CtlPort.reimport: needs_confirm)
+            case "import_pack": titleId(true); need("path"); break;
             case "job": action(); titleId(false); break;
             case "game": {
                 String a = action();

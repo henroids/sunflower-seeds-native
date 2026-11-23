@@ -23,7 +23,7 @@ final class AboutData {
 
     /** Built on: name, what it is, its license, its page */
     static final String[][] BUILT_ON = {
-            {"Banana Native", "moceure", "GPL-3.0", "https://git.eden-emu.dev/moceure/BananaNative"},
+            {"Banana Native", "moceure", "GPL-3.0-or-later", "https://git.eden-emu.dev/moceure/BananaNative"},
             {"nxnative", "seedds", "MIT", "https://github.com/seedds/nxnative"},
             {"Eden Duo", "The companions' runtime", "Its notice", "https://github.com/igawa6/eden-duo"},
             {"All notices", "This app's license notice", "Read", REPO + "/blob/main/android/NOTICE.md"},
@@ -31,7 +31,7 @@ final class AboutData {
 
     /** In the app: name, what it does here, its license, its notice */
     static final String[][] THIRD_PARTY = {
-            {"Frame generation", "From Eden and lsfg-vk", "GPL-3.0", REPO + "/blob/main/android/NOTICE.md"},
+            {"Frame generation", "From Eden and lsfg-vk", "GPL-3.0-or-later", REPO + "/blob/main/android/NOTICE.md"},
             {"FidelityFX FSR 1", "The FSR upscaler", "MIT", REPO + "/blob/main/dm/third_party/README.md"},
             {"libadrenotools", "Loads a custom GPU driver", "BSD-2", REPO + "/blob/main/dm/third_party/README.md"},
             {"Zstandard", "Unpacks the shader library", "BSD", REPO + "/blob/main/dm/third_party/README.md"},

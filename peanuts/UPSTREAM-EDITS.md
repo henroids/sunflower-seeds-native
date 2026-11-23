@@ -1494,6 +1494,28 @@ log's and the GPU driver page's bars (which took `PUi.progress`) and the Prepare
 |---|---|---|---|
 | `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 1 | The Prepare card's progress bar is `dev.peanuts.ui.Strip.card`, the building cover's 6 dp rounded strip, in place of `Ui.progress` | `PEANUTS` |
 
+### Round 58, the build queue (2026-11-22, issue #348)
+
+A build asked while another runs waits its turn instead of being refused: `dev.peanuts.build.BuildQueue` keeps the games in order in the app's own storage
+(`files/build-queue.tsv`), and `BuildService` (now sticky) builds one after the other, also after Android ended the app's process. A game that fails or is
+stopped is marked and the next one starts. Before each game the queue waits while upstream's `PackPolicy` says so (heat, battery; read by reflection, with the packer's
+remembered Go on anyway, #93), while a game of the app runs and while a build with mods runs; a `.nup` that does not fit the free space, or less
+than 0.5 GB where the pack is made, stops that game before anything is written. The library shows the queue (the covers' "Queued, 3 of 5", the Building
+filter's Up next card, Remove, Stop all, Resume after a pause, Dismiss on a stopped card), the notification the place ("2 of 5"), Cancel all, and one alert
+at the queue's end. Build all… queues every game that needs a build (Build needed, stopped, or built by an earlier version of the app). `Prepare` waits while
+the packer still runs another job, and takes the packer's messages only of its own job. Upstream's own Prepare goes into the queue while it runs:
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/ondevice/java/dev/nxnative/android/Ondevice.java` | 1 | `prepare()` asks `dev.peanuts.ui.Library.queuePrepare` first: while the library builds or its queue waits, the Prepare goes into the build queue | `PEANUTS` |
+
+Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/` (`build/BuildQueue.java` new; `build/BuildService`, `BuildPipeline`, `Prepare`,
+`Upstream`; `ui/Library`, `ui/GameSheet`, `ui/CtlPort`, `ui/BottomScreen`, `ui/BottomPanel`; `ctl/Ctl`, `ctl/Request`, `ctl/Status`; `settings/ModsSection`), `android/app/src/jvmtest/java/dev/peanuts/build/BuildQueueJvmTest.java`
+(new), `peanuts/tests/test_build_queue.py` (new), `peanuts/docs/FAQ.md`, `peanuts/docs/CONTROL.md`.
+
+Tests: `peanuts/tests/test_build_queue.py` (the JVM test: order, the file, a cut-off run, a failure that does not stop the queue, removing, Cancel all, the same
+game twice, the batch's places, a pause, a damaged file; and the wiring). Upstream candidate: no (Banana Native has no build service of its own).
+
 ### Round 29, compressed game files: .nsz and .xcz (2026-11-19, issue #149)
 
 The importer builds a game from NSP and XCI files compressed with nsz: an `.ncz` entry is an NCA stored as zstd with the keys and counters of its
@@ -1806,8 +1828,7 @@ Tests: `peanuts/tests/test_bottom_screen_peanuts.py`. Upstream candidate: no (th
 ### Round 44, Settings in ten sections (2026-11-21)
 
 Settings was one long page of eight cards, its Library card holding folders, keys, haptics, both screens and Miis. Its rows now sit in ten sections,
-Library, Console, Graphics, Controls, Screens, Users, App, Help, Developer and About (the design: the canvas "Peanuts Settings Redesign", page Konzept,
-board "Aufteilung"), one section shown at a time: on a window 600 dp wide or more a sidebar of the sections at the left, each with its Peanuts icon and the
+Library, Console, Graphics, Controls, Screens, Users, App, Help, Developer and About, one section shown at a time: on a window 600 dp wide or more a sidebar of the sections at the left, each with its Peanuts icon and the
 selected one on banana yellow; on a tablet (its smaller side 600 dp or more) the ten sections as tiles across the screen, a tile opening the section's
 page and Back coming back to the tiles; on a narrow phone the section's page with a button that opens a drawer of the sections. Upstream still builds every row as
 before, with its listeners, its fields and its `refreshSettings()`; one line at the end of `buildSettings()` hands the column to
@@ -1820,7 +1841,7 @@ know (one upstream adds) goes to the section of the heading it was built under, 
 | `android/app/src/main/java/dev/nxnative/android/PadFocus.java` | 1 | `watch()`: the focus frame goes on as `dev.peanuts.ui.FocusFrame.at(now, frame(...))`, which draws it where the view shows. A view draws its foreground in its scrolled coordinates and a one-line, centred text scrolls far, so on every button, Segmented tab and chip the frame was off screen: About's Check for updates showed no focus at all, a tab only Android's grey highlight | trailing `// PEANUTS: ...` |
 
 Peanuts' own files, no marker: `android/app/src/main/java/dev/peanuts/ui/` (`SettingsSections.java`, `SettingsPage.java`, `Icons.java` new; `Motion.java`:
-the drawer's window animation), `android/app/src/peanuts/res/` (`drawable/pi_*.xml` new: the icons, made with `design/peanuts-native/icons/icons.py`;
+the drawer's window animation), `android/app/src/peanuts/res/` (`drawable/pi_*.xml` new: the icons, written by `peanuts/scripts/icons.py`;
 `values/peanuts_icons.xml`, `anim/peanuts_drawer_in.xml`, `anim/peanuts_drawer_out.xml` new), `dev/peanuts/ctl/Ctl.java` (`nav to=settings section=`
 picks a section; `screen.settings_section`), `FocusFrame.java` new (the controller's focus frame on a one-line button or tab; in the wide layout the D-pad
 stays in the page going up and down, left goes to the selected section, right from the sidebar to where the focus was in the page or its first item), the player texts that name a moved row (`FontGate`, `Library`, `CtlPort`), `peanuts/docs/` (`FAQ.md`,
@@ -2106,3 +2127,148 @@ Tests: the `t_android_*` suite; on the AYN Thor (Turnip v26.2.0-R5), the owner's
 | `dm/games/010075101EF84000/game.tsv`, `dm/games/010075101EF84000/README.md` | 1, 1 | Stray (`010075101EF84000`, base 1.0.0, SDK 17.5.6, Unreal Engine 4) profile and Android bring-up note on POCO F7 | `PEANUTS` |
 | `dm/games/010075101EF84000/game.tsv`, `dm/games/010075101EF84000/patches.py`, `dm/games/010075101EF84000/README.md` | 1, new, 1 | Stray (`010075101EF84000`, base 1.0.0, SDK 17.5.6, Unreal Engine 4) 60 fps unlock (`bUseFixedFrameRate` + `fps_target 60`) and Android bring-up note on POCO F7 | `PEANUTS` |
 | `dm/games/0100F9D023176000/game.tsv`, `dm/games/0100F9D023176000/README.md` | 1, 1 | Viewfinder (`0100F9D023176000`, base 1.0.0, SDK 19.3.9, Unity 2022.3.61f1 IL2CPP) 60 fps (`present_interval display`) and 16 GB alias memory profile on POCO F7 | `PEANUTS` |
+
+### Round 25 (2026-11-19) — vbf.py LZ4 blocks
+
+FFXII The Zodiac Age's `FFXII_TZA.vbf` (Virtuos SRYK) has the same layout as FFX's archives — 64 KB blocks, a
+16-bit stored length per block, length == uncompressed size means raw — but its compressed blocks are raw LZ4
+blocks, not zlib: `vbf.read` aborted with zlib's `Error -3 ... incorrect header check`. Verified on the real
+archive: `lz4.block.decompress(block, uncompressed_size=n)` returned exactly n bytes for 17,206 of 17,206
+sampled compressed blocks; FFX's blocks stay zlib. The reader chooses the codec from the block, not from an
+exception: a block is LZ4 when `lz4_block` parses it (the format's sequences and end rules, down to the last byte and
+exactly the block's uncompressed size, `None` otherwise), zlib when it is not LZ4 and starts with a zlib stream header
+(RFC 1950: deflate, a window of at most 32 KB, no preset dictionary, the two bytes a multiple of 31), and invalid
+otherwise (`ValueError`). `lz4_block` is the format itself in a few lines, so `vbf.py` needs no `lz4` package.
+Checked against the `lz4` package: all of 13,109 sampled compressed blocks of the real archive decode identically,
+and 150,000 randomly corrupted blocks agree in all but one (an offset of 0, which the library accepts and the format
+forbids); 30,000 zlib blocks never parse as LZ4. The zlib path is unchanged.
+`dm/gfx/tests/test_vbf.py` builds a small SRYK archive with one LZ4 block (written by hand) and one raw block, covers
+`lz4_block`'s accepted and refused blocks and `zlib_header`, and compares `lz4_block` with the `lz4` package when it
+is installed. Upstream candidate: yes — a general reader change for one more Virtuos compression method, no
+game-specific branch.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/vbf.py` | 4 | `lz4_block` and `zlib_header` (new) and `read`: a compressed block that parses as LZ4 is decoded as LZ4, one with a zlib header as zlib, any other is invalid; the module docstring names the three block kinds | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/tests/test_vbf.py` | 5 | `test_lz4_compressed_and_raw_blocks`, `test_zlib_header`, `test_lz4_block`, the comparison with the `lz4` package (skipped without it), the hand-written block and the optional import | `PEANUTS(upstream-candidate)` |
+
+### Round 25 (2026-11-19) — shader_split.py raw_shaders neighbour rule
+
+`dm/gfx/tools/shader_split.py` takes the offline programs whose code area the game's code never
+addresses. FFXII The Zodiac Age's `main` (0100EB100AB42000) has 7 control sections — 0xfc4dec, 0xfc732c,
+0xfc9ab4, 0xfce4ac, 0xfd0d40, 0xfd34a4, 0xfd5e08 — whose code area lies directly before them (0x300, 0x300,
+0x100, 0x300, 0x200, 0x200 and 0x200 bytes, the length each control section's +0x704 gives): no relocation
+slot points at either of a pair and no adrp + add builds an address near one, so `raw_shaders` printed
+`[RED] ... no code area ...; left out` for all 7 and the game then asked the host for exactly those programs
+and drew black screens. The host's `DM_NVN_SHDUMP` captures of them equal the control section and the area
+before it, byte for byte. Where the built-address rule finds no candidate, `raw_shaders` now takes the
+neighbour that passes its stage and length checks — and only when exactly one of the two neighbours passes
+them, so a control section with two neighbours that both look right stays ambiguous and is left out as
+before. `dm/tools/tests/test_raw_shaders_adjacent.py` builds a synthetic image (no relocations, no adrp) and
+pins the taken neighbour, the two valid neighbours, the neighbour that fails the checks, and the built-address
+rule still taking the nearer area when the code builds both. Upstream candidate: yes — a general reader
+change for offline shaders the code reaches by offset alone, no game-specific branch.
+
+The same scan now also takes control sections at offsets that are not 4-byte aligned. After that first change
+the split found 7 programs in main, yet the game's runtime asked the host for 7 *different* keys and only 3 of
+them were in the new table. The runtime's captured programs sit at odd offsets: control 0xfca50d with its code
+area (0x200 bytes) at 0xfca30d = c − n, control 0xfd1699 with its code area (0x100 bytes) at 0xfd1599 — and
+`if not (c := m.start()) & 3` never looked at them, without one [RED] line to say so. An unaligned match is
+collected with the same skip ranges and `known` filter as an aligned one and goes through the adjacent-neighbour
+fallback only: no `code_of` table lookup and no `built`/adrp evidence, those are for aligned records. It is taken
+only when exactly one neighbour passes the stage and length checks (the rule above), and it is dropped when it
+lies inside the bytes of a program already taken — its control section's or its code area's, tracked in `taken` —
+so no program is taken twice. An unaligned match with no valid neighbour prints nothing: that line would be
+[RED] for a control section that was never one, a control magic at an odd offset being very often just bytes.
+The aligned path and every aligned [RED] line are unchanged, byte for byte. Measured on the same main: 23
+programs, 7 aligned (the seven above, unchanged) and 16 unaligned, and the key `shader_split.skey` computes over
+a taken control section and code area includes the runtime's two captured keys 6db47b250e545e02 (control
+0xfca50d) and 3933ce26c4dbd8eb (control 0xfd1699), their control and code bytes equal to the host's captures
+byte for byte; the two runtime keys never captured, 59241958cbf8ccf2 and f8052db57514646c, appear as unaligned
+matches at 0xfc4293 and 0xfc5b45 as expected. `test_raw_shaders_adjacent.py` covers it: an unaligned control
+section with a valid code area before it is found; one with no valid neighbour is not taken and prints no [RED]
+line; a second control magic inside the bytes of a taken program is not taken a second time; and the aligned
+[RED] case is unchanged beside an unaligned match. Upstream candidate: yes — the same general reader change
+extended to unaligned offsets, no game-specific branch.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/shader_split.py` | 3 (5 in a one-line-context diff) | `raw_shaders`: the fallback candidate list for a control section with no built-address evidence, the unaligned control-section collection and its neighbour pass with the `taken` ranges (declared on a marked line), and the docstring's sentences on them | `PEANUTS(upstream-candidate)` |
+| `dm/tools/tests/test_raw_shaders_adjacent.py` (new) | whole file | the eight cases on a synthetic module image; a new file; the first line of its docstring carries the marker | `PEANUTS(upstream-candidate)` |
+
+### Round 56, Users and Miis: the review's later points (2026-11-22)
+
+igawa6's notes on Round 46 to 49 (PR #321) that were left for later, one change each; `DM_USER_IMAGES` with the other defaults came with 0.1.7 itself
+(3f35b1e4). No upstream file has a hunk; the JVM tests are new files with a `PEANUTS` first line.
+
+- The Mii editor kept its edits only in memory, so a turn of the device, a change to dark mode or the process ending in the background lost them.
+  `dev.peanuts.mii.MiiEditor` keeps the Mii, the Mii as it was, the Undo steps (the newest 100) and the tab in its saved state (`dev.peanuts.mii.MiiEditState`,
+  a CharInfo and a byte a field) and takes them back in `onCreate`; no `configChanges`, so a turn still lays the page out for the new width.
+- A firmware without AvatarImage was read again at every cold start: `LibrarySettings.addMissingFonts` took the missing pictures' folder for a firmware read
+  by an older app. A read that works now keeps what the importer takes (`PeanutsPrefs.firmwareRead`, `LibrarySettings.FIRMWARE_READ` 3: the fonts, the
+  Chinese and Korean ones, MiiModel and AvatarImage), and a firmware read so is not read again for what it lacks. The files decide only for a firmware read
+  before; that one is read once more, as before. The importer's scan is unchanged.
+- "Always X" on the question when the app opens is the setting's Don't ask, so it also stops the question before a game from a shortcut or a frontend, while
+  its line spoke only of the app opening. The behaviour stays, one setting for both questions; the switch's line, the Who's playing? row and its choices
+  name both questions now (`WhoPlaysActivity`, `UsersPage`).
+- `MiiGl` did not catch `OutOfMemoryError`, which on its thread would end the app, and once it could not start it stayed off until the process ended. A
+  picture or the preview that runs out of memory now gives none (a head made half-way gives its textures back), and a start that failed (the Mii files
+  unreadable, no EGL context, a shader refused) leaves nothing half made and is tried again once the firmware's Mii files change or 30 s later
+  (`dev.peanuts.mii.MiiGlRetry`).
+- `MiiLook.java` named a `MiiLookJvmTest` that was not there, and nothing tested `Yaz0`. `MiiLookJvmTest` checks the colour tables and their lookups, each
+  part's colouring and the face's layout (mirrored halves, sizes and turns that follow the Mii's values, the layout scaling with the texture);
+  `Yaz0JvmTest` packs its own data (literals, short, long and overlapping references) and checks the refusals by their reason: a reference before the
+  start, a size past the limit (and one near 4 GiB), another magic, an input that ends early; a reference past the end stops at the size.
+
+Peanuts' own files, no marker: in `android/app/src/main/java/dev/peanuts/`, `mii/MiiEditState.java` and `mii/MiiGlRetry.java` new, `mii/MiiEditor.java`,
+`mii/MiiGl.java`, `PeanutsPrefs.java`, `ui/LibrarySettings.java`, `users/WhoPlaysActivity.java`, `users/UsersPage.java` and `users/WhoPlays.java` (texts
+and comments), `users/Yaz0.java` (its comment); in `android/app/src/jvmtest/java/dev/peanuts/`, `mii/MiiEditStateJvmTest.java`,
+`mii/MiiGlRetryJvmTest.java`, `mii/MiiLookJvmTest.java` and `users/Yaz0JvmTest.java` new; `peanuts/tests/test_mii_editor.py` and `test_mii_gl.py` new,
+`test_users_page.py`, `test_mii_parts.py`.
+
+Tests: `peanuts/tests/test_mii_editor.py`, `test_users_page.py`, `test_mii_gl.py`, `test_mii_parts.py`. Upstream candidate: no (Peanuts' pages).
+
+### Round 57, the library and Import pack…: the review's later points, a card's partitions, one version's folder (2026-11-23, #280, #370)
+
+igawa6's notes on PR #260 (Import pack… before the first build) and PR #249 (mod folders out of the scan) that were left for later, one change each, and
+two library issues. One upstream path has hunks: Import pack…'s JVM test, a Peanuts file in the upstream test tree.
+
+- `PackImport.busy()` upper-cased the title ID, `take()` and `give()` used it as given: all three go through `key()`.
+- The sheet's checks ran before the system picker, not after it, so a build started while the picker was open could still have had its pack swapped. The
+  picker's answer is checked again against the library as it is then (`PackImportUi.picked`), and once more on the main thread right before the import,
+  where the title is taken (`PackImport.take`, which `PackImport.run` now expects) with nothing in between: `Library.startBuild` runs on the main thread too.
+  A pack that came into the pack folder meanwhile, which the player was not asked about, is asked about first (`FirstImport.Pick`).
+- The pick was a static field only, so when Android ended the process while the picker was open, the answer did nothing and said nothing. It is kept in
+  `PeanutsPrefs.packImportPick` too, and an answer that comes before the library's first scan of the new process waits for it (`Library.scannedOnce`,
+  `PackImportUi.scanned`).
+- `Request.check`: the comment on `needs_confirm` is back on `reimport`'s line.
+- The walk found a dump only with `base/exefs/main` or `exefs/main`: OunceCake's `base/program/0/exefs/main` was not seen, and an update-only dump was
+  listed as its `updates/<version>` folder. `LibraryWalk.isDump` reads the versions where `DumpLayout.versions` does, each at its package
+  (`LibraryWalk.root`, `DumpLayout.root`'s three places).
+- A mod loose in the game folder with a whole `exefs/main` of its own counted as a dump. One version's folder (`exefs/` at its top) counts only with `main`,
+  `main.npdm` and `sdk` (`LibraryWalk.wholeCode`): every profile's build checks `sdk`, and a code mod never brings it.
+- #280: an XCI of Hyrule Warriors: Age of Calamity was missing from the library and failed at Build with "not an NCA (wrong header key?)" on its meta NCA,
+  with keys that read other games. The importer read every partition of a card but `update`; `normal` (older cards) or `logo` (cards for firmware 4.0.0 and
+  later) hold the meta NCA and the icon NCA a second time under the same names, and one copy that did not read as an NCA failed the whole XCI. A card's game
+  is taken from its `secure` partition only; without one every partition but `update` is read, as before (`dm/peanuts/import/nx_nca.c`). Not checked
+  against the reporter's file.
+- #370: Breath of the Wild extracted on a PC (`exefs/` and `romfs/` at the top of its folder, updated to 1.9.0) showed as v0 with Wrong version, and Build
+  refused it with "Pick the dump folder above it", which there was not. A dump folder without `updates/<version>/` takes the version its main's build is
+  (`LibraryWalk.mainBuildId`, `versionOf`, the profile's build rows), and for one version's folder Prepare says to move `exefs` and `romfs` into a folder
+  named `base` (`dev.peanuts.build.VersionFolder`); the build card adds no "dump the game again" to it. Upstream's Prepare is
+  unchanged.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/jvmtest/java/dev/peanuts/pack/FirstImportJvmTest.java` | 24 | the import taken as the sheet takes it (`imp`), the busy mark in either case, an import nobody took, the pick and its kept text | the first line's `// PEANUTS` is now `// PEANUTS begin`, `// PEANUTS end` on the last line |
+
+Peanuts' own files, no marker: in `android/app/src/main/java/dev/peanuts/`, `pack/PackImport.java`, `pack/FirstImport.java`, `ui/PackImportUi.java`,
+`ui/CtlPort.java`, `ui/Library.java`, `ui/LibraryWalk.java`, `ui/LibraryScanner.java`, `ctl/Request.java`, `PeanutsPrefs.java`, `build/Prepare.java`,
+`build/VersionFolder.java` new; `dm/peanuts/import/nx_nca.c`, `CMakeLists.txt`, `tests/xci_test.c` new; `peanuts/docs/FAQ.md`;
+`peanuts/tests/test_first_import.py`, `test_library_walk.py`, `test_version_folder.py` new.
+
+Tests: `peanuts/tests/test_first_import.py` (with `FirstImportJvmTest`), `test_library_walk.py`, `test_version_folder.py`, `test_ctl.py`; `xci_test`
+(ctest; before the change six of its nine checks fail with "not an NCA (wrong header key?)"), `ncz_test` and `nup_meta_test`. On the emulator with the
+test app, a made-up NSP and a made-up pack: the process ended with `am kill` while the picker was open, then the pack picked: "Pack imported" once the
+library had scanned; a pack put into the pack folder while the picker was open: the question after it, Cancel keeps that pack; the game file moved away
+while the picker was open: "Pack not imported … Nothing was changed." Upstream candidate: no (Peanuts' library and importer).

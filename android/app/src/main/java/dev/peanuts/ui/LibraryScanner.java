@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 
 /**
  * The library: every game in the roots (the game folder, then the update and DLC folders; each walked two levels deep) as *.nsp, *.xci, *.nsz, *.xcz, *.nup or a dump folder
- * (base/exefs/main or exefs/main present; mods left out, LibraryWalk), grouped by the base game's title ID, with a status per title.
+ * (a version with exefs/main in a layout upstream's DumpLayout reads; mods left out: LibraryWalk), grouped by the base game's title ID, with a status per title.
  * <p>
  * An NSP/XCI's titles come from the importer's probe (ImporterPort.probe: title id, application id, kind, version, name), kept in files/library-cache.json by
  * path+size+mtime so a scan reads each file once; without the importer the title ID is taken from a [16 hex digits] in the file name (common dump naming) and the kind
@@ -305,14 +305,32 @@ final class LibraryScanner {
         });
     }
 
-    /** A dump folder: one base source (its updates are inside it, updates/<version>), version = the newest update's */
+    /** A dump folder: one base source (its updates are inside it, updates/<version>), version = the newest update's; with no update folder, the version its
+     *  main's build is (LibraryWalk.versionOf: a base or one version's folder that holds an update's whole code, GitHub issue #370), else the base's */
     private List<Source> dump(File d) {
         String id = Upstream.titleIdOf(d);
         if (id == null) return Collections.emptyList();
         long v = 0;
         File[] ups = new File(d, "updates").listFiles(File::isDirectory);
         if (ups != null) for (File u : ups) try { v = Math.max(v, Long.parseLong(u.getName())); } catch (NumberFormatException e) { /* not a version */ }
+        if (v == 0) v = Math.max(0, LibraryWalk.versionOf(LibraryWalk.mainBuildId(d), profileBuilds(id)));
         return Collections.singletonList(new Source(d, BASE, id, id, v, "", ""));
+    }
+
+    /** The profile's builds (game.tsv build rows: version to module to build ID) through upstream's Profile (reflection, as versionInfo); null when it has none */
+    private static Map<Long, Map<String, String>> profileBuilds(String titleId) {
+        try {
+            Class<?> profileClass = Class.forName(NXP + "Profile");
+            Method of = profileClass.getDeclaredMethod("of", String.class); of.setAccessible(true);
+            Object p = of.invoke(null, titleId);
+            if (p == null) return null;
+            Method buildMap = profileClass.getDeclaredMethod("buildMap"); buildMap.setAccessible(true);
+            @SuppressWarnings("unchecked") Map<Long, Map<String, String>> bm = (Map<Long, Map<String, String>>) buildMap.invoke(p);
+            return bm;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            Log.w("peanuts", "profile builds " + titleId + ": " + e);
+            return null;
+        }
     }
 
     /** The titles in a file: a .nup's packages, or an NSP/XCI's probe (cached), or its name's title ID */

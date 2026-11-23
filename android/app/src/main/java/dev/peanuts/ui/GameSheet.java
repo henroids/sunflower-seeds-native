@@ -205,6 +205,18 @@ public final class GameSheet {
         if (title.base == null) PUi.add(box, PUi.body(a, "No base game found. Only an update or DLC is in the folder."), 14);
         if (fileGone) PUi.add(box, PUi.body(a, "Pick the file again above before building."), 14);
         if (building) PUi.add(box, PUi.small(a, "Building now: the progress is on the game's card."), 14);
+        // the build queue (issue #348): a game that waits says its place; Build here gives it this sheet's choices, Remove from queue takes it out
+        dev.peanuts.build.BuildQueue.Item queued = building ? null : Library.queued(title.titleId);
+        if (queued != null) {
+            dev.peanuts.build.BuildQueue q = dev.peanuts.build.BuildPipeline.queueNow();
+            String p = q == null ? "" : q.placeText(queued);
+            PUi.add(box, PUi.small(a, (p.isEmpty() ? "In the build queue" : "In the build queue, " + p) + ": it builds when the games before it are done. "
+                    + "Add to queue keeps its place with the choices made here."), 14);
+            PUi.add(box, PUi.button(a, "Remove from queue", PUi.Kind.QUIET, Haptics.on(Haptics.Word.TICK, v -> {
+                if (dev.peanuts.build.BuildPipeline.remove(a, queued.id)) dialog.dismiss();
+                else { Haptics.play(v, Haptics.Word.REJECT); rows(); }
+            })), 4, PUi.wrap());
+        }
         String chosenFolder = PeanutsPrefs.chosenBuildDir(a, title.titleId);
         String defaultFolder = PeanutsPrefs.buildDir(a);
         PUi.Setting destination = new PUi.Setting(a, "🗂️", "Build destination",
@@ -216,7 +228,9 @@ public final class GameSheet {
         renderSpaceLine();
         boolean unsupported = chosenVersionState() == LibraryScanner.VersionState.UNSUPPORTED;
         LinearLayout actions = PUi.row(a);
-        PUi.Action build = PUi.action(a, R.drawable.ic_build, ready ? "Rebuild" : unsupported ? "Build anyway" : "Build", PUi.Kind.PRIMARY, v -> startBuild());
+        // while another game builds or waits, Build puts this one into the build queue (issue #348), and says so
+        boolean toQueue = !building && dev.peanuts.build.BuildPipeline.queueing();
+        PUi.Action build = PUi.action(a, R.drawable.ic_build, toQueue ? "Add to queue" : ready ? "Rebuild" : unsupported ? "Build anyway" : "Build", PUi.Kind.PRIMARY, v -> startBuild());
         build.setEnabled(!building && title.base != null && !missingSetup && title.home != null && !fileGone);
         actions.addView(build, PUi.weight());
         if (needKeys) {
@@ -520,7 +534,7 @@ public final class GameSheet {
         if (s.home == null) { Haptics.play(box, Haptics.Word.REJECT); Toast.makeText(a, "Set the game folder first (Settings › Library)", Toast.LENGTH_LONG).show(); return; }
         String why = lib.startBuild(s);
         if (why != null) { Haptics.play(box, Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Build").setMessage(why).setPositiveButton("OK", null).show(); return; }
-        if (lib.building(title.titleId)) Haptics.play(box, Haptics.Word.HEAVY);   // the build was accepted (a refusal by the pipeline says so in its own dialog)
+        if (lib.building(title.titleId) || Library.queued(title.titleId) != null) Haptics.play(box, Haptics.Word.HEAVY);   // the build was accepted or queued (a refusal by the pipeline says so in its own dialog)
         dialog.dismiss();
     }
 

@@ -52,8 +52,17 @@ final class Prepare {
     private final Context c;
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean cancelled;
-    private volatile String fromService;   // the newest job JSON the service sent over the Messenger
+    private volatile String fromService;   // the newest job JSON the service sent over the Messenger, of this run's job only
     private volatile long fromServiceAt;
+    // The build queue (issue #348) runs games back to back: the packer may still run the job of the game before (stopping after its Stop, or upstream's own
+    // Prepare), and it drops a start that comes while it does. ownFile: this run's job.json; otherRuns: the service's last message was of another job it runs
+    private volatile File ownFile;
+    private volatile boolean heard, otherRuns;
+    private volatile String otherName = "";
+    /** This run started the packer on its job (so a Stop may pause the packer: before, the packer runs another game's job) */
+    private volatile boolean jobStarted;
+
+    boolean jobStarted() { return jobStarted; }
     private Link link;
     private volatile String logId;   // the game whose build log (BuildLog) this run's lines go to
 
@@ -132,6 +141,8 @@ final class Prepare {
             // not a missing one (found in review; this used to say FILE_MISSING and offer "pick the file again", which does not fix a bad dump)
             boolean other = Boolean.TRUE.equals(Upstream.get(r, "otherBuild"));
             String detail = Upstream.str(Upstream.get(r, "detail"));
+            String flat = other ? null : VersionFolder.why(dump);   // one version's folder: where its files go, not "pick the folder above it" (GitHub issue #370)
+            if (flat != null) error = flat;
             throw new BuildListener.Failure((other ? "Untested game version: " : "Cannot prepare this dump: ") + error + (detail.isEmpty() ? "" : "\n" + detail),
                     other ? BuildListener.WRONG_VERSION : BuildListener.INVALID_DUMP);
         }
@@ -210,10 +221,14 @@ final class Prepare {
         boolean relaxed = false;   // one restart with the checks relaxed when the job fails for something Try anyway skips
         // The translator calls at once (4 on a phone with 14 GB or more, 2 on an 8 GB one) are set by PackService from the phone's memory (BuildMemory), not by a line here:
         // a fixed 4 in env.txt ran an 8 GB phone out of memory (Fire Emblem Engage on a Thor Base, issue #10). A line env.txt has still applies, up to that count
-        // 4. the service, as the panel starts it
+        // 4. the service, as the panel starts it (once it runs no other job)
+        ownFile = file;
         bind();
+        waitForPacker(p);
+        long startedAt = System.currentTimeMillis();   // a pause job.json says was written before this start is the last run's (a Resume of a paused job)
         try {
             c.startForegroundService(Upstream.packStart(c, file));
+            jobStarted = true;
         } catch (RuntimeException e) {   // ForegroundServiceStartNotAllowedException (Android 12+): the app counts as background now
             log("PackService start refused: " + e);
             throw new BuildListener.Failure("Android did not let the packer start in the background. The job is saved: open " + appName() + " and tap Resume on the game's card.", BuildListener.CANCELLED);
@@ -276,6 +291,10 @@ final class Prepare {
             }
             int pct = pct(si, done, total);
             if (state.equals("paused")) {
+                // the pause of the run before (its "updated" older than this start): the packer has not taken the job yet. A queue would take it for a pause
+                // of this run and hold all its games; after 30 s it counts, as before
+                boolean before = o.optLong("updated") < startedAt && System.currentTimeMillis() - startedAt < 30_000;
+                if (before) { p.on(pct, STEP_TEXT[si]); continue; }
                 if (reason.equals("user") || reason.equals("timeout") || reason.equals("refused") || reason.equals("apk")) {
                     log("prepare: the job paused at " + step + " (" + reason + ")");
                     throw new BuildListener.Failure("Preparing paused (" + reasonText(reason) + "). Resume from the game's card on the Home screen.", BuildListener.CANCELLED);
@@ -322,6 +341,15 @@ final class Prepare {
         org.json.JSONArray a = job.optBoolean("try_anyway") ? job.optJSONArray("addon_missing") : null;
         try { PackNote.built(pack, a == null ? 0 : a.optLong(0), a == null ? 0 : a.optLong(1)); }
         catch (IOException e) { Log.w(TAG, "prepare: the pack's note: " + e.getMessage()); }
+    }
+
+    /**
+     * Whether a built game's pack fits this app as it is, as a build of it would find (Build all that need it, issue #348): not of a game file imported again
+     * since, main.orig.bin there, its code and shaders this app's ({@link #current}). A pack that cannot be judged counts as fitting: it is not offered
+     */
+    boolean upToDate(File packDir, File dump, String titleId) {
+        try { return packDir == null || !packDir.isDirectory() || !PackNote.stale(packDir) && !noOrig(packDir) && current(packDir, dump, titleId); }
+        catch (IOException | RuntimeException e) { return true; }
     }
 
     /** Whether the pack fits this APK as it is: startable code of this rewriter (PackCheck.blocking / code) and this APK's shader library (PackCheck.shaders) */
@@ -397,9 +425,12 @@ final class Prepare {
         File file = Upstream.jobFile(job);
         log("modded prepare: job " + file + " (" + (resumedMod ? "resumed, it was " + Upstream.jobState(job) : "new") + "), pack " + packDir);
         BuildLogShare.remember(c, id, workDir);
+        ownFile = file;
         bind();
+        waitForPacker(p);
         try {
             c.startForegroundService(Upstream.packStart(c, file));
+            jobStarted = true;
         } catch (RuntimeException e) {
             log("PackService start refused (modded): " + e);
             throw new BuildListener.Failure("Android did not let the packer start in the background. The modded build is saved; try again from the game's Mods section (hold the cover, Game tab).", BuildListener.CANCELLED);
@@ -521,15 +552,45 @@ final class Prepare {
             try { service.send(m); } catch (RemoteException e) { service = null; }
         }
 
-        @Override public void onServiceDisconnected(ComponentName n) { service = null; alive = false; }
+        @Override public void onServiceDisconnected(ComponentName n) { service = null; alive = false; otherRuns = false; }
 
         boolean onMessage(Message m) {
             if (m.what != Upstream.MSG_STATE) return false;
             Bundle d = m.getData();
-            String j = d.getString("job");
+            String j = d.getString("job"), f = d.getString("file");
+            boolean on = d.getBoolean("alive");
+            heard = true;
+            // the service tells every client of the job it runs: another game's (the queue's game before this one) is no state of this run's job
+            File own = ownFile;
+            if (f != null && own != null && !new File(f).getAbsolutePath().equals(own.getAbsolutePath())) {
+                otherRuns = on;
+                String n = "";
+                try { n = j == null ? "" : new JSONObject(j).optString("name"); } catch (org.json.JSONException e) { /* no name: said without one */ }
+                otherName = n;
+                return true;
+            }
+            otherRuns = false;
             if (j != null) { fromService = j; fromServiceAt = SystemClock.elapsedRealtime(); }
-            alive = d.getBoolean("alive");
+            alive = on;
             return true;
         }
+    }
+
+    /**
+     * The packer runs one job, and a start that comes while it runs another is dropped (this build would then wait for a job that never starts). After the
+     * bind its first message says what it runs: while that is another job (the queue's game before, which stops within seconds of its Stop, or upstream's own
+     * Prepare), this waits, with the card saying so. No message within 3 s: it runs none
+     */
+    private void waitForPacker(Progress p) throws IOException {
+        long until = SystemClock.elapsedRealtime() + 3000;
+        while (!heard && !cancelled && SystemClock.elapsedRealtime() < until) SystemClock.sleep(100);
+        boolean said = false;
+        while (otherRuns && !cancelled && link != null) {
+            if (!said) { log("prepare: the packer still runs another job (" + otherName + "): this one starts when it has ended"); said = true; }
+            p.on(0, otherName.isEmpty() ? "Waiting for another game's Prepare to finish" : "Waiting for " + otherName + " to finish preparing");
+            SystemClock.sleep(1000);
+        }
+        if (cancelled) throw new BuildListener.Failure("Build cancelled.", BuildListener.CANCELLED);
+        if (said) log("prepare: the packer is free");
     }
 }

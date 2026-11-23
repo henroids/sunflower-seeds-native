@@ -32,7 +32,7 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 ### Phyre NVN effects in Virtuos VBF archives
 
 - **Symptom:** the shader split finds no game programs despite loose `.fx.phyre` effects and multi-GB `.vbf` archives.
-- **Cause:** Phyre stores GPU code immediately before its control section, often at unaligned offsets inside `RYHP` effect containers. Virtuos `SRYK` archives keep the effects in 64 KB zlib or raw blocks. These are neither BNSH nor whole GLSLC outputs.
+- **Cause:** Phyre stores GPU code immediately before its control section, often at unaligned offsets inside `RYHP` effect containers. Virtuos `SRYK` archives keep the effects in 64 KB zlib or raw blocks. These are neither BNSH nor whole GLSLC outputs. The codec of a compressed archive is the archive's own: zlib in FINAL FANTASY X/X-2 HD Remaster, raw LZ4 in FINAL FANTASY XII THE ZODIAC AGE. <!-- PEANUTS(upstream-candidate): the LZ4 codec was met on FINAL FANTASY XII THE ZODIAC AGE. -->
 - **Fix:** `vbf.py` reads the Switch archive's two hash tables, file records, names and block lengths through the RomFS adapter. The split reads compiled effects and shader members without extracting textures or audio. `phyre_shaders` verifies the adjacent code header, the control's code length and stage, and preserves the original bytes and keys. Single-stage vertex programs use a pixel-input cover for padding.
 - **Found on:** [FINAL FANTASY X/X-2 HD Remaster](../../dm/games/0100BC300CB48000/README.md); base and both supplied DLC packs yield 5,752 unique shaders.
 - **Check:** `test_vbf.py` covers raw and zlib blocks, shared/missing members, truncation, unaligned effects, loose shader keys and inconsistent lengths. All 5,752 programs translate on the Mac.
@@ -324,6 +324,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Cause:** the movie player (Bink 2's Unity plugin) builds its programs from 32 control sections and code areas in `main`'s read-only segment that are in no GLSLC output and no BNSH file. 26 are 0x20-byte records in two tables in `.data` (`{code area pointer, control section pointer, u32 code length, u32 control length}`, both pointers relative relocations); the code takes the other 6 by address (`adrp` + `add` to the control section and, a few instructions away, to the code area it copies with `memcpy`), the code area right after the control section's own length (+0x20, 16-byte aligned) or right before it, and two control sections share one code area. The 8 compute shaders' code areas have no header (SDK 10).
 - **Fix:** the reader (`raw_shaders`) takes them. Both neighbours can pass the header and length checks, so it takes only a code area the code builds the address of, the nearest one to the control section's.
 - **Found on:** [Advance Wars 1+2: Re-Boot Camp](../../dm/games/0100300012F2A000/README.md) (Unity 2020.2 with Bink 2's Unity plugin). Of 25 `main`s on hand no other has such control sections.
+
+### Embedded programs in main that no code points at (adjacent code area, unaligned control section)
+
+<!-- PEANUTS(upstream-candidate): offline programs embedded in `main` that no relocation and no built address points at, found by the neighbour rule; first met on FINAL FANTASY XII THE ZODIAC AGE. -->
+
+- **Symptom:** the packed shader library has no program for a key the game binds at run time (`[RED] shader <key> is not in the shader map`), the scene draws black while sound and cutscenes play, and the split prints no `[RED]` line about it, so nothing says where the program is.
+- **Cause:** the game builds such programs from NVN control sections embedded in `main` with their code area immediately before them, and no relocation slot points at them and no `adrp` + `add` pair in the code builds their addresses, the two kinds of evidence `raw_shaders` uses for a control section that is in no GLSLC output and no BNSH file. Half of them sit at offsets that are not 4-byte aligned (here `main` +`0xfca50d` with its code area at `0xfca30d`, and `+0xfd1699` with its code at `+0xfd1599`), which the aligned scan never looked at.
+- **Fix:** `raw_shaders` takes them on the neighbour rule: a control section with no built-address evidence keeps the neighbour that passes the stage and length checks, and only when exactly one of the two neighbours passes them. A control magic at an odd offset is very often just bytes, so one with no passing neighbour is left out in silence. Unaligned matches are collected with the same skip ranges (GLSLC outputs, BNSH files) and the same `known` filter as the aligned ones, lengths bounded to the module, and a match inside a program already taken is not taken a second time.
 
 ### SNVN program records in Retro Studios' RFRM forms
 

@@ -298,13 +298,13 @@ public final class UsersPage {
 
     private String whoLabel() {
         if (users.size() < 2) return "Asks when there are two or more users";
-        if (UsersPrefs.whoMode(a) == WhoPlays.ASK) return "Asks when the app opens";
+        if (UsersPrefs.whoMode(a) == WhoPlays.ASK) return "Asks when the app opens and before games from shortcuts";
         UsersPort.User d = find(UsersPort.defaultUid(a));
         return "Don't ask, " + (d != null ? d.name : users.get(0).name) + " plays";
     }
 
     private void whoPlays() {
-        String[] items = {"Ask when the app opens", "Don't ask"};
+        String[] items = {"Ask when the app opens and before games from shortcuts or frontends", "Don't ask"};   // one setting for both questions (WhoPlays)
         AlertDialog d = new AlertDialog.Builder(a).setTitle("Who's playing?")
                 .setSingleChoiceItems(items, UsersPrefs.whoMode(a), (x, w) -> { UsersPrefs.whoMode(a, w); Feel.picked(x); x.dismiss(); refresh(); })
                 .setNegativeButton("Cancel", null).create();

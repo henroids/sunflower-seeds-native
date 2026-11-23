@@ -36,6 +36,9 @@ public final class PeanutsPrefs {
 
     public static String firmwareDir(Context c) { return of(c).getString("firmware_dir", null); }
     public static void firmwareDir(Context c, String p) { put(c, "firmware_dir", p); }
+    /** What the importer that last read the firmware takes from one (LibrarySettings.FIRMWARE_READ); 0 when it was read before the app kept this */
+    public static int firmwareRead(Context c) { return of(c).getInt("firmware_read", 0); }
+    public static void firmwareRead(Context c, int what) { of(c).edit().putInt("firmware_read", what).apply(); }
     public static String gameDir(Context c) { return of(c).getString("game_dir", null); }
     public static void gameDir(Context c, String p) { put(c, "game_dir", p); }
     public static String updateDir(Context c) { return of(c).getString("update_dir", null); }
@@ -207,6 +210,13 @@ public final class PeanutsPrefs {
         return of(c).contains(k) ? of(c).getBoolean(k, true) : Companion.hasSecondDisplay(c);
     }
     public static void installCompanion(Context c, String titleId, boolean on) { of(c).edit().putBoolean(key(titleId, "install_companion"), on).apply(); }
+
+    /**
+     * The game sheet's Import pack… while the system picker is open (dev.peanuts.pack.FirstImport.Pick's text; dev.peanuts.ui.PackImportUi): Android may end the
+     * process meanwhile, and the picker's answer then comes to a new one. null when no picker of it is open
+     */
+    public static String packImportPick(Context c) { return of(c).getString("pack_import_pick", null); }
+    public static void packImportPick(Context c, String pick) { put(c, "pack_import_pick", pick); }
 
     // (Removed: a dead, unread duplicate of the "second screen physical/off" pref - dev.peanuts.settings.CompanionSection.secondScreen() is the one
     // Companion.java actually reads, in its own SharedPreferences file ("peanuts", MODE_MULTI_PROCESS).)

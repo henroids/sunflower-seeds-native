@@ -99,9 +99,9 @@ Files compressed with nsz go in like `.nsp` and `.xci`, mixed with them as you l
 
 A game whose profile (`dm/games/<titleID>/shader_map.tsv`) has `/glslc_capture/` rows (shaders the game compiles with GLSLC at run time, for example Fire Emblem: Three Houses) or `/ue_shaders/` rows (Unreal shader archives, for example TRIANGLE STRATEGY) needs a step that boots the game or runs the phone's decoder. The builder stops before the import with a `[RED]` message and a non-zero exit code; use Build in the Peanuts app on the device, which runs that step there. If you already have the files, set `DM_GLSLC_CAPTURE` or `DM_UE_SHADERS` to the folder that holds them and the check is skipped.
 
-## Oodle and Unreal games a Linux PC builds itself
+## Oodle and Unreal games a PC builds itself
 
-On Linux the builder does that step itself for the games below. Each game's shader keys were checked on a PC against its profile.
+On Linux and macOS (x86-64 or arm64) the builder does that step itself for the games below. Each game's shader keys were checked on a PC against its profile; on arm64 macOS that was FINAL FANTASY RESONANCE so far, and the key check below holds there for the others too.
 
 | Game | What the PC does | Checked |
 |---|---|---|
@@ -109,14 +109,14 @@ On Linux the builder does that step itself for the games below. Each game's shad
 | Pokémon Legends: Z-A (`0100F43008C44000`) | decodes its Trinity packs with `unoodle` | 28,603 of 28,603 shader keys on 2.0.2 with Mega Dimension |
 | Captain Tsubasa 2: World Fighters (`01009720213B0000`) | decodes its IoStore shader libraries with `unoodle` | 21,903 of 21,903 shader keys on version 1.0.6 |
 | Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2 (`0100AD80208A8000`) | reads inline IoStore shaders with `unoodle` | 128,449 shader keys on 1.80 |
-| FINAL FANTASY RESONANCE (`0100606026F12000`) | decodes its Unreal shader libraries (Oodle Mermaid) with `unoodle` | 73,496 of 73,496 keys; the shader package is the phone's byte for byte |
+| FINAL FANTASY RESONANCE (`0100606026F12000`) | decodes its Unreal shader libraries (Oodle Mermaid) with `unoodle` | 73,496 of 73,496 keys on x86-64 Linux and on arm64 macOS; the shader package is the phone's byte for byte (Linux) |
 | OCTOPATH TRAVELER 0 (`01005270232F2000`) | the same | its 10,596 streams and 10,324 keys; a build from its game files was not run on a PC yet |
 | DRAGON QUEST III HD-2D Remake (`01003E601E324000`) | reads its Unreal shader archives (LZ4, no Oodle) | 47,298 of 47,298 keys |
 
-- **`unoodle`** is a small worker built from the open-source ooz decoder in [`dm/third_party/ooz`](../../dm/third_party/ooz/README.md). It is GPL-3.0-or-later and a program of its own: the builder's tools start it and talk to it over a pipe (`DM_OODLE_OOZ`). It is for the PC builder only: it is not in the APK, not in the on-device build and not in any release file. Its licence as that folder's README records it: the decoder's source file carries a GPL-3.0-or-later notice, but the ooz project has no licence file, and its files without a notice that hold decoder code are left out. The builder compiles it into `peanuts/.build/ooz` the first time such a game is built. It needs x86-64, g++ or clang++, and the `patch` program.
-- The builder compiles the `_nxaes` module for Unreal games so it can read encrypted pak indexes. It needs gcc or clang and Python's headers (`python3-dev` or `python3-devel`). The split decodes the archives into `<TITLE ID>-work/android-shaders/ue_shaders` and reuses them while the game's paks are the same.
+- **`unoodle`** is a small worker built from the open-source ooz decoder in [`dm/third_party/ooz`](../../dm/third_party/ooz/README.md). It is GPL-3.0-or-later and a program of its own: the builder's tools start it and talk to it over a pipe (`DM_OODLE_OOZ`). It is for the PC builder only: it is not in the APK, not in the on-device build and not in any release file. Its licence as that folder's README records it: the decoder's source file carries a GPL-3.0-or-later notice, but the ooz project has no licence file, and its files without a notice that hold decoder code are left out. The builder compiles it into `peanuts/.build/ooz` the first time such a game is built. It needs x86-64 or arm64 (on arm64 the decoder's SSE2 intrinsics come from `ooz_neon.h`, in NEON), g++ or clang++, and the `patch` program.
+- On Linux the builder compiles the `_nxaes` module for Unreal games so it can read encrypted pak indexes. It needs gcc or clang and Python's headers (`python3-dev` or `python3-devel`). macOS needs none: the pak reader uses the system's CommonCrypto. The split decodes the archives into `<TITLE ID>-work/android-shaders/ue_shaders` and reuses them while the game's paks are the same.
 - **ooz is not the game's own decoder**, and an Oodle stream has no checksum. So the pack is made only if the shader keys that come out of the split are exactly the ones in the game's profile; each key is a hash of its shader's bytes. With one key missing or one key more the build stops with a `[RED]` message that names the ooz decoder, and nothing it decoded is used. The usual cause is game files of another version than the profile's; build on the device then.
-- Where the worker cannot be built (arm64, no compiler), the Unreal games are refused as above and Arceus and Z-A stop before the import with the reason. On macOS and Windows nothing changes: these games are refused as before. Other games with Oodle-compressed files (for example Bayonetta 3) are not on the list, because their decode was not checked on a PC; they still stop at the shader split.
+- Where the worker cannot be built (another processor, no compiler), the Unreal games are refused as above and Arceus and Z-A stop before the import with the reason. On Windows nothing changes: these games are refused as before. Other games with Oodle-compressed files (for example Bayonetta 3) are not on the list, because their decode was not checked on a PC; they still stop at the shader split.
 - `DM_OODLE_OOZ` set by you (a worker you built with `dm/third_party/ooz/build.sh`) is used for any game, with the same key check.
 - Double Dragon Revive (`01006AE02236C000`): set `DM_OODLE_OOZ` to that worker to decode its IoStore libraries, or supply the decoded `DM_UE_SHADERS` folder for the version being packed. Its [two-build split](../../dm/games/01006AE02236C000/README.md#shaders) contains 18,510 keys, including 13 read directly from NROs.
 
@@ -131,6 +131,46 @@ The shader translator needs .NET. The builder points the tools it starts at the 
 - With an update, the `.nup` holds the update package alone (since Peanuts Native 0.1.7). An update's package carries a full RomFS (its patch applied), so the base package was a second copy that playing the update never reads, and a game whose data is one big archive the update touches doubled (Yoshi's Crafted World 11.34 GB, now 5.67 GB). The base file is still an input: the update's patch reads it. The update is marked standalone and carries the icon, title and publisher. `nximport_cli nup --keep-base` writes the base package too (to play version 0 from the `.nup`). An older `.nup` is fixed in place with `peanuts/scripts/nup_drop_base.py <file.nup>` (or on the phone, without copying it over, with `--adb <serial> <path on the phone>`): no dumps or keys, every kept file byte for byte.
 - The pack goes to `<folder of the .nup>/<TITLE ID>-work/android-pack`.
 - The importer is built into `peanuts/.build/nximport`, the Oodle worker into `peanuts/.build/ooz` and `_nxaes` into `peanuts/.build/pymod` (all git-ignored).
+- **Keep the `.nup` (and so the work folder) or at least the shader cache on a local disk, not on an exFAT or FAT drive.** The shader library's cache
+  (`<TITLE ID>-work/android-shaders/lib/v-<V>/results`) keeps one small file per shader for the next build, and each file takes at least one allocation
+  unit. External drives formatted exFAT on macOS often have 1 MiB units: on one, Mario Kart 8 Deluxe's 59,302 files took 58 GB for under 1 GB of data,
+  Pokémon Brilliant Diamond's 28 GB, and FINAL FANTASY RESONANCE filled the drive at a quarter of its 73,496 shaders. The builder prints a `[RED]` line
+  before the pack when the cache would go on a drive with units of 256 KiB or more (statvfs; not on Windows). Pass `--nup <folder on a local disk>`, or
+  `-- --shader-cache <folder>`; the game files can stay on the drive, as they are only read. A finished library does not need its `results` folder: deleting
+  it frees the space, and the next build of the same game still reuses the library (it is rebuilt only when the chain or the profile changes).
+
+## Using every core
+
+The pack has three steps that can run in parallel, each with its own setting. Pass the `pack_android.py` ones after `--`:
+
+| Step | Setting | Default |
+|---|---|---|
+| Code rewrite | `-j N`: modules rewritten at once (each also splits some of its own work over `DM_REWRITE_J`, set from the cores) | 2 |
+| Shader split | the environment's `J`: processes | 8 |
+| Shader library | `-J N`: shaders translated at once | 8 |
+
+The library's Python half holds one interpreter lock, so `-J` alone keeps it near one core. `DMSH_VK_PROCS=N` splits it over N worker interpreters
+([android/SHADERS.md](../../android/SHADERS.md), worker interpreters), which need the translator and the validator as libraries, named by `XLATE` and
+`SPIRV_VAL`. On macOS:
+
+```sh
+cd dm/gfx/tools/dmsh_xlate_android
+mkdir -p obj && python3 ../xlate_tree.py > obj/tree.sha        # the library carries the tree it was built from; vk_android_build.py checks it
+LIBRARY_PATH=$(brew --prefix openssl@3)/lib:$(brew --prefix brotli)/lib \
+  dotnet publish dmsh_xlate_android.csproj -c Release -r osx-arm64 -p:NativeLib=Shared -p:OutputType=Library -o <folder>   # the .NET 10 SDK (brew install dotnet)
+```
+
+Then, with the packer environment's Python itself (not through `peanuts-build.command`: its environment check runs `XLATE` as a program, fails on the
+library, and then makes the environment again):
+
+```sh
+J=10 XLATE=<folder>/dmsh_xlate.dylib SPIRV_VAL=<env>/lib/libSPIRV-Tools-shared.dylib DMSH_VK_PROCS=10 \
+  <env>/bin/python peanuts/scripts/peanuts_build.py "Game folder" --nup <folder on a local disk> --push -- -j 10 -J 10
+```
+
+`sysctl -n hw.ncpu` gives the number of cores. Rebuild the library after a change to the translator's sources (`xlate_tree.py --check-lib <library>` says
+whether it still matches). Measured on an Apple Silicon Mac: Mario Kart 8 Deluxe's library (29,651 shaders) in 114 s with 4 workers against about 540 s
+with the defaults, the same `dmsh_vk.lib` byte for byte; FINAL FANTASY RESONANCE's whole pack (73,496 shaders, Unreal) in 16 minutes with 4 workers, most of it the library.
 
 ## Status
 

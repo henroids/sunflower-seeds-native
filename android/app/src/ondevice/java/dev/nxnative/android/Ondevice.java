@@ -52,7 +52,7 @@ final class Ondevice {
     }
 
     /** Prepare the dump (MainActivity's Add game, a game card's Prepare again): checked off the main thread, then asked before anything is written */
-    static void prepare(MainActivity a, File dump, boolean again) { if (panel != null && panel.a == a) panel.picked(dump, false, null, again); }
+    static void prepare(MainActivity a, File dump, boolean again) { if (dev.peanuts.ui.Library.queuePrepare(a, dump)) return; if (panel != null && panel.a == a) panel.picked(dump, false, null, again); }   // PEANUTS: while the library builds, its build queue takes this Prepare (issue #348)
 
     /** Shaders a delta update of this pack translates (the profile's manifest rows for the pack's older libraries, ShaderLibs.toTranslate), -1 when the manifest has none of them */
     static int deltaShaders(File packDir, String titleId) { return Pack.deltaShaders(packDir, titleId); }

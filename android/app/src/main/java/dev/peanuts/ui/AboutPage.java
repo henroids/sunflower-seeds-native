@@ -27,7 +27,7 @@ import java.util.List;
 import dev.nxnative.android.R;
 
 /**
- * Settings › About (the canvas's board "About"): a Segmented at its top right, Overview, Games, Credits and Licenses.
+ * Settings › About: a Segmented at its top right, Overview, Games, Credits and Licenses.
  * <ul>
  * <li>Overview: the app's badge, its name and version (the build tag below, to copy), what it is, Check for updates and two links; beside it Peanuts
  * cracked, the app's own peanut cracked open (CrackedPeanut) over the count.</li>
@@ -359,7 +359,7 @@ final class AboutPage {
 
     // ---- Pieces ----
 
-    /** A card with its label inside at the top (the board's Made by, Contributors, Built on) */
+    /** A card with its label inside at the top (Made by, Contributors, Built on, In this app) */
     private static LinearLayout section(Activity a, String label) {
         LinearLayout card = PUi.listCard(a);
         TextView l = PUi.section(a, label);
