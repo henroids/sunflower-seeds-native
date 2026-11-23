@@ -15,10 +15,21 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'dm/tools/tests'), str(REPO / 'dm/peanuts/reuse')]
-from test_split_targeted import BUILD, GAME, TABLES, bnsh, ps, sarc, vs   # noqa: E402  (its synthetic shader files)
+from test_split_targeted import BUILD, GAME, TABLES, bnsh, ps, sarc, ss, vs   # noqa: E402  (its synthetic shader files)
 import split_reuse   # noqa: E402
 
 MODELS = 60   # files with no shader: four batches of 16 with the others, so the check has batches to take
+
+
+def nlg(name, shader):
+    """A Next Level Games archive as shader_split.py nlg_dict and nlg_shaders read it (stored as is): its index, of one variant whose control section (section 8)
+    and code area (section 7) of one stage lie in the file the index names, name (the reader opens the index's path less five characters followed by it); and
+    that file's bytes"""
+    ctl, code = shader
+    head = ss.NLG_DICT + bytes([4, 1, 0, 0]) + struct.pack('<I', len(ctl)) + bytes([3, 1, 1, 0])   # not compressed; 3 chunks, 1 record, 1 name
+    secs = bytearray(16); secs[7], secs[8] = 2, 1
+    chunks = [(0, 0), (0, len(ctl)), (len(ctl), len(code))]   # 0: the variant's entry table (not read without a patch), 1: the control section, 2: the code area
+    return head + struct.pack('<IHH', 0, 0, 0) + bytes(secs) + b''.join(struct.pack('<3IHBB', o, n, 0, 0, 0, 0) for o, n in chunks) + name.encode() + b'\0', ctl + code
 
 
 class SplitReuse(unittest.TestCase):
@@ -160,6 +171,38 @@ class SplitReuse(unittest.TestCase):
             finally: del os.environ['PN_REUSE_DIR']
         self.assertIsNotNone(keys[0])
         self.assertNotEqual(keys[0], keys[1])
+
+    def test_what_the_next_level_games_reader_opens_is_in_the_key(self):
+        # nlg_shaders goes by the index's magic, not the name, and opens the index's path less five characters (as if it ended in '.dict') followed by each name
+        # the index lists: for Shader/level.idx that is Shader/leve.data, which does not start with the stem "level"; and a name may lead into a folder (lv + _d/x.data).
+        # Neither was in the key, so a changed data file left the archive's kept result from before (two files: too few for the check to take one)
+        for n, (index, data) in enumerate((('Shader/level.idx', 'Shader/leve.data'), ('Shader/lv.dict', 'Shader/lv_d/x.data'))):
+            with self.subTest(index):
+                shutil.rmtree(self.reuse, ignore_errors=True)
+                name = data[len(index) - len('.dict'):]
+                files = dict(zip((index, data), nlg(name, vs(5))))
+                self.split(self.nup(files), f'first{n}')
+                files[data] = nlg(name, vs(6))[1]   # another shader in the data file, the index the same
+                nup = self.nup(files)
+                after, line, _ = self.split(nup, f'after{n}')
+                ref, _, _ = self.split(nup, f'ref{n}', reuse=False)
+                self.assertIn(f'/{index}#NLG0:', (ref / 'shader_map.tsv').read_text())   # the reader took it
+                self.same(after, ref)
+                self.assertEqual(self.kept(line), 0)
+
+    def test_the_magic_is_the_readers_and_a_name_shorter_than_dict_is_not_kept(self):
+        # the archive's magic as shader_split.py has it; nlg_shaders would cut a name of fewer than five characters in its folder's name and open files a folder up
+        self.assertEqual(split_reuse.NLG, ss.NLG_DICT)
+        idx, data = nlg('.data', vs(5))
+        nup = self.nup({'Data/abc': idx, 'Data/abcd.data': data, 'Data/a.b': b'not an archive', 'Data/abcde': idx})
+        os.environ['PN_REUSE_DIR'] = str(self.reuse)
+        try:
+            c = split_reuse.Context(None, {}, None, None, [], pickle.Unpickler)
+            keys = {rel: c.key((f'{nup}:base/romfs/{rel}', rel)) for rel in ('Data/abc', 'Data/a.b', 'Data/abcde')}
+        finally: del os.environ['PN_REUSE_DIR']
+        self.assertIsNone(keys['Data/abc'])
+        self.assertIsNotNone(keys['Data/a.b'])   # another reader's: its stem
+        self.assertIsNotNone(keys['Data/abcde'])   # five: the reader's path ends at the folder
 
     def test_the_files_scanned_to_check_change_from_split_to_split(self):
         # the split has no full check later: a sample that took the same files on every split would never meet a kept result that went stale elsewhere

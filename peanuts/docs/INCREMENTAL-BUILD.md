@@ -221,12 +221,32 @@ keyed by the job's place and the container's time, and is deleted once the split
 keeps, across builds, the result of every plain file job (`<PN_REUSE_DIR>/split/`): a file inside a `.nup`, whose table of contents has its SHA-256. A job's key:
 
 - that SHA-256 and size;
-- the names and SHA-256s of the files beside it whose name starts with its stem: what a plain file's reader opens besides it (`stem + '.dict'`,
-  `stem + '.patch'`, each name a Next Level Games index lists);
+- the names and SHA-256s of the files and folders beside it whose name starts with its stem (the name without its last extension), and for a Next Level
+  Games index those of every file its reader can open (below);
 - the job's direct-scan entry (its recorded containers, `DM_SPLIT_DIRECT`);
 - a common part: the tools' and the profile's sources (`digest_sources`), `split_reuse.py` itself and the `_nxyaz0` module (or none), Unity's common strings
   from main, the zstd dictionaries, `DM_SPLIT_SELECTED`, the split's environment and Python's version. Another common part (other tools, another main whose
   strings differ) starts the kept results over.
+
+The stem rule ("a file's reader opens nothing beside it but files whose name starts with its stem") was checked against every reader `shader_split.py`
+runs for a plain file job, `scan_file_in` and what it calls, and `direct_file` for the direct scan:
+
+- They read the file alone: VFS3 (`vfs3_members`), Koei Tecmo's IDRK / PDRK (`idrk_shaders`; a large container goes through a temporary file), DRPF
+  (`drp.py`), Criterion's Bundle 2, Alchemy's igArchive, Heaps' PAK, Three Houses' SPKG and chunked zlib (`kt_shaders`), Unreal Engine 3, Retro Studios'
+  RFRM, Snowdrop, MT Framework, the Bezel Engine, Game Freak's archives, VBF (`vbf.py`), and a file no archive reader takes (`scan_whole`, `plain_blob`:
+  zstd with the RomFS's dictionaries, which are in the common part, gzip, Gust's zlib, Monolith, Phyre, LZ4 and zstd frames, Yaz0; then XNB, Unity with
+  the first pass's type trees, the second pass not kept, and `scan_blob` with every container it opens: SARC, NARC, SUMO, PACX4, BAHS, NDSR, NDVE,
+  BNSH, MSHD, MGFX, Needle, PlatinumGames, Viper, TFXO, SLCT).
+- `scan_file_in` and `direct_file` read a `.data`, `.patch`, `.debug` or `.nxpc` file as empty when `stem + '.dict'` is there, a file or a folder:
+  inside the rule.
+- The Next Level Games reader (`nlg_shaders`) breaks it. It takes a file by its index's magic, not by its name, and opens the index's path less five
+  characters (as if it ended in `.dict`) followed by `.patch` and each name the index lists. For `Shader/level.idx` that is `Shader/leve.data`, which does
+  not start with the stem `level`, and a name with a `/` leads into a folder beside it. So for a file whose first bytes are that magic, the key covers
+  the files and folders whose name starts with the shorter of the stem and the name less five characters, each folder with everything in it; a name
+  shorter than five characters is not kept (that reader's paths start a folder up). Luigi's Mansion 3's archives (`<name>.dict` beside `.data`,
+  `.debug`, `.nxpc`) were inside the rule already.
+
+The archive readers (LINKDATA, `.bdt`, Unreal paks, Trinity packs and the other archive jobs) open other files, but their jobs are not kept.
 
 A kept result is written whole or not at all (a temporary file, flushed to storage, then renamed); one that does not read back (cut short by a reboot) is
 deleted and its file scanned, so it does not turn the reuse off for later splits.
@@ -241,7 +261,8 @@ against the profile's.
 
 Archive ranges (several files, ranges planned over the whole archive), files without a hash (a plaintext NSP, a folder dump) and the Unity second pass are scanned
 as before. Tests: `peanuts/tests/test_split_reuse.py` (`shader_split.py` run on a `.nup` made by `dm/tools/nup_pack.py`: a second split keeps every file but the
-ones it checks and makes the same outputs byte for byte, a changed and a new file are scanned, kept results that differ are caught, `PN_REUSE=0`, the stem rule).
+ones it checks and makes the same outputs byte for byte, a changed and a new file are scanned, kept results that differ are caught, `PN_REUSE=0`, the stem rule,
+what the Next Level Games reader opens).
 
 On ACNH the targeted, direct split reads only 93 files at their recorded containers: kept, they take 1 s in place of 9 s. A profile of the rest put 72 % of the
 split in `romfs.walk`, which the split runs three times over the RomFS: each entry's `is_dir` was a stat of its whole path, which a `.nup` resolved from its root

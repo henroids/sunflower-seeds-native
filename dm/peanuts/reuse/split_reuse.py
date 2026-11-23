@@ -9,8 +9,9 @@
 #
 # Which results are kept: those of a plain file job (path, relative path), the file inside a .nup, whose table of contents has each file's SHA-256 (dm/tools/nup.py
 # record). A job's key: that SHA-256 and size; the names and SHA-256s of the files beside it whose name starts with its stem (what a plain file's reader opens
-# besides it: stem + '.dict', stem + '.patch', each name a Next Level Games index lists; the readers that take other files, LINKDATA, .bdt, Unreal paks, Trinity
-# packs, are archive jobs); the job's DIRECT entry (the direct scan's recorded containers); and a common part: the tools' and the profile's sources
+# besides it: stem + '.dict'; the readers that take other files, LINKDATA, .bdt, Unreal paks, Trinity packs, are archive jobs), and for a file whose first bytes
+# are a Next Level Games index (NLG) those of every file its reader can open, which the stem does not cover (_siblings); the job's DIRECT entry (the direct
+# scan's recorded containers); and a common part: the tools' and the profile's sources
 # (shader_split.py digest_sources), Unity's common strings from main (COMMON), the zstd dictionaries (ZDICTS), DM_SPLIT_SELECTED (KEEP), the split's environment
 # and Python's version. Archive ranges (several files, ranges planned over the whole archive), a plaintext NSP or a folder dump (no hashes) and the Unity second
 # pass are scanned as before. A result with no shader goes into a list file, one with shaders into a file of its own (<PN_REUSE_DIR>/split/<common part>/).
@@ -33,6 +34,7 @@ from pathlib import Path
 
 FORMAT = 'pn-split 1'
 SAMPLE_SHARE, SAMPLE_MIN, CHECK_FROM = 50, 1, 3   # batches: one in SAMPLE_SHARE checked, at least SAMPLE_MIN, when at least CHECK_FROM could be kept
+NLG = bytes.fromhex('5824f3a9')   # shader_split.py NLG_DICT: the magic its Next Level Games reader (nlg_shaders) goes by, whatever the file's name
 REPO = Path(__file__).resolve().parents[3]
 ENV = ('DM_GAME', 'DM_GLSLC_CAPTURE', 'DM_UE_SHADERS', 'DM_NRO_DIR', 'DM_PACKER_COMMIT')
 
@@ -101,7 +103,7 @@ class Context:
         self.part = h.hexdigest()[:32]
         self.root = Path(os.environ['PN_REUSE_DIR']) / 'split' / self.part
         self.off, self.loads_ok, self.keys = None, False, []
-        self.dirs, self.filled, self.expect, self.kept, self.checked = {}, [], {}, 0, 0
+        self.dirs, self.trees, self.filled, self.expect, self.kept, self.checked = {}, {}, [], {}, 0, 0
         try:
             for d in (self.root.parent.iterdir() if self.root.parent.is_dir() else []):   # one common part a game: older ones (other tools, another main) go
                 if d.name != self.part: shutil.rmtree(d, ignore_errors=True)
@@ -118,23 +120,56 @@ class Context:
         if n.is_dir(k) or getattr(n, 'synthetic', False): return None
         return n, k
 
-    def _siblings(self, path):
-        """The digest of the files and folders beside path whose name starts with its stem (the name without its last extension): what a reader may open besides the file
-        (shader_split.py: stem + '.dict', stem + '.patch', Next Level Games' stem + each name its index lists), path itself among them; None when one has no hash"""
-        p = path.replace('\\', '/')
-        parent, stem = posixpath.dirname(p), posixpath.splitext(posixpath.basename(p))[0]
-        if parent not in self.dirs:
+    def _listing(self, folder):
+        """[(name, the file's SHA-256 or b'folder')] of a folder of the .nup, sorted; None when it cannot be read"""
+        if folder not in self.dirs:
             try:
-                file, rest = self.nup.split(parent)
+                file, rest = self.nup.split(folder)
                 n = self.nup.open_nup(file); k = n.node(rest)
                 # a folder too: a reader's os.path.exists(stem + '.dict') is true for one (found in review); a folder's mark is never a file's hash
-                self.dirs[parent] = sorted((name, b'folder' if n.is_dir(c) else n.record(c)[3]) for name, c in n.children(k))
-            except Exception: self.dirs[parent] = None
-        files = self.dirs[parent]
+                self.dirs[folder] = sorted((name, b'folder' if n.is_dir(c) else n.record(c)[3]) for name, c in n.children(k))
+            except Exception: self.dirs[folder] = None
+        return self.dirs[folder]
+
+    def _tree(self, folder):
+        """The digest of everything in a folder of the .nup (each name, each file's SHA-256, the folders in it the same way); None when a part cannot be read or a
+        file has no hash"""
+        if folder not in self.trees:
+            files, parts = self._listing(folder), []
+            for name, sha in files or ():
+                if sha == b'folder': sha = self._tree(f'{folder}/{name}')
+                if sha is None or sha == bytes(32): parts = None; break
+                parts.append((name, sha))
+            self.trees[folder] = digest(*parts) if files is not None and parts is not None else None
+        return self.trees[folder]
+
+    def _siblings(self, path, nlg=False):
+        """The digest of the files and folders beside path that a reader may open besides it, path itself among them; None when one has no hash. The readers
+        shader_split.py runs for a plain file job (peanuts/docs/INCREMENTAL-BUILD.md, "The split", names them) open that file alone, but two: scan_file_in and
+        direct_file read a '.data', '.patch', '.debug' or '.nxpc' file as empty when stem + '.dict' is there (the stem: the name without its last extension),
+        and nlg_shaders, which takes a file by the Next Level Games index's magic (nlg, read by key), opens the path less five characters, as if it ended in '.dict',
+        followed by '.patch' and each name the index lists. Such a name may lead into a folder ('/'), and for a name that does not end in '.dict' that path is not
+        the stem (Shader/level.idx: Shader/leve.data). So: the files and folders whose name starts with the stem; for nlg, with the shorter of the stem and the name
+        less five characters, each folder with everything in it, and a name shorter than five is not keyed (that reader's paths start a folder up). Found in review:
+        the key had the stem alone, so such an archive kept its result when its data changed"""
+        p = path.replace('\\', '/')
+        parent, name = posixpath.split(p)
+        stem = posixpath.splitext(name)[0]
+        if nlg:
+            if len(name) < len('.dict'): return None
+            stem = min(stem, name[:-len('.dict')], key=len)
+        files = self._listing(parent)
         if files is None: return None
-        near = [(name, sha) for name, sha in files if name.startswith(stem)]
-        if any(sha == bytes(32) for _, sha in near): return None
-        return digest(*[x for name, sha in near for x in (name, sha)])
+        near = []
+        for n, sha in files:
+            if not n.startswith(stem): continue
+            if nlg and sha == b'folder':
+                t = self._tree(f'{parent}/{n}')
+                if t is None: return None
+                near.append((n, sha, t))
+            else: near.append((n, sha))
+        if any(e[1] == bytes(32) for e in near): return None
+        return digest(*[x for e in near for x in e])
 
     def key(self, job):
         """A plain file job's key, or None (an archive range, a file without a hash: scanned as before)"""
@@ -146,7 +181,8 @@ class Context:
             n, k = r
             size, _, _, sha, _ = n.record(k)
             if sha == bytes(32): return None
-            near = self._siblings(path)
+            with n.open(k) as f: nlg = f.read(len(NLG)) == NLG   # (a .nup's zstd file is decoded only up to a read this short)
+            near = self._siblings(path, nlg)
             if near is None: return None
         except Exception: return None
         return digest(self.part, rel, sha, size, near, canon(self.direct.get(rel)))
