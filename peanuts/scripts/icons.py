@@ -120,6 +120,10 @@ ICONS = {
 
     # Status: the kernel takes the status colour instead of the accent
     "info": [("s", circle(12, 12, 8.5)), ("s", "M12 11v5.5"), ("k", circle(12, 7.9, 1.3))],
+
+    # Screens: a TV on its stand, the play mark as the kernel (Settings › Screens › TV and monitors, #407)
+    "tv": [("s", "M5 4H19A2.5 2.5 0 0 1 21.5 6.5V14A2.5 2.5 0 0 1 19 16.5H5A2.5 2.5 0 0 1 2.5 14V6.5A2.5 2.5 0 0 1 5 4Z"),
+           ("s", "M8.5 20.5h7M12 16.5v4"), ("k", "M10.4 8.1 14.4 10.25 10.4 12.4Z")],
 }
 
 
