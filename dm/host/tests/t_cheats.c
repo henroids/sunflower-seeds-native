@@ -798,21 +798,26 @@ int main(void) {
             "[Dies]\n04000000 00000410 D503201F\n21000000\n";
         fresh("pncode", zt); load_all();
         if (mprotect(img, 0x4000, PROT_READ | PROT_EXEC)) { perror("text read + execute"); return 1; }
+        static char st[16384];
+        #define STATUS() (nxhost_cheat_status(st, sizeof st), st)
+        // A cheat's line of the status text, "" when it has none
+        #define ROW(name) (!strncmp(STATUS(), name "\t", strlen(name "\t")) ? st : strstr(st, "\n" name "\t") ? strstr(st, "\n" name "\t") + 1 : "")
         int money = at("Money", 0), also = at("Also", 0), speed = at("Speed x8", 0), cave = at("Cave", 0), site = at("Site", 0), reads = at("Reads it", 0), dies = at("Dies", 0);
         cheats_pass();
         CHECK(stops == 0, "Android code: no cheat on, no stop of the game's threads");
+        CHECK(!strncmp(STATUS(), "Restore Code\toff\t\t\nMoney\toff\t\t\n", 31), "the status: a line per entry in file order (off, no flags, no reason)");
 
         // compare before write: one stop to write, none while the word holds the value
         dm_cheat_toggle(money); cheats_pass();
         CHECK(rd32(0x400) == 0xB9004009 && stops == 1, "Money on: STR W8 -> STR W9 in one stop");
         for (int k = 0; k < 30; k++) cheats_pass();
         CHECK(rd32(0x400) == 0xB9004009 && stops == 1, "30 passes later still one stop: the word already holds the value (a compare a pass)");
-        CHECK(g_pn_owns[money] == 1 && g_pn_ever[money], "Money owns its one code word");
+        CHECK(!strncmp(ROW("Money"), "Money\ton\tcode\t\n", 15), "the status: on, it wrote code");
         { uint64_t a = 0, z = 0; int pr = 0; CHECK(!plat_mem_region((uint64_t)(uintptr_t)img, &a, &z, &pr) && pr == (PROT_READ | PROT_EXEC), "the text page is read + execute again after the write"); }
 
         // restore: off puts the game's word back, unless another running cheat still writes it
         dm_cheat_toggle(money); cheats_pass();
-        CHECK(rd32(0x400) == 0xB9004008 && stops == 2 && g_pn_owns[money] == 0, "Money off: the original STR W8 back in one stop");
+        CHECK(rd32(0x400) == 0xB9004008 && stops == 2 && !strncmp(ROW("Money"), "Money\toff\tcode\t\n", 16), "Money off: the original STR W8 back in one stop; the status still says it wrote code");
         dm_cheat_toggle(money); dm_cheat_toggle(also); cheats_pass();
         CHECK(rd32(0x400) == 0xB900400A && stops == 3, "Money and Also on together: one stop, the later cheat's word wins (file order)");
         dm_cheat_toggle(also); cheats_pass(); cheats_pass();
@@ -845,25 +850,25 @@ int main(void) {
         CHECK(flips_ok, "ZL held 10 passes, released 10 passes, twice: four stops, one per flip");
         dm_cheat_toggle(speed); cheats_pass();
         CHECK(rd32(0x500) == 0x1E2E1000 && stops == s0 + 4, "Speed off while released: main holds the original, nothing to write");
+        CHECK(!strncmp(ROW("Speed x8"), "Speed x8\toff\tcode,hold\t\n", 24), "the status: a key-conditional cheat says hold");
 
         // a site the rewriter changed is refused for that cheat, with the reason; the others run
         dm_cheat_toggle(site); dm_cheat_toggle(also); cheats_pass();
-        CHECK(rd32(0x304) == 0x14000123 && rd32(0x400) == 0xB900400A && dm_cheat_kind_at(site) == 2 && strstr(dm_cheat_why_at(site), "writes main+0x304, which the rewriter changed or moved"),
-              "a write into a rewritten word: refused with the reason, the other cheat written");
+        CHECK(rd32(0x304) == 0x14000123 && rd32(0x400) == 0xB900400A && strstr(ROW("Site"), "Site\trefused\t\trewritten:writes main+0x304, which the rewriter changed or moved"), "a write into a rewritten word: refused with the reason, the other cheat written");
         dm_cheat_toggle(also); cheats_pass();
 
-        // the game's threads do not stop in time: nothing written, the cheat noted as waiting, later passes try again (after 1, then 2 passes)
+        // the game's threads do not stop in time: nothing written, the status says so, later passes try again (after 1, then 2 passes)
         stop_fail = 1; s0 = stops; dm_cheat_toggle(money); cheats_pass();
-        CHECK(rd32(0x400) == 0xB9004008 && g_pn_wait[money] == 1, "threads not stopped: not written, the cheat waits");
+        CHECK(rd32(0x400) == 0xB9004008 && strstr(ROW("Money"), "Money\ton\tcode,wait\twait:the game's threads did not stop in time"), "threads not stopped: not written, the status says it waits");
         stop_fail = 0; cheats_pass();
         CHECK(rd32(0x400) == 0xB9004008, "the next pass waits (one pass)");
         cheats_pass();
-        CHECK(rd32(0x400) == 0xB9004009 && stops == s0 + 1 && g_pn_wait[money] == 0, "then it is written, the wait gone");
+        CHECK(rd32(0x400) == 0xB9004009 && stops == s0 + 1 && !strncmp(ROW("Money"), "Money\ton\tcode\t\n", 15), "then it is written, the note gone");
         dm_cheat_toggle(money); cheats_pass();
 
         // a code cave (two words in one 8-byte write) is not written while a stopped thread stands in it; off puts both words back
         stood_inside = 1; dm_cheat_toggle(cave); cheats_pass();
-        CHECK(rd32(0x600) == 0 && rd32(0x604) == 0 && g_pn_wait[cave] == 2, "a thread inside the two words: they wait");
+        CHECK(rd32(0x600) == 0 && rd32(0x604) == 0 && strstr(ROW("Cave"), "Cave\ton\tcode,wait\twait:a game thread stands inside the code words"), "a thread inside the two words: they wait");
         stood_inside = 0; cheats_pass();
         CHECK(rd32(0x600) == 0xF9000102 && rd32(0x604) == 0x1763D8B3, "then both are written, in the reference's word order");
         dm_cheat_toggle(cave); cheats_pass();
@@ -871,17 +876,29 @@ int main(void) {
 
         // a cheat that dies after its write gives the word back
         dm_cheat_toggle(dies); cheats_pass(); cheats_pass();
-        CHECK(rd32(0x410) == 0x2A0003E0 && dm_cheat_kind_at(dies) == 2 && strstr(dm_cheat_why_at(dies), "mismatched else"), "a cheat turned off by its own error: its code word back, refused with the reason");
+        CHECK(rd32(0x410) == 0x2A0003E0 && strstr(ROW("Dies"), "Dies\trefused\tcode\tother:mismatched else"), "a cheat turned off by its own error: its code word back, refused with the reason");
 
-        // a load of another file (the Mac's Reload cheats): the words' owners follow their cheats by key, a cheat that is gone gives its code back
+        // reload (the launcher rewrote <build>.txt and <build>.enabled): a cheat already loaded keeps its switch by key, a new key takes <build>.enabled's state,
+        // a cheat that is gone gives its code back; a file that cannot be read leaves everything as it was
         dm_cheat_toggle(money); dm_cheat_toggle(at("Berries", 0)); cheats_pass();
         CHECK(rd32(0x400) == 0xB9004009 && rd32(0x440) == 0xD503201F, "Money and Berries on (the berries' branch a NOP)");
-        put("1111111111111111.txt", "[New]\n04000000 00000500 1E241000\n[Money]\n04000000 00000400 B9004009\n");
-        s0 = stops; load_all(); cheats_pass();
-        CHECK(dm_cheat_on_at(at("Money", 0)) && g_pn_owns[at("Money", 0)] == 1 && rd32(0x440) == 0x54000949 && rd32(0x400) == 0xB9004009 && stops == s0 + 1,
-              "after the load Money (on from <build>.enabled) owns its word at its new place; Berries, gone, gave its word back in one stop");
-        dm_cheat_toggle(at("Money", 0)); cheats_pass();
-        CHECK(rd32(0x400) == 0xB9004008, "Money off at its new place: the original back");
+        put("1111111111111111.txt", "[--SectionStart:Item--]\n[New]\n04000000 00000500 1E241000\n[Old]\n04000000 00004504 00000001\n[Money]\n04000000 00000400 B9004009\n[--SectionEnd:Item--]\n");
+        put("1111111111111111.enabled", "New\n");   // the launcher's states: New on, Money not named (it is on in the game: that wins)
+        s0 = stops;
+        int n = nxhost_cheats_reload();
+        CHECK(n == 5 && dm_cheat_on_at(at("Money", 0)) && dm_cheat_on_at(at("New", 0)) && !dm_cheat_on_at(at("Old", 0)) && !strcmp(get("1111111111111111.enabled"), "New\nMoney\n"),
+              "reload: 5 entries, Money kept on by its name, the new key New on as <build>.enabled has it, Old off");
+        CHECK(!strncmp(STATUS(), "--SectionStart:Item--\tlabel\t\t\nNew\ton\t\t\nOld\toff\t\t\nMoney\ton\tcode\t\n", 58), "the status lists the section markers as labels; Money still says code");
+        cheats_pass();
+        CHECK(rd32(0x440) == 0x54000949 && rd32(0x400) == 0xB9004009 && rd32(0x500) == 0x1E241000 && stops == s0 + 1, "the next pass: the gone cheat's word back, New's written, Money's stays (one stop)");
+        rm("1111111111111111.txt");
+        CHECK(nxhost_cheats_reload() == -1 && dm_cheat_on_at(at("Money", 0)) && rd32(0x400) == 0xB9004009 && !strncmp(ROW("Money"), "Money\ton\tcode\t\n", 15), "reload of a file that cannot be read: -1, the cheats as they were");
+        dm_cheat_toggle(at("Money", 0)); dm_cheat_toggle(at("New", 0)); cheats_pass();
+        CHECK(rd32(0x400) == 0xB9004008 && rd32(0x500) == 0x1E2E1000, "off again: the originals back");
+        fresh("pncode-none", NULL); load_all();
+        CHECK(!strcmp(STATUS(), ""), "no file for this build: the status is empty (Native.cheatStatus: null)");
+        #undef ROW
+        #undef STATUS
         if (mprotect(img, 0x4000, PROT_READ | PROT_WRITE)) { perror("text read + write"); return 1; }
         pn_forget(); held = 0;
     }

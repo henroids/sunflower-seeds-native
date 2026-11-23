@@ -2329,3 +2329,18 @@ Atmosphère cheat files write main's code (a community cheat file for Pokémon L
 | `docs/reference/cheats.md`, `docs/development.md` | 1 each | Android in "Writes into main's code" and in the Cheats paragraph | `<!-- PEANUTS -->` |
 
 Tests: `make GAME=<id> peanuts-cheats` (Linux, `CLANG=gcc`): 193 checks pass, 27 of them the new case (one stop to write and none while the word holds the value, the page read + execute again, off puts the original back unless another running cheat writes the word, "Restore Code" left on before the cheat it undoes: no stop a pass, a read of a word queued earlier in the pass, ZL held and released twice: four stops, a rewritten site refused with its reason while another cheat is written, threads that do not stop: not written, then written two passes later, a thread inside a two-word cave, a cheat that dies after its write, a new file: the owners follow by key and a gone cheat's word goes back). `make GAME=<id> peanuts-cheats-alias`: upstream's 166 checks pass with `PN_CODE` 0, code written through the alias as on the Mac (the host itself builds only for Apple and Android; with `PN_CODE` 0 every hook is a constant-false branch and `peanuts_cheats.inc` holds only empty stubs). Upstream candidate: `main_rx_end`'s rounding; the rest is Android's.
+
+### Mod menu Part B: cheat status and reload in a running game (2026-11-23)
+
+On Part A. The launcher reads each cheat's state while the game runs and reloads the merged cheat file after an import in the game. The format is the one agreed with the loader (Part C).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/peanuts/peanuts_cheats.inc` | (Peanuts' own) | `nxhost_cheat_status`, `nxhost_cheats_reload` | Peanuts' own file |
+| `android/app/src/main/java/dev/nxnative/android/Native.java` | 1 | `cheatStatus()` (UTF-8 bytes decoded, null without cheats), `cheatsReload()` | `// PEANUTS begin` / `end` |
+| `android/app/src/main/cpp/nxlaunch.c` | 1 | weak forwarders `Native_cheatStatusUtf8`, `Native_cheatsReload` | `// PEANUTS begin` / `end` |
+| `dm/host/tests/t_cheats.c` | (in Part A's span) | the status and the reload in the case "code cheats on Android" | inside the `// PEANUTS begin` / `end` span |
+
+The status, polled by the in-game panel: a line per entry of the loaded file, labels too, `<key>\t<state>\t<flags>\t<reason>`: state `on`, `off`, `master`, `label`, `refused` (turned off while the game ran: a rewritten site, a write past the image, a runaway loop), `unsupported`; flags a comma list of `code` (it wrote main's code this run), `hold` (opcode 8 or C4), `wait` (a code write waits for a stop); reason empty or `<token>:<detail>`, tokens `rewritten`, `nolist`, `region`, `unsupported`, `other`, and on a running cheat `access` (failed accesses) or `wait`. No file loaded: empty, and `Native.cheatStatus` gives null. The reload reads `<build>.txt` and `<build>.enabled` again: a cheat already loaded keeps its switch by key, a new key takes `<build>.enabled`'s state, a key that is gone puts its code back at the next pass; a loaded file that cannot be read now leaves everything as it was (-1).
+
+Tests: `make GAME=<id> peanuts-cheats`: 199 checks pass, 33 of them the case "code cheats on Android" (Part A's, and the status's lines, flags and reason tokens, a reload by key with a new key from `<build>.enabled` and section markers as labels, a file that cannot be read, no file: an empty status); `make GAME=<id> peanuts-cheats-alias`: 166, unchanged (the status and the reload exist only with `PN_CODE`). `peanuts/tests/test_cheat_status.py`: the JNI block against a stand-in host (a status longer than the first buffer, no host) and the UTF-8 decoding (a name outside the BMP, null without cheats).

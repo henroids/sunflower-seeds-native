@@ -16,6 +16,7 @@
 //   - The rewriter's sites stay refused, as on the Mac: main_write_check turns a cheat off with the reason when it writes a word main.changed.tsv lists (an SVC site, a
 //     cut, a moved window), before anything is queued. The other cheats run.
 // Inside the stop nothing allocates, logs or takes a lock: a stopped game thread may hold the allocator's. Everything here runs under hle_cheats.c's g_lock.
+// The launcher reads each cheat's state (nxhost_cheat_status, Native.cheatStatus) and reloads the file while the game runs (nxhost_cheats_reload, Native.cheatsReload).
 #if PN_CODE
 
 int dm_guest_stop_all(uint64_t timeout_ns);   // hle_thread.c (PEANUTS): every game thread stopped, G held until the resume; 0, or -1 / -2 when not in time
@@ -282,8 +283,8 @@ static void pn_pass_end_queued(void) {
     }
 }
 
-// A load (load_all: at start, the Mac's "Reload cheats") replaces the cheats, and with them the indexes the records name their owners by.
-// pn_load_before notes each cheat's key before; pn_load_after (the next pass, after load_all returned) gives each word's bytes to the cheat of the
+// A load (load_all: at start, the Mac's "Reload cheats", nxhost_cheats_reload) replaces the cheats, and with them the indexes the records name their owners by.
+// pn_load_before notes each cheat's key before; pn_load_after (the next pass, status or reload, after load_all returned) gives each word's bytes to the cheat of the
 // same key in the new file, and a cheat that is gone gives its bytes back (they go back at the next stop)
 static char g_pn_key0[CHEAT_MAX][CHEAT_NAME_MAX + 16]; static uint8_t g_pn_on0[CHEAT_MAX], g_pn_ever0[CHEAT_MAX]; static int g_pn_n0, g_pn_remap;
 static void pn_load_after(void);
@@ -318,6 +319,116 @@ static void pn_load_after(void) {
         for (int j = 0; j < CHEAT_MAX; j++) if (own[j]) g_pn_owns[j]++;
     }
     g_pn_nq = 0;
+}
+
+// ---- the launcher's side: the state of every cheat, and a reload that keeps the switches ----
+
+// A field of the status text and the character after it: tabs and line breaks inside the field become spaces. o counts the whole text, out keeps what fits
+static size_t pn_put(char *out, size_t cap, size_t o, const char *s, char end) {
+    for (; *s; s++) { char ch = *s == '\t' || *s == '\n' || *s == '\r' ? ' ' : *s; if (o + 1 < cap) out[o] = ch; o++; }
+    if (end) { if (o + 1 < cap) out[o] = end; o++; }
+    return o;
+}
+
+// The reason text of a cheat without hle_cheats.c's wrapping: " (off: x)" -> "x", " (x)" -> "x"
+static void pn_why(const cheat_t *c, char *out, size_t n) {
+    const char *w = c->why; size_t L;
+    while (*w == ' ') w++;
+    if (*w == '(') w++;
+    if (!strncmp(w, "off: ", 5)) w += 5;
+    snprintf(out, n, "%s", w);
+    L = strlen(out);
+    if (L && out[L - 1] == ')') out[L - 1] = 0;
+}
+
+// Does the cheat wait on a button (opcode 8 or C4 anywhere in its program)? Decoded with a scratch cheat, so the cheat itself is never touched
+static int pn_holds(const cheat_t *c) {
+    static cheat_t probe;   // the decoder's scratch (it writes why / broken on a failure); callers hold g_lock
+    if (c->broken || c->label) return 0;
+    for (int a = 0; a < c->nins;) {
+        ins_t in;
+        int len = ins_dec(&probe, c->ins + a, c->nins - a, &in);
+        if (len <= 0) return 0;
+        if (in.op == 8 || in.op == 0xC4) return 1;
+        a += len;
+    }
+    return 0;
+}
+
+// The reason field: "" or "<token>:<detail>". The tokens the launcher maps to a player's words: rewritten (a word the rewriter changed or moved), nolist (no
+// main.changed.tsv: code writes refused), region (a write past main's image), unsupported (an opcode or form this host does not run), other; on a running cheat
+// access (accesses that failed, a pointer not set yet) or wait (a code write waits for a stop of the game's threads). The detail is the host's own text
+static void pn_reason(const cheat_t *c, int ci, char *out, size_t n) {
+    char why[160] = "";
+    out[0] = 0;
+    if (c->label) return;
+    if (c->broken || c->dead || c->noted) pn_why(c, why, sizeof why);
+    const char *tok = NULL;
+    if (c->broken) tok = !strncmp(why, "malformed", 9) || !strncmp(why, "no code words", 13) ? "other" : "unsupported";
+    else if (c->dead) tok = strstr(why, "rewriter changed or moved") ? "rewritten" : strstr(why, "main.changed.tsv") ? "nolist" : strstr(why, "past the game's image") ? "region" : "other";
+    else if (ci < CHEAT_MAX && g_pn_wait[ci] && pn_runs(c)) {
+        snprintf(out, n, "wait:%s", g_pn_wait[ci] == 2 ? "a game thread stands inside the code words" : "the game's threads did not stop in time");
+        return;
+    } else if (c->noted) tok = "access";
+    if (tok) snprintf(out, n, "%s:%s", tok, why);
+}
+
+// The status (Native.cheatStatus): a line per entry of the loaded file in its order, labels too: "<key>\t<state>\t<flags>\t<reason>\n". key: as <build>.enabled
+// and nxhost_cheat_set have it ("Name", "Name #2"). state: on, off, master, label, refused (turned off while the game ran: a rewritten site, a write past the image,
+// a runaway loop), unsupported (never runs: an opcode this host does not run, a malformed line). flags, a comma list: code (it wrote main's code this run), hold (it
+// waits on a button: opcode 8 or C4), wait (a code write of it waits for a stop); a reader ignores a flag it does not know. reason: pn_reason. "" with no file
+// loaded. Returns the length of the whole text; out holds as much of it as fits, NUL-terminated
+__attribute__((visibility("default"))) size_t nxhost_cheat_status(char *out, size_t cap) {
+    if (!out || !cap) return 0;
+    pthread_mutex_lock(&g_lock);
+    pn_load_after();
+    size_t o = 0;
+    for (int i = 0; i < g_ncheat && g_path[0]; i++) {
+        const cheat_t *c = &g_cheat[i];
+        int ci = i < CHEAT_MAX ? i : CHEAT_MAX - 1;
+        char key[CHEAT_NAME_MAX + 16], flags[32] = "", reason[200];
+        cheat_key(c, key, sizeof key);
+        const char *state = c->label ? "label" : c->broken ? "unsupported" : c->dead ? "refused" : c->master ? "master" : c->on ? "on" : "off";
+        int code = g_pn_ever[ci], hold = pn_holds(c), wait = g_pn_wait[ci] && pn_runs(c);
+        snprintf(flags, sizeof flags, "%s%s%s%s%s", code ? "code" : "", code && hold ? "," : "", hold ? "hold" : "", (code || hold) && wait ? "," : "", wait ? "wait" : "");
+        pn_reason(c, ci, reason, sizeof reason);
+        o = pn_put(out, cap, o, key, '\t');
+        o = pn_put(out, cap, o, state, '\t');
+        o = pn_put(out, cap, o, flags, '\t');
+        o = pn_put(out, cap, o, reason, '\n');
+    }
+    out[o < cap ? o : cap - 1] = 0;
+    pthread_mutex_unlock(&g_lock);
+    return o;
+}
+
+// Read the cheats folder again (the launcher rewrote the merged <build>.txt and <build>.enabled while the game runs: a cheat imported in the game). A cheat that was
+// loaded keeps its switch by key, whatever <build>.enabled says; a new key takes <build>.enabled's state (off when the file does not name it). A key that is gone
+// gives its code back at the next pass. A file that was loaded and cannot be read now leaves everything as it was. Returns the entries now loaded (labels too), -1
+// when there is no readable file for this build (the old list stays)
+static int pn_reload_locked(void) {
+    if (g_path[0]) {
+        FILE *f = fopen(g_path, "rb");
+        if (!f) { LOG("[RED] cheats: cannot read %s again (errno %d): the cheats stay as they were", g_path, errno); return -1; }
+        fclose(f);
+    }
+    load_all();   // (pn_load_before ran inside it)
+    pn_load_after();
+    for (int j = 0; j < g_ncheat; j++) {
+        cheat_t *c = &g_cheat[j];
+        if (!toggles(c)) continue;
+        for (int i = 0; i < g_pn_n0; i++) if (g_pn_map[i] == j) { c->on = g_pn_on0[i]; c->restore_once = 0; break; }
+    }
+    states_save();
+    if (!atomic_load(&g_active)) { pn_pass_begin(); pn_pass_end(); }   // no pass runs without a cheat: the code of the ones gone goes back now
+    LOG("cheats: reloaded %s: %d entries, the switches of the cheats already loaded kept by name", g_path[0] ? g_path : "(no file for this build)", g_ncheat);
+    return g_path[0] ? g_ncheat : -1;
+}
+__attribute__((visibility("default"))) int nxhost_cheats_reload(void) {
+    pthread_mutex_lock(&g_lock);
+    int r = pn_reload_locked();
+    pthread_mutex_unlock(&g_lock);
+    return r;
 }
 
 #else   // no PN_CODE: the hooks are never reached (their call sites test PN_CODE), these keep them compiling

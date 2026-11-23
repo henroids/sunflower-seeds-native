@@ -615,6 +615,21 @@ JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_cheatSet(JNIEnv *env, jc
     (void)cls; if (!nxhost_cheat_set) return -2;
     char *k = jstr(env, key); int r = k ? nxhost_cheat_set(k, on ? 1 : 0) : -1; free(k); return r;
 }
+// PEANUTS begin: every cheat's state for the in-game panel (Native.cheatStatus, as UTF-8 bytes: a cheat's name may hold a character outside the BMP) and a reload of the
+// merged cheat file while the game runs (Native.cheatsReload): dm/peanuts/peanuts_cheats.inc. A host without them: no bytes, -2
+#pragma weak nxhost_cheat_status
+size_t nxhost_cheat_status(char *out, size_t cap);
+#pragma weak nxhost_cheats_reload
+int nxhost_cheats_reload(void);
+JNIEXPORT jbyteArray JNICALL Java_dev_nxnative_android_Native_cheatStatusUtf8(JNIEnv *env, jclass cls) {
+    (void)cls; if (!nxhost_cheat_status) return jbytes(env, "");
+    size_t cap = 16384; char *b = malloc(cap); if (!b) return jbytes(env, "");
+    size_t n = nxhost_cheat_status(b, cap);
+    if (n + 1 > cap) { char *g = realloc(b, n + 1); if (g) { b = g; nxhost_cheat_status(b, n + 1); } }
+    jbyteArray a = jbytes(env, b); free(b); return a;
+}
+JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_cheatsReload(JNIEnv *env, jclass cls) { (void)env; (void)cls; return nxhost_cheats_reload ? nxhost_cheats_reload() : -2; }
+// PEANUTS end
 // Game resolution of a game that sizes its scenes by the graphics scale, live from the in-game panel (Native.graphicsModeSet): the host changes the scale and operation mode
 // and posts the console's notifications (300, 30 / 31), which the game answers by querying them again
 #pragma weak nxhost_graphics_mode_set
