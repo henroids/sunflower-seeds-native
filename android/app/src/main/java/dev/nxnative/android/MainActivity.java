@@ -63,6 +63,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        dev.peanuts.ui.Scoreboard.init(this);   // PEANUTS: the test app's scoreboard fonts
         if (saved != null) settingsPage = saved.getBoolean("settings");
         if (saved != null && saved.getString("game_settings") != null)   // a fold or unfold makes the activity again: the game's settings page stays open
             for (Game g : Game.load(this)) if (g.gameDir.equals(saved.getString("game_settings"))) { settingsGame = g; break; }
@@ -74,6 +75,7 @@ public final class MainActivity extends Activity {
             bananas.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
             if (poppedText != null) poppedText.setText(poppedLine(n));
         });
+        if (dev.peanuts.ui.Scoreboard.ON) { bananas.setVisibility(View.GONE); frame.setBackgroundColor(getColor(R.color.bn_bg)); }   // PEANUTS: the scoreboard's plain board, no drifting bananas
         setContentView(frame);
         PadFocus.watch(getWindow());   // a controller: the focus frame (PadFocus)
         build();
@@ -284,6 +286,7 @@ public final class MainActivity extends Activity {
         trailing.addView(headerButtons());
         // PEANUTS end
         content.addView(Ui.header(this, Ui.badge(this, 44), "Sunflower Seeds Native", Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
+        if (dev.peanuts.ui.Scoreboard.ON) Ui.add(content, scoreboardStatus(), 16);   // PEANUTS: the scoreboard's status row
         accessCard = accessCard();
         Ui.add(content, accessCard, 16);
         Ondevice.attach(this, content, content.getChildCount());   // a game being prepared and its progress (hidden when there is none)
@@ -293,6 +296,17 @@ public final class MainActivity extends Activity {
         Ui.add(content, gameBox, 16);
         refresh();
     }
+
+    // PEANUTS begin: Home's status row on the test app's scoreboard look: MLB The Show 26's frame rate cap, console mode and GPU driver, and the app's version
+    private View scoreboardStatus() {
+        String id = Prefs.MLB26;
+        int cap = Prefs.fpsCap(this, id);
+        String drv = Prefs.driverChoice(this, id);
+        drv = Recommend.SYSTEM.equals(drv) ? "SYSTEM" : drv.toLowerCase(java.util.Locale.ROOT).contains("turnip") ? "TURNIP" : drv.toUpperCase(java.util.Locale.ROOT);
+        return dev.peanuts.ui.Scoreboard.status(this, "FPS CAP", cap > 0 ? String.valueOf(cap) : "GAME", "MODE", ScreenMode.mode(this, id) == 1 ? "720P" : "1080P",
+                "DRIVER", drv, "APP", BuildConfig.VERSION_NAME);
+    }
+    // PEANUTS end
 
     /** The Ondevice card is added without a margin: give it the cards' gap */
     private void fixGap(LinearLayout col, int gapDp) {

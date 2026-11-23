@@ -53,7 +53,7 @@ public final class PUi {
     public static GradientDrawable round(int fill, float radiusPx, int stroke, int strokePx) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(fill);
-        g.setCornerRadius(radiusPx);
+        g.setCornerRadius(Scoreboard.radius(radiusPx));
         if (strokePx > 0) g.setStroke(strokePx, stroke);
         return g;
     }
@@ -66,7 +66,7 @@ public final class PUi {
         return new RippleDrawable(ColorStateList.valueOf(0x336B4423), shape, mask);
     }
 
-    public static Typeface face(int weight) { return Typeface.create(Typeface.SANS_SERIF, weight, false); }
+    public static Typeface face(int weight) { Typeface s = Scoreboard.face(weight); return s != null ? s : Typeface.create(Typeface.SANS_SERIF, weight, false); }
 
     /** A vector icon (res/drawable/ic_*.xml) tinted with a palette color */
     public static Drawable icon(Context c, int drawable, int colorRes) {
