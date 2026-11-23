@@ -51,7 +51,9 @@ class Windows(unittest.TestCase):
 
     def test_the_page_is_a_panel_that_never_takes_the_focus(self):
         self.assertIn('TYPE_APPLICATION_PANEL', self.oncreate)
-        self.assertIn('new CompanionPage(this, p,', self.oncreate)   # the panel's window, which the page makes NOT_FOCUSABLE
+        self.assertIn('content(getIntent());', self.oncreate)
+        content = self.screen[self.screen.index('private void content('):self.screen.index('protected void onNewIntent(')]
+        self.assertIn('new CompanionPage(this, p,', content)   # the panel's window, which the page makes NOT_FOCUSABLE (black while a game is on the TV: test_tv_screens.py)
         page = (PEANUTS / 'CompanionPage.java').read_text(encoding='utf-8')
         self.assertIn('FLAG_NOT_FOCUSABLE', page[page.index('View create()'):page.index('void start()')])
 

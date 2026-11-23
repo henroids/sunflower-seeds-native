@@ -161,6 +161,11 @@ public final class PeanutsPrefs {
     public static boolean swapScreens(Context c) { return of(c).getBoolean("swap_screens", false); }
     public static void swapScreens(Context c, boolean on) { of(c).edit().putBoolean("swap_screens", on).apply(); }
 
+    /** Settings › TV and monitors (dev.peanuts.Screens, #358): true a game plays on a connected TV or monitor; false (the default) the system decides what the TV
+     *  shows (Android mirrors the screen, a handheld's firmware may turn its own screens off), and Peanuts only keeps its pages off the TV */
+    public static boolean tvPlay(Context c) { return of(c).getBoolean("tv_play", false); }
+    public static void tvPlay(Context c, boolean on) { of(c).edit().putBoolean("tv_play", on).apply(); }
+
     /** The roots the library scans: the game folder first, then the update and DLC folders when set and different, then the build folder (walked the same
      *  two levels deep, so its {@code <title ID>/<name>.nup} entries are found) */
     public static List<File> roots(Context c) {

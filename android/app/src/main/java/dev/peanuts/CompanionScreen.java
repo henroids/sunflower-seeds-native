@@ -15,7 +15,7 @@ import android.view.WindowManager;
 
 /**
  * The companion page (CompanionPage) on the built-in, default display while the game runs on another one (Swap screens, dev.peanuts.Screens, or the app
- * started there; #131).
+ * started there; #131). While the game is on a TV (Play on the TV, #358) and no companion takes this screen, the panel is only black (Companion.cover).
  * Android takes no Presentation on the default display, so the page gets an activity of its own there, in the game's process. Companion starts and finishes it.
  * <p>
  * Two windows (#183):
@@ -67,8 +67,7 @@ public final class CompanionScreen extends Activity {
         p.setDecorFitsSystemWindows(false);
         edgeToEdge(p);
         panel.setCancelable(false);
-        page = new CompanionPage(this, p, getIntent().getStringExtra("name"));   // the page makes the panel NOT_FOCUSABLE
-        panel.setContentView(page.create());
+        content(getIntent());
         w.getDecorView().post(this::showPanel);   // a sub-window needs this window's token: posted, it runs once the window is attached
     }
 
@@ -76,6 +75,30 @@ public final class CompanionScreen extends Activity {
         WindowManager.LayoutParams a = w.getAttributes();
         a.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         w.setAttributes(a);
+    }
+
+    /** What the panel shows: the companion's page, or black while the game is on the TV (Companion.cover) until a companion takes this screen */
+    private void content(android.content.Intent i) {
+        if (page != null || panel == null) return;   // the page stays once it is up
+        Window p = panel.getWindow();
+        if (Companion.screenPage()) {
+            page = new CompanionPage(this, p, i.getStringExtra("name"));   // the page makes the panel NOT_FOCUSABLE
+            panel.setContentView(page.create());
+            if (started && panel.isShowing()) run(true);
+            return;
+        }
+        p.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);   // as the page: a tap here never takes the controller from the game
+        View black = new View(this);
+        black.setBackgroundColor(Color.BLACK);
+        black.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        panel.setContentView(black);
+    }
+
+    /** singleInstance: Companion starts it again to switch from black to the companion's page */
+    @Override protected void onNewIntent(android.content.Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        content(i);
     }
 
     private void showPanel() {

@@ -187,6 +187,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         dev.peanuts.build.ShaderCapture.cover(this, root);   // PEANUTS: internal shader preparation stays behind a progress screen
         root.setOnApplyWindowInsetsListener((v, in) -> { insetOverlay(in); return in; });   // again whenever the insets change (a turn, a fold)
         setContentView(root);
+        dev.peanuts.TvPicture.fit(this);   // PEANUTS: on a TV or monitor, a picture of at most 1080 lines and the TV's game mode (#358)
         immersive();
         if (!dev.peanuts.build.ShaderCapture.active(this)) {   // PEANUTS: preparation is not a play session
             dev.peanuts.Companion.start(this, getIntent().getStringExtra("name"));   // PEANUTS: the companion on the second display
@@ -1447,6 +1448,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     @Override public void onConfigurationChanged(Configuration c) {
         super.onConfigurationChanged(c);
         fitOrientation();   // a fold or an unfold changes the display: the other screen may want the other answer
+        dev.peanuts.TvPicture.fit(this);   // PEANUTS: the game moved to a TV or back to the device's screen (#358)
         if (started) Native.motionRotation(getDisplay().getRotation());
     }
 

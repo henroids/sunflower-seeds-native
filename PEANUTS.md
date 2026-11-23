@@ -197,6 +197,11 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
    - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` (`onTopResumedActivityChanged`) — (2026-11-20, GitHub issue #183)
      `dev.peanuts.Companion.gameOnTop(this)` each time the game is the top activity again: a game that Recents moved to another display goes back to its
      own, and the companion opens again where it belongs (`ScreenPlace`). `peanuts/UPSTREAM-EDITS.md` Round 31.
+   - `android/app/src/main/java/dev/nxnative/android/GameActivity.java` (`onCreate`, `onConfigurationChanged`) — (2026-11-22, TV and monitors, GitHub issue #358)
+     `dev.peanuts.TvPicture.fit(this)`: on a TV or monitor the game's surface is at most 1080 lines high and the window asks for the TV's game mode. Which display
+     is which: `dev.peanuts.Screens` and `ScreenRole` (the bottom screen, the companion and Screens off use only the device's own screens). By default the
+     system decides what a TV shows; Play on the TV (Settings › TV and monitors) starts a game there, and the screen it left is black unless the system turned
+     it off. `peanuts/UPSTREAM-EDITS.md` Round 59.
 - 2026-11-18 (Share build log, issue #124's "no log attached"): one `.zip` per game with everything its build left. `dev.peanuts.build.BuildLog` is the
   game's own build log, `<app files>/build-logs/<title ID>.log` (to `.1.log` at 2 MB), which `BuildService`, `ModBuildService` and `Prepare` write as
   they go: the inputs with sizes, the folders and free space, the memory, the import's milestones, Prepare's choice of job, the progress every 5 % and

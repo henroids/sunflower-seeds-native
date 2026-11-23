@@ -16,7 +16,7 @@ class SwapScreens(unittest.TestCase):
     def test_off_means_the_start_as_before(self):
         src = (JAVA / 'dev/peanuts/Screens.java').read_text(encoding='utf-8')
         start = src[src.index('public static void startGame'):src.index('static boolean startOn')]
-        self.assertLess(start.index('PeanutsPrefs.swapScreens(launcher) ? external(launcher) : null'), start.index('startOn(launcher, intent, d.getDisplayId())'))
+        self.assertLess(start.index('PeanutsPrefs.swapScreens(launcher) ? otherScreen(launcher) : null'), start.index('startOn(launcher, intent, d.getDisplayId())'))
         self.assertLess(start.index('startOn(launcher, intent, d.getDisplayId())'), start.index('launcher.startActivity(intent);'))
         on = src[src.index('static boolean startOn'):]
         self.assertLess(on.index('d.isValid()'), on.index('setLaunchDisplayId'))
@@ -54,7 +54,9 @@ class SwapScreens(unittest.TestCase):
 
     def test_companion_takes_the_display_the_game_is_not_on(self):
         src = (JAVA / 'dev/peanuts/Companion.java').read_text(encoding='utf-8')
-        self.assertIn('if (own != Display.DEFAULT_DISPLAY) {', src)
+        second = src[src.index('static Display secondDisplay('):src.index('public static boolean hasSecondDisplay')]
+        self.assertIn('Screens.deviceScreen(game, dm, own)', second)   # never a TV (#358, test_tv_screens.py)
+        self.assertIn('if (own == Display.DEFAULT_DISPLAY || second != null) return second;', second)
         self.assertIn('new android.content.Intent(game, CompanionScreen.class)', src)
         screen = (JAVA / 'dev/peanuts/CompanionScreen.java').read_text(encoding='utf-8')
         self.assertIn('TYPE_APPLICATION_PANEL', screen)   # the page never takes the focus: a panel (#183, peanuts/tests/test_companion_screen.py)
