@@ -518,6 +518,8 @@ final class Ui {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setColor(0xFF1E5B3A);
+        android.graphics.drawable.Drawable sb = dev.peanuts.ui.Scoreboard.seed(c);   // PEANUTS: the test app's bulb seed on the board's slate square
+        if (sb != null) { v.setImageDrawable(sb); g.setShape(GradientDrawable.RECTANGLE); g.setColor(0xFF151A1D); }
         v.setBackground(g);
         v.setScaleType(ImageView.ScaleType.FIT_CENTER);
         v.setLayoutParams(new LinearLayout.LayoutParams(dp(c, sizeDp), dp(c, sizeDp)));

@@ -40,7 +40,7 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
         boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         baseAlpha = night ? 40 : 72;   // low contrast: text and buttons stay readable
         paint.setAlpha(baseAlpha);
-        shard.setColor(getContext().getColor(R.color.bn_banana_deep));
+        shard.setColor(dev.peanuts.ui.Scoreboard.ON ? 0xFFE9A93F : getContext().getColor(R.color.bn_banana_deep));   // PEANUTS: amber flecks from a popped bulb seed
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
@@ -93,7 +93,8 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
     private Bitmap banana() {
         if (banana == null) {
             int px = Math.max(1, Math.round(BananaGrid.TILE_DP * density));
-            Drawable d = getContext().getDrawable(R.drawable.ic_banana);
+            Drawable d = dev.peanuts.ui.Scoreboard.seed(getContext());   // PEANUTS: the test app's bulb seed
+            if (d == null) d = getContext().getDrawable(R.drawable.ic_banana);
             banana = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888);
             d.setBounds(0, 0, px, px);
             d.draw(new Canvas(banana));
@@ -152,7 +153,7 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
         }
         paint.setAlpha(Math.round(baseAlpha * alpha));
         canvas.save();
-        canvas.rotate(odd ? 28f : -8f);
+        if (!dev.peanuts.ui.Scoreboard.ON) canvas.rotate(odd ? 28f : -8f);   // PEANUTS: the bulb seed is drawn turned 15 degrees already
         canvas.scale(scale, scale);
         canvas.drawBitmap(b, -half, -half, paint);
         canvas.restore();
