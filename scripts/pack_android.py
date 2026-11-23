@@ -565,6 +565,82 @@ def _run_in_process_once(script, args, env, log, progress, mode):   # PEANUTS: r
     return code, rerun   # PEANUTS
 
 
+# PEANUTS begin: the phone's rewrite on its fast cores (issue #120, peanuts/docs/INCREMENTAL-BUILD.md "The rewrite on the fast cores")
+REWRITE_RERUN = 75                 # the worker's exit when its tool asked to be run again: the variables are on its last line, after RERUN_LINE
+RERUN_LINE = 'pn-rewrite-rerun '   # (a tool's own exit 75, or such a line alone, is not a rerun)
+REWRITE_BOOT = ('import json, runpy, sys\n'
+                'sys.argv = sys.argv[1:]; sys.path.insert(0, sys.argv[0].rsplit("/", 1)[0])\n'
+                'try: runpy.run_path(sys.argv[0], run_name="__main__")\n'
+                'except SystemExit as e:\n'
+                '    r = e.code.get("rerun_env") if isinstance(e.code, dict) else None\n'
+                '    if not isinstance(r, dict): raise\n'
+                '    sys.stderr.flush()\n'
+                '    print(%r + json.dumps({str(k): str(v) for k, v in r.items()}), flush=True)\n'
+                '    sys.exit(%d)\n') % (RERUN_LINE, REWRITE_RERUN)
+
+
+def pn_rewrite_worker(script, args, env, log, progress=None):
+    """script (patch_nso.py) as `python3 script args`, in a worker process of its own (DM_SPLIT_WORKER: nxpack_worker, a Python without the app's threads, as the
+    split's workers), with DM_REWRITE_J = PN_REWRITE_J: its x18 and spin phases fork that many workers there (patch_nso.py in_forks; the phone's Python has no
+    _multiprocessing, and the app's own process must not fork). The same output as run_in_process: the file log, its progress lines passed on (ProgressTee).
+    → its exit code; None with no worker command or PN_REWRITE_J below 2 (run_in_process then, one core). A stop (this process interrupted) ends the worker
+    and its forks (their own process group)
+    The tool sees DM_IN_PROCESS=1, as in run_in_process: the worker cannot exec either (Android refuses an exec of a file in the app's data), so a tool that
+    would run itself again with more variables (patch_nso.py's DM_PATCH_FRONT, #177) asks with sys.exit({'rerun_env': {...}}); REWRITE_BOOT passes that on
+    (RERUN_LINE, REWRITE_RERUN) and it is run again with them in a new worker, its output appended to the same log. One that asks again for the same fails.
+    (Found in review: without it the worker took the os.execve path, and DAVE THE DIVER stopped at "Rewriting the game's code" again)"""
+    cmd = os.environ.get('DM_SPLIT_WORKER', '').split()
+    try: j = int(os.environ.get('PN_REWRITE_J') or 1)
+    except ValueError: j = 1
+    if not cmd or j < 2: return None
+    extra = {}
+    for attempt in range(3):
+        code, rerun = _rewrite_worker_once(cmd, script, args, {**env, **extra, 'DM_REWRITE_J': str(j), 'DM_IN_PROCESS': '1'}, log, progress,
+                                           'a' if attempt else 'w')
+        if not rerun or rerun.items() <= extra.items(): return code if not rerun else 1
+        extra.update(rerun)
+    return 1
+
+
+def _rewrite_worker_once(cmd, script, args, env, log, progress, mode):   # pn_rewrite_worker's single run → (exit code, the rerun variables the tool asked for or None)
+    import json
+    with open(log, mode, buffering=1, encoding='utf-8', errors='backslashreplace') as f:
+        tee = ProgressTee(f, sys.stdout, *progress) if progress else f
+        p = subprocess.Popen(cmd + ['-c', REWRITE_BOOT, str(script)] + [str(a) for a in args], env={**os.environ, **env},
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='backslashreplace',
+                             start_new_session=True)
+        # the pipe is read in a thread: a stop (an exception the packer raises in this thread, at its next bytecode) reached a read of it only with the
+        # worker's next line, and in_forks' parent prints one only as each child is done (ACNH's spin phase on two workers: about 30 s), past the 20 s
+        # after which PackService ends the process (found in review); a read that fails (the log's storage full) ends the worker here as before
+        import threading
+        failed, last = [], ['']
+
+        def pump():
+            try:
+                for line in p.stdout: tee.write(line); last[0] = line
+            except BaseException as e: failed.append(e)
+        reader = threading.Thread(target=pump, name='pn-rewrite-log', daemon=True)
+        try:
+            reader.start()
+            while reader.is_alive(): reader.join(0.5)
+            if failed: raise failed[0]
+            code = p.wait()
+            if code != REWRITE_RERUN or not last[0].startswith(RERUN_LINE): return code, None
+            try: rerun = json.loads(last[0][len(RERUN_LINE):])
+            except ValueError: return 1, None
+            return (0, {str(k): str(v) for k, v in rerun.items()}) if isinstance(rerun, dict) and rerun else (1, None)
+        except BaseException:
+            try: os.killpg(p.pid, signal.SIGKILL)
+            except OSError: pass
+            p.wait()
+            reader.join(5)
+            raise
+        finally:
+            try: p.stdout.close()
+            except OSError: pass
+# PEANUTS end
+
+
 def staging(out, m):   # where a module is rewritten before it goes into the pack (inside it: same file system, so the swap is renames)
     return out / f'.rewrite-{m}'
 
@@ -608,6 +684,12 @@ def write_orig(src, out, m):   # PEANUTS
     return len(buf)
 
 
+def pn_reuse():   # PEANUTS: dm/peanuts/reuse/rewrite_reuse.py (issue #120)
+    sys.path.insert(0, str(REPO / 'dm/peanuts/reuse'))
+    import rewrite_reuse
+    return rewrite_reuse
+
+
 def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
     """patch_nso.py --target android on each module into out (each its own <module>.* files); a module whose key file matches is kept. Each module is
     rewritten into a staging folder and swapped in when it is complete (swap_in), so a run stopped part way never leaves new code with old tables.
@@ -630,6 +712,7 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
             if ok:
                 if have != key: tmp = out / f'{m}.android.key.tmp'; write_lf(tmp, key + '\n'); os.replace(tmp, kf)   # the same rewrite: its key as rewrite_key's (upgrade_keys)
                 print(f'  {m}: unchanged, kept'); continue
+        if m not in xmod and (pn_reuse().keep(m, src, out, g, key, REWRITER) or pn_reuse().restore(m, src, out, g, key, REWRITER)): continue   # PEANUTS: the key moved, the module's part of it did not; or the pack has none and the app's copy of its last rewrite is it (issue #120, dm/peanuts/reuse/rewrite_reuse.py)
         todo[m] = (src, key)
     for m in todo: (out / f'{m}.android.key').unlink(missing_ok=True)   # every module to rewrite is unfinished from here on: no mix of old and new modules passes
     if in_process:
@@ -649,7 +732,8 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
             print(f'  {m}: rewriting {src} (in process)', flush=True)
             t0 = time.monotonic()
             width = 1000 * size[m] // total
-            rc = run_in_process(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id, 'DM_REWRITE_J': '1'}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: xargs
+            rc = pn_rewrite_worker(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: on the fast cores (issue #120)
+            if rc is None: rc = run_in_process(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id, 'DM_REWRITE_J': '1'}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: xargs; pn_rewrite_worker
             if rc:
                 tail = (out / f'rewrite_{m}.log').read_text(errors='replace').splitlines()[-20:]
                 raise Error(f'patch_nso.py exit code {rc} on {m}:\n' + '\n'.join(tail))
@@ -1179,6 +1263,8 @@ def main():
             nros = collect_nros(exe, romfs, work, a.in_process)
             try:
                 rewrite(sys.executable, srcs | nros, out, max(1, a.j), g, a.in_process, xmod_files)   # PEANUTS: xmod_files
+                for _m, _src in (srcs | nros).items():   # PEANUTS: what each module was made from, for the next build's rewrite_reuse.keep (issue #120)
+                    if _m not in (xmod_files or {}): pn_reuse().record(_m, _src, out, g, REWRITER)
                 rewrite_variants(sys.executable, srcs, out, g, a.in_process)   # game.tsv variant rows (a native 4:3 mod) into <pack>/<variant>/
             finally: shutil.rmtree(out / '.nup-src', ignore_errors=True)   # the module copies a NUP game's rewrite read (rewriter_src)
             place_nros(work / 'android-nro' if nros else None, out)

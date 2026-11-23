@@ -642,7 +642,7 @@ final class BottomPanel extends Presentation {
             statValue[1].setText(k.play == null || k.play.lastRun <= 0 ? none : dev.peanuts.launch.PlayLedger.compact(k.play.lastRun));
             statValue[2].setText(playedShort(last));
         }
-        String l2 = ready ? (stats ? "" : played(k.played)) : toBuild ? k.space : "";
+        String l2 = ready ? (k.update != null ? k.update : stats ? "" : played(k.played)) : toBuild ? k.space : "";   // a newer update or add-ons found say so first
         setLine(cardLine1, cardLine1Row, l1);
         setLine(cardLine2, cardLine2, l2);
         cardPrimary.setVisibility(k.primary != null ? View.VISIBLE : View.GONE);

@@ -45,6 +45,7 @@ public final class BottomScreen {
         String companion;               // ready: the companion's version, null if none
         long played;                    // ready: last Play, 0 if never
         dev.peanuts.launch.PlayLedger.Entry play;   // ready: its play time (dev.peanuts.launch.PlayTime), null if never played with this app
+        String update;                  // ready: a newer update or add-ons beside its .nup (UpdateFound), null if none
         String found = "", space = "";  // to build: what the scan found
         boolean queued;                 // to build: it waits in the build queue (its state is its place, in the cover's quiet pill)
         Runnable primary, second;       // A and Y, null if none
