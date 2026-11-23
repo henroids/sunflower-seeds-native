@@ -15,8 +15,8 @@ import android.widget.TextView;
  * The Sunflower Seeds test app's look, "Scoreboard" (design option C): square panels on near-black, a purple header strip, labels in a pixel font (Silkscreen),
  * numbers in a dot-matrix font (VT323), text in Space Grotesk, mint for the selection and the main button. Only the test app (applicationId …sunflowertest)
  * has it: its colours and fonts come from android/app/src/sunflower-test (res and assets, build.gradle), and every hook asks ON first, so every other build
- * keeps the upstream look. The hooks: Ui / PUi round (no corners), face (the text font), section (pixel labels), header (the strip); MainActivity (no bananas,
- * the status row on Home). The fonts are OFL-1.1 (assets/fonts/*.txt)
+ * keeps the upstream look. The hooks: Ui / PUi round (no corners), face (the text font), section (pixel labels), header (the strip), badge (the bulb seed);
+ * BananaBackgroundView (bulb seeds drift in place of the bananas); MainActivity (the status row on Home). The fonts are OFL-1.1 (assets/fonts/*.txt)
  */
 public final class Scoreboard {
     private Scoreboard() {}
@@ -34,6 +34,13 @@ public final class Scoreboard {
         assets = c.getApplicationContext().getAssets();
         try { pixel = Typeface.createFromAsset(assets, "fonts/Silkscreen-Regular.ttf"); led = Typeface.createFromAsset(assets, "fonts/VT323-Regular.ttf"); }
         catch (RuntimeException e) { pixel = led = null; }
+    }
+
+    /** The seed in amber bulbs, turned 15 degrees (res/drawable-nodpi/sb_seed.png, the test app's only), or null: the caller's own drawing */
+    public static android.graphics.drawable.Drawable seed(Context c) {
+        if (!ON) return null;
+        int id = c.getResources().getIdentifier("sb_seed", "drawable", c.getPackageName());   // by name: the other builds have no such drawable
+        return id == 0 ? null : c.getDrawable(id);
     }
 
     /** A shape's corner radius: none on the scoreboard */

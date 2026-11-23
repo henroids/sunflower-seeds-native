@@ -75,7 +75,7 @@ public final class MainActivity extends Activity {
             bananas.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
             if (poppedText != null) poppedText.setText(poppedLine(n));
         });
-        if (dev.peanuts.ui.Scoreboard.ON) { bananas.setVisibility(View.GONE); frame.setBackgroundColor(getColor(R.color.bn_bg)); }   // PEANUTS: the scoreboard's plain board, no drifting bananas
+        if (dev.peanuts.ui.Scoreboard.ON) frame.setBackgroundColor(getColor(R.color.bn_bg));   // PEANUTS: the scoreboard's board under its drifting bulb seeds (BananaBackgroundView)
         setContentView(frame);
         PadFocus.watch(getWindow());   // a controller: the focus frame (PadFocus)
         build();

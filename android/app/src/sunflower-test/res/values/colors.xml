@@ -17,4 +17,5 @@
     <color name="bn_danger">#FFFF9670</color>
     <color name="bn_danger_tint">#FF3D2016</color>
     <color name="bn_warn_tint">#FF262A14</color>
+    <color name="sb_icon_background">#FF151A1D</color>   <!-- the icon's board -->
 </resources>
