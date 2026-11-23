@@ -18,8 +18,6 @@ import android.view.Display;
 import android.view.View;
 
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Set;
 
 import dev.nxnative.android.R;
@@ -385,16 +383,12 @@ public final class BottomScreen {
         if (PeanutsPrefs.bottomScreen(owner)) show(); else dismiss();
     }
 
-    /** First valid other display. The Thor lists Screen-2 only as a presentation display, the emulator only in the plain list */
+    /** The device's own second screen (the Thor's Screen-2), never a TV, a monitor or a cast (dev.peanuts.Screens, #358: a phone mirroring to a TV showed this page there) */
     static Display secondDisplay(Activity a) {
         DisplayManager m = (DisplayManager) a.getSystemService(Context.DISPLAY_SERVICE);
         if (m == null) return null;
         int own = a.getDisplay() != null ? a.getDisplay().getDisplayId() : Display.DEFAULT_DISPLAY;
-        Map<Integer, Display> all = new LinkedHashMap<>();
-        for (Display d : m.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)) all.put(d.getDisplayId(), d);
-        for (Display d : m.getDisplays()) all.put(d.getDisplayId(), d);
-        for (Display d : all.values()) if (d.getDisplayId() != own && d.getDisplayId() != Display.DEFAULT_DISPLAY && d.isValid()) return d;
-        return null;
+        return dev.peanuts.Screens.deviceScreen(a, m, own);
     }
 
     // ---- Lifecycle ----
@@ -452,8 +446,9 @@ public final class BottomScreen {
         if (displays != null) return;
         dm = (DisplayManager) a.getSystemService(Context.DISPLAY_SERVICE);
         if (dm == null) return;
+        dev.peanuts.Screens.log(a, "the launcher starts");   // which display is which, for a report
         displays = new DisplayManager.DisplayListener() {
-            @Override public void onDisplayAdded(int id) { show(); }
+            @Override public void onDisplayAdded(int id) { if (owner != null) dev.peanuts.Screens.log(owner, "display " + id + " came"); show(); }
             @Override public void onDisplayRemoved(int id) { if (panel != null && panel.getDisplay() != null && panel.getDisplay().getDisplayId() == id) dismiss(); show(); }
             @Override public void onDisplayChanged(int id) {
                 BackgroundFlow.stale();

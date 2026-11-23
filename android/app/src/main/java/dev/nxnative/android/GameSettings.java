@@ -192,6 +192,7 @@ final class GameSettings {
                 picture.add(new Ui.Setting(a, "✨", "FSR sharpness", v -> sharpness(a, g, again)).value(dflt(GameUpscaler.ownSharp(a, id), GameUpscaler.sharpName(a, id))).chevron(a).sub());
         }
         picture.add(new Ui.Setting(a, "📺", "Display", v -> display(a, g, again)).value(displayLabel(a, id)).chevron(a));   // PEANUTS: displayLabel (Fill)
+        picture.add(new Ui.Setting(a, "📼", "CRT filter", v -> crt(a, g, again)).value(CrtFilter.label(CrtFilter.mode(a, id))).chevron(a));   // PEANUTS: CrtFilter
         if (!aspects(prof).isEmpty())   // a profile with a native aspect mod (game.tsv variant rows labelled w:h)
             picture.add(new Ui.Setting(a, "🔳", "Aspect ratio", v -> aspect(a, g, again)).value(aspectLabel(a, id)).chevron(a));
 
@@ -845,6 +846,11 @@ final class GameSettings {
     private static void sharpness(MainActivity a, Game g, Runnable done) {   // FSR's RCAS sharpening (GameUpscaler, DM_VK_NDSR_SHARP)
         choose(a, "FSR sharpness · " + g.name, GameUpscaler.SHARP_NAMES, firstLabel(null, GameUpscaler.sharpName(GameUpscaler.sharp(a))), GameUpscaler.ownSharp(a, g.titleId),
                GameUpscaler.sharpIndex(GameUpscaler.sharp(a, g.titleId)), v -> GameUpscaler.sharp(a, g.titleId, v == null ? null : GameUpscaler.SHARPS[v]), done);
+    }
+
+    private static void crt(MainActivity a, Game g, Runnable done) {   // PEANUTS: the CRT filter (CrtFilter, DM_VK_CRT); the in-game panel changes it live
+        choose(a, "CRT filter · " + g.name, CrtFilter.MODES, firstLabel(null, CrtFilter.label(CrtFilter.mode(a))), CrtFilter.ownMode(a, g.titleId), CrtFilter.mode(a, g.titleId),
+               v -> CrtFilter.mode(a, g.titleId, v), done);
     }
 
     private static void dlssMode(MainActivity a, Game g, Runnable done) {   // the DLSS stand-in's mode (GameUpscaler.dlssMode, DM_VK_DLSS); the in-game panel changes it live

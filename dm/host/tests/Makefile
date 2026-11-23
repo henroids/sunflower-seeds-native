@@ -704,12 +704,13 @@ $(B)/t_pkp_aspect: t_pkp_aspect.c ../android/pkp_aspect.c ../hle.h ../dm.h $(GAM
 # (hle_hid.c dm_pad_raw / dm_pad_gate), over t_hid.c's stand-ins. t_peanuts_host: dm/peanuts/peanuts.c's tick thread, presence, pad reads and guarded reads
 PN_ASIF = -D__ANDROID__=1 -D__aarch64__=1 -D_ASM_X86_SIGCONTEXT_H -include stdbool.h
 .PHONY: peanuts-host
-peanuts-host: $(B)/t_peanuts_stopworld $(B)/t_peanuts_padgate $(B)/t_peanuts_host $(B)/t_peanuts_frametime $(B)/t_peanuts_graph
+peanuts-host: $(B)/t_peanuts_stopworld $(B)/t_peanuts_padgate $(B)/t_peanuts_host $(B)/t_peanuts_frametime $(B)/t_peanuts_graph $(B)/t_peanuts_audiosync
 	$(B)/t_peanuts_stopworld
 	TMPDIR="$(abspath $(B))" $(B)/t_peanuts_padgate
 	$(B)/t_peanuts_host "$(abspath $(B))"
 	$(B)/t_peanuts_frametime
 	$(B)/t_peanuts_graph
+	TMPDIR="$(abspath $(B))" $(B)/t_peanuts_audiosync
 ifeq ($(shell uname -s),Linux)
 run: peanuts-host
 endif
@@ -726,6 +727,10 @@ $(B)/t_peanuts_frametime: t_peanuts_frametime.c ../../peanuts/peanuts_frametime.
 # t_peanuts_graph: the host's drawing of the overlay's frame-time bars (peanuts_graph.c, included): background, columns, colours, premultiplied bytes, the block path.
 $(B)/t_peanuts_graph: t_peanuts_graph.c ../../peanuts/peanuts_graph.c ../../peanuts/peanuts_graph.h ../../peanuts/peanuts_frametime.c ../../peanuts/peanuts_frametime.h | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-unused-function -o $@ t_peanuts_graph.c -lpthread -lm
+# t_peanuts_audiosync: the sound following the game's pace (peanuts_audiosync.c, included): the stretch's length, pitch and continuity at fixed tempos, its exact
+# output at a tempo of 1, and the automatic mode (within 1 % until two resyncs while the game runs slow, then the game's pace, kept for the next start; none at full pace)
+$(B)/t_peanuts_audiosync: t_peanuts_audiosync.c ../../peanuts/peanuts_audiosync.c ../../peanuts/peanuts_audiosync.h | $(B)
+	$(CLANG) -O2 -g -Wall -Wno-unused-function -o $@ t_peanuts_audiosync.c -lpthread -lm
 # t_peanuts_syncstress: a hunt for lost wake-ups in hle_thread.c's waits and signals with real threads (single cases, then a storm of SYNC_SECS seconds; with --stops the
 # game is stopped and resumed throughout): make GAME=<id> peanuts-sync [SYNC_SECS=300] [SYNC_ARGS=--stops]. peanuts-sync-control builds the host's old condition
 # variable order (-DDM_TEST_CV_OLD_ORDER, a lost wake-up that is known) and passes when the test catches it

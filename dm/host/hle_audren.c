@@ -31,6 +31,7 @@ void dm_pcmout_start(void *k);
 int dm_pcmout_append(void *k, void *b);
 void *dm_pcmout_released(void *k);
 void dm_pcmout_wait(void *k, int ms);
+__attribute__((weak)) int pn_audio_follow(int index, int16_t *buf, int n, int cap);   // PEANUTS: absent in a build without dm/peanuts
 
 // P_SIZE: bytes of the game's AudioRendererParameter copied before the two fields are changed. SDK 16's struct is 0x38 bytes; SDK 8's (Link's Awakening) has one more word,
 // its revision at +0x38: copying only 0x38 left the revision uninitialized and the SDK rejected it (CheckValidRevision, Result 0x499). The SDK reads only its own size of the copy
@@ -196,8 +197,10 @@ static void render_main(void *arg) {
         int n = got ? got : 240;
         gbuf *b = free_list[--nfree];
         if (got) memcpy(b->ptr, src, (size_t)n * 4); else memset(b->ptr, 0, (size_t)n * 4);
+        if (pn_audio_follow) { int f = pn_audio_follow(ar_index(a), b->ptr, n, FRAME_MAX); next += (int64_t)(f - n) * (FRAME_NS - FRAME_NS / 200) / 240; n = f; }   // PEANUTS: stretched to the game's pace (dm/peanuts/peanuts_audiosync.h); the clock paces the frames played
         b->size = (uint64_t)n * 4;
         render_unlock();   // PEANUTS: render lock (see above)
+        if (!n) { free_list[nfree++] = b; continue; }   // PEANUTS: nothing to play yet (the stretch fills its look-ahead, peanuts_audiosync.c)
         if (!dm_pcmout_append(out, b)) free_list[nfree++] = b;
     }
     dm_pcmout_close(out);   // the output would otherwise keep its sound card callback or silent sink running and hold one of the AudioOut slots after the renderer closes

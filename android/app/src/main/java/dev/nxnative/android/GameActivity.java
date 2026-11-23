@@ -187,6 +187,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         dev.peanuts.build.ShaderCapture.cover(this, root);   // PEANUTS: internal shader preparation stays behind a progress screen
         root.setOnApplyWindowInsetsListener((v, in) -> { insetOverlay(in); return in; });   // again whenever the insets change (a turn, a fold)
         setContentView(root);
+        dev.peanuts.TvPicture.fit(this);   // PEANUTS: on a TV or monitor, a picture of at most 1080 lines and the TV's game mode (#358)
         immersive();
         if (!dev.peanuts.build.ShaderCapture.active(this)) {   // PEANUTS: preparation is not a play session
             dev.peanuts.Companion.start(this, getIntent().getStringExtra("name"));   // PEANUTS: the companion on the second display
@@ -564,6 +565,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (prof != null) env.addAll(prof.optionsEnv(optEnv -> Prefs.gameOption(this, id, optEnv)));
         Lsfg.env(this, env);   // frame generation: the user's Lossless.dll and the settings
         GameUpscaler.env(this, id, env);   // the Upscaler (Game settings, the in-game panel): the game's own upscaler and the present's scaling
+        env.add(CrtFilter.line(this, id));   // PEANUTS: the CRT filter (Settings › Display, Game settings, the in-game panel; CrtFilter)
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
         fpsModeAtStart = Prefs.paceCap(this, id);
         // PEANUTS: a supported update may lack this game's reviewed FPSLocker plan.
@@ -1404,6 +1406,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (hasFocus) getWindow().getDecorView().requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK);
     }
 
+    @Override public void onTopResumedActivityChanged(boolean top) { super.onTopResumedActivityChanged(top); if (top) dev.peanuts.Companion.gameOnTop(this); }   // PEANUTS: back in front (Recents may have moved it to another display): the game goes back to its display, the companion where it belongs (#183)
     @Override protected void onStart() {
         super.onStart();
         if (!started) return;
@@ -1445,6 +1448,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     @Override public void onConfigurationChanged(Configuration c) {
         super.onConfigurationChanged(c);
         fitOrientation();   // a fold or an unfold changes the display: the other screen may want the other answer
+        dev.peanuts.TvPicture.fit(this);   // PEANUTS: the game moved to a TV or back to the device's screen (#358)
         if (started) Native.motionRotation(getDisplay().getRotation());
     }
 

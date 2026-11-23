@@ -395,6 +395,12 @@ public final class MainActivity extends Activity {
         sharpRow = new Ui.Setting(this, "✨", "FSR sharpness", v -> pick("FSR sharpness", GameUpscaler.SHARP_NAMES, GameUpscaler.sharpIndex(GameUpscaler.sharp(this)),
                 w -> GameUpscaler.sharpDefault(this, GameUpscaler.SHARPS[w]))).chevron(this);
         perf.addView(sharpRow.view);
+        Ui.Setting crt = new Ui.Setting(this, "📼", "CRT filter", null).chevron(this);   // PEANUTS: the default for every game (CrtFilter)
+        crt.view.setOnClickListener(v -> new PadFocus.Builder(this).setTitle("CRT filter")
+                .setSingleChoiceItems(CrtFilter.MODES, CrtFilter.mode(this), (d, w) -> { CrtFilter.modeDefault(this, w); crt.value(CrtFilter.label(w)); d.dismiss(); })
+                .setNegativeButton("Cancel", null).show());
+        crt.value(CrtFilter.label(CrtFilter.mode(this)));
+        perf.addView(crt.view);
         drsRow = new Ui.Setting(this, "📐", "Dynamic resolution", v -> DrsSlider.dialog(this, "", Prefs.drs(this), null, true, w -> Prefs.drsDefault(this, w),
                 this::refreshSettings)).chevron(this);
         perf.addView(drsRow.view);

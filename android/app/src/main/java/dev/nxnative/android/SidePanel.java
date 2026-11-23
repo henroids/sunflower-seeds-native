@@ -500,6 +500,9 @@ final class SidePanel extends FrameLayout {
 
         picture();
 
+        head("CRT filter");   // PEANUTS: CrtFilter, live
+        CrtFilter.rows(act, box, game());
+
         head("Overlay");
         Overlay.rows(act, box, null);
         dev.peanuts.overlay.HudSettings.rows(act, box);   // PEANUTS: overlay style and preset
