@@ -2419,3 +2419,22 @@ Settings › Users counted a user's saves from the app's own `saves/` folder by 
 | `android/app/src/main/java/dev/nxnative/android/UserSaves.java` | Round 60's file | public now, with `of` (a user's saves across the library), `has`, `bytes`, `size` and `open` | its `// PEANUTS: new file` |
 
 Peanuts' own files: `dev/peanuts/users/UsersPage.java` (`saves` from `UserSaves.of`, Show saves), `WhoPlaysActivity.java` (`hasSave` from `UserSaves.has`), `peanuts/tests/test_user_saves.py`, `peanuts/docs/FAQ.md`.
+
+### Game page Part A: the game at the left, its areas at the right (2026-11-23, design canvas page "Spielseite", variant A)
+
+A game's page had four tabs cut by how the code is split (Performance, Game, Saves, Storage) and, on a wide window, a rail of sections inside a tab. On a
+window 600 dp wide or more (the Thor's top screen, a tablet, a phone on its side) it is now the game at the left (cover, name, version, publisher, play
+time, Play) and nine areas at the right as tiles that say what is set: Graphics, Mods & Cheats, Saves, Game options, Controls, Companion, Files, Help,
+Advanced. A opens an area at the right, L1 / R1 step the areas, B goes back to the tiles (on the tile it came from) and to Home, Y plays (Mods &
+Cheats keeps Y for a cheat's details). Every row gets a Peanuts icon of its own. Upstream still builds every row, value, dialog and switch: the port
+builds its tabs off the page and the page moves their views into the areas by title (`GameAreas`; a row it does not know goes to the area of the heading
+it was built under, with its emoji).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 5 | `build`'s first line: `GamePagePort.build`; its `wide` line: `&& !GamePagePort.harvesting()`; its sections line: every section while harvesting (one build has every row); `stepTab`: `GamePagePort.step` after Mods & Cheats' line; `openOn` (Round 61's line): `GamePagePort.at(t)` | trailing `// PEANUTS: ...` |
+| `android/app/src/main/java/dev/nxnative/android/GamePagePort.java` | new | Peanuts-owned, in upstream's package (as `CheatsBridge.java`): the harvest of the Performance and Game tabs (and Saves, Storage when their area shows), the facts the page shows, L1 / R1, the tab `openOn` names | Peanuts' own file |
+
+Peanuts-owned: `dev.peanuts.ui.GamePage` (the layout, the game's panel beside the page's column as Settings' sidebar, the tiles, an area's groups, the D-pad between panel and page, Y), `GameAreas` (the areas, every row's area, group and icon), `CheatsPage.area` / `leaveArea` / `tileLine` (Mods & Cheats inside the area: its bar of Cheats | Mods and Add, no Back, no top that stays), `SettingsPage.onBack` and `lay` and `BottomScreen.home` call `GamePage.onBack` / `left`, 44 icons in `android/app/src/peanuts/res/drawable` (drawn in `design/peanuts-native/icons/icons.py`). A narrower window keeps upstream's page (Part B).
+
+Tests: `peanuts/tests/test_game_page.py` (`GameAreasJvmTest`: the areas, the rows' places and icons, the tiles' lines; the hooks; a drawable for every icon).

@@ -117,6 +117,7 @@ public final class BottomScreen {
     public static void home(Activity a, Runnable settings) {
         SettingsPage.homeBuilt();   // a tablet's Settings opens on its tiles again
         dev.peanuts.mods.CheatsPage.left();   // Home shows: a game's Mods & Cheats is closed
+        GamePage.left();   // and a game's page opens on its tiles again
         watch(a);
         openSettings = settings;
         explain = null;

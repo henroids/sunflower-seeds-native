@@ -106,6 +106,10 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      user's save at the start (`UserSaveDirs.recoverUsers`; one it cannot finish is left and noted, it stops no start). `peanuts/UPSTREAM-EDITS.md` Round 60.
    - `android/app/src/main/java/dev/nxnative/android/GameSettings.java` — (2026-11-23, a user's saves in Settings › Users) one line after `open`: `openOn(a, g, tab)`
      opens a game's page at a tab, so Show saves on a user's card opens the game's Saves tab with that user picked (`UserSaves.open`). Round 61.
+   - `android/app/src/main/java/dev/nxnative/android/GameSettings.java` — (2026-11-23, Game page Part A) the page in areas (`dev.peanuts.ui.GamePage`):
+     `build`'s first line hands the page to `GamePagePort.build` on a window 600 dp wide or more; its `wide` and sections lines build the narrow column with every section while the port
+     takes upstream's rows off its tabs (`GamePagePort.harvesting`); `stepTab` asks `GamePagePort.step` after Mods & Cheats' own line; `openOn` (Round 61's
+     line) tells the port the tab, so Settings › Users opens the area Saves. `GamePagePort.java` is Peanuts' own file in upstream's package.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).

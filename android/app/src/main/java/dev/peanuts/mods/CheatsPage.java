@@ -58,6 +58,7 @@ public final class CheatsPage {
     private static Activity owner;
     private static int gameScroll;      // where the game's page was when the page opened, for Back
     private static boolean toTop;       // the page shows anew (opened, another tab): at its top
+    private static boolean inArea;      // the page is an area of the game's page in areas (dev.peanuts.ui.GamePage): no top of its own, Back and L1 / R1 are the area's
 
     /** A game as the game's page has it */
     static final class Game {
@@ -85,6 +86,7 @@ public final class CheatsPage {
 
     /** GameSettings.build's first line (PEANUTS hook): Mods & Cheats open for this game: its page is built into content instead, true */
     public static boolean build(Activity a, LinearLayout content, String titleId, String name, String gameDir, String packDir, Runnable again, Runnable close) {
+        if (inArea) return false;   // an area of the game's page (GamePage builds it)
         if (openFor == null || !openFor.titleId.equals(titleId) || a != owner) { openFor = null; return false; }
         openFor = new Game(titleId, name, gameDir, packDir);   // its folders as the page has them now
         CheatsPage.again = again;
@@ -98,6 +100,7 @@ public final class CheatsPage {
 
     /** MainActivity.onBackPressed (through SettingsPage.onBack): Mods & Cheats closes to the game's page; true when it did */
     public static boolean onBack(Activity a) {
+        if (inArea) return false;   // the game's page in areas: Back goes to its tiles (GamePage.onBack)
         if (openFor == null || a != owner) return false;
         close();
         return true;
@@ -105,6 +108,7 @@ public final class CheatsPage {
 
     /** GameSettings.stepTab (PEANUTS hook): L1 / R1 on the page switch Cheats and Mods; true when the page shows (the caller builds it again) */
     public static boolean stepTab(String titleId, int delta) {
+        if (inArea) return false;   // the game's page in areas: L1 / R1 step its areas
         if (openFor == null || !openFor.titleId.equals(titleId)) return false;
         tab = tab.equals(CHEATS) ? MODS : CHEATS;
         toTop = true;
@@ -112,7 +116,36 @@ public final class CheatsPage {
     }
 
     /** Home or Settings shows (BottomScreen.home, SettingsPage.lay): the page is closed */
-    public static void left() { openFor = null; dev.peanuts.settings.ModsSection.listChanged = null; }
+    public static void left() { openFor = null; inArea = false; dev.peanuts.settings.ModsSection.listChanged = null; }
+
+    /**
+     * The game's page in areas (dev.peanuts.ui.GamePage): the page's content in the area Mods &amp; Cheats (pane: the area's column under its title):
+     * Cheats | Mods and Add in a bar, then the cheats or the mods. No Back and no game name (the area and the game's panel have them), no top that stays.
+     * A switch, an import or a removal builds the game's page again (again), which shows this area again
+     */
+    public static void area(Activity a, LinearLayout pane, String titleId, String name, String gameDir, String packDir, Runnable again) {
+        owner = a;
+        inArea = true;
+        openFor = new Game(titleId, name, gameDir, packDir);
+        CheatsPage.again = again;
+        toTop = false;
+        page(a, pane, openFor, false);
+    }
+
+    /** The area Mods &amp; Cheats is left (another area, the tiles): the page is closed */
+    public static void leaveArea() {
+        if (!inArea) return;
+        inArea = false;
+        openFor = null;
+        dev.peanuts.settings.ModsSection.listChanged = null;
+    }
+
+    /** The tile of the area Mods &amp; Cheats: what the game has (as the Game tab's row said it), or what to do first */
+    public static CharSequence tileLine(Activity a, String titleId, String name, String gameDir, String packDir) {
+        Game g = new Game(titleId, name, gameDir, packDir);
+        dev.peanuts.settings.ModsSection.due(a, titleId, name, gameDir, packDir);   // a build with mods that is due starts as when the row showed
+        return summary(a, g);
+    }
 
     static void open(Activity a, Game g, String which, Runnable again) {
         owner = a;
@@ -237,7 +270,10 @@ public final class CheatsPage {
 
     // ---- The page ----
 
-    private static void page(Activity a, LinearLayout content, Game g) {
+    private static void page(Activity a, LinearLayout content, Game g) { page(a, content, g, true); }
+
+    /** The page; own: with its top (Back, the titles) kept at the top (its own page), else the bar alone (an area of the game's page) */
+    private static void page(Activity a, LinearLayout content, Game g, boolean own) {
         Model m = new Model(a, g);
         boolean wide = a.getResources().getConfiguration().screenWidthDp >= 600;
         int mods = modsCount(a, g);
@@ -267,7 +303,13 @@ public final class CheatsPage {
         head.addView(titles, PUi.weight());
         LinearLayout top = new LinearLayout(a);   // the page's top, kept at the top while the rest scrolls (stick)
         top.setOrientation(LinearLayout.VERTICAL);
-        if (wide) {
+        if (!own) {   // the area's bar: Cheats | Mods, then Add
+            LinearLayout bar = PUi.row(a);
+            bar.addView(seg, new LinearLayout.LayoutParams(PUi.dp(a, 240), ViewGroup.LayoutParams.WRAP_CONTENT));
+            bar.addView(PUi.spacer(a));
+            bar.addView(add, PUi.wrap());
+            top.addView(bar);
+        } else if (wide) {
             head.addView(seg, new LinearLayout.LayoutParams(PUi.dp(a, 240), ViewGroup.LayoutParams.WRAP_CONTENT));
             LinearLayout.LayoutParams al = PUi.wrap();
             al.leftMargin = PUi.dp(a, 10);
@@ -291,7 +333,7 @@ public final class CheatsPage {
         } else {
             cheats(a, content, m);
         }
-        stick(content, top);
+        if (own) stick(content, top);
     }
 
     /**

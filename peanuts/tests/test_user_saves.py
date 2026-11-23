@@ -131,7 +131,7 @@ class SettingsUsers(unittest.TestCase):
         op = op[:op.index('\n    }\n')]
         self.assertLess(op.index('picked.put(titleId, uid);'), op.index('GameSettings.openOn((MainActivity) a, g, GameSettings.SAVES);'))
         gs = read('GameSettings.java')
-        self.assertIn('static void openOn(MainActivity a, Game g, String t) { tab = t; a.gameSettings(g); }   // PEANUTS', gs)
+        self.assertRegex(gs, r'static void openOn\(MainActivity a, Game g, String t\) \{ tab = t; (GamePagePort\.at\(t\); )?a\.gameSettings\(g\); \}   // PEANUTS')   # the page in areas: at Saves too
 
 
 class SaveStoreStaysAlone(unittest.TestCase):
