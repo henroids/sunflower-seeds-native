@@ -77,7 +77,9 @@ FAKE = textwrap.dedent('''
             except (OSError, ValueError): pass   # as the real tool: a library it cannot read is skipped
     res = os.environ['DMSH_VK_RESULTS']; os.makedirs(res, exist_ok=True)
     out, made = [], []
+    fails = set(os.environ.get('FAKE_FAILS', '').split())   # shaders whose translation fails now: the tool leaves them out of the library
     for k in keys:
+        if k in fails: continue
         s, rp = None, os.path.join(res, k + '.r')
         if os.path.isfile(rp):   # a result of an earlier run (the real tool's result cache)
             with open(rp) as f: s = bytes.fromhex(f.read().split()[1])
@@ -278,6 +280,38 @@ class Reuse(Base):
         self.assertEqual(set(runs[1]) | set(runs[0]), set(self.vs + self.ps))   # the second run translated what the first had kept
         padded = {self.vs[i] for i in range(200) if self.ps[i] not in runs[0]}   # vertex shaders whose pixel shader the first run kept (Padding)
         self.assertEqual(set(runs[0]) & set(runs[1]), set(runs[0]) & padded)   # twice only those: the first run's other translations stay as results
+
+    def test_a_sample_shader_the_library_lacks_fails_the_check(self):
+        # one sample entry the new library lacks (its translation fails now) says the build did not make what it made before: the kept shaders are translated
+        # again. Before, up to half of the sample could be missing and the kept shaders still stood (found in review)
+        self.profile(); self.build(); self.into_pack()
+        sample = self.sample(self.vs + self.ps)
+        lost = sorted(sample)[0]
+        os.environ['FAKE_FAILS'] = lost
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): code, runs, lib = self.build()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(runs), 2)   # the checked run, then the full one
+        self.assertIn(f'[RED] reuse check: of the {len(sample)} shaders translated to check, 1 is not in the library or cannot be read there ({lost}): '
+                      f'the {400 - len(sample)} kept shaders are translated again', out.getvalue())
+        full = self.full(); del full[lost]
+        self.assertEqual(lib, full)   # every other shader a translation of now: none kept
+        self.assertEqual(set(runs[0]) | set(runs[1]), set(self.vs + self.ps) - {lost})
+        self.assertIsNone(sr.read_todo(str(self.reuse)))   # nothing kept: no full check due
+        self.assertEqual(len(list((self.reuse / sr.RECORDS_DIR).glob('*.tsv'))), 1)   # the record that led here went: only the new library's
+
+    def test_the_sample_fails_on_any_entry_it_lacks_or_cannot_read(self):
+        # check() itself: one key of the sample that the library lacks is missing, not left out of the count
+        self.profile(); self.build()
+        lib = self.out / f'v-{VERSION}' / 'dmsh_vk.lib'
+        game, _, d = sr.load_modules()
+        L = d.Library(str(lib))
+        try: sample = {k: (VERSION, L.hash_of(L.index[k], None)[1]) for k in sorted(L.index)[:20]}
+        finally: L.close()
+        self.assertEqual(sr.check(str(lib), sample, None, d), ([], []))
+        sample['00000000deadbeef'] = (VERSION, 'ab' * 32)
+        sample[self.vs[0]] = (VERSION, 'cd' * 32)
+        self.assertEqual(sr.check(str(lib), sample, None, d), ([self.vs[0]], ['00000000deadbeef']))
 
     def test_inputs_changed_without_a_record_keeps_nothing(self):
         self.profile(); self.build(); self.into_pack()

@@ -25,8 +25,8 @@
 # (<PN_REUSE_DIR>/profile/<title ID>, DM_GAME pointed at it): vk_android_build.py's delta path then keeps them byte for byte and translates the rest.
 #
 # The check: a sample of the keys that could be kept (2 %, at least 16, at most 1,000, picked by a hash of the key, and at least 4 of each class: a stage, and a
-# vertex shader with pixel shaders that pad it or one without) is left out of the manifest, so it is translated; when the library is written, each sample entry must be the older library's byte for byte (vk_android_delta.py entry_hash). One that differs, or a
-# sample of which less than half could be compared, means the rule did not hold for this game: the kept results are deleted and the tool runs again with the
+# vertex shader with pixel shaders that pad it or one without) is left out of the manifest, so it is translated; when the library is written, each sample entry must be the older library's byte for byte (vk_android_delta.py entry_hash). One that differs, or
+# one the new library lacks or has unreadable, means the rule did not hold for this game: the kept results are deleted and the tool runs again with the
 # profile as it is, which translates them (a full build; the shaders translated already are kept by its own result cache). A library that cannot be read, an
 # entry that cannot be read, a record that is not this library's: that part is translated. Nothing here can make the step pass with a shader the tool did not
 # make or keep by its own rules.
@@ -465,18 +465,17 @@ def wanted_keys(argv, deps, delta):
 
 
 def check(new_lib, sample, zstd, delta):
-    """→ (compared, [keys whose translated entry differs]) for the sample against the library just written"""
+    """→ ([keys whose translated entry differs], [keys not in the library just written, or whose entry there cannot be read]) for the sample against it"""
     L = delta.Library(new_lib)
     try:
-        compared, differ = 0, []
+        differ, missing = [], []
         for k, (_, h) in sorted(sample.items()):
             i = L.index.get(k)
-            if i is None: continue
+            if i is None: missing.append(k); continue
             try: _, nh, _ = L.hash_of(i, zstd)
-            except Exception: continue
-            compared += 1
+            except Exception: missing.append(k); continue
             if nh != h: differ.append(k)
-        return compared, differ
+        return differ, missing
     finally: L.close()
 
 
@@ -770,10 +769,14 @@ def reuse(argv):
         code = run_build(argv, {'DM_GAME': str(prof)} if prof else {})
         if code != 0 and kept: drop_unchecked(res)   # a failed step: its kept results are not left for a Retry that may not check them
         if code == 0 and kept:
-            compared, differ = check(os.path.join(out_dir, 'dmsh_vk.lib'), sample, zstd, delta)
-            if differ or compared * 2 < len(sample):
-                why = (f'{len(differ)} of {compared} shaders translated to check differ from the older library ({", ".join(differ[:3])})' if differ
-                       else f'only {compared} of the {len(sample)} shaders translated to check are in the library')
+            differ, missing = check(os.path.join(out_dir, 'dmsh_vk.lib'), sample, zstd, delta)
+            # every sample entry must be there and the older library's: the sample's keys are shaders this build makes (wanted_keys: of them only the ones the
+            # split found), and an older library had each of them, so one the new library lacks (its translation failed now, or the tool left it out) says the
+            # build did not make what it made before. Before, up to half of the sample could be missing and the kept shaders still stood (found in review)
+            if differ or missing or not sample:
+                parts = ([f'{len(differ)} {"differs" if len(differ) == 1 else "differ"} from the older library ({", ".join(differ[:3])})'] if differ else []) \
+                    + ([f'{len(missing)} {"is" if len(missing) == 1 else "are"} not in the library or cannot be read there ({", ".join(missing[:3])})'] if missing else [])
+                why = f'of the {len(sample)} shaders translated to check, {" and ".join(parts)}' if parts else 'no shader was translated to check them'
                 say(f'[RED] reuse check: {why}: the {len(kept)} kept shaders are translated again')
                 drop_unchecked(res)
                 if reuse_dir: shutil.rmtree(Path(reuse_dir) / RECORDS_DIR, ignore_errors=True)   # a record that led here is not trusted again
@@ -782,7 +785,7 @@ def reuse(argv):
             else:
                 try: os.unlink(os.path.join(res, MARK))
                 except OSError: pass
-                say(f'reuse check: {compared} of {compared} shaders translated to check are the older library\'s byte for byte; {len(kept)} shaders kept')
+                say(f'reuse check: {len(sample)} of {len(sample)} shaders translated to check are the older library\'s byte for byte; {len(kept)} shaders kept')
         if reuse_dir: shutil.rmtree(Path(reuse_dir) / 'profile', ignore_errors=True)
     if code == 0 and reuse_dir:
         try:
