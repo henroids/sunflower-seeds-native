@@ -17,7 +17,7 @@ MODS = APP / 'main/java/dev/peanuts/mods'
 LAUNCHER = APP / 'main/java/dev/nxnative/android'
 TEST = APP / 'jvmtest/java/dev/peanuts/mods/CheatLoaderJvmTest.java'
 CORE = [MODS / 'CheatFile.java', MODS / 'CheatImport.java', MODS / 'CheatSources.java']
-UI_FILES = [MODS / 'CheatPick.java', LAUNCHER / 'CheatsBridge.java']   # the words the player reads
+UI_FILES = [MODS / 'CheatPick.java', LAUNCHER / 'CheatsBridge.java', MODS / 'CheatsPage.java', MODS / 'CheatImportUi.java']   # the words the player reads
 
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'needs a JDK')
@@ -53,6 +53,19 @@ class Sources(unittest.TestCase):
         self.assertIn('CheatSources.migrate(', mc, "upstream's imported/ files become sources")
         bridge = (LAUNCHER / 'CheatsBridge.java').read_text(encoding='utf-8')
         self.assertIn('Icons.tile(row.tile, "folder")', bridge, "the Cheat files row's tile is the Peanuts folder icon, no emoji")
+
+    def test_the_page_replaces_the_rows(self):   # Part D
+        prefs = (LAUNCHER / 'Prefs.java').read_text(encoding='utf-8')
+        self.assertIn('CheatsBridge.wanted(c, titleId', prefs, 'a start passes cheats when a source is on')
+        settings = (LAUNCHER / 'GameSettings.java').read_text(encoding='utf-8')
+        self.assertNotRegex(settings, r'(?m)^\s*if \(Prefs\.cheatsGame\(id\)\) CheatsUi\.rows', 'the Game tab has the page row, not the cheat rows (only the comment says what it was)')
+        self.assertIn('dev.peanuts.mods.CheatsPage.entry(', settings)
+        self.assertIn('dev.peanuts.mods.CheatsPage.build(', settings)
+        self.assertIn('dev.peanuts.mods.CheatsPage.stepTab(', settings)
+        page = (MODS / 'CheatsPage.java').read_text(encoding='utf-8')
+        self.assertIn('stick(content, top);', page, "the page's top stays while the rest scrolls under it (the canvas)")
+        lib = (APP / 'main/java/dev/peanuts/ui/LibrarySettings.java').read_text(encoding='utf-8')
+        self.assertLess(lib.index('CheatImportUi.result('), lib.index('CheatsBridge.result('), "the page's Add is asked before the rows' sheet (the same request codes)")
 
     def test_the_start_merges_the_sources(self):
         mc = (LAUNCHER / 'ModCheats.java').read_text(encoding='utf-8')

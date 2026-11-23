@@ -222,6 +222,9 @@ public final class PeanutsPrefs {
      */
     public static String packImportPick(Context c) { return of(c).getString("pack_import_pick", null); }
     public static void packImportPick(Context c, String pick) { put(c, "pack_import_pick", pick); }
+    /** A game's Mods &amp; Cheats › Show in the game: its Mods tab in the in-game panel (SPEC-mod-menu.md, Package C); on by default */
+    public static boolean modsTab(Context c, String titleId) { return of(c).getBoolean(key(titleId, "mods_tab"), true); }
+    public static void modsTab(Context c, String titleId, boolean on) { of(c).edit().putBoolean(key(titleId, "mods_tab"), on).apply(); }
 
     // (Removed: a dead, unread duplicate of the "second screen physical/off" pref - dev.peanuts.settings.CompanionSection.secondScreen() is the one
     // Companion.java actually reads, in its own SharedPreferences file ("peanuts", MODE_MULTI_PROCESS).)

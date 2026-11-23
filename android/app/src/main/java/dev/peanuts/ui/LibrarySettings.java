@@ -307,6 +307,7 @@ public final class LibrarySettings {
     public static boolean result(Activity a, int request, int result, Intent data) {
         if (BuildLogUi.result(a, request, result, data)) return true;   // Share build log's Save to a folder (REQ_SAVE 71)
         if (PackImportUi.result(a, request, result, data)) return true;   // the game sheet's Import pack… (72, 73)
+        if (dev.peanuts.mods.CheatImportUi.result(a, request, result, data)) return true;   // Mods & Cheats' Add (83, 84 when it started the pick)
         if (dev.nxnative.android.CheatsBridge.result(a, request, result, data)) return true;   // Game settings › Cheat files: a cheat file, a folder, an export (83 to 86)
         if (request < REQ_KEYS || request > REQ_MOD_ZIP) return false;
         if (result != Activity.RESULT_OK || data == null || data.getData() == null) return true;

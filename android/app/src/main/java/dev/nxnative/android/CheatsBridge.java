@@ -84,6 +84,72 @@ public final class CheatsBridge {
 
     private static String first(Set<String> s) { return s.isEmpty() ? null : s.iterator().next(); }
 
+    // ---- For the Mods & Cheats page (dev.peanuts.mods.CheatsPage, Part D) ----
+
+    /** The size of main's code in the pack (main.fixups.tsv "# TEXT_END"), which tells a code cheat from a data cheat; -1 when the pack has none */
+    public static long textEnd(String packDir) {
+        if (packDir == null || packDir.isEmpty()) return -1;
+        File f = new File(packDir, "main.fixups.tsv");
+        if (!f.isFile()) return -1;
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(f), StandardCharsets.UTF_8))) {
+            for (String l; (l = r.readLine()) != null && l.startsWith("#"); ) {
+                String[] w = l.substring(1).trim().split("\\s+");
+                if (w.length >= 2 && w[0].equals("TEXT_END")) return Long.parseLong(w[1].replaceFirst("^0[xX]", ""), 16);
+            }
+        } catch (IOException | NumberFormatException ignored) { }
+        return -1;
+    }
+
+    /**
+     * The merge a start would make now (ModCheats.install): the app's cheats, the player's sources and the enabled mods' cheat files of this build, with every
+     * cheat's key; textEnd gives the kinds (CheatFile.parse). The page switches by these keys
+     */
+    public static CheatSources.Merged merged(Context c, String titleId, String gameDir, String packDir, String build, long textEnd) {
+        String app = appText(packDir, build);
+        List<ModCheats.ModFile> mods = ModCheats.of(modDirs(gameDir, titleId, packDir), build, null);
+        return CheatSources.merge(ModCheats.blocks(app == null ? "" : app, folder(c, titleId), build, mods, textEnd));
+    }
+
+    /** The enabled mods' cheats folders, as GameActivity.start finds them (dev.peanuts.mods.ModRuntime.cheatsDirs beside the game) */
+    static List<File> modDirs(String gameDir, String titleId, String packDir) {
+        if (gameDir == null || gameDir.isEmpty()) return java.util.Collections.emptyList();
+        File game = new File(gameDir);
+        try {
+            return dev.peanuts.mods.ModRuntime.cheatsDirs(game.isDirectory() ? game : game.getParentFile(), titleId, packDir == null || packDir.isEmpty() ? null : new File(packDir));
+        } catch (RuntimeException e) {
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    /** The player's toggles, by key (the merged file's names) */
+    public static Set<String> on(Context c, String titleId) { return Prefs.cheatsOn(c, titleId); }
+    public static void on(Context c, String titleId, Set<String> keys) { Prefs.cheatsOn(c, titleId, keys); }
+    public static void on(Context c, String titleId, String key, boolean on) { Prefs.cheatOn(c, titleId, key, on); }
+
+    /**
+     * Prefs.cheats (PEANUTS hook): whether a start hands the host the game's cheats. Any game may (the profile's cheats rows are no longer asked); it does when a
+     * source is on. The first time for a game, its earlier state moves over: the app's own cheats are on when the game's old Cheats switch was (master), and upstream's
+     * imported files become sources (CheatSources.migrate)
+     */
+    public static boolean wanted(Context c, String titleId, boolean master) {
+        File folder = folder(c, titleId);
+        try {
+            Profile p = Profile.of(titleId);
+            if (!CheatSources.appKnown(folder) && (master || p != null && p.cheats)) CheatSources.appEnabled(folder, master);   // only a game that has had the switch writes a state
+            List<CheatSources.Source> moved = CheatSources.migrate(folder, System.currentTimeMillis());
+            if (!moved.isEmpty()) android.util.Log.i("peanuts", "cheats: " + titleId + ": " + moved.size() + " imported file(s) are sources now");
+        } catch (IOException | RuntimeException e) {
+            android.util.Log.w("peanuts", "cheats: " + titleId + ": the earlier state could not be moved: " + e);
+            return master;
+        }
+        if (Boolean.TRUE.equals(CheatSources.appEnabled(folder))) return true;
+        for (CheatSources.Source s : CheatSources.list(folder)) if (s.enabled && !s.files().isEmpty()) return true;
+        return false;
+    }
+
+    /** The game's old Cheats switch (Game settings › Cheats, Experimental), kept for {@link #wanted}'s first look */
+    public static boolean master(Context c, String titleId) { return Prefs.of(c).getBoolean(Prefs.gameKey("cheats", titleId), false); }
+
     // ---- The row and its sheet ----
 
     /** CheatsUi.rows (PEANUTS hook): Cheat files, what the game has, opening the sheet. Its tile is the Peanuts folder icon (the sheet imports files and folders) */
