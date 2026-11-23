@@ -9,7 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The areas of a game's page (GamePage; design: the canvas "Peanuts Settings Redesign", page "Spielseite", variant A), as data: each area's label, icon
+ * The areas of a game's page (GamePage), as data: each area's label, icon
  * and line, and for every row upstream's GameSettings and MainActivity.gameTab build, the area, the group and the Peanuts icon it gets. Keyed by the
  * row's title as upstream builds it. A row this table does not know (upstream added one) goes to the area of the heading it was built under, in a
  * group "More", with its own emoji, so nothing is lost after an update. Plain Java, no Android: peanuts/tests/test_game_page.py runs GameAreasJvmTest on it.

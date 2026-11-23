@@ -21,7 +21,7 @@ import dev.peanuts.ui.Icons;
 import dev.peanuts.ui.PUi;
 
 /**
- * Mods &amp; Cheats › Add (SPEC-mod-menu.md, Package B 2; the canvas board "Import"): a file (.zip or .txt) or a folder from this device, read off the UI thread
+ * Mods &amp; Cheats › Add (SPEC-mod-menu.md, Package B 2): a file (.zip or .txt) or a folder from this device, read off the UI thread
  * (CheatImport), then one dialog in the app's AlertDialog look: the cheats for the game's version ("Add cheats"), or why not (another version, another game, no
  * build named, nothing found). A pick with romfs or exefs folders is a mod: it goes to the mod import (ModsSection) on the page's Mods tab. Nothing is downloaded.
  * The pickers' results come back through MainActivity.onActivityResult → dev.peanuts.ui.LibrarySettings.result → {@link #result}.

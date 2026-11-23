@@ -39,7 +39,7 @@ import dev.nxnative.android.R;
 import dev.peanuts.PeanutsPrefs;
 
 /**
- * The in-game panel's Mods tab (SPEC-mod-menu.md Package C 1-3, 5-7; David's canvas board "Mod-SidePanel"), in the panel's own look (its dark sheet, the
+ * The in-game panel's Mods tab (SPEC-mod-menu.md Package C 1-3, 5-7), in the panel's own look (its dark sheet, the
  * yellow of its selected tab and focus frame, SidePanel's headings and notes as PanelPolish styles them). dev.nxnative.android.ModsPanel puts it between
  * Controls and General and hands it the panel's box.
  * <ul>

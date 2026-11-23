@@ -33,7 +33,7 @@ import java.util.Map;
 import dev.nxnative.android.R;
 
 /**
- * A game's page in areas (the canvas "Peanuts Settings Redesign", page "Spielseite", variant A): the game at the left (its cover, name, version,
+ * A game's page in areas: the game at the left (its cover, name, version,
  * publisher, play time and Play), its areas at the right (GameAreas: Graphics, Mods &amp; Cheats, Saves, Game options, Controls, Companion, Files,
  * Help, Advanced) as tiles that say what is set, and an area's rows in their place once it is opened. Upstream's GameSettings and MainActivity.gameTab
  * build every row as before (dev.nxnative.android.GamePagePort takes them off their tabs); this lays them out, gives each its Peanuts icon, and keeps
