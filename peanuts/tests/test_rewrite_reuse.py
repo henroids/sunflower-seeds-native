@@ -1,17 +1,22 @@
 """dm/peanuts/reuse/rewrite_reuse.py (issue #120): the rewrite step keeps a module whose key moved only with other builds' rows of the profile, and rewrites it on any
 change of what its own rewrite reads (its build's patches, its module's build rows, main's fps_decouple rows, its bytes, the rewriter) or of its patched.bin. The
-profiles and modules here are small stand-ins (an NSO header with a build ID); no game files."""
+profiles and modules here are small stand-ins (an NSO header with a build ID); no game files. BuildSrc runs the rewriter itself (skipped without Capstone 5)."""
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(REPO / 'dm/peanuts/reuse'), str(REPO / 'dm/games')]
+sys.path[:0] = [str(REPO / 'dm/peanuts/reuse'), str(REPO / 'dm/games'), str(REPO / 'dm/tools/tests')]
 import rewrite_reuse as rr   # noqa: E402
 import game   # noqa: E402
+try:
+    import capstone
+    HAVE_REWRITER = capstone.cs_version()[0] == 5
+except ImportError: HAVE_REWRITER = False
 
 REWRITER = ('patch_nso.py', 'nso.py')
 SDK, MAIN_A, MAIN_B = 'aa' * 16, 'b1' * 16, 'b2' * 16
@@ -123,10 +128,12 @@ class Rewrite(unittest.TestCase):
 class Restore(Rewrite):
     """The copy of a module's files its record keeps (<PN_REUSE_DIR>/rewrite/<module>.files): a pack without the module (another Build folder, a build deleted)
     gets them back instead of a rewrite, when the module's part and every file are the recorded ones"""
-    FILES = {'main.patched.bin': b'patched main', 'main.fixups.tsv': b'layout\n', 'main.changed.tsv': b'0x10\t1\n', 'build_src.sha256': b'tools\n'}
+    FILES = {'main.patched.bin': b'patched main', 'main.fixups.tsv': b'layout\n', 'main.changed.tsv': b'0x10\t1\n'}
+    OLD_SRC = b'tools of the rewrite the copy was made with\n'   # build_src.sha256 as that rewrite wrote it
 
     def made(self, g, main):
         for f, b in self.FILES.items(): (self.out / f).write_bytes(b)
+        (self.out / rr.SHARED).write_bytes(self.OLD_SRC)
         (self.out / 'main.android.key').write_text('key-1\n')
         (self.out / 'sdk.patched.bin').write_bytes(b'not main\'s')   # another module's file beside it: not in main's copy
         rr.record('main', main, self.out, g, REWRITER)
@@ -134,12 +141,20 @@ class Restore(Rewrite):
     def new_pack(self):
         p = self.d / 'pack2'; p.mkdir(exist_ok=True); return p
 
+    def current_src(self):
+        """build_src.sha256 as write_build_src makes it here (BuildSrc: the rewriter's own, byte for byte)"""
+        d = self.d / 'src-now'; d.mkdir(exist_ok=True)
+        self.assertTrue(rr.write_build_src(d))
+        return (d / rr.SHARED).read_bytes()
+
     def test_a_pack_without_the_module_gets_the_copy(self):
         main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
         self.made(g, main)
         p = self.new_pack()
         self.assertTrue(rr.restore('main', main, p, g, 'key-2', REWRITER))
-        self.assertEqual({f.name: f.read_bytes() for f in p.iterdir() if f.name != 'main.android.key'}, self.FILES)
+        self.assertEqual({f.name: f.read_bytes() for f in p.iterdir() if f.name not in ('main.android.key', rr.SHARED)}, self.FILES)
+        self.assertEqual((p / rr.SHARED).read_bytes(), self.current_src())   # not the copy's: the copy holds none
+        self.assertFalse((self.d / 'reuse' / 'rewrite' / 'main.files' / rr.SHARED).exists())
         self.assertEqual((p / 'main.android.key').read_text(), 'key-2\n')   # the current key, written last
         self.assertFalse((p / 'sdk.patched.bin').exists())
 
@@ -167,12 +182,26 @@ class Restore(Rewrite):
         p = self.new_pack(); (p / 'main.patched.bin').write_bytes(b'a cut rewrite')   # a rewrite stopped part way: no key, rewritten
         self.assertFalse(rr.restore('main', main, p, g, 'key-2', REWRITER))
 
-    def test_the_shared_file_of_the_pack_stays(self):
+    def test_the_shared_file_of_the_pack_is_the_current_one(self):
+        # before, a restore left the pack's file as it was, one written by an earlier rewrite of another module
         main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
         self.made(g, main)
-        p = self.new_pack(); (p / 'build_src.sha256').write_bytes(b'written by another module\'s rewrite\n')
+        p = self.new_pack(); (p / rr.SHARED).write_bytes(b'written by an earlier rewrite of another module\n')
         self.assertTrue(rr.restore('main', main, p, g, 'key-2', REWRITER))
-        self.assertEqual((p / 'build_src.sha256').read_bytes(), b'written by another module\'s rewrite\n')
+        self.assertEqual((p / rr.SHARED).read_bytes(), self.current_src())
+
+    def test_no_shared_file_no_restore(self):
+        # the shared file cannot be made (patch_nso.py's lines not found): the module is rewritten, its files left without a key
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        self.made(g, main)
+        saved = rr.write_build_src; rr.write_build_src = lambda out: False
+        try:
+            p = self.new_pack()
+            self.assertFalse(rr.restore('main', main, p, g, 'key-2', REWRITER))
+            self.assertFalse((p / 'main.android.key').exists())
+            self.assertFalse(self.keeps('main', main, g))
+            self.assertEqual((self.out / 'main.android.key').read_text(), 'key-1\n')
+        finally: rr.write_build_src = saved
 
     def test_off_and_no_folder(self):
         main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
@@ -192,7 +221,7 @@ class Restore(Rewrite):
             self.assertEqual(n, [])
             (self.out / 'main.patched.bin').write_bytes(b'rewritten again')
             rr.record('main', main, self.out, g, REWRITER)
-            self.assertEqual(len(n), len(self.FILES))
+            self.assertEqual(len(n), len(self.FILES))   # the module's files, not the shared one
         finally: rr.shutil.copyfile = saved
         self.assertEqual((self.d / 'reuse' / 'rewrite' / 'main.files' / 'main.patched.bin').read_bytes(), b'rewritten again')
 
@@ -209,7 +238,7 @@ class Restore(Rewrite):
 class Review(Rewrite):
     """igawa6's review of #150 (2026-11-22): PN_REUSE=0 writes nothing, the copies go under the cap when they are made, and a record other rules wrote is not
     trusted"""
-    FILES, made, new_pack = Restore.FILES, Restore.made, Restore.new_pack
+    FILES, OLD_SRC, made, new_pack = Restore.FILES, Restore.OLD_SRC, Restore.made, Restore.new_pack
 
     def other_title(self, title, mb, age):
         """Another title's kept copy of mb MB, age seconds old (only its size and time count)"""
@@ -296,6 +325,47 @@ class Tables(Rewrite):
         other = self.d / 'other-build-folder'; other.mkdir()
         self.assertTrue(rr.restore('main', src, other, g, 'key-2', REWRITER))
         self.assertFalse((other / 'main.match.tsv').exists())
+
+
+@unittest.skipUnless(HAVE_REWRITER, 'the rewriter needs Capstone 5')
+class BuildSrc(unittest.TestCase):
+    """build_src.sha256 (the SHA-256 of the rewriter's files and every patch file) of a pack whose module was kept or restored is the one a rewrite of the same
+    inputs writes, byte for byte: patch_nso.py run here on a small module (test_xmod's), with a profile outside the repository (DM_GAMES_DIR), so the file lists
+    its patches.py too. Before, a kept module left the file of the rewrite it was made with, and a restore the copy's where the pack had none (igawa6's review
+    of #150). Rewrite's helpers, not its tests (each test here runs the rewriter)"""
+    OLD_SRC = b'tools of an earlier rewrite\n'
+    tearDown, profile, built, src, keeps = Rewrite.tearDown, Rewrite.profile, Rewrite.built, Rewrite.src, Rewrite.keeps
+
+    def setUp(self):
+        Rewrite.setUp(self)
+        more = self.d / 'more' / '0100000000EE0000'; more.mkdir(parents=True); (more / 'patches.py').write_text('CUTS = {}\n')
+        os.environ['DM_GAMES_DIR'] = str(self.d / 'more')
+        import test_xmod
+        src = self.d / 'rewrite' / 'main'; src.parent.mkdir(); src.write_bytes(test_xmod.module({0x100: 0xD65F03C0}))   # a RET
+        r = subprocess.run([sys.executable, str(REPO / 'dm/tools/patch_nso.py'), str(src), str(self.d / 'rewrite' / 'pack'), 'main', '--target', 'android'],
+                           capture_output=True, text=True, env=dict(os.environ, DM_REWRITE_J='1', DM_GAME=''))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.want = (self.d / 'rewrite' / 'pack' / rr.SHARED).read_bytes()
+        self.assertIn(b'  patch_nso.py\n', self.want)
+        self.assertIn(b'/0100000000EE0000/patches.py\n', self.want)
+
+    def test_after_a_keep(self):
+        sdk = self.src('sdk', module(SDK))
+        (self.out / rr.SHARED).write_bytes(self.OLD_SRC)
+        self.built('sdk', sdk, self.profile([('v1', '1.0.0', MAIN_A, SDK)]))
+        self.assertTrue(self.keeps('sdk', sdk, self.profile([('v1', '1.0.0', MAIN_A, SDK), ('v2', '1.0.1', MAIN_B, SDK)])))
+        self.assertEqual((self.out / rr.SHARED).read_bytes(), self.want)
+
+    def test_after_a_restore(self):
+        main, g = self.src('main', module(MAIN_A)), self.profile([('v1', '1.0.0', MAIN_A, SDK)])
+        (self.out / rr.SHARED).write_bytes(self.OLD_SRC)
+        self.built('main', main, g)
+        for have in (None, self.OLD_SRC):   # a pack without the file, and one with another rewrite's
+            with self.subTest(have=have):
+                p = self.d / f'pack-{have is None}'; p.mkdir()
+                if have: (p / rr.SHARED).write_bytes(have)
+                self.assertTrue(rr.restore('main', main, p, g, 'key-2', REWRITER))
+                self.assertEqual((p / rr.SHARED).read_bytes(), self.want)
 
 
 if __name__ == '__main__':

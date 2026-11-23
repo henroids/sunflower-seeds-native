@@ -178,12 +178,18 @@ Tests: `peanuts/tests/test_rewrite_reuse.py`. On an AYN Thor (ACNH 3.0.3, 2026-1
 own builds' rows changed; Prepare took 3 min 37 s. The kept `sdk.patched.bin` is byte for byte (SHA-256) the one a build from nothing makes with that
 profile.
 
-The record also keeps a copy of the module's files (`<module>.*` as the rewriter names them, and `build_src.sha256`, each by its SHA-256:
+The record also keeps a copy of the module's files (`<module>.*` as the rewriter names them, each by its SHA-256:
 `no_backup/reuse/<title ID>/rewrite/<module>.files/`), made again only when they changed. A pack that has no rewrite of the module (another Build folder, a build
-deleted) gets the copy back when the module's part is the recorded one and every file is the recorded one: the files are copied in, the shared
-`build_src.sha256` only where the pack has none, and the current key last (`<module>: kept from the app's copy of its last rewrite ...`). Otherwise, or with a copy
+deleted) gets the copy back when the module's part is the recorded one and every file is the recorded one: the files are copied in, then the shared
+`build_src.sha256`, and the current key last (`<module>: kept from the app's copy of its last rewrite ...`). Otherwise, or with a copy
 that changed, the module is rewritten; a copy cut short leaves files without a key, which the rewrite replaces. Each copy goes under the 4 GB of every game's
 kept copies when it is made, as the library's (`shader_reuse.py room`), and none that would leave less than 2 GB free.
+
+`build_src.sha256` (the SHA-256 of the rewriter's files and every patch file, the same for every module) is written, for a kept module and a restored one, as a
+rewrite of any module writes it now: the lines of `patch_nso.py` that write it are taken from its source and run (`rewrite_reuse.py write_build_src`), so its
+list of files has one source. Before, a kept module left the file of the rewrite it was made with, and a restore the copy's where the pack had none. The key's
+list of the rewriter's files (`pack_android.py REWRITER`) is not that list: it has `nso_match.py`, which the file leaves out, and of the patch files only
+`sdk_patches.py`, where the file has every profile's. When those lines cannot be found or run, the module is rewritten.
 
 Each record covers the source of the rules that wrote it, as the split's key covers `split_reuse.py`: `shader_reuse.py`'s record and each shader's part
 hash `shader_reuse.py` (`RULES`), each module's part hashes `rewrite_reuse.py`. A later app whose keep rules differ keeps nothing at its first build, instead
@@ -358,6 +364,7 @@ oldest going first, this game's split results before them, none above the cap or
 build's library equals a full build's. `peanuts/tests/test_rewrite_reuse.py`: a new version row keeps an unchanged `sdk`, a new main build rewrites `main`, patches for
 the build (in the profile or in another profile's `patches.py`) and `MATCH_CUTS` of the module rewrite it, its bytes, its `patched.bin` and the `fps_decouple`
 rows count, no record, another key, `PN_REUSE=0` (nor a record or a copy written), a copy under the cap of every game's copies, a record other keep rules
-wrote. `peanuts/tests/test_split_reuse.py`: past the cap this game's kept results go. `peanuts/tests/test_rewrite_forks.py` `Worker`: a tool that asks
+wrote; `BuildSrc`: after a keep and after a restore `build_src.sha256` is the one `patch_nso.py` writes, byte for byte (the rewriter run on a small module,
+skipped without Capstone 5). `peanuts/tests/test_split_reuse.py`: past the cap this game's kept results go. `peanuts/tests/test_rewrite_forks.py` `Worker`: a tool that asks
 for a rerun (#177's second pass) runs again with its variables, one that asks again for the same fails. `StorageScanJvmTest`: a game's build caches are
 not deleted while a build holds their lock.

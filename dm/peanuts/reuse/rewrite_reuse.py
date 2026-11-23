@@ -15,15 +15,21 @@
 # doubt (no record, another part, another patched.bin, a mod's cross-module layout, no PN_REUSE_DIR) rewrites the module as before; PN_REUSE=0 (the job's env.txt)
 # turns it off and writes no record or copy. The part covers this file too (RULES): a record that other rules wrote is not trusted.
 #
-# The record also keeps a copy of the module's files (<module>.* and build_src.sha256, each by its SHA-256, in <PN_REUSE_DIR>/rewrite/<module>.files/): a pack that
+# The record also keeps a copy of the module's files (<module>.*, each by its SHA-256, in <PN_REUSE_DIR>/rewrite/<module>.files/): a pack that
 # has no rewrite of the module (another Build folder, a build deleted) gets them back when its part is the recorded one and every file is the recorded one (restore),
 # instead of a rewrite (ACNH's main: 2 to 3 minutes on an AYN Thor, Octopath Traveler 0's: 25). Each copy goes under the cap of the kept copies of every game
 # when it is made (dm/peanuts/reuse/shader_reuse.py room), and none that would leave less than KEEP_FREE_MB free.
+# A kept or restored module's pack gets the build_src.sha256 a rewrite writes now (write_build_src): patch_nso.py's own lines write it, from its own list.
+import ast
+import glob
 import hashlib
+import importlib.machinery
 import importlib.util
 import os
 import shutil
 import sys
+import types
+import warnings
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -32,8 +38,56 @@ FORMAT = 'pn-rewrite-part 1'
 RULES = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:32]   # this file, the keep rules, in every part: a record another file wrote is not trusted, as
 # split_reuse.py's key covers its own source (found in review: a later app with other rules would have kept by what the earlier rules wrote)
 _LOADED = {}
-SHARED = 'build_src.sha256'   # written by every module's rewrite, the same for each (patch_nso.py): copied with each, put back when the pack has none
+SHARED = 'build_src.sha256'   # written by every module's rewrite, the same for each (patch_nso.py): written as a rewrite writes it (write_build_src), never copied
 KEEP_FREE_MB = 2048   # as shader_reuse.py's
+REWRITER_PY = REPO / 'dm/tools/patch_nso.py'
+_BUILD_SRC = []
+
+
+def build_src_code():
+    """patch_nso.py's own lines that write build_src.sha256 (the SHA-256 of the rewriter's files and every patch file, by path from dm/tools), taken from its source
+    as test_rewrite_forks.py takes in_forks (the script rewrites a module when it runs, so it is not imported): its list of patch files (PATCH_FILES, from its first
+    assignment to its last) and the `with` that writes the file. The list is the rewriter's own: rewriter_files (pack_android.py REWRITER, what the key hashes) is
+    not it (it has nso_match.py, which the file leaves out, and of the patch files only sdk_patches.py, where the file has every profile's). → (code, [the
+    modules it names by __file__]), None when the source does not hold them so"""
+    if not _BUILD_SRC:
+        out = None
+        try:
+            tree = ast.parse(REWRITER_PY.read_text(encoding='utf-8'))
+            named = lambda n: any(isinstance(t, ast.Name) and t.id == 'PATCH_FILES' for t in (n.targets if isinstance(n, ast.Assign) else [n.target]))
+            sets = [i for i, n in enumerate(tree.body) if isinstance(n, (ast.Assign, ast.AugAssign)) and named(n)]
+            writes = [n for n in tree.body if isinstance(n, ast.With) and any(isinstance(c, ast.Constant) and c.value == SHARED for c in ast.walk(n.items[0].context_expr))]
+            if sets and len(writes) == 1:
+                mods = sorted({a.value.id for a in ast.walk(writes[0]) if isinstance(a, ast.Attribute) and a.attr == '__file__' and isinstance(a.value, ast.Name)})
+                out = compile(ast.Module(body=tree.body[sets[0]:sets[-1] + 1] + writes, type_ignores=[]), str(REWRITER_PY), 'exec'), mods
+        except (OSError, SyntaxError, ValueError): pass
+        _BUILD_SRC.append(out)
+    return _BUILD_SRC[0]
+
+
+def write_build_src(out):
+    """build_src.sha256 into the pack out as a rewrite of any module writes it now: patch_nso.py's lines (build_src_code) run with its __file__, the modules it
+    imports from its own folder and this environment (DM_GAMES_DIR), into a temporary folder in out, then renamed. Found in review: a kept module left the file of
+    the rewrite it was made with, a restored one the copy's where the pack had none. → False when it cannot be made (the module is then rewritten)"""
+    code = build_src_code()
+    if code is None: return False
+    code, mods = code
+    ns = {'__file__': str(REWRITER_PY), '__name__': 'pn_build_src', 'os': os, 'glob': glob, 'hashlib': hashlib}
+    for m in mods:   # (patch_nso.py runs from dm/tools, sys.path[0])
+        spec = importlib.machinery.PathFinder.find_spec(m, [str(REWRITER_PY.parent)])
+        if spec is None or not spec.origin: return False
+        ns[m] = types.SimpleNamespace(__file__=spec.origin)
+    tmp = Path(out) / f'.{SHARED}.tmp'   # (one a stop left goes here)
+    try:
+        shutil.rmtree(tmp, ignore_errors=True); tmp.mkdir()
+        ns['outdir'] = str(tmp)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', ResourceWarning)   # (its open(...).read() leaves each file to be closed when collected, as in a rewrite)
+            exec(code, ns)
+        os.replace(tmp / SHARED, Path(out) / SHARED)
+        return True
+    except Exception: return False
+    finally: shutil.rmtree(tmp, ignore_errors=True)
 
 
 def patch_files():
@@ -133,13 +187,12 @@ def _read(rp):
 
 
 def _files(name, out, registered=False):
-    """The module's own files in the pack (<module>.*, as patch_nso.py names them, less its key, which is written last) and the shared one. Never a cross-module
-    table (<module>.xmod.tsv: cross_module writes it after the rewrites, for a build with code mods, whose modules are never recorded), nor for a registered
-    build a match table (patch_nso.py writes none for it: one in the pack is an earlier build's). A file a rewrite does not make must not reach another pack
-    (found in review)"""
+    """The module's own files in the pack (<module>.*, as patch_nso.py names them, less its key, which is written last); not the shared one (write_build_src).
+    Never a cross-module table (<module>.xmod.tsv: cross_module writes it after the rewrites, for a build with code mods, whose modules are never recorded), nor
+    for a registered build a match table (patch_nso.py writes none for it: one in the pack is an earlier build's). A file a rewrite does not make must not reach
+    another pack (found in review)"""
     skip = {f'{name}.android.key', f'{name}.xmod.tsv'} | ({f'{name}.match.tsv'} if registered else set())
-    own = [f for f in Path(out).iterdir() if f.is_file() and f.name.startswith(name + '.') and f.name not in skip and not f.name.endswith('.tmp')]
-    return sorted(own + ([Path(out) / SHARED] if (Path(out) / SHARED).is_file() else []))
+    return sorted(f for f in Path(out).iterdir() if f.is_file() and f.name.startswith(name + '.') and f.name not in skip and not f.name.endswith('.tmp'))
 
 
 def _registered(src_bytes, g):
@@ -193,8 +246,8 @@ def record(name, src, out, g, rewriter_files):
 
 def restore(name, src, out, g, key, rewriter_files):
     """True when the pack has no rewrite of the module and the copy its record keeps is the rewrite the current inputs make (its part the recorded one, every
-    file the recorded one): the files go into the pack, the shared one only where there is none, and the current key last. Else False, and the module is rewritten
-    (a copy cut short leaves files without a key, which the rewrite replaces)"""
+    file the recorded one): the files go into the pack, then the shared one as a rewrite writes it now (write_build_src), and the current key last. Else False,
+    and the module is rewritten (a copy cut short leaves files without a key, which the rewrite replaces)"""
     if os.environ.get('PN_REUSE') == '0': return False
     rp = _record_path(name)
     if rp is None or (Path(out) / f'{name}.patched.bin').exists() or (Path(out) / f'{name}.android.key').exists(): return False
@@ -206,8 +259,8 @@ def restore(name, src, out, g, key, rewriter_files):
         if pt is None or pt != rec.get('part'): return False
         if any(_sha(keep / f) != h for f, h in files.items()): return False
         for f in files:
-            if f == SHARED and (Path(out) / f).is_file(): continue
             tmp = Path(out) / (f + '.tmp'); shutil.copyfile(keep / f, tmp); os.replace(tmp, Path(out) / f)
+        if not write_build_src(out): return False
     except Exception: return False
     tmp = Path(out) / f'{name}.android.key.tmp'
     with open(tmp, 'w', newline='\n') as f: f.write(key + '\n')
@@ -217,7 +270,8 @@ def restore(name, src, out, g, key, rewriter_files):
 
 
 def keep(name, src, out, g, key, rewriter_files):
-    """True when the pack's module (whose key file is not the current key) is the rewrite the current inputs make: its current key is then written. Else False"""
+    """True when the pack's module (whose key file is not the current key) is the rewrite the current inputs make: the shared file is then written as a rewrite
+    writes it now (write_build_src), and its current key last. Else False"""
     if os.environ.get('PN_REUSE') == '0': return False   # env.txt PN_REUSE=0: off, as for the shaders (and no record or copy is written)
     rp = _record_path(name)
     kf, pb = Path(out) / f'{name}.android.key', Path(out) / f'{name}.patched.bin'
@@ -227,6 +281,7 @@ def keep(name, src, out, g, key, rewriter_files):
         if rec.get('format') != FORMAT or rec.get('key') != kf.read_text().strip(): return False
         pt = part(name, src.read_bytes(), g, rewriter_files)
         if pt is None or pt != rec.get('part') or _sha(pb) != rec.get('bin'): return False
+        if not write_build_src(out): return False
     except Exception: return False
     tmp = Path(out) / f'{name}.android.key.tmp'
     with open(tmp, 'w', newline='\n') as f: f.write(key + '\n')
