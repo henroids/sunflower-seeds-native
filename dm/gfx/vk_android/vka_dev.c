@@ -1325,5 +1325,6 @@ void vka_gpu_floor(void) {
     int again = !V.perf_hint && (f >= sent_f + 30 || f < sent_f);
     if (again) sent_f = f;
     floor_set_(s, 0, again);
+    { extern void peanuts_gpu_floor_beat(int) __attribute__((weak)); if (g_kg_host && !V.perf_hint && peanuts_gpu_floor_beat) peanuts_gpu_floor_beat(s); }   // PEANUTS: the floor reaches the clock on "highest only" kernels (dm/peanuts/peanuts_gpufloor.c)
 }
 #endif

@@ -98,6 +98,8 @@ not edited (see table above).
 | `dm/games/010035F022078000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for DRAGON BALL: Sparking! ZERO |
 | `dm/games/01006B601380E000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Kirby's Return to Dream Land Deluxe |
 | `dm/games/0100DE501433A000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Tetris Effect: Connected |
+| `dm/games/010085500130A000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for LEGO CITY UNDERCOVER |
+| `dm/games/01006F600FFC8000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for LEGO MARVEL Super Heroes |
 | `dm/games/0100F9F00C696000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Crash Team Racing Nitro-Fueled |
 | `dm/games/0100A0F00DA68000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for Monster Sanctuary (provisional: packed on a PC, not run on a device) |
 | `dm/games/0100B63016916000/` (new: `game.tsv`, `README.md`, the shader tables) + its row in `dm/games/README.md` | marked (`game.tsv`, the note, the row); tables allow-listed in `peanuts/upstream-unmarked.txt` | could be: Banana Native has no profile for My Time at Sandrock (provisional: packed on a PC, not run on a device) |
@@ -1251,6 +1253,25 @@ module; 16 a module is checked off the device (a 15-array pixel shader of the ga
 
 Checked on the AYN Thor (Turnip Gen8 V38) with Hogwarts Legacy only; on the tree before Round 17; on this tree `t_android_shlib` passes (clang with ASan and UBSan) and the app builds, and it has not run on a device yet. Not run: the Odin 2, Qualcomm's driver, other games. No shader-chain file is changed. The switch has its row in `docs/advanced_settings.tsv`.
 
+### LEGO CITY UNDERCOVER, TT Games' DAT archives (2026-11-22)
+
+The game's first profile (`dm/games/010085500130A000/`) and the split's reader of its archives. The shader reader is not a shader-cache input (`dmsh_chain.py` `FILES`), so no library
+version moves.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/tools/ttdat.py` | new | TT Games' DAT archives: the `.CC40TAD` index (version -11), RFPK chunks decoded as the game's `unref` does (main+0xc77ee8 in 1.0.3), stored chunks, ZIPX (RC4) chunks. Checked on all 75,792 files of the game's five archives. Upstream candidate: yes | `PEANUTS` (file header) |
+| `dm/gfx/tools/shader_split.py` | 3 | `ttdat_jobs`, `ttdat_shaders`, their branch in `scan_file_in` and their place in `scan_jobs`: every DAT archive (found by its index) read file by file in ranges and each file scanned like a loose one. The game's split went from 331 shaders (those in `main`) to 24,393. Upstream candidate: yes | `PEANUTS` |
+| `dm/tools/tests/test_split_ttdat.py` | new | synthetic archive, every `unref` op, overlapping copies, stored and ZIPX chunks, the split's jobs | `PEANUTS` |
+| `docs/reference/shaders.md` | 1 | the entry "BNSH files in TT Games' DAT archives" | `PEANUTS(upstream-candidate)` |
+| `dm/host/hle_audren_svc.c` (new), `dm/host/hle_sf.c`, `dm/host/hle.h`, `dm/host/hle_thread.c`, `dm/host/hle_audren.c`, `dm/host/tests/t_sf.c`, `docs/reference/audio.md` | 10 | The audio renderer service (`audren:u`) for an SDK with no renderer of its own (SDK 1.3.1: no `ExecuteAudioRendererRendering`): manager and renderer commands, `RequestUpdate` in SDK 1.3.1's layout, and a CPU mixer on a 5 ms render thread into the host's PCM output (PCM16 and DSP-ADPCM voices, the voices' biquads, channel resource volumes, submix matrices, the device sink downmixed to stereo); voice progress comes from the rendering. `hle_sf.c` serves services that read their requests (`sf_req`: arguments, A / B / X / C buffers, copied handles in; data, a handle, a domain object or session out); `hle_thread.c` `hle_signal_event_handle`; `hle_audren.c` hands such an SDK's calls to the SDK. Every SDK with its own renderer is unchanged. Upstream candidate: yes | `PEANUTS` |
+| `dm/gfx/nvn/hle_nvn.c`, `dm/gfx/nvn/nvn_obj.h`, `docs/reference/memory.md` | 4 | `copy_span`: `CopyBufferToTexture` / `CopyTextureToBuffer` name the bytes they copy (the region by the format's blocks and the copy strides, tracked per command buffer in `cmd_t`), not the rest of a shader-code pool: LEGO CITY UNDERCOVER's black screen. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `dm/host/hle_movie.c`, `docs/reference/movies.md` | 2 | `msym2`: SDK 1.3.1's `movie::Buffer` getters without `const`. Upstream candidate: yes | `PEANUTS` |
+| `dm/gfx/vk_android/vka_tex.c`, `dm/gfx/vk_android/vka_exec.c`, `dm/gfx/vk_android/vka.h`, `dm/gfx/nvn/hle_nvn.c`, `docs/env_switches.tsv`, `docs/reference/rendering.md` | 6 | `vka_tex_b2t_mirror` (called from `copy_bt`) packs a buffer → texture copy's source into the level's block-linear guest storage on the GPU, in queue order, with the tiled write-back's compute shader (whole levels of 2D, 2D array and cube textures, block-compressed included); `hle_nvn.c` `b2t_need` asks for the destination storage to be placed when the copy is recorded; switch `DM_VK_B2T_MIRROR` (default 1). LEGO CITY UNDERCOVER's heap defragmenter moved stale storage bytes of copy-filled textures. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `dm/gfx/vk_android/vka_tex.c`, `dm/gfx/vk_android/vka_exec.c`, `dm/gfx/vk_android/vka.h`, `docs/reference/rendering.md` | 5 | `vka_tex_gw_part` (called from `chunk` when a part of a submission goes to the queue) marks the GPU writes recorded so far as queued; `gw_src_overwritten`: a pending copy whose source a later queued or submitted write overlaps is not made again from memory in a texture's upload (`gw_content`) or a read (`vka_tex_gw_read`), and the texture is uploaded again once the copy is done. LEGO CITY UNDERCOVER's menu boxes were cut short by a defragmenter's run of copies made twice. Upstream candidate: yes | `PEANUTS(upstream-candidate)` |
+| `dm/host/hle_sf.c` | 1 | a served service's raw output is cut to the message buffer | `PEANUTS` |
+| `dm/host/tests/t_audren_layout.c`, `dm/host/tests/t_audren_work.c` | 2 | a `dm_audren_served` stub: `hle_audren.c` asks the host's renderer service (`hle_audren_svc.c`), which the tests do not link | `PEANUTS` |
+
 ## Breath of the Wild 1.6.0
 
 | Files | Change | Marker |
@@ -2315,3 +2336,23 @@ On an NVN1 host a texture whose storage the game wrote from the CPU before the t
 | `dm/host/tests/t_android_texcontent.c` (new) | whole file | its host test | line 1 `PEANUTS(upstream-candidate)` |
 | `dm/host/tests/Makefile` | 3 | the test joins the run and the build rule | `PEANUTS(upstream-candidate)` comment before each hunk |
 | `docs/reference/nvn-objects.md` | 1 | the "Switch 1: uncompressed storage the CPU wrote before a texture's first sample" entry | `<!-- PEANUTS(upstream-candidate) -->` |
+### Round 62, the GPU clock floor reaches the clock on 8 Gen 2 / 8 Gen 3 (2026-11-23, GitHub issues #113 and #257)
+
+On Adreno 740 / 750 kernels (graphics-kernel, gen7 hwsched) the power constraint `vka_dev.c` sets on Turnip's queue contexts is applied only to commands of a
+context made with `KGSL_CONTEXT_PWR_CONSTRAINT` or carrying that flag, and Turnip sets neither: the log said `GPU clock floor (KGSL): 100 % (highest)` while the
+GPU ran 401 to 550 of 680 MHz (AYN Thor; #113 on an 8 Gen 3: with the clock pinned by root, Turnip held 60 fps). `dm/peanuts/peanuts_gpufloor.c` makes its own
+kernel context with the flag and the "highest" constraint and submits one CP_NOP to it at each replayed submission (at most every `PN_GPU_FLOOR_BEAT_MS`, 8),
+which applies the floor device-wide; it lapses within the kernel's idle interval when no frames come. It runs only where vka_dev.c found the "highest only" form
+of the constraint and `DM_VK_GPU_FLOOR` is above 0; `PN_GPU_FLOOR_BEAT=0` turns it off (live). On the Thor (2026-11-23) in Super Mario Odyssey's light start
+screens the GPU ran 401 MHz with the beat off and 680 MHz with it on, switched live twice. The entry:
+[frame-rate.md](../docs/reference/frame-rate.md#the-kgsl-clock-floor-reaches-the-clock-only-through-flagged-commands-on-host-dcvs-adreno-android).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `dm/gfx/vk_android/vka_dev.c` | 1 | `vka_gpu_floor` calls `peanuts_gpu_floor_beat(s)` (weak) when the constraint is "highest only" and there is no queue hint | `PEANUTS` |
+| `android/host/CMakeLists.txt` | 1 | compiles `dm/peanuts/peanuts_gpufloor.c` | `PEANUTS` |
+| `docs/reference/frame-rate.md`, `docs/agents/symptoms.md` | 1 each | the entry above and its symptom line (`docs_symptoms.py`) | `PEANUTS begin/end`, `(PEANUTS)` in the symptom |
+| `docs/env_switches.tsv`, `docs/advanced_settings.tsv` | 2 rows each | `PN_GPU_FLOOR_BEAT`, `PN_GPU_FLOOR_BEAT_MS` | `[PEANUTS]` in the text / generated |
+| `dm/games/0100000000010000/README.md` | 1 line | under "Found on this game" | `PEANUTS` in the line |
+
+Peanuts' own files, no marker: `dm/peanuts/peanuts_gpufloor.c` (new). Upstream candidate: yes, general (`vka_dev.c`'s KGSL floor on every host-DCVS Adreno).
