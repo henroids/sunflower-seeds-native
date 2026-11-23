@@ -1100,5 +1100,37 @@ class Records(Base):
         self.assertIn(self.vs[150], runs[0])
 
 
+
+class ReplacedCheck(unittest.TestCase):
+    """PEANUTS: a due check that another build replaces or clears never runs, so its library's record goes (note_check; two Build folders of one game)"""
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, self.d, True)
+        (self.d / sr.RECORDS_DIR).mkdir()
+
+    def record(self, lib):
+        p = sr.record_path(self.d, lib); p.write_text('a record\n'); return p
+
+    def test_another_librarys_check_replaced_drops_its_record(self):
+        a = self.record('liba'); sr.note_check(self.d, 'liba', 'v1', 'game', ['s1'], 'in', 'tree')
+        b = self.record('libb'); sr.note_check(self.d, 'libb', 'v1', 'game', ['s2'], 'in', 'tree')
+        self.assertFalse(a.exists())   # liba's check never runs: nothing may keep from it
+        self.assertTrue(b.exists())
+        self.assertEqual(sr.read_todo(self.d)['library'], 'libb')
+
+    def test_a_build_that_keeps_nothing_drops_the_unchecked_record(self):
+        b = self.record('libb'); sr.note_check(self.d, 'libb', 'v1', 'game', ['s2'], 'in', 'tree')
+        c = self.record('libc'); sr.note_check(self.d, 'libc', 'v1', 'game', [], 'in', 'tree')
+        self.assertFalse(b.exists())
+        self.assertTrue(c.exists())   # a full translation: its own record stands
+        self.assertIsNone(sr.read_todo(self.d))
+
+    def test_the_same_library_again_keeps_its_record(self):
+        a = self.record('liba')
+        sr.note_check(self.d, 'liba', 'v1', 'game', ['s1'], 'in', 'tree')
+        sr.note_check(self.d, 'liba', 'v1', 'game', ['s1'], 'in', 'tree')
+        self.assertTrue(a.exists())
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -600,6 +600,10 @@ def note_check(reuse_dir, lib_id, version, game_id, kept, inputs, tree):
     todo names what the library was made with besides its version (the profile inputs, the translator's sources): a check with others translates what another
     build would make, which says nothing of this library"""
     p = Path(reuse_dir) / TODO
+    # PEANUTS: a due check of another library that this build replaces or clears never runs: that library's kept shaders were checked by the sample alone, so
+    # its record goes and no later build keeps from it (another Build folder's build in between left it trusted; found in review of #150, as drop_check)
+    was = read_todo(reuse_dir)
+    if was and was.get('library') and was.get('library') != lib_id: record_path(reuse_dir, was['library']).unlink(missing_ok=True)
     if not kept:
         p.unlink(missing_ok=True); shutil.rmtree(Path(reuse_dir) / CHECK_DIR, ignore_errors=True)
         return
