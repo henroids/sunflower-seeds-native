@@ -49,7 +49,7 @@ final class Ui {
     static GradientDrawable round(int fill, float radiusPx, int stroke, int strokePx) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(fill);
-        g.setCornerRadius(radiusPx);
+        g.setCornerRadius(dev.peanuts.ui.Scoreboard.radius(radiusPx));   // PEANUTS: square on the test app's scoreboard look
         if (strokePx > 0) g.setStroke(strokePx, stroke);
         return g;
     }
@@ -62,7 +62,7 @@ final class Ui {
         return new RippleDrawable(ColorStateList.valueOf(0x336B4423), shape, mask);
     }
 
-    static Typeface face(int weight) { return Typeface.create(Typeface.SANS_SERIF, weight, false); }
+    static Typeface face(int weight) { Typeface s = dev.peanuts.ui.Scoreboard.face(weight); return s != null ? s : Typeface.create(Typeface.SANS_SERIF, weight, false); }   // PEANUTS: Scoreboard.face (the test app's font)
 
     /** A vector icon (res/drawable/ic_*.xml) tinted with a palette color */
     static Drawable icon(Context c, int drawable, int colorRes) {
@@ -109,6 +109,7 @@ final class Ui {
         t.setLetterSpacing(0.08f);
         t.setPadding(dp(c, 4), 0, 0, 0);
         t.setAccessibilityHeading(true);
+        if (dev.peanuts.ui.Scoreboard.ON) dev.peanuts.ui.Scoreboard.pixel(t, 11);   // PEANUTS: the scoreboard's pixel labels
         return t;
     }
 
@@ -348,6 +349,7 @@ final class Ui {
             h.addView(col, weight());
         }
         if (trailing != null) h.addView(trailing);
+        dev.peanuts.ui.Scoreboard.strip(c, h, t);   // PEANUTS: the scoreboard's purple strip (the test app only)
         return h;
     }
 

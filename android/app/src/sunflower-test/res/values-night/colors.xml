@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PEANUTS: the Sunflower Seeds test app only. Dark mode: dark olive cards, sage chips, pale green text, the purple for buttons and mint for switches -->
-    <color name="bn_bg">#FF15180F</color>
-    <color name="bn_card">#FF262B1D</color>
-    <color name="bn_card_stroke">#FF3A412B</color>
-    <color name="bn_tint">#FF4B5239</color>
-    <color name="bn_banana">#FF5A59A6</color>
-    <color name="bn_banana_deep">#FF4A4993</color>
-    <color name="bn_on_banana">#FFF4F2FF</color>
+    <!-- PEANUTS: the Sunflower Seeds test app only (-PnxAppId=sunflowertest, build.gradle): the "Scoreboard" look (dev.peanuts.ui.Scoreboard), dark in both modes.
+         Near-black board, square cells with olive lines, pale green text, mint for the main button and the selection, the purple for the header strip -->
+    <color name="bn_bg">#FF060805</color>
+    <color name="bn_card">#FF0B0F09</color>
+    <color name="bn_card_stroke">#FF2E3524</color>
+    <color name="bn_tint">#FF141A10</color>          <!-- tonal buttons, icon tiles, chips -->
+    <color name="bn_banana">#FFBFF2CC</color>        <!-- primary buttons: the mint -->
+    <color name="bn_banana_deep">#FFA9E5B9</color>
+    <color name="bn_on_banana">#FF060805</color>
     <color name="bn_text">#FFE6EEC6</color>
-    <color name="bn_text_2">#FFB7C09C</color>
-    <color name="bn_accent">#FFBFF2CC</color>        <!-- the mint -->
-    <color name="bn_leaf">#FFA9E5B9</color>
-    <color name="bn_on_leaf">#FF102418</color>
+    <color name="bn_text_2">#FF8A937A</color>
+    <color name="bn_accent">#FFBFF2CC</color>        <!-- check boxes, switches, dialog buttons -->
+    <color name="bn_leaf">#FFD9D4F5</color>          <!-- the lavender -->
+    <color name="bn_on_leaf">#FF060805</color>
     <color name="bn_danger">#FFFF9670</color>
     <color name="bn_danger_tint">#FF3D2016</color>
-    <color name="bn_warn_tint">#FF3B3A1C</color>
+    <color name="bn_warn_tint">#FF262A14</color>
 </resources>
