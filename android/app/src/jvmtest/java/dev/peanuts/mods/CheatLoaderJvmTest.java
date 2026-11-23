@@ -106,6 +106,7 @@ public final class CheatLoaderJvmTest {
         layouts(root);
         sources(new File(root, "sources-case"));
         merge(new File(root, "merge-case"));
+        status();
         if (a.length > 1 && !a[1].isEmpty()) real(new File(a[1]));
         System.out.println("ok");
     }
@@ -113,6 +114,46 @@ public final class CheatLoaderJvmTest {
     static CheatFile.Cheat cheat(CheatFile.Parsed p, String name) {
         for (CheatFile.Cheat c : p.cheats) if (c.key.equals(name)) return c;
         throw new AssertionError("no cheat " + name + " in " + p.cheats);
+    }
+
+    // ---- The host's status for the in-game Mods tab (Part E: CheatStatus over Part B's Native.cheatStatus) ----
+
+    static void status() {
+        check(CheatStatus.parse(null) == null, "no status: null");
+        String st = "1. Lots of coins\ton\tcode\t\n"
+                + "Items\tlabel\t\t\n"
+                + "4. Fast run (Hold ZL)\toff\thold\t\n"
+                + "2. No item cost\trefused\tcode\trewritten:a word the rewriter changed or moved\n"
+                + "6. Pause trick\tunsupported\t\tunsupported:opcode FF\n"
+                + "3. Coins as a number\ton\tcode,wait,future\twait:the game's threads did not stop in time\r\n"
+                + "a line without a tab\n"
+                + "\n";
+        Map<String, CheatStatus.Entry> m = CheatStatus.parse(st);
+        check(m.size() == 6, "six entries, the label too, a line without a tab left out: " + m.keySet());
+        CheatStatus.Entry coins = m.get("1. lots of coins");
+        check(coins != null && coins.key.equals("1. Lots of coins") && coins.on() && coins.switchState() && !coins.bad() && coins.flag("code") && coins.reason.isEmpty(),
+                "on, found by its key in lower case");
+        check(m.get("items").state.equals("label") && !m.get("items").switchState(), "a label has no switch state");
+        CheatStatus.Entry cost = m.get("2. no item cost");
+        check(cost.bad() && cost.switchState() && !cost.on(), "refused: no switch, shown off");
+        check(m.get("6. pause trick").bad() && !m.get("6. pause trick").switchState(), "unsupported: no switch");
+        CheatStatus.Entry num = m.get("3. coins as a number");
+        check(num.flag("wait") && num.flag("code") && !num.flag("hold") && !num.flag("futur") && num.reason.startsWith("wait:"), "flags as a list, an unknown one ignored, no \\r left");
+
+        CheatFile.Parsed p = CheatFile.parse(SITE, 0x200000);
+        CheatFile.Cheat c1 = cheat(p, "1. Lots of coins"), fast = cheat(p, "4. Fast run (Hold ZL)");
+        check(CheatStatus.chip(CheatStatus.look(c1, false, true, true), c1).equals("Running"), "on: Running");
+        check(CheatStatus.chip(CheatStatus.look(c1, false, true, false), c1).equals(c1.kind.label), "off: its kind");
+        String hold = CheatStatus.chip(CheatStatus.look(fast, false, true, true), fast);
+        check(hold.equals("Hold ZL"), "a hold cheat shows its buttons: " + hold);
+        check(CheatStatus.look(c1, false, false, true) == CheatStatus.Look.NEXT_START, "not in this run's host: Next start");
+        check(CheatStatus.look(fast, true, true, true) == CheatStatus.Look.NOT_POSSIBLE, "refused before anything else");
+        check(CheatStatus.line(c1, true, true, cost.reason).startsWith("Peanuts rewrote"), "rewritten, in the player's words");
+        check(CheatStatus.why("nolist:x", c1).contains("Build the game again") && CheatStatus.why("region:x", c1).contains("memory")
+                && CheatStatus.why("odd:x", c1).equals("The game stopped this cheat. The others go on."), "the refusals; an unknown token reads as other");
+        check(CheatStatus.line(c1, false, true, num.reason).endsWith("Its change waits for a moment when the game can be stopped."), "wait on a running cheat");
+        check(CheatStatus.line(c1, false, false, "").endsWith("It is in the game from the next start."), "Next start in its line");
+        check(CheatStatus.line(c1, false, true, "").equals(CheatFile.describe(c1)), "else what it changes");
     }
 
     // ---- Reading a file ----

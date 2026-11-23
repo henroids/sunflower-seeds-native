@@ -138,6 +138,11 @@ public final class LibrarySettings {
             refreshRows();
             return true;
         });
+        // The in-game panel's Mods tab for every game (dev.peanuts.mods.ModsTab; SettingsSections puts the row under Controls › Controller)
+        PUi.Setting modsTab = new PUi.Setting(a, "", "Mods tab", null).value("Cheats and mods in the in-game panel")
+                .toggle(a, PeanutsPrefs.modsTabAll(a), (b, on) -> { Feel.toggled(b, on); PeanutsPrefs.modsTabAll(a, on); });
+        modsTab.view.setOnClickListener(v -> modsTab.toggle.toggle());
+        card.addView(modsTab.view);
         refreshRows();
     }
 

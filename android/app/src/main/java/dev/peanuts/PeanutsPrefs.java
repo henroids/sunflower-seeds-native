@@ -226,6 +226,18 @@ public final class PeanutsPrefs {
     public static boolean modsTab(Context c, String titleId) { return of(c).getBoolean(key(titleId, "mods_tab"), true); }
     public static void modsTab(Context c, String titleId, boolean on) { of(c).edit().putBoolean(key(titleId, "mods_tab"), on).apply(); }
 
+    /** Settings › Controls › Mods tab: the in-game panel's Mods tab for every game; on by default */
+    public static boolean modsTabAll(Context c) { return of(c).getBoolean("mods_tab", true); }
+    public static void modsTabAll(Context c, boolean on) { of(c).edit().putBoolean("mods_tab", on).apply(); }
+
+    /** The in-game panel's tab shown last (its name), so it opens there again; "" none yet. In a file of its own: the game's process writes it, and the launcher's
+     *  process, which keeps "peanuts" in memory, would write its older copy back over it */
+    public static String panelTab(Context c) { return c.getSharedPreferences("peanuts_panel", Context.MODE_PRIVATE).getString("tab", ""); }
+    public static void panelTab(Context c, String name) {
+        SharedPreferences p = c.getSharedPreferences("peanuts_panel", Context.MODE_PRIVATE);
+        if (!name.equals(p.getString("tab", ""))) p.edit().putString("tab", name).apply();
+    }
+
     // (Removed: a dead, unread duplicate of the "second screen physical/off" pref - dev.peanuts.settings.CompanionSection.secondScreen() is the one
     // Companion.java actually reads, in its own SharedPreferences file ("peanuts", MODE_MULTI_PROCESS).)
 

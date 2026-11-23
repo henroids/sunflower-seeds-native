@@ -58,6 +58,7 @@ public final class SettingsHelp {
         put(m, "On-screen controls", "When the touch controls show over the game.", "Auto");
         put(m, "Show / hide button", "The small button at the top centre of the game that hides the on-screen controls.", "On");
         put(m, "Controller: in-game panel", "How a controller opens the in-game panel. By touch it opens with a swipe in from the right edge, or Back.", "Home, or hold − and +");
+        put(m, "Mods tab", "The in-game panel's Mods tab: the game's cheats and mods while it runs. A game's own Mods & Cheats page can hide it for that game.", "On");
         put(m, "Rumble", "Lets games rumble the controller, or the phone when no controller is connected.", "On");
         // Screens
         put(m, "Bottom screen", "On a device with a second screen: the game you are on, with Play and its page, while you are in the app. Off leaves that screen to Android.", "On");

@@ -147,6 +147,26 @@ public final class CheatsBridge {
         return false;
     }
 
+    // ---- For the in-game Mods tab (dev.peanuts.mods.ModsTab, Part E), in the game's process ----
+
+    /** Every entry of the host's cheat file: "key\tstate\tflags\treason" a line (Native.cheatStatus, Part B); null when no file is loaded or the host has no such call */
+    public static String status() {
+        try { return Native.cheatStatus(); } catch (UnsatisfiedLinkError e) { return null; }
+    }
+
+    /** The host reads the merged file and its .enabled again (Native.cheatsReload): the entries now loaded, -1 the file could not be read, -2 not in this host */
+    public static int reload() {
+        try { return Native.cheatsReload(); } catch (UnsatisfiedLinkError e) { return -2; }
+    }
+
+    /** A cheat on or off in the running game by its key (Native.cheatSet): 1 done, 0 not a plain cheat (refused, broken), -1 no such key, -2 not in this host */
+    public static int set(String key, boolean on) {
+        try { return Native.cheatSet(key, on); } catch (UnsatisfiedLinkError e) { return -2; }
+    }
+
+    /** The running game stopped and started again (the Mods tab's Restart: a mod's files and code are read at a start) */
+    public static void restart(Activity a) { ModsPanel.restart(a); }
+
     /** The game's old Cheats switch (Game settings › Cheats, Experimental), kept for {@link #wanted}'s first look */
     public static boolean master(Context c, String titleId) { return Prefs.of(c).getBoolean(Prefs.gameKey("cheats", titleId), false); }
 

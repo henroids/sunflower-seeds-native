@@ -16,8 +16,9 @@ APP = REPO / 'android/app/src'
 MODS = APP / 'main/java/dev/peanuts/mods'
 LAUNCHER = APP / 'main/java/dev/nxnative/android'
 TEST = APP / 'jvmtest/java/dev/peanuts/mods/CheatLoaderJvmTest.java'
-CORE = [MODS / 'CheatFile.java', MODS / 'CheatImport.java', MODS / 'CheatSources.java']
-UI_FILES = [MODS / 'CheatPick.java', LAUNCHER / 'CheatsBridge.java', MODS / 'CheatsPage.java', MODS / 'CheatImportUi.java']   # the words the player reads
+CORE = [MODS / 'CheatFile.java', MODS / 'CheatImport.java', MODS / 'CheatSources.java', MODS / 'CheatStatus.java']
+UI_FILES = [MODS / 'CheatPick.java', LAUNCHER / 'CheatsBridge.java', MODS / 'CheatsPage.java', MODS / 'CheatImportUi.java',
+            MODS / 'ModsTab.java', LAUNCHER / 'ModsPanel.java']   # the words the player reads
 
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'needs a JDK')
@@ -66,6 +67,25 @@ class Sources(unittest.TestCase):
         self.assertIn('stick(content, top);', page, "the page's top stays while the rest scrolls under it (the canvas)")
         lib = (APP / 'main/java/dev/peanuts/ui/LibrarySettings.java').read_text(encoding='utf-8')
         self.assertLess(lib.index('CheatImportUi.result('), lib.index('CheatsBridge.result('), "the page's Add is asked before the rows' sheet (the same request codes)")
+
+    def test_the_panel_has_a_mods_tab(self):   # Part E
+        panel = (LAUNCHER / 'SidePanel.java').read_text(encoding='utf-8')
+        for call in ('ModsPanel.opening(', 'ModsPanel.build(', 'ModsPanel.padKey(', 'ModsPanel.shows()', 'ModsPanel.afterLayout('):
+            self.assertRegex(panel, re.escape(call) + r'.*// PEANUTS', f'SidePanel: the marked hook {call}')
+        self.assertRegex(panel, r'static String\[\] TAB_NAMES = .*// PEANUTS')
+        self.assertRegex(panel, r'static int TAB_GENERAL = 3;\s+// PEANUTS')
+        self.assertRegex(panel, r'if \(!ModsPanel\.shows\(\)\) cheatRows\(\);', "General keeps upstream's cheat switches only without the Mods tab")
+        mp = (LAUNCHER / 'ModsPanel.java').read_text(encoding='utf-8')
+        self.assertIn('{"Performance", "Display", "Controls", MODS, "General"}', mp, 'Mods sits between Controls and General')
+        bridge = (LAUNCHER / 'CheatsBridge.java').read_text(encoding='utf-8')
+        for call in ('Native.cheatStatus()', 'Native.cheatsReload()', 'Native.cheatSet('):
+            self.assertIn(call, bridge, f'the tab reaches {call} through CheatsBridge (Native is package-private)')
+        tab = (MODS / 'ModsTab.java').read_text(encoding='utf-8')
+        self.assertIn('CheatStatus.parse(CheatsBridge.status())', tab, "the chips come from the host's status")
+        self.assertIn('R.style.Theme_Banana_Dialog', tab, "the tab's dialogs are the app's sheet, also in the game's process")
+        self.assertIn('android.R.attr.dialogPreferredPadding', tab, "the details' text starts under the sheet's title, as a message does")
+        sections = (APP / 'main/java/dev/peanuts/ui/SettingsSections.java').read_text(encoding='utf-8')
+        self.assertIn('r("Mods tab", "mods")', sections, 'Settings › Controls has the Mods tab row')
 
     def test_the_start_merges_the_sources(self):
         mc = (LAUNCHER / 'ModCheats.java').read_text(encoding='utf-8')

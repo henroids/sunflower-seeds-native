@@ -44,8 +44,8 @@ final class SidePanel extends FrameLayout {
     private final Runnable tick = this::refresh;
 
     // The tabs: each a builder of its own (build); Performance's rows refresh twice a second while it shows
-    static final String[] TAB_NAMES = {"Performance", "Display", "Controls", "General"};
-    private static final int TAB_PERF = 0, TAB_DISPLAY = 1, TAB_CONTROLS = 2, TAB_GENERAL = 3;
+    static String[] TAB_NAMES = {"Performance", "Display", "Controls", "General"};   // PEANUTS: not final, ModsPanel.opening puts Mods between Controls and General
+    private static final int TAB_PERF = 0, TAB_DISPLAY = 1, TAB_CONTROLS = 2; static int TAB_GENERAL = 3;   // PEANUTS: TAB_GENERAL not final, the last tab (4 while Mods shows: ModsPanel)
     private int tab = TAB_PERF;
     private static final int FOCUS = 0xFFFFD54F;   // the tab bar's selected tab and the focus frame: a banana yellow, dark text on it
 
@@ -108,6 +108,7 @@ final class SidePanel extends FrameLayout {
         open = true;
         if (onOpen != null) onOpen.run();
         box.removeAllViews();
+        tab = ModsPanel.opening(this, act, game(), tab);   // PEANUTS: the tabs with Mods (dev.peanuts.mods.ModsTab) when it shows, and the tab shown last
         build();
         look();
         setVisibility(VISIBLE);
@@ -137,6 +138,7 @@ final class SidePanel extends FrameLayout {
         int dir = PadPanel.ofKey(k);
         if (dir != PadPanel.NONE) { if (press) press(dir); else if (up) release(dir); return true; }
         if (!press) return true;
+        if (ModsPanel.padKey(k, findFocus(), confirm)) return true;   // PEANUTS: Y (details) and X (All off) on the Mods tab
         boolean lost = findFocus() == null || isInTouchMode();
         if (k == back) close();
         else if (k == KeyEvent.KEYCODE_BUTTON_L1 || k == KeyEvent.KEYCODE_BUTTON_R1) { if (lost) ensureFocus(); showTab(PadPanel.tab(tab, k == KeyEvent.KEYCODE_BUTTON_L1 ? -1 : 1, TAB_NAMES.length)); }
@@ -291,7 +293,7 @@ final class SidePanel extends FrameLayout {
         x.setOnClickListener(v -> close());
         x.setContentDescription("Close the panel, back to the game");
         tabs.addView(x, new LinearLayout.LayoutParams(h, h));
-        tabs.post(this::tabTextSize);
+        ModsPanel.afterLayout(tabs, this::tabTextSize);   // PEANUTS: once the bar is laid out, also at the panel's first opening (a post ran before it: no fit, which five tabs need)
     }
 
     /** One text size for all tab labels: the largest (16 sp at most, 10 at least) at which the widest label, in bold as when selected, fits its tab.
@@ -385,6 +387,7 @@ final class SidePanel extends FrameLayout {
         tabBar();
         fpsNow = lsfgNow = null;
         caps = null;
+        if (ModsPanel.build(this, act, box, tab)) return;   // PEANUTS: the Mods tab (dev.peanuts.mods.ModsTab); keeps which tab shows
         if (tab == TAB_DISPLAY) { display(); return; }
         if (tab == TAB_CONTROLS) { controls(); return; }
         if (tab == TAB_GENERAL) { general(); return; }
@@ -562,7 +565,7 @@ final class SidePanel extends FrameLayout {
     private void general() {
         note("The game runs on behind this panel; every change applies now and is kept, except those marked for the next start.");
         panelRows();
-        cheatRows();
+        if (!ModsPanel.shows()) cheatRows();   // PEANUTS: the cheat switches are in the Mods tab when it shows
 
         Button pause = new Button(act);   // the game suspended (clock, graphics, threads, audio) until a tap on the screen, or A / Start: GameActivity.pause
         pause.setText("Pause the game");
