@@ -114,6 +114,16 @@ class PlayOnTheTv(unittest.TestCase):
         self.assertIn('PeanutsPrefs.tvPlay(game) && !Screens.onTv(game) ? Screens.tv(game, home) : null', start)
         self.assertLess(start.index('cover(game);'), start.index('toTv(game, tv.getDisplayId())'))
 
+    def test_hold_never_stopped_before_it_is_in_the_foreground(self):
+        # two screen rebuilds in a row (a TV off and another on) stopped it early, and Android ended the game for it
+        hold = (PEANUTS / 'GameHold.java').read_text(encoding='utf-8')
+        stop = hold[hold.index('public static void stop(Context c)'):hold.index('public int onStartCommand(')]
+        self.assertLess(stop.index('if (pending || !up) return;'), stop.index('c.stopService('))
+        command = hold[hold.index('public int onStartCommand('):hold.index('public void onDestroy()')]
+        self.assertLess(command.index('startForeground(NOTE, n'), command.index('if (!wanted) { stopping = true; stopSelf(); }'))
+        start = hold[hold.index('public static void start(Context c, String gameName)'):hold.index('public static void stop(Context c)')]
+        self.assertLess(start.index('if (pending || up && !stopping) return;'), start.index('startForegroundService('))
+
     def test_picture_hooks(self):
         game = read('dev/nxnative/android/GameActivity.java')
         self.assertRegex(game, r'setContentView\(root\);\s+dev\.peanuts\.TvPicture\.fit\(this\);\s+// PEANUTS:')
