@@ -2392,10 +2392,6 @@ static int img_wb_kind(const vka_img *im) { return (im->d.flags & (NVN_TEXTURE_F
 // the cube a generated face is lit by stayed zero, the face black, its specular left). A sampled texture now takes the newest GPU write through an uncompressed image over the
 // same storage of its texel (or block) size and its extent in texels (or blocks) and layers, written after its own last write, by a copy between size-compatible formats
 // (vkCmdCopyImage copies the bits), each time that image is written again. DM_VK_BC_TAKE=0 turns it off. Caller holds g_tmu
-// A texture of the source's own format and target takes too when it is a GPU-side one (gpu_owned: its storage is never uploaded from the CPU): two such textures over one
-// storage that do not share an image (same_shape says no: other levels or flags) are still one memory on the Switch. MLB The Show 26 renders a composed face into one
-// 512x256 RGBA8 texture and averages it through another over the same storage (SPRITE db36c1459370f8a1, the WookieMean passes) for the body skin's target tone: the
-// average of an empty image, a zero target (ICE_SKINSHADER fp_c4[2]), every generated player's body black
 static uint64_t g_wgen;
 static vka_img *take_src(const vka_img *im) {
     if (!im->mem || im->par || im->samples > 1 || im->f.kind >= 3 || !VKA_ENV("DM_VK_BC_TAKE", 1)) return NULL;
@@ -2404,7 +2400,7 @@ static vka_img *take_src(const vka_img *im) {
     vka_img *best = NULL; int k;
     for (vka_img *o = live_first(im->mem, &k); o; o = live_next(o, im->mem, &k))
         if (o != im && !compressed(&o->f) && o->f.kind < 3 && o->f.bpb == im->f.bpb && o->gpu_owned && o->wgen > im->wgen && o->w == bw && o->h == bh && o->layers == im->layers
-            && o->depth == im->depth && o->samples == 1 && !o->par && (c || o->f.vk != im->f.vk || o->d.target != im->d.target || im->gpu_owned) && (!best || o->wgen > best->wgen)) best = o;
+            && o->depth == im->depth && o->samples == 1 && !o->par && (c || o->f.vk != im->f.vk || o->d.target != im->d.target) && (!best || o->wgen > best->wgen)) best = o;
     return best;
 }
 static vka_img *take_img_of(int id) { smap_ent *e = id > 0 && id < g_ntreg && g_treg[id].t.serial ? map_get(g_treg[id].t.serial) : NULL; return e ? e->im : NULL; }
@@ -2414,9 +2410,9 @@ int vka_tex_id_take_pending(int id) {
     pthread_mutex_unlock(&g_tmu);
     return r;
 }
-// Takes into im the newest GPU write through another texture over its storage, if one is pending. Caller holds g_tmu, which is released; outside a pass
-static void take_locked(vka_img *im, VkCommandBuffer cb) {
-    vka_img *src = im ? take_src(im) : NULL;
+void vka_tex_id_take(int id, VkCommandBuffer cb) {
+    pthread_mutex_lock(&g_tmu);
+    vka_img *im = take_img_of(id), *src = im ? take_src(im) : NULL;
     if (!src) { pthread_mutex_unlock(&g_tmu); return; }
     VkImageCopy rc[16]; uint32_t n = 0;
     for (uint32_t lv = 0; lv < im->levels && lv < src->levels && n < 16; lv++) {   // the levels whose extent in texels (blocks) is the source level's
@@ -2433,15 +2429,6 @@ static void take_locked(vka_img *im, VkCommandBuffer cb) {
     else im->wgen = src->wgen;   // (no level fits: not asked again until the source is written again)
     pthread_mutex_unlock(&g_tmu);
     if (n) vka_img_written(im);   // (its wgen past the source's: taken again only after the next write through it)
-}
-void vka_tex_id_take(int id, VkCommandBuffer cb) { pthread_mutex_lock(&g_tmu); take_locked(take_img_of(id), cb); }
-// The same for an image a copy reads (vka_exec.c copy_t2t, copy_bt): a texture the game only copies from, never samples, was copied empty. MLB The Show 26 outside
-// create-a-player copies its GPU-compressed skin textures on without sampling them there: every generated player's skin black unless create-a-player had sampled them first
-void vka_tex_take(vka_img *im, VkCommandBuffer cb) {
-    if (!im || !cb) return;
-    pthread_mutex_lock(&g_tmu);
-    if (take_src(im)) { static _Atomic int nl; if (atomic_fetch_add(&nl, 1) < 32) VLOG("storage take for a copy: texture serial %llu %ux%u format %#x is copied from", (unsigned long long)im->serial, im->w, im->h, im->d.format); }
-    take_locked(im, cb);
 }
 // PEANUTS end
 // PEANUTS begin: DM_VK_TEX_STATS: GPU writes, so that a texture's report can name what the GPU wrote over its storage, live or since dropped (vka_tex_id_storage):
@@ -3945,10 +3932,6 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
     if (!bpb || r->width <= 0) return;
     size_t wb = (size_t)((r->width + bw - 1) / bw) * bpb, hb = (size_t)((r->height > 0 ? r->height : 1) + bh - 1) / bh;
     size_t dn = img * (size_t)(nz - 1) + row * (hb - 1) + wb;
-    // PEANUTS: everything the game has submitted is replayed and done first. A submission still being replayed on the worker thread (its dispatch or draw recorded, not yet
-    // queued) was missed by rt_gpu's wait for the queued work alone, and the read answered what the image held before it. behind: the submissions that were not done yet
-    uint64_t behind = 0;
-    if (vka_ok()) { uint64_t last = vka_fence_last(), dn0 = vka_done(); behind = last > dn0 ? last - dn0 : 0; if (behind) vka_wait_done(last, 2000000000ull); }   // (bounded: a submission parked on something this thread does later must not hang the read)
     vka_img *im = vka_ok() ? vka_tex_acquire(t->serial) : NULL;
     // PEANUTS begin: a texture the game reads without ever having bound it has no image of its own, and one whose storage the GPU wrote through another texture object
     // holds nothing itself: on the Switch the read sees that write, the storage being one. So the GPU-written image over the storage is read instead: one of the texture's
@@ -3985,9 +3968,6 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
         VLOG("%sReadTexels: texture serial %llu %ux%ux%u target %d format %#x flags %#x level %u layer %u, region %d,%d,%d %dx%dx%d: read from its %s%s%s", done ? "" : "[RED] ",
              (unsigned long long)t->serial, t->d.width, t->d.height, t->d.depth, t->d.target, t->d.format, t->d.flags, level, layer0, r->xoffset, r->yoffset, r->zoffset, r->width, r->height, r->depth,
              done ? how : "nothing readable", done ? via : "", !done ? ": zeros" : z0 ? ": all zero" : "");
-    if (gpu) { size_t nzb = 0; uint32_t h = 2166136261u; for (size_t i = 0; i < dn; i++) { nzb += dst[i] != 0; h = (h ^ dst[i]) * 16777619u; }   // PEANUTS: what a GPU read answered, to compare runs
-        static _Atomic int nc; if (atomic_fetch_add(&nc, 1) < 64) VLOG("ReadTexels: serial %llu answered %zu bytes, %zu non-zero, hash %08x, from image serial %llu; %llu submissions were not done yet (waited for)",
-            (unsigned long long)t->serial, dn, nzb, h, (unsigned long long)(im ? im->serial : 0), (unsigned long long)behind); }
     if (im) vka_tex_drop(im);
 }
 #endif
