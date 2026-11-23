@@ -32,7 +32,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.7 includes 59 games, and 1 more is coming in 0.1.8 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.7 includes 59 games, and 7 more are coming in 0.1.8 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion | Contributor |
 |---|---|---|---|---|
@@ -96,6 +96,12 @@ Peanuts Native 0.1.7 includes 59 games, and 1 more is coming in 0.1.8 (marked in
 | Hogwarts Legacy | `0100F7E00C70E000` | 1.0.5 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
 | Star Ocean The Second Story R | `010065301A2E0000` | 1.1.0 | No |  |
 | Stray (coming in 0.1.8) | `010075101EF84000` | 1.0.0 | No | ⭐<br><a href="https://github.com/dnyan007"><img src="https://img.shields.io/badge/dnyan007-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="dnyan007"></a> |
+| 13 Sentinels: Aegis Rim (coming in 0.1.8) | `01003FC01670C000` | 1.10 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Captain Toad: Treasure Tracker (coming in 0.1.8) | `01009BF0072D4000` | 1.4.2 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| Advance Wars 1+2: Re-Boot Camp (coming in 0.1.8) | `0100300012F2A000` | 1.0.0 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| FANTASY LIFE i: The Girl Who Steals Time (coming in 0.1.8) | `0100755017EE0000` | 1.5.0 | No | ⭐<br><a href="https://github.com/tapionallanaire"><img src="https://img.shields.io/badge/tapionallanaire-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="tapionallanaire"></a> |
+| Pokémon: Let's Go, Pikachu! (coming in 0.1.8) | `010003F003A34000` | 1.0.2 | No | ⭐<br><a href="https://github.com/fireworksordie"><img src="https://img.shields.io/badge/fireworksordie-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="fireworksordie"></a> |
+| Pokémon: Let's Go, Eevee! (coming in 0.1.8) | `0100187003A36000` | 1.0.2 | No | ⭐<br><a href="https://github.com/fireworksordie"><img src="https://img.shields.io/badge/fireworksordie-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="fireworksordie"></a> |
 
 <!-- PEANUTS end: the Supported games table -->
 
