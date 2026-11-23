@@ -17,7 +17,8 @@
 #                pixel shaders (dmsh_build.py shader_key and pair_keyed take the same parts for the Mac's per-shader cache). The digest of each shader is
 #                recorded when a library is made (<PN_REUSE_DIR>/shaders/<library id>.tsv), so the next build compares the old digest with the new one.
 # Both need the library's record: it names the translator's source tree (xlate_tree.py: not in DMSH_CHAIN, so an app update can bring another translator
-# library with the same version) and each entry's hash (library_id covers the library up to its blob). A library without one, or of another tree, keeps nothing.
+# library with the same version), the translation options (XLATE_DEBUG / XLATE_REDUCED, translation_options) and each entry's hash (library_id covers the
+# library up to its blob). A library without one, or of another tree or other options, keeps nothing.
 # Either way only a shader this build makes (wanted_keys: vk_android_build.py's own selection, less the absences validated against the split), and a vertex
 # shader only when its paired pixel shaders that this build makes are those the older library holds: its outputs are padded with theirs (PS_INPUTS), so an
 # add-on installed since (its pixel shaders absent before) changes it while its part of the profile stays the same (same_pixel_shaders).
@@ -52,7 +53,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 TOOLS = REPO / 'dm/gfx/tools'
 BUILD = TOOLS / 'vk_android_build.py'
-FORMAT = 'pn-shader-deps 2'   # 2: the translator's source tree (translator_tree) and each entry's hash
+FORMAT = 'pn-shader-deps 3'   # 2: the translator's source tree (translator_tree) and each entry's hash; 3: the translation options (translation_options)
 RULES = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:32]   # this file, the keep rules: a record (and each shader's part) another file wrote is not
 # trusted, as split_reuse.py's key covers its own source (found in review: a later app with other rules would have kept by what the earlier rules wrote)
 SAMPLE_SHARE, SAMPLE_MIN, SAMPLE_MAX = 50, 16, 1000   # one key in SAMPLE_SHARE, within these bounds
@@ -96,6 +97,13 @@ def load_modules():
     sys.path.insert(0, str(TOOLS)); sys.path.insert(0, str(REPO / 'dm/games'))
     import game, dmsh_chain, vk_android_delta   # noqa: E401
     return game, dmsh_chain, vk_android_delta
+
+
+def translation_options():
+    """The translator's options of this run (XLATE_DEBUG / XLATE_REDUCED: dmsh_chain.py options, as dmsh_build.py job_for puts them in each shader's job), which
+    a record must name (read_record, plan). They are in DMSH_CHAIN's version too, so vk_android_build.py refuses others than its header was written with; the
+    record says it itself (igawa6's review of #150: the options were in no key here)"""
+    return load_modules()[1].options()
 
 
 def zstd_module():
@@ -199,7 +207,7 @@ def record_path(d, lib_id): return Path(d) / RECORDS_DIR / f'{lib_id}.tsv'
 
 
 def read_record(d, lib_id):
-    """{'version', 'game', 'inputs', 'tree', 'deps': {key: (digest, entry hash)}} of a library's record, None when it has none or it does not read as one"""
+    """{'version', 'game', 'inputs', 'tree', 'options', 'deps': {key: (digest, entry hash)}} of a library's record, None when it has none or it does not read as one"""
     if not d: return None
     try: text = record_path(d, lib_id).read_text()
     except OSError: return None
@@ -207,17 +215,17 @@ def read_record(d, lib_id):
     for l in text.split('\n'):
         c = l.split('\t')
         if l.startswith('#'): continue
-        if len(c) == 2 and c[0] in ('format', 'rules', 'version', 'game', 'inputs', 'tree'): out[c[0]] = c[1]
+        if len(c) == 2 and c[0] in ('format', 'rules', 'version', 'game', 'inputs', 'tree', 'options'): out[c[0]] = c[1]
         elif len(c) == 3 and KEY.fullmatch(c[0]) and re.fullmatch(r'[0-9a-f]{32}', c[1]) and re.fullmatch(r'[0-9a-f]{16}', c[2]): out['deps'][c[0]] = (c[1], c[2])
-    return out if out.get('format') == FORMAT and out.get('rules') == RULES and all(x in out for x in ('version', 'game', 'inputs', 'tree')) else None
+    return out if out.get('format') == FORMAT and out.get('rules') == RULES and all(x in out for x in ('version', 'game', 'inputs', 'tree', 'options')) else None
 
 
 def write_record(d, lib_id, version, game, inputs, tree, deps):
-    """deps: {key: (its digest, its entry's hash)}"""
+    """deps: {key: (its digest, its entry's hash)}; the options are this run's (translation_options), which made the library"""
     p = record_path(d, lib_id); p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix('.tmp')
     tmp.write_text(f'# what each shader of a library was built from (dm/peanuts/reuse/shader_reuse.py): the next build keeps the shaders whose part is the same\n'
-                   f'format\t{FORMAT}\nrules\t{RULES}\nversion\t{version}\ngame\t{game}\ninputs\t{inputs}\ntree\t{tree}\n'
+                   f'format\t{FORMAT}\nrules\t{RULES}\nversion\t{version}\ngame\t{game}\ninputs\t{inputs}\ntree\t{tree}\noptions\t{translation_options()}\n'
                    + ''.join(f'{k}\t{deps[k][0]}\t{deps[k][1]}\n' for k in sorted(deps)))
     os.replace(tmp, p)
 
@@ -276,7 +284,7 @@ def plan(libs, version, game_id, inputs, deps, reuse_dir, zstd, wanted=None, pai
     newest first; deps: Deps of this build; wanted: the keys this build makes, None for all the profile maps; pairs_in_inputs: the profile has its own
     pso_pairs.tsv (else load_pairs takes the split's, which the inputs digest does not cover, and "same inputs" does not hold)"""
     kept, sample, lines, taken = {}, {}, [], set()
-    tree = translator_tree()
+    tree, options = translator_tree(), translation_options()
     for L in libs:
         if L.version != version or L.game != game_id:
             lines.append(f'reuse: {L.path} is of version {L.version}, game {L.game}: not this build\'s'); continue
@@ -284,9 +292,11 @@ def plan(libs, version, game_id, inputs, deps, reuse_dir, zstd, wanted=None, pai
         same = L.inputs == inputs and pairs_in_inputs
         rec = read_record(reuse_dir, library_id(L))
         # a record of this app's: without one the translator a library was made with cannot be told (the translator's sources are not in its version)
-        if rec is None or (rec['version'], rec['game'], rec['tree']) != (version, game_id, tree):
+        if rec is None or (rec['version'], rec['game'], rec['tree'], rec['options']) != (version, game_id, tree, options):
             lines.append(f'reuse: {L.path} has no record of the translator and the parts of the profile its shaders were made with'
-                         + (f' (its record names the translator {rec["tree"]}, this build\'s is {tree})' if rec and rec['tree'] != tree else '') + ': none kept from it')
+                         + (f' (its record names the translator {rec["tree"]}, this build\'s is {tree})' if rec and rec['tree'] != tree else '')
+                         + (f' (its record names the translation options {rec["options"]}, this build\'s are {options})' if rec and rec['options'] != options else '')
+                         + ': none kept from it')
             continue
         cand = [k for k in L.index if k not in taken and k in deps.stage and (wanted is None or k in wanted) and k in rec['deps']
                 and (same or rec['deps'][k][0] == deps.digest(k)) and same_pixel_shaders(L, k, deps, wanted)]

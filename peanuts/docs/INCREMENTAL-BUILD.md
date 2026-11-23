@@ -21,13 +21,15 @@ library in the pack's `shaders/` of this app's `DMSH_VK_CHAIN` and this game:
 |---|---|
 | built from the same profile inputs (`dmsh_chain.inputs`: the shader tables and the `nvn_*` / `shader_*` rows), the profile having its own `pso_pairs.tsv` | every shader it has: a result is a function of the tools, those inputs and the shader's key (`vk_android_build.py` keys its own result cache on exactly that) |
 | built from other inputs (the app's profile gained a game version), or from the same ones by a profile without its own `pso_pairs.tsv`, with a record of each shader's part of them | each shader whose part is the same: its stage, its `shader_facts.tsv` row, its pairs (with the split's `pso_pairs.tsv` where the profile has none), its `dual_want` / `bf_want` membership, the `geo_mesh` and conflict rows that name it, the facts of the mesh programs drawn with it, the profile's `nvn_*` / `shader_*` rows; a vertex shader also its pixel shaders' parts (the parts the Mac's per-shader cache key takes, `dmsh_build.py shader_key`) |
-| of another chain version, another game, with no record, or with a record of another translator | nothing |
+| of another chain version, another game, with no record, or with a record of another translator or other translation options | nothing |
 
-The record is written when a library is made: `no_backup/reuse/<title ID>/shaders/<library id>.tsv`, one digest and the entry's hash a shader, and the
-translator's source tree (`dm/gfx/tools/xlate_tree.py`). Every keep needs it, the same inputs too: the translator's sources are not in `DMSH_CHAIN` (its lock
-fingerprints the Mac's dlls), so an app update can bring a translator library built from other sources with the same version, and only the record says which
-one made the library. A library's entries must be the ones its record names (the library's id covers it only up to its blob). A pack made before this app has
-no record, so its first build with this app keeps nothing; the next one has it.
+The record is written when a library is made: `no_backup/reuse/<title ID>/shaders/<library id>.tsv`, one digest and the entry's hash a shader, the
+translator's source tree (`dm/gfx/tools/xlate_tree.py`) and the translation options (`XLATE_DEBUG` / `XLATE_REDUCED`, `dmsh_chain.py options`). Every keep
+needs it, the same inputs too: the translator's sources are not in `DMSH_CHAIN` (its lock fingerprints the Mac's dlls), so an app update can bring a translator
+library built from other sources with the same version, and only the record says which one made the library. The options are in `DMSH_CHAIN`'s version, by
+which `vk_android_build.py` refuses options its headers were not written with; the record names them as well, so a keep does not rest on that check. A
+library's entries must be the ones its record names (the library's id covers it only up to its blob). A pack made before this app has no record, so its first
+build with this app keeps nothing; the next one has it.
 
 Why the profile's own `pso_pairs.tsv`: a profile without one (most of them) pads its vertex shaders with the split's copy (`dmsh_build.py load_pairs`), which
 the inputs digest does not cover; an added DLC can add pairs there while the profile stays the same. Such a profile keeps by the record, whose digests take the
@@ -360,7 +362,8 @@ and a new pair (exactly those and the vertex shaders they pad are translated), p
 inputs), an add-on's pixel shaders built after a build without them (they and the vertex shaders they pad are translated), the same inputs without a record (nothing kept unless the profile has its own `pso_pairs.tsv`), a change the rule does not see (caught by the check,
 then a full translation), one sample shader the new library lacks (the same; `check` counts a missing or unreadable entry as one), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; the kept copy (a build keeps one and puts the environment back, a build
 whose pack's library is gone keeps from it, it and the pack's count once, a damaged one is skipped, only this version's, every game's under the cap with the
-oldest going first, this game's split results before them, none above the cap or when storage is low); a record other keep rules wrote keeps nothing; each
+oldest going first, this game's split results before them, none above the cap or when storage is low); a record other keep rules wrote keeps nothing, nor one
+of other translation options; each
 build's library equals a full build's. `peanuts/tests/test_rewrite_reuse.py`: a new version row keeps an unchanged `sdk`, a new main build rewrites `main`, patches for
 the build (in the profile or in another profile's `patches.py`) and `MATCH_CUTS` of the module rewrite it, its bytes, its `patched.bin` and the `fps_decouple`
 rows count, no record, another key, `PN_REUSE=0` (nor a record or a copy written), a copy under the cap of every game's copies, a record other keep rules

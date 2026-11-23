@@ -1051,6 +1051,25 @@ class Records(Base):
         self.assertEqual((code, len(runs[0])), (0, 400))
         self.assertEqual(lib, self.full())
 
+    def test_other_translation_options_keep_nothing(self):
+        # XLATE_DEBUG / XLATE_REDUCED (dmsh_chain.py options) change every translation: a library made with others keeps nothing, either way. They were in no
+        # key here, only in DMSH_CHAIN's version, by which vk_android_build.py refuses options its header was not written with (igawa6's review of #150)
+        self.profile()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i]}\n' for i in range(50)))   # "same inputs" too
+        self.build(); self.into_pack()
+        os.environ['XLATE_DEBUG'] = '0'
+        code, runs, lib = self.build()
+        self.assertEqual((code, len(runs[0])), (0, 400))
+        self.assertIn('options\tdebug=False reduced=True\n', next((self.reuse / 'shaders').glob('*.tsv')).read_text())
+        self.into_pack()
+        del os.environ['XLATE_DEBUG']
+        code, runs, lib = self.build()
+        self.assertEqual((code, len(runs[0])), (0, 400))
+        self.assertEqual(lib, self.full())
+        self.into_pack()
+        code, runs, lib = self.build()   # the same options: all but the sample kept
+        self.assertEqual(sorted(runs[0]), sorted(self.sample(self.vs + self.ps)))
+
     def test_no_translator_sources_keep_nothing(self):
         self.profile(); self.build(); self.into_pack()
         saved = sr.translator_tree
