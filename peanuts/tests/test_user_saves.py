@@ -106,6 +106,34 @@ class Hooks(unittest.TestCase):
         self.assertLess(src.index('holdLock(dir);'), a)
 
 
+class SettingsUsers(unittest.TestCase):
+    """Part 2: Settings › Users reaches a user's saves (UserSaves.of / has / open), counted from each game's real save folder (Folders.save, a picked one too)"""
+    USERS = REPO / 'android/app/src/main/java/dev/peanuts/users'
+
+    def test_counts_come_from_the_games_save_folders(self):
+        page = (self.USERS / 'UsersPage.java').read_text(encoding='utf-8')
+        self.assertIn('static int saves(Context c, String uid) { return dev.nxnative.android.UserSaves.of(c, uid).size(); }', page)
+        self.assertNotIn('getExternalFilesDir', page)
+        who = (self.USERS / 'WhoPlaysActivity.java').read_text(encoding='utf-8')
+        self.assertIn('return tid != null && dev.nxnative.android.UserSaves.has(this, tid, uid);', who)
+        self.assertNotIn('new File(new File(getExternalFilesDir(null), "saves"), tid)', who)
+        us = read('UserSaves.java')
+        of = us[us.index('public static List<Saved> of(Context c, String uid)'):]
+        of = of[:of.index('\n    }\n')]
+        for want in ('Game.load(c)', 'Folders.save(c, g)', 'Users.saveDir(base, uid)', 'SaveStore.hasFiles(d)'):
+            self.assertIn(want, of)
+
+    def test_show_saves_opens_the_saves_tab_with_the_user_picked(self):
+        page = (self.USERS / 'UsersPage.java').read_text(encoding='utf-8')
+        self.assertIn('if (!mine.isEmpty()) PUi.add(box, PUi.button(c, "Show saves"', page)
+        us = read('UserSaves.java')
+        op = us[us.index('public static boolean open(android.app.Activity a, String titleId, String uid)'):]
+        op = op[:op.index('\n    }\n')]
+        self.assertLess(op.index('picked.put(titleId, uid);'), op.index('GameSettings.openOn((MainActivity) a, g, GameSettings.SAVES);'))
+        gs = read('GameSettings.java')
+        self.assertIn('static void openOn(MainActivity a, Game g, String t) { tab = t; a.gameSettings(g); }   // PEANUTS', gs)
+
+
 class SaveStoreStaysAlone(unittest.TestCase):
     def setUp(self):
         self.src = read('SaveStore.java')

@@ -5,6 +5,7 @@ package dev.nxnative.android;
 // user's folder (save), says whose save each dialog is about, and holds the game's own save lock around another user's backup or restore (locked), which a
 // game start takes too. Copy to another user gives one user's save to another, theirs backed up first. The folder logic without Android is UserSaveDirs.
 // It lives in this package because SaveUi, SaveStore, Users, Folders and Ui are package-private; the hooks are one line each (SaveUi, MainActivity.gameTab).
+// Settings › Users (dev.peanuts.users.UsersPage) reaches a user's saves through the public part at the end: of, has, open.
 
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
@@ -24,7 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-final class UserSaves {
+public final class UserSaves {   // public: Settings › Users lists a user's saves and opens a game's Saves tab (of, has, open)
     private UserSaves() {}
 
     /** The Saves tab's choice by title ID: whose save its rows work on (a user's uid, or a removed user's). Kept while the app runs */
@@ -373,5 +374,59 @@ final class UserSaves {
                         + (x.before != null ? "; their old save is in Restore saves" : ""), Toast.LENGTH_LONG).show();
             });
         });
+    }
+
+    // ---- For Settings › Users (dev.peanuts.users): a user's saves across the library ----
+
+    /** A game of the library that a user has a save of: its title ID, its name and the user's folder of its save */
+    public static final class Saved {
+        public final String titleId, name;
+        public final File dir;
+
+        Saved(String titleId, String name, File dir) { this.titleId = titleId; this.name = name; this.dir = dir; }
+    }
+
+    /** The games of the library where user uid has a save (a file in their folder of the game's save, Folders.save: a picked folder as well), by name */
+    public static List<Saved> of(Context c, String uid) {
+        List<Saved> out = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (Game g : Game.load(c)) {
+            File base = Folders.save(c, g);
+            if (base == null || !seen.add(g.titleId)) continue;
+            File d = Users.saveDir(base, uid);
+            if (SaveStore.hasFiles(d)) out.add(new Saved(g.titleId, g.name, d));
+        }
+        out.sort((x, y) -> x.name.compareToIgnoreCase(y.name));
+        return out;
+    }
+
+    /** Whether user uid has a save of the game titleId: in their folder of the game's save (Folders.save), the app's own save folder for a game not in the library */
+    public static boolean has(Context c, String titleId, String uid) {
+        File base = null;
+        for (Game g : Game.load(c)) if (g.titleId.equals(titleId)) { base = Folders.save(c, g); break; }
+        if (base == null) base = AppStorage.save(c, titleId);
+        return SaveStore.hasFiles(Users.saveDir(base, uid));
+    }
+
+    /** The bytes of the files in a folder (read it off the main thread) */
+    public static long bytes(File d) {
+        long[] fb = {0, 0};
+        count(d, fb);
+        return fb[1];
+    }
+
+    /** "1.2 MB" (SaveStore.size) */
+    public static String size(long bytes) { return SaveStore.size(bytes); }
+
+    /** Opens the game's page on its Saves tab with user uid picked there; false when a is not the launcher's main screen or the game is not in the library */
+    public static boolean open(android.app.Activity a, String titleId, String uid) {
+        if (!(a instanceof MainActivity)) return false;
+        for (Game g : Game.load(a)) {
+            if (!g.titleId.equals(titleId)) continue;
+            picked.put(titleId, uid);
+            GameSettings.openOn((MainActivity) a, g, GameSettings.SAVES);
+            return true;
+        }
+        return false;
     }
 }

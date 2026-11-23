@@ -46,6 +46,8 @@ final class GameSettings {
         a.gameSettings(g);
     }
 
+    static void openOn(MainActivity a, Game g, String t) { tab = t; a.gameSettings(g); }   // PEANUTS: at a tab: a user's save in Settings › Users opens its game's Saves tab (UserSaves.open)
+
     /**
      * An optional shader update (Pack.shaderUpdateAvailable): this app version makes its games' shaders in a newer way; the game plays with the ones it has until the player
      * updates them. Shown on every tab of the game's page, under the tabs, with the button and no time promised (a game's whole shader set is made again on the phone)

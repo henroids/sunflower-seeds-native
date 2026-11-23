@@ -104,6 +104,8 @@ Banana Native ships several releases a day, so this fork is kept as a **thin ove
      user's backup or restore under the game's lock (`UserSaves.locked`); SaveStore records a backup's user in its manifest and keeps the device save, every
      user's, out of another user's save (its helpers in one marked block, so the class needs no other file); GameActivity finishes a stopped restore into any
      user's save at the start (`UserSaveDirs.recoverUsers`; one it cannot finish is left and noted, it stops no start). `peanuts/UPSTREAM-EDITS.md` Round 60.
+   - `android/app/src/main/java/dev/nxnative/android/GameSettings.java` — (2026-11-23, a user's saves in Settings › Users) one line after `open`: `openOn(a, g, tab)`
+     opens a game's page at a tab, so Show saves on a user's card opens the game's Saves tab with that user picked (`UserSaves.open`). Round 61.
 3. **Settings go through upstream's own mechanisms**: `env.txt` keys named `PN_*`, `settings.tsv` rows, `DM_CTL` lines. No new settings UI inside upstream classes.
 4. **Never reformat or "fix" upstream files.** A general fix belongs upstream as a PR to Banana Native (its AGENTS.md prefers general changes), then it arrives by rebase.
 5. **Branches:** `upstream/android` is Banana Native; `peanuts` is this overlay, always a linear set of commits on top of a Banana Native tag. History is rewritten on every update (rebase, never merge).

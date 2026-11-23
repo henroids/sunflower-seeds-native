@@ -2408,3 +2408,14 @@ Each user has a save of their own (`Users.saveDir`: the first user's is the game
 | `android/app/src/jvmtest/java/dev/nxnative/android/UserSavesJvmTest.java` | new | whose a folder and a backup are, the user line read back and older manifests, the folders, the device save rules, stopped restores finished, the lock | `// PEANUTS: new file` |
 
 Tests: `peanuts/tests/test_user_saves.py` (the JVM test, then the hooks and the words from the sources; the JVM half needs a JDK and is skipped on Windows, whose `File.renameTo` does not replace a file). `dm/tools/tests/test_android_saves.py`, `test_android_saf.py`, `test_android_packzip.py` and `test_android_users.py` are unchanged; `test_wiki.py` passes.
+
+### Round 61, a user's saves in Settings › Users (2026-11-23, issue #422, part 2 on Round 60)
+
+Settings › Users counted a user's saves from the app's own `saves/` folder by name, and Who's playing? looked there too, so a save in a folder picked in a game's Folders was not seen. Both now ask `UserSaves`, which looks in each game's real save folder (`Folders.save`, then `Users.saveDir`). The focused user's card has **Show saves** when they have any: the games with their save and its size; one opens that game's page on its Saves tab with this user picked (Round 60's cards).
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java` | 1 | `openOn(a, g, tab)`: the game's page at a tab (upstream's `open` always starts at its first) | `// PEANUTS` |
+| `android/app/src/main/java/dev/nxnative/android/UserSaves.java` | Round 60's file | public now, with `of` (a user's saves across the library), `has`, `bytes`, `size` and `open` | its `// PEANUTS: new file` |
+
+Peanuts' own files: `dev/peanuts/users/UsersPage.java` (`saves` from `UserSaves.of`, Show saves), `WhoPlaysActivity.java` (`hasSave` from `UserSaves.has`), `peanuts/tests/test_user_saves.py`, `peanuts/docs/FAQ.md`.

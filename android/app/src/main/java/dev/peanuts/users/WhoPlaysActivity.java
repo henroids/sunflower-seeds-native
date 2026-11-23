@@ -209,13 +209,8 @@ public final class WhoPlaysActivity extends Activity {
     private UsersPort.User find(String uid) { for (UsersPort.User u : users) if (u.uid.equals(uid)) return u; return null; }
     private UsersPort.User user(String uid) { UsersPort.User u = find(uid); return u != null ? u : users.get(0); }
 
-    private boolean hasSave(String uid) {
-        if (tid == null) return false;
-        File base = new File(new File(getExternalFilesDir(null), "saves"), tid);
-        File dir = UsersPort.FIRST.equals(uid) ? base : new File(base.getParentFile(), base.getName() + "_user_" + uid);
-        String[] in = dir.list();
-        return in != null && in.length > 0;
-    }
+    /** Whether this user has a save of the game: a file in their folder of its save (UserSaves.has: the game's save folder, a picked one as well) */
+    private boolean hasSave(String uid) { return tid != null && dev.nxnative.android.UserSaves.has(this, tid, uid); }
 
     // ---- The bottom screen: the game, Play as, Always ----
 
