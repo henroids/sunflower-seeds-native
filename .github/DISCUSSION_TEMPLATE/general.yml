@@ -2,7 +2,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for posting! Bugs go to [Issues](https://github.com/igawa6/peanuts-native/issues) with the form.
+        Thanks for posting! Bugs go to [Issues](https://github.com/henroids/sunflower-seeds-native/issues) with the form.
         **No game files, keys, firmware or links to them**: don't share them, offer them or ask where to get them. Peanuts Native works with your own dump of a game you own. Posts that break this are edited or removed.
   - type: textarea
     id: body

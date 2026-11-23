@@ -29,7 +29,7 @@ final class LogDigest {
     static final long TAIL_BYTES = 2L << 20;
     static final String RULES_ASSET = "digest/log_rules.tsv", NOISE_ASSET = "digest/log_noise.tsv";
     /** A rule's doc (a repository path with its anchor) is read on the public repository's android branch */
-    static final String DOCS_BASE = "https://git.eden-emu.dev/moceure/BananaNative/src/branch/android/";
+    static final String DOCS_BASE = "https://github.com/henroids/sunflower-seeds-native/blob/main/";   // PEANUTS: this fork's repository (upstream: Banana Native's android branch)
     static final int CUT = 200, MAX_GROUPS = 15, TRACK_GROUPS = 4000;
     private static final int FLAGS = "The Android Project".equals(System.getProperty("java.vendor")) ? 0 : Pattern.UNICODE_CHARACTER_CLASS;
 

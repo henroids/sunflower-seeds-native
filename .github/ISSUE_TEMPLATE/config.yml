@@ -1,13 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  # Hosted on git.eden-emu.dev while GitHub is unavailable. The GitHub links below go back in when the project returns there
-  # (Forgejo has no Discussions; Questions and ideas have their own form there).
   - name: Install and use
-    url: https://github.com/igawa6/peanuts-native
-    about: What you need, the games and versions that run, and how to add a game. Questions and ideas have their own form above.
-  # - name: Questions, ideas and phone reports that work
-  #   url: https://github.com/igawa6/peanuts-native/discussions
-  #   about: Ask, suggest a game or a feature, or tell which phone and driver it runs on. Issues are for problems, with the form.
-  # - name: Install and use
-  #   url: https://github.com/igawa6/peanuts-native#readme
-  #   about: What you need, the games and versions that run, and how to add a game.
+    url: https://github.com/henroids/sunflower-seeds-native#install
+    about: What you need, and how to make the .nup, prepare MLB The Show 26 on a PC and play it.
+  - name: Questions and answers
+    url: https://github.com/henroids/sunflower-seeds-native/blob/main/peanuts/docs/FAQ.md
+    about: The app's screens, settings, GPU drivers and saves.

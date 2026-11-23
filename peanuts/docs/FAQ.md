@@ -1,13 +1,20 @@
-# Peanuts Native FAQ
+# Questions and answers
 
-For version 0.1.4. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
+> [!NOTE]
+> Sunflower Seeds is a fork of Peanuts Native for one game, MLB The Show 26. How to install it, make the game's `.nup`
+> and prepare it on a PC is in the [README](../../README.md#install); what was fixed for the game is in
+> [the skin and hair write-up](../../docs/mlb-the-show-26-skin-and-hair.md). The answers below come from Peanuts Native
+> and describe the app's screens, which are the same here. Bugs go to this repository's
+> [issues](https://github.com/henroids/sunflower-seeds-native/issues).
+
+Written for Peanuts Native 0.1.4. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
 
 ## Quick answers
 
 - **Build is off, or a game stops at startup:** add your keys and firmware in Settings › Library (**Keys**, **Firmware**), then build or play again. See [Keys and firmware](#keys-and-firmware).
 - **Black screen, wrong picture or a crash at start:** pick another GPU driver in Settings › **GPU driver**, then run Settings › **Readiness check**. See [GPU drivers](#gpu-drivers).
 - **A cover says Wrong version:** the update you have is not one this app version supports. See [What does "Wrong version" mean?](#what-does-wrong-version-mean-and-how-do-i-fix-it)
-- **The app closes as soon as it opens, on version 0.1.1 or 0.1.2:** on Android 13 or older those two versions close when they find a newer release. Install 0.1.3 or later by hand from the project's [releases page](https://github.com/igawa6/peanuts-native/releases); your games, saves and settings stay. Until then the app opens with Wi-Fi off.
+- **The app closes as soon as it opens, on version 0.1.1 or 0.1.2:** on Android 13 or older those two versions close when they find a newer release. Install 0.1.3 or later by hand from the project's [releases page](https://github.com/henroids/sunflower-seeds-native/releases); your games, saves and settings stay. Until then the app opens with Wi-Fi off.
 - **The companion is empty or keeps waiting after an app update:** hold the game's cover, open **Storage**, tap **Build again**, then **Rebuild**.
 
 ## First run, step by step
@@ -696,7 +703,7 @@ Out of memory, typically on an 8 GB device: update to 0.1.1 or later, which buil
 
 ### How do I report a bug well?
 
-Open an issue at https://github.com/igawa6/peanuts-native/issues with:
+Open an issue at https://github.com/henroids/sunflower-seeds-native/issues with:
 
 - what happened, and what you did just before;
 - the device, its RAM and the Android version;

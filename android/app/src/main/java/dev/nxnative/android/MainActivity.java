@@ -248,7 +248,7 @@ public final class MainActivity extends Activity {
     private String poppedLine(long n) { return "Bananas Popped: " + java.text.NumberFormat.getIntegerInstance().format(n); }
 
     /** The player wiki (its pages are written and kept up to date on the project's site, so the app links to it and keeps no copy) */
-    static final String WIKI_URL = "https://github.com/igawa6/peanuts-native/blob/main/peanuts/docs/FAQ.md";   // PEANUTS: this fork's questions and answers (upstream: Banana Native's player wiki, which describes that app's screens and games)
+    static final String WIKI_URL = "https://github.com/henroids/sunflower-seeds-native/blob/main/peanuts/docs/FAQ.md";   // PEANUTS: the questions and answers, in this fork's repository (upstream: Banana Native's player wiki, which describes that app's screens and games)
 
     /** Home's header buttons: the wiki, then Settings */
     private View headerButtons() {
