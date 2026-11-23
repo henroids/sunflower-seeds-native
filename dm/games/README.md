@@ -175,6 +175,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [Silver Pines](0100D5B026844000/README.md) | `0100D5B026844000` | 1.0.0 (base) | 21.4.7 | Unity 6000.3.15f1 IL2CPP | NVN |
 | [Sonic Frontiers Definitive Edition](0400921025B32000/README.md) | `0400921025B32000` | v65536 (Switch 2) | 21.4.1 (Ounce) | Hedgehog Engine 2, CRIWARE | NVN2 |
 | [Splatoon Raiders](0400380020056000/README.md) | `0400380020056000` | v65536 (Switch 2) | 21.4.4 (Ounce) | Nintendo EPD (sead / agl / gsys) | NVN2 |
+| [SPY×ANYA: Operation Memories](010089B01AB44000/README.md) | `010089B01AB44000` | 1.0.1 | 14.3.1 | Unity 2020.3.43f1 IL2CPP, CRIWARE, FMOD | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Star Fox](0400E88025B1A000/README.md) | `0400E88025B1A000` | v131072 (Switch 2) | 21.4.4 (Ounce) | custom (eclipse) | NVN2 |
 | [STAR OCEAN THE SECOND STORY R](010065301A2E0000/README.md) | `010065301A2E0000` | 1.1.0 (plays on an AYN Thor, Turnip) | 15.3.2 | Unity 2021.3.22f1 IL2CPP, CRIWARE, FMOD | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [STEINS;GATE RE:BOOT](01008BC024FDE000/README.md) | `01008BC024FDE000` | 1.0.3 | 20.5.17 | M2's ADV engine | NVN |
@@ -201,6 +202,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [Super Mario Odyssey](0100000000010000/README.md) | `0100000000010000` | 1.4.1 | 7.3.2 | Nintendo EPD (sead / agl, NintendoWare) | NVN |
 | [Stray](010075101EF84000/README.md) | `010075101EF84000` | 1.0.0 (base) | 17.5.6 | Unreal Engine 4 | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Super Mario Party Jamboree](0100965017338000/README.md) | `0100965017338000` | 2.3.0 | 17.5.9 | NintendoWare Bezel Engine 2.9 | NVN |
+| [Super Mario RPG](0100BC0018138000/README.md) | `0100BC0018138000` | 1.0.1 | 14.3.1 | Unity 2021.3.15f1 IL2CPP, CRIWARE | NVN <!-- PEANUTS: nxnative's profile, taken as it is --> |
 | [Super Monkey Ball Banana Rumble](010031F019294000/README.md) | `010031F019294000` | 2.20 | 17.5.8 | Unity 2022.3.30f1 IL2CPP, CRIWARE, FMOD | NVN |
 | [SUPER ROBOT WARS Y](010063301BD50000/README.md) | `010063301BD50000` | 1.4.1 | 18.3.5 | Unity 2022.3.44f1 IL2CPP, CRIWARE | NVN |
 | [Super Smash Bros. Ultimate](01006A800016E000/README.md) | `01006A800016E000` | 13.0.5 | 8.2.1 | Bandai Namco / Sora's engine | NVN |
@@ -220,7 +222,9 @@ One row per profile; the notes are each profile's `README.md`.
 | [TRIANGLE STRATEGY](0100CC80140F8000/README.md) | `0100CC80140F8000` | 1.1.1 | 12.3.2 | Unreal Engine 4.27 | NVN |
 | [Unicorn Overlord](010069401ADB8000/README.md) | `010069401ADB8000` | 1.05 | 16.2.4 | Vanillaware's engine | NVN |
 | [Unicorn Overlord, Asian release](010054B01AD92000/README.md) | `010054B01AD92000` | 1.05 | 16.2.4 | Vanillaware's engine | NVN |
+| [WarioWare: Get It Together!](0100563010E0C000/README.md) | `0100563010E0C000` | 1.0.0 | 10.4.1 | NintendoWare Bezel Engine 1.50 | NVN <!-- PEANUTS: Peanuts-only profile; plays on an AYN Thor (Turnip) -->
 | [Well Dweller](0100217023F6C000/README.md) | `0100217023F6C000` | 1.0.0 | 22.2.0 | GameMaker Studio 2 (its runner) | OpenGL |
+| [Viewfinder](0100F9D023176000/README.md) | `0100F9D023176000` | 1.0.0 (base) | 19.3.9 | Unity 2022.3.61f1 IL2CPP, FMOD | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Xenoblade Chronicles: Definitive Edition](0100FF500E34A000/README.md) | `0100FF500E34A000` | 1.1.2 | 9.3.1 | Monolith's engine | NVN |
 | [Xenoblade Chronicles 2](0100E95004038000/README.md) | `0100E95004038000` | 2.1.0 | 3.5.0 | Monolith's engine | NVN |
 | [Xenoblade Chronicles 3](010074F013262000/README.md) | `010074F013262000` | 2.2.1 | 12.3.9 | Monolith's engine | NVN |
