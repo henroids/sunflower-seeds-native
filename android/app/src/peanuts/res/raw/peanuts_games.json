@@ -69,7 +69,9 @@
     "010003F003A34000",
     "0100187003A36000",
     "0100F9D023176000",
-    "010089B01AB44000"
+    "010089B01AB44000",
+    "0100BC0018138000",
+    "0100563010E0C000"
   ],
   "games": [
     {
@@ -1159,6 +1161,27 @@
       "note": "dm/games/0100000000010000/README.md"
     },
     {
+      "title_id": "0100BC0018138000",
+      "name": "Super Mario RPG",
+      "profile_name": "Super Mario RPG",
+      "builds": [
+        {
+          "version": "v65536",
+          "number": 65536,
+          "display": "1.0.1"
+        }
+      ],
+      "readme_update": "1.0.1",
+      "package": "v65536",
+      "companion": false,
+      "since": "0.1.8",
+      "contributors": [
+        "intermission88"
+      ],
+      "profile": "dm/games/0100BC0018138000/game.tsv",
+      "note": "dm/games/0100BC0018138000/README.md"
+    },
+    {
       "title_id": "0100DE501433A000",
       "name": "Tetris Effect: Connected",
       "profile_name": "Tetris Effect: Connected",
@@ -1382,6 +1405,27 @@
       ],
       "profile": "dm/games/0100F9D023176000/game.tsv",
       "note": "dm/games/0100F9D023176000/README.md"
+    },
+    {
+      "title_id": "0100563010E0C000",
+      "name": "WarioWare: Get It Together!",
+      "profile_name": "WarioWare: Get It Together!",
+      "builds": [
+        {
+          "version": "v0",
+          "number": 0,
+          "display": "1.0.0"
+        }
+      ],
+      "readme_update": "1.0.0",
+      "package": "v0",
+      "companion": false,
+      "since": "0.1.8",
+      "contributors": [
+        "intermission88"
+      ],
+      "profile": "dm/games/0100563010E0C000/game.tsv",
+      "note": "dm/games/0100563010E0C000/README.md"
     },
     {
       "title_id": "0100453019AA8000",
