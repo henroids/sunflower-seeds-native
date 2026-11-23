@@ -357,6 +357,7 @@ android {
             java.srcDirs += 'src/ondevice/java'
         }
         if (nxApp == 'peanuts') { release { res.srcDirs += 'src/peanuts/res' }; debug { res.srcDirs += 'src/peanuts/res' } }   // PEANUTS: peanut icon/background overlay (a build type's res overrides main's by name)
+        if (nxApp == 'peanuts' && nxAppId == 'sunflowertest') { release { res.srcDirs += 'src/sunflower-test/res' }; debug { res.srcDirs += 'src/sunflower-test/res' } }   // PEANUTS: the Sunflower Seeds test app's own colours (purple and greens); the official app keeps main's
         // The service and its permissions, merged over the main manifest (a build type's manifest is an overlay)
         release { manifest.srcFile 'src/ondevice/AndroidManifest.xml' }
         debug { manifest.srcFile 'src/ondevice/AndroidManifest.xml' }
