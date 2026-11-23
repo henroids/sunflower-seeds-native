@@ -229,6 +229,13 @@ class Base(unittest.TestCase):
         """The split's own pso_pairs.tsv (load_pairs takes it when the profile has none)"""
         (self.pkg.parent / 'pso_pairs.tsv').write_text(''.join(f'{v}\t{p}\n' for v, p in pairs))
 
+    def other_title(self, title, mb, age):
+        """Another title's kept copy of mb MB, age seconds old (only its size and time count)"""
+        f = self.reuse.parent / title / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'
+        f.parent.mkdir(parents=True); f.write_bytes(b'\0' * int(mb * (1 << 20)))
+        t = os.stat(f).st_mtime - age; os.utime(f, (t, t))
+        return f
+
     def into_pack(self):
         """The finished build's library goes into the pack (the pack step), as the older library of the next build"""
         dst = self.pack / f'v-{VERSION}'; dst.mkdir(parents=True, exist_ok=True)
@@ -544,13 +551,6 @@ class Leftover(Base):
 class Kept(Base):
     """The copy of the last library in <PN_REUSE_DIR>/library (keep_library): the next build keeps from it when the pack's library is gone"""
     def copy(self): return self.reuse / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'
-
-    def other_title(self, title, mb, age):
-        """Another title's kept copy of mb MB, age seconds old (only its size and time count)"""
-        f = self.reuse.parent / title / sr.KEEP_DIR / f'v-{VERSION}' / 'dmsh_vk.lib'
-        f.parent.mkdir(parents=True); f.write_bytes(b'\0' * int(mb * (1 << 20)))
-        t = os.stat(f).st_mtime - age; os.utime(f, (t, t))
-        return f
 
     def test_a_build_keeps_a_copy_of_its_library(self):
         self.profile()
@@ -894,6 +894,89 @@ class FullCheck(Base):
         shutil.rmtree(self.pack.parent)   # then another Build folder
         code, runs, lib = self.build()
         self.assertEqual(lib, self.full())
+
+    def due(self):
+        """A build that kept shaders, its library in the pack and the kept copy, its full check due → (the library's path, what its check needs, the kept copy's size)"""
+        self.profile(); self.build(); self.into_pack(); self.build(); self.into_pack()
+        self.assertIsNotNone(self.todo())
+        lib_path = self.pack / f'v-{VERSION}' / 'dmsh_vk.lib'
+        L = delta.Library(str(lib_path))
+        try: need = sr.check_bytes(L)
+        finally: L.close()
+        self.assertEqual(need, 2 * lib_path.stat().st_size + sr.CHECK_ENTRY_BYTES * 400)
+        return lib_path, need, self.copy().stat().st_size
+
+    def test_the_checks_own_folder_counts_in_the_cap(self):
+        # its results, kept between its tries, and its library are a copy like the others while it is there (found in review: outside the cap)
+        f = self.reuse / sr.CHECK_DIR / 'results' / '0000000000001000.r'
+        f.parent.mkdir(parents=True); f.write_bytes(b'\0' * 1000)
+        _, size, dirs = sr.copies(self.reuse)
+        self.assertEqual((size, dirs), (1000, [self.reuse / sr.CHECK_DIR]))
+
+    def test_a_check_without_room_is_dropped_with_the_records(self):
+        self.due()
+        saved = sr.KEEP_FREE_MB
+        sr.KEEP_FREE_MB = 1 << 40   # it would leave too little free
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out): self.assertEqual(self.check(), (0, []))   # nothing translated
+        finally: sr.KEEP_FREE_MB = saved
+        self.assertIn('reuse full check: no room for its', out.getvalue())
+        self.assertIn(sr.DROPPED, out.getvalue())
+        self.assert_dropped()
+
+    def test_a_check_makes_room_from_the_titles_built_longest_ago(self):
+        _, need, copy = self.due()
+        other = self.other_title('0100000000BB0000', 1.5, 3600)
+        os.environ['PN_REUSE_KEEP_MB'] = str(-(-(need + copy) // (1 << 20)))   # room for the check and this game's copy, not for the other title's too
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): code, runs = self.check()
+        self.assertEqual((code, sorted(runs[0])), (0, sorted(self.vs + self.ps)))
+        self.assertFalse(other.exists())
+        self.assertIn('reuse full check: room made for its', out.getvalue())
+        self.assertIsNone(self.todo())
+
+    def test_a_check_that_goes_on_counts_what_it_wrote_toward_its_room(self):
+        # a stopped check's results stay for the next try: they are part of what it needs, not more on top
+        _, need, copy = self.due()
+        left = self.reuse / sr.CHECK_DIR / 'results' / 'left-by-the-try-before'
+        left.parent.mkdir(parents=True); left.write_bytes(b'\0' * (1 << 20))
+        os.environ['PN_REUSE_KEEP_MB'] = str(-(-(need + copy) // (1 << 20)))   # what it left on top of what it needs would not fit
+        self.assertEqual(self.check()[0], 0)
+        self.assertIsNone(self.todo())
+        self.assertTrue((self.reuse / sr.RECORDS_DIR).is_dir())   # a check that ran: nothing dropped
+
+    def test_a_build_keeps_no_shader_whose_full_check_could_not_follow(self):
+        # with the kept copies at most 0 MB no full check has room: such a build kept shaders that only the sample would ever check
+        self.profile(); self.build(); self.into_pack()
+        os.environ['PN_REUSE_KEEP_MB'] = '0'
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): code, runs, lib = self.build()
+        self.assertEqual((code, len(runs), sorted(runs[0])), (0, 1, sorted(self.vs + self.ps)))
+        self.assertIn('would need about', out.getvalue())
+        self.assertEqual(lib, self.full())
+        self.assertIsNone(self.todo())
+
+    def test_a_build_keeps_no_shader_whose_check_would_not_fit_beside_this_games_copies(self):
+        # the check's room is asked beside the copies of this game that stay (its library's and its modules'): where the check alone fits under the cap but not
+        # beside them, every check of such a build would be dropped
+        self.profile(); self.build(); self.into_pack()
+        lib_path = self.pack / f'v-{VERSION}' / 'dmsh_vk.lib'
+        L = delta.Library(str(lib_path))
+        try: need = sr.check_bytes(L)
+        finally: L.close()
+        mods = self.reuse / 'rewrite' / 'main.files' / 'main.patched.bin'
+        mods.parent.mkdir(parents=True); mods.write_bytes(b'\0' * (1 << 20))
+        os.environ['PN_REUSE_KEEP_MB'] = str(-(-(need + lib_path.stat().st_size) // (1 << 20)))   # the check and the library's copy fit, the modules' copy on top not
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): code, runs, lib = self.build()
+        self.assertEqual((code, len(runs), sorted(runs[0])), (0, 1, sorted(self.vs + self.ps)))
+        self.assertIn('beside this game\'s copies of', out.getvalue())
+        self.assertIsNone(self.todo())
+        mods.unlink()   # without them it fits: the next build keeps
+        shutil.rmtree(self.res)
+        code, runs, _ = self.build()
+        self.assertEqual((code, sorted(runs[0])), (0, sorted(self.sample(self.vs + self.ps))))
 
     def test_a_library_another_build_replaced(self):
         self.profile(); self.build(); self.into_pack(); self.build()

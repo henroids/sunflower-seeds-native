@@ -45,8 +45,8 @@ chain changes, so the library version does not move.
 Where the older library comes from: the pack's `shaders/`, and a copy of the last library this game's shaders step wrote, kept in the app's own storage
 (`no_backup/reuse/<title ID>/library/v-<V>/`, `keep_library`), which `shader_reuse.py` adds to `DMSH_VK_DELTA_FROM` for itself and for `vk_android_build.py`.
 So a game whose pack's library is gone keeps its shaders all the same: the build deleted (Settings › Storage, Remove game data), another Build folder, a pack
-that was moved. Only this version's copy is kept, at most 4 GB for every game's copies together, the modules' and the split's kept results too, and none
-that would leave less than 2 GB free (`shader_reuse.py room`): the room under the cap comes first from this game's split results (a scan of a few seconds
+that was moved. Only this version's copy is kept, at most 4 GB for every game's copies together, the modules' and the split's kept results too, and the
+full check's own folder while it is there, and none that would leave less than 2 GB free (`shader_reuse.py room`): the room under the cap comes first from this game's split results (a scan of a few seconds
 makes them again), then from the games built longest ago; that is decided before any other copy goes. The pack's library and the copy count once (the same library). Settings › Storage lists each game's cache under Build caches (not ticked), and deletes one only while no build or full check of the game runs: they hold
 a lock beside the folder (`no_backup/reuse/<title ID>.lock`, `StorageScan.reuseLock`), which works across the app's processes.
 
@@ -107,7 +107,16 @@ translation (`ondevice/logs/check.log`).
   another selection, an app update since the build. One that fails (the tool ended with an error, storage full, or the packer's process ended while it ran:
   `check.running`, counted at the next start) is tried again, at most three times (`check.tries`), then dropped. Before, such a check was asked again every two minutes for good and held every other game's check. A build with code mods
   is never the check's job.
-- A dropped check, whatever dropped it (also an app update, and a library to check that neither the pack nor the kept copy holds any more), takes the
+- Before it writes, the check asks for room as a kept copy does (`room`, `check_bytes`): about twice the library and 4 KiB a shader (a library of its
+  own, and a result file for each shader with the same modules and a JSON head; by this count about 230 MB for ACNH 3.0.3's library of 96 MB and 580 MB
+  for Mario Kart 8 Deluxe 4.0.1's of 233 MB). Its folder counts toward the cap while it is there, what a stopped check left counts toward what it needs,
+  and the room comes from this game's split results first, then from the games built longest ago. Without room the check is dropped (below). A build keeps
+  no shader whose check could never fit under the cap beside the game's copies that stay (the kept copy of its library and its modules':
+  `PN_REUSE_KEEP_MB=0`, a library of about a third of the cap or more): the log says
+  `reuse: the full check of shaders kept from … would need about N MB beside this game's copies of M MB …: none kept`. The job's `split/` is the job's, not a kept copy: it is on storage
+  already when the check starts, so the free space the check asks about has it, and it goes when the check does. A full translation that differed takes
+  the kept copy's place by a rename out of the check's folder, with no second copy.
+- A dropped check, whatever dropped it (also an app update, no room for it, and a library to check that neither the pack nor the kept copy holds any more), takes the
   records of the game's shaders (`shaders/`) and the kept copy of its library (`library/`) with it (`CheckDue.drop`, `shader_reuse.py drop_check`): its kept
   shaders were checked by the sample alone, so the next build of the game keeps none and translates every one. Before, the records stayed and the next build
   kept the same entries again, so a wrong one the sample missed could stay in the pack for good. The records go first: a stop in between leaves the check
@@ -144,8 +153,8 @@ found", and its Build made a pack byte for byte the full build's in about a minu
 - `PN_REUSE=0` in the job's `ondevice/env.txt`: off, the shaders step is `vk_android_build.py` as before, the rewrite keeps no module whose key moved, and
   nothing is written for a later build (no record, no copy of the library or of a module, no split result).
 - A profile whose own manifest is of the build: upstream's delta update runs as it was.
-- `PN_REUSE_KEEP_MB=<n>` in `env.txt`: the kept copies of every game together (libraries, modules and the split's results), at most n MB (4096 by default;
-  0 keeps none).
+- `PN_REUSE_KEEP_MB=<n>` in `env.txt`: the kept copies of every game together (libraries, modules, the split's results and the full check's folder), at
+  most n MB (4096 by default; 0 keeps none, and then no shader either, as no full check could follow).
 - `shaders.log` lines: `reuse: <library>: N shaders kept (...), M translated to check them`, then `reuse check: M of M shaders translated to check are the
   older library's byte for byte; N shaders kept`, and `reuse: this library kept for the next build of this game (S MB)` (or why not). The card shows
   "Translating M new shaders (the other N are reused)" from the tool's own count.
@@ -319,7 +328,7 @@ python3 peanuts/scripts/incremental-check.py --package dev.nxnative.android.<suf
 
 ## Tests
 
-`peanuts/tests/test_shader_reuse.py` `FullCheck` (due only after a build that kept shaders, a library that is a full translation, a wrong kept shader the sample missed is found and replaced in the pack, the pack replaced since, a stopped check goes on, a library another build replaced; a check dropped for an app update, another translator, a library of another version or one gone leaves no record or kept copy, and the next build translates every shader; a stop while a check is dropped leaves it due). `CheckDueJvmTest` (through `peanuts/tests/test_reuse_check.py`): a check its job cannot make, one that failed three times and one whose process ended three times are dropped with the records and the kept copy; `test_reuse_check.py` also checks that `CheckDue` names them as `shader_reuse.py` does. `peanuts/tests/test_update_found.py` (UpdateFound on the JVM: nothing new, a newer update the profile knows, one it does not, an older one, a first update, new add-ons, both, what "Not now" remembers; the cover's wiring). `peanuts/tests/test_build_reuse.py` (the ready message: the last run of each step's log, only the steps this build ran, a failed check, the words the tools print). `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
+`peanuts/tests/test_shader_reuse.py` `FullCheck` (due only after a build that kept shaders, a library that is a full translation, a wrong kept shader the sample missed is found and replaced in the pack, the pack replaced since, a stopped check goes on, a library another build replaced; a check dropped for an app update, another translator, a library of another version or one gone leaves no record or kept copy, and the next build translates every shader; a stop while a check is dropped leaves it due; the check's folder counts in the cap, a check without room is dropped the same way, one makes room from the games built longest ago, what a stopped check left counts toward its room, and a build keeps no shader whose check could not follow). `CheckDueJvmTest` (through `peanuts/tests/test_reuse_check.py`): a check its job cannot make, one that failed three times and one whose process ended three times are dropped with the records and the kept copy; `test_reuse_check.py` also checks that `CheckDue` names them as `shader_reuse.py` does. `peanuts/tests/test_update_found.py` (UpdateFound on the JVM: nothing new, a newer update the profile knows, one it does not, an older one, a first update, new add-ons, both, what "Not now" remembers; the cover's wiring). `peanuts/tests/test_build_reuse.py` (the ready message: the last run of each step's log, only the steps this build ran, a failed check, the words the tools print). `peanuts/tests/test_shader_reuse.py`: a first build, a rebuild with the same inputs (only the sample translated), a profile that gains shaders, a changed fact
 and a new pair (exactly those and the vertex shaders they pad are translated), pairs that change in the split's `pso_pairs.tsv` (translated, not kept by the same
 inputs), an add-on's pixel shaders built after a build without them (they and the vertex shaders they pad are translated), the same inputs without a record (nothing kept unless the profile has its own `pso_pairs.tsv`), a change the rule does not see (caught by the check,
 then a full translation), one sample shader the new library lacks (the same; `check` counts a missing or unreadable entry as one), no record, `PN_REUSE=0`, a stop before the check, too few to check, a library of another version, the sample's classes; the kept copy (a build keeps one and puts the environment back, a build

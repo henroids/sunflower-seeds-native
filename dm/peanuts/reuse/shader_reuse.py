@@ -372,8 +372,9 @@ def dir_size(d):
 
 def copies(t):
     """A title's kept copies → (the time of its newest file, their size, their folders): its library's (KEEP_DIR), its modules' (rewrite_reuse.py,
-    rewrite/<module>.files) and the split's kept results (split_reuse.py, SPLIT_DIR)"""
-    dirs = [d for d in [t / KEEP_DIR, *sorted((t / 'rewrite').glob('*.files')), t / SPLIT_DIR] if d.is_dir()]
+    rewrite/<module>.files), the split's kept results (split_reuse.py, SPLIT_DIR) and, while it is there, the full check's own folder (CHECK_DIR: its results,
+    kept between its tries, and its library; found in review, it was outside the cap)"""
+    dirs = [d for d in [t / KEEP_DIR, *sorted((t / 'rewrite').glob('*.files')), t / SPLIT_DIR, t / CHECK_DIR] if d.is_dir()]
     newest, size = 0.0, 0
     for d in dirs:
         for r, _, names in os.walk(d):
@@ -394,8 +395,9 @@ def room(reuse_dir, size, replaced=(), free_mb=None):
     """Whether a copy of size bytes fits among the kept copies, for the title of reuse_dir and in place of its folders in replaced: every title's copies together
     at most cap_bytes(), the room under it made first by this title's split results (SPLIT_DIR: a few seconds of a scan to make again, so they never take another
     copy's place), then by the copies of the titles built longest ago; and none that would leave less than free_mb (KEEP_FREE_MB) free. Decided before anything is
-    deleted, so a copy that is not made takes no other's place. The library's copy (keep_library), each module's (rewrite_reuse.py) and the split's results
-    (split_reuse.py, size 0 once they are written) all ask here. → (None, [the folders to delete before it is made], [the titles whose copies go]) or (why not, [], [])"""
+    deleted, so a copy that is not made takes no other's place. The library's copy (keep_library), each module's (rewrite_reuse.py), the split's results
+    (split_reuse.py, size 0 once they are written) and the full check before it writes (full_check, check_bytes) all ask here. → (None, [the folders to delete
+    before it is made], [the titles whose copies go]) or (why not, [], [])"""
     me, cap = Path(reuse_dir), cap_bytes()
     free_mb = KEEP_FREE_MB if free_mb is None else free_mb
     if size > cap: return f'it is larger than the kept copies may be ({cap >> 20} MB, PN_REUSE_KEEP_MB)', [], []
@@ -415,24 +417,39 @@ def room(reuse_dir, size, replaced=(), free_mb=None):
     return None, drop, gone
 
 
-def keep_library(reuse_dir, out_dir, version):
+CHECK_ENTRY_BYTES = 4096   # what the full check writes for each shader besides its modules: a result file's JSON head, and the storage a file of its own rounds up to
+
+
+def check_bytes(L):
+    """About what the full check of the library L (a delta.Library) writes into CHECK_DIR: a library of its own, L's size, and a result file for each shader
+    (vk_android_build.py write_result: the same stored modules as L's entry, and a JSON head), so twice L and CHECK_ENTRY_BYTES for each entry. Measured
+    libraries on the phone: ACNH 3.0.3's 96 MB of 9,766 shaders, Mario Kart 8 Deluxe 4.0.1's 233 MB of 29,651 (by this count about 230 and 580 MB for their checks)"""
+    return 2 * os.path.getsize(L.path) + CHECK_ENTRY_BYTES * len(L.index)
+
+
+def keep_library(reuse_dir, out_dir, version, moved=False):
     """A copy of the library this step wrote in <PN_REUSE_DIR>/library/v-<V>/ (the pack may be on shared storage or a card, so no link): the next build of this title
     keeps from it when the pack's library is gone. Only this version's (no build of this app keeps from another's). Under the cap of every title's copies (room):
-    a copy that is not made takes no other's place. → a line for the log"""
+    a copy that is not made takes no other's place. moved: out_dir is the full check's own (full_check, in CHECK_DIR: the same storage, counted under the cap
+    already), and its library takes the copy's place by a rename, with no room to ask and no second copy written. → a line for the log"""
     src = os.path.join(out_dir, 'dmsh_vk.lib')
     me, root = Path(reuse_dir), Path(reuse_dir) / KEEP_DIR
     dst = root / ('v-' + version) / 'dmsh_vk.lib'
     size = os.path.getsize(src)
-    if size > cap_bytes():
-        shutil.rmtree(root, ignore_errors=True)   # nor an older copy, which would no longer be this build's
-        return f'reuse: this library ({size >> 20} MB) is larger than the kept copies may be ({cap_bytes() >> 20} MB, PN_REUSE_KEEP_MB): not kept'
-    why, drop, gone = room(me, size, [root])   # this title's libraries: replaced
-    if why: return f'reuse: this library ({size >> 20} MB) not kept: {why}'
-    for d in drop: shutil.rmtree(d, ignore_errors=True)
+    drop, gone = [], []
+    if not moved:
+        if size > cap_bytes():
+            shutil.rmtree(root, ignore_errors=True)   # nor an older copy, which would no longer be this build's
+            return f'reuse: this library ({size >> 20} MB) is larger than the kept copies may be ({cap_bytes() >> 20} MB, PN_REUSE_KEEP_MB): not kept'
+        why, drop, gone = room(me, size, [root])   # this title's libraries: replaced
+        if why: return f'reuse: this library ({size >> 20} MB) not kept: {why}'
+        for d in drop: shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(root, ignore_errors=True)   # the copies before (another version's, or the last library: this one takes its place)
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix('.tmp')
-    try: shutil.copyfile(src, tmp); os.replace(tmp, dst)
+    try:
+        if moved: os.replace(src, dst)
+        else: shutil.copyfile(src, tmp); os.replace(tmp, dst)
     except OSError:
         shutil.rmtree(dst.parent, ignore_errors=True)   # never a cut copy (storage full after all): the next build keeps from the pack's library
         raise
@@ -651,6 +668,21 @@ def full_check(argv):
     if target is None:
         say(f'reuse full check: the library to check is gone (neither the pack nor the kept copy holds it): nothing checked, {DROPPED}')
         drop_check(reuse_dir); return 0
+    # its own folder under the cap of the kept copies, as any copy, before it writes (what it holds already counts toward it: a stopped check goes on from its
+    # results). Found in review: outside the cap and with no free space asked, a large game's check could fill the phone and fail its tries
+    try:
+        need = check_bytes(target)
+        why, drop, gone = room(reuse_dir, need, [root])
+    except BaseException:
+        target.close(); raise
+    if why:
+        target.close()   # (before its kept copy goes)
+        say(f'reuse full check: no room for its {need >> 20} MB ({why}): {DROPPED}')
+        drop_check(reuse_dir); return 0
+    for d in drop: shutil.rmtree(d, ignore_errors=True)
+    made = ([f'the kept copies of {", ".join(gone)} deleted (at most {cap_bytes() >> 20} MB together)'] if gone else []) \
+        + (['this game\'s kept split results deleted'] if Path(reuse_dir) / SPLIT_DIR in drop else [])
+    if made: say(f'reuse full check: room made for its {need >> 20} MB: {"; ".join(made)}')
     try:
         say(f'reuse full check: {target.path}: every shader translated again ({todo.get("kept", "?")} of them were kept from earlier builds)')
         code = run_build(argv[:3] + [str(root / 'lib')] + argv[4:], {'DMSH_VK_RESULTS': str(root / 'results'), 'DMSH_VK_DELTA_FROM': str(root / 'none')})
@@ -702,7 +734,7 @@ def full_check(argv):
     os.replace(tmp, Path(reuse_dir) / FAILED)
     tree = translator_tree()
     if tree is not None: write_record(reuse_dir, new_id, version, g.id, dmsh_chain.inputs(g), tree, new_record)
-    try: say(keep_library(reuse_dir, str(new_dir), version))
+    try: say(keep_library(reuse_dir, str(new_dir), version, moved=True))   # moved out of the check's folder: already under the cap, no second copy
     except OSError as e: say(f'reuse: this library not kept for the next build ({e})')
     (Path(reuse_dir) / TODO).unlink(missing_ok=True); shutil.rmtree(root, ignore_errors=True)
     return DIFFER
@@ -746,7 +778,17 @@ def reuse(argv):
         libs = older_libraries(delta, out_dir, g.id)
         wanted = wanted_keys(argv, deps, delta)
         try:
+            # a shader is kept only where its full check can follow: the check asks for room beside this game's copies that stay (the kept copy of the library
+            # this build writes, about the older one's size, and its modules'; room() frees only the split's results and other games' copies), and one that
+            # never fits is dropped before it runs (full_check). A build that kept shaders anyway would leave them checked by the sample alone
+            # (PN_REUSE_KEEP_MB=0, a library of about a third of the cap or more)
+            mods = sum(dir_size(d) for d in (Path(reuse_dir) / 'rewrite').glob('*.files')) if reuse_dir else 0
+            big = next((L for L in libs if (L.version, L.game) == (version, g.id) and check_bytes(L) + os.path.getsize(L.path) + mods > cap_bytes()), None)
             if wanted is None: kept, sample, lines = {}, {}, ['reuse: this build\'s keys cannot be told (its absences, its selection): none kept']
+            elif big is not None:
+                kept, sample, lines = {}, {}, [f'reuse: the full check of shaders kept from {big.path} would need about {check_bytes(big) >> 20} MB beside this game\'s '
+                                               f'copies of {(os.path.getsize(big.path) + mods) >> 20} MB, more than the kept copies may be ({cap_bytes() >> 20} MB, '
+                                               f'PN_REUSE_KEEP_MB): none kept']
             else: kept, sample, lines = plan(libs, version, g.id, inputs, deps, reuse_dir, zstd, wanted, g.table('pso_pairs.tsv').is_file())
         finally:
             for L in libs: L.close()
