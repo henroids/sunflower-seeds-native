@@ -44,7 +44,8 @@ import dev.nxnative.android.R;
  *     rows keep Y for their details. Settings › Users opens the page in Saves (GamePagePort.at).</li>
  * <li>Mods &amp; Cheats is the page of Mods &amp; Cheats (dev.peanuts.mods.CheatsPage) inside the area; Saves has the user cards of #422.</li>
  * </ul>
- * A window 600 dp wide or more (the Thor's top screen, a tablet, a phone on its side); a narrower one keeps upstream's page for now.
+ * A window 600 dp wide or more (the Thor's top screen, a tablet, a phone on its side) has the game in a panel at the left of the page; a narrower one
+ * (a phone) has it at the top of the tiles (cover, name, facts, Play across the width) and each area as a page of its own, with Back to the tiles.
  */
 public final class GamePage {
     private GamePage() {}
@@ -79,8 +80,11 @@ public final class GamePage {
 
     // ---- Hooks ----
 
-    /** Whether this window gets the page in areas (GamePagePort.build) */
-    public static boolean used(Context c) { return c.getResources().getConfiguration().screenWidthDp >= WIDE_DP; }
+    /** Whether this window gets the page in areas (GamePagePort.build): every window, the game at the left (wide) or at the top of the tiles */
+    public static boolean used(Context c) { return true; }
+
+    /** The game in a panel at the left of the page (else at the top of the tiles, each area a page of its own) */
+    static boolean wide(Context c) { return c.getResources().getConfiguration().screenWidthDp >= WIDE_DP; }
 
     /** The area the page shows for this title (or opens at next), null: the tiles */
     public static String area(String titleId) {
@@ -152,9 +156,13 @@ public final class GamePage {
         content.addView(p, PUi.fill());
         pane = p;
         paneLast = null;
-        panel(a, content, f);
-        if (area == null) hub(a, p, got, f);
-        else areaPage(a, p, got, f, area);
+        boolean wide = wide(a);
+        play = null;
+        if (wide) panel(a, content, f);
+        if (area == null) {
+            if (!wide) phoneTop(a, p, f);
+            hub(a, p, got, f, wide);
+        } else areaPage(a, p, got, f, area, wide);
         watchFocus(a);
         boolean enter = entering;
         entering = false;
@@ -176,6 +184,74 @@ public final class GamePage {
         dev.peanuts.ctl.Ctl.screen();
     }
 
+    // ---- A phone: the game at the top of the tiles ----
+
+    /** Back, then the cover with the name, the facts and the play time beside it, then Play across the width (the canvas' phone board) */
+    private static void phoneTop(Activity a, LinearLayout p, Facts f) {
+        LinearLayout bar = PUi.row(a);
+        bar.setMinimumHeight(PUi.dp(a, 48));
+        bar.addView(PUi.back(a, v -> backKey(a)));
+        p.addView(bar);
+        LinearLayout head = PUi.row(a);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView cover = coverView(a);
+        head.addView(cover, new LinearLayout.LayoutParams(PUi.dp(a, 112), PUi.dp(a, 112)));
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(PUi.dp(a, 14), 0, 0, 0);
+        TextView name = PUi.text(a, f.name, 20, R.color.bn_text, 800);
+        name.setMaxLines(3);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setAccessibilityHeading(true);
+        col.addView(name);
+        LinearLayout facts = PUi.row(a);
+        TextView version = chip(a), publisher = chip(a);
+        facts.addView(version, PUi.wrap());
+        LinearLayout.LayoutParams pl = PUi.wrap();
+        pl.setMarginStart(PUi.dp(a, 6));
+        facts.addView(publisher, pl);
+        facts.setVisibility(View.GONE);
+        PUi.add(col, facts, 6);
+        if (f.edition) {
+            TextView ed = PUi.chip(a, "Switch 2 Edition");
+            ed.setSingleLine(true);
+            PUi.add(col, ed, 6, PUi.wrap());
+        }
+        CharSequence played = dev.peanuts.launch.PlayTime.line(a, f.titleId);
+        if (played != null) PUi.add(col, PUi.small(a, played), 6);
+        head.addView(col, PUi.weight());
+        PUi.add(p, head, 8);
+        if (f.play != null) {
+            Button b = playButton(a, f);
+            PUi.add(p, b, 14, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, PUi.dp(a, 48)));
+            play = b;
+        } else if (f.missing != null) {
+            PUi.add(p, PUi.small(a, f.missing), 12);
+        }
+        cover(a, f, cover, version, publisher, facts);
+    }
+
+    private static Button playButton(Activity a, Facts f) {
+        Button b = PUi.button(a, "Play", PUi.Kind.PRIMARY, Feel.launch(v -> f.play.run()));
+        b.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_play, R.color.bn_on_banana), null, null, null);
+        b.setCompoundDrawablePadding(PUi.dp(a, 4));
+        b.setGravity(Gravity.CENTER);
+        return b;
+    }
+
+    /** The cover's view: rounded, the tint until the icon is read */
+    private static ImageView coverView(Context a) {
+        ImageView cover = new ImageView(a);
+        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        cover.setBackground(PUi.round(PUi.col(a, R.color.bn_tint), PUi.dp(a, 16), 0, 0));
+        cover.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), PUi.dp(v.getContext(), 16)); }
+        });
+        cover.setClipToOutline(true);
+        cover.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        return cover;
+    }
+
     // ---- The game at the left ----
 
     /** The game's panel beside upstream's scrolling column, in its gutter (as Settings' sidebar): Back, cover, name, facts, play time and Play */
@@ -189,14 +265,7 @@ public final class GamePage {
         side.setOrientation(LinearLayout.VERTICAL);
         ImageView back = PUi.back(a, v -> backKey(a));
         side.addView(back, new LinearLayout.LayoutParams(PUi.dp(a, 40), PUi.dp(a, 40)));
-        ImageView cover = new ImageView(a);
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setBackground(PUi.round(PUi.col(a, R.color.bn_tint), PUi.dp(a, 16), 0, 0));
-        cover.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), PUi.dp(v.getContext(), 16)); }
-        });
-        cover.setClipToOutline(true);
-        cover.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        ImageView cover = coverView(a);
         side.cover = cover;
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(PUi.dp(a, 140), PUi.dp(a, 140));
         cp.topMargin = PUi.dp(a, 10);
@@ -226,12 +295,8 @@ public final class GamePage {
             PUi.add(side, pt, 6);
         }
         side.addView(new View(a), new LinearLayout.LayoutParams(1, 0, 1));
-        play = null;
         if (f.play != null) {
-            Button b = PUi.button(a, "Play", PUi.Kind.PRIMARY, Feel.launch(v -> f.play.run()));
-            b.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_play, R.color.bn_on_banana), null, null, null);
-            b.setCompoundDrawablePadding(PUi.dp(a, 4));
-            b.setGravity(Gravity.CENTER);
+            Button b = playButton(a, f);
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, PUi.dp(a, 48));
             bp.topMargin = PUi.dp(a, 12);
             side.addView(b, bp);
@@ -389,18 +454,19 @@ public final class GamePage {
 
     // ---- The tiles ----
 
-    private static void hub(Activity a, LinearLayout p, Got got, Facts f) {
-        if (got.shader != null) PUi.add(p, detach(got.shader), 0);
-        int right = Math.min(a.getResources().getConfiguration().screenWidthDp, 1040) - 40 - PANEL_DP - GAP_DP;   // the page's right side, in dp
+    private static void hub(Activity a, LinearLayout p, Got got, Facts f, boolean wide) {
+        if (got.shader != null) PUi.add(p, detach(got.shader), wide ? 0 : 14);
+        int right = Math.min(a.getResources().getConfiguration().screenWidthDp, 1040) - 40 - (wide ? PANEL_DP + GAP_DP : 0);   // the page's right side, in dp
         int cols = right >= 700 ? 3 : 2;
+        boolean upright = !wide;   // a phone: icon over name over two lines
         LinearLayout row = null;
         int n = 0;
         for (String key : shown) {
             if (key.equals(GameAreas.ADVANCED)) continue;
-            if (n % cols == 0) { row = PUi.row(a); row.setBaselineAligned(false); PUi.add(p, row, n == 0 ? (got.shader != null ? 12 : 4) : 8); }
+            if (n % cols == 0) { row = PUi.row(a); row.setBaselineAligned(false); PUi.add(p, row, n == 0 ? (got.shader != null ? 12 : wide ? 4 : 16) : 8); }
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
             if (n % cols > 0) lp.setMarginStart(PUi.dp(a, 8));
-            row.addView(tile(a, GameAreas.area(key), got.line(key), false), lp);
+            row.addView(tile(a, GameAreas.area(key), got.line(key), false, upright), lp);
             n++;
         }
         for (int k = n % cols; row != null && k > 0 && k < cols; k++) {   // the last row's empty places keep the tiles' width
@@ -408,32 +474,34 @@ public final class GamePage {
             lp.setMarginStart(PUi.dp(a, 8));
             row.addView(new android.widget.Space(a), lp);
         }
-        if (shown.contains(GameAreas.ADVANCED)) PUi.add(p, tile(a, GameAreas.area(GameAreas.ADVANCED), got.line(GameAreas.ADVANCED), true), n == 0 ? 4 : 8);
+        if (shown.contains(GameAreas.ADVANCED)) PUi.add(p, tile(a, GameAreas.area(GameAreas.ADVANCED), got.line(GameAreas.ADVANCED), true, false), n == 0 ? 4 : 8);
     }
 
     /** An area's tile: its icon, its name and what is set in it; A or a tap opens the area */
-    private static View tile(Activity a, GameAreas.Area ar, CharSequence line, boolean quiet) {
-        LinearLayout t = PUi.row(a);
+    private static View tile(Activity a, GameAreas.Area ar, CharSequence line, boolean quiet, boolean upright) {
+        LinearLayout t = upright ? new LinearLayout(a) : PUi.row(a);
+        if (upright) t.setOrientation(LinearLayout.VERTICAL);
         t.setTag(new Tile(ar.key));
-        t.setMinimumHeight(PUi.dp(a, quiet ? 48 : 60));
-        t.setPadding(PUi.dp(a, 10), PUi.dp(a, 8), PUi.dp(a, 10), PUi.dp(a, 8));
+        t.setMinimumHeight(PUi.dp(a, upright ? 104 : quiet ? 48 : 60));
+        int pad = PUi.dp(a, upright ? 12 : 10);
+        t.setPadding(pad, PUi.dp(a, upright ? 12 : 8), pad, PUi.dp(a, upright ? 12 : 8));
         t.setBackground(PUi.ripple(a, PUi.round(quiet ? Color.TRANSPARENT : PUi.col(a, R.color.bn_card), PUi.dp(a, 16), PUi.col(a, R.color.bn_card_stroke), PUi.dp(a, 1))));
         TextView ic = rowTile(a, ar.icon);
         t.addView(ic, new LinearLayout.LayoutParams(PUi.dp(a, 36), PUi.dp(a, 36)));
         LinearLayout col = new LinearLayout(a);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(PUi.dp(a, 12), 0, PUi.dp(a, 4), 0);
+        col.setPadding(upright ? 0 : PUi.dp(a, 12), upright ? PUi.dp(a, 8) : 0, PUi.dp(a, 4), 0);
         TextView name = PUi.text(a, ar.label, 15, R.color.bn_text, 600);
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         col.addView(name);
         TextView l = PUi.text(a, line == null ? "" : line, 13, R.color.bn_text_2, 400);
-        l.setSingleLine(true);
+        if (upright) l.setMaxLines(2); else l.setSingleLine(true);
         l.setEllipsize(android.text.TextUtils.TruncateAt.END);
         l.setVisibility(line == null || line.length() == 0 ? View.GONE : View.VISIBLE);
         col.addView(l);
         tileLines.put(ar.key, l);
-        t.addView(col, PUi.weight());
+        t.addView(col, upright ? PUi.fill() : PUi.weight());
         t.setFocusable(true);
         t.setClickable(true);
         t.setContentDescription(ar.label + (line == null || line.length() == 0 ? "" : ". " + line));
@@ -475,13 +543,24 @@ public final class GamePage {
 
     // ---- An area ----
 
-    private static void areaPage(Activity a, LinearLayout p, Got got, Facts f, String key) {
+    private static void areaPage(Activity a, LinearLayout p, Got got, Facts f, String key, boolean wide) {
         GameAreas.Area ar = GameAreas.area(key);
         LinearLayout h = PUi.row(a);
-        h.setMinimumHeight(PUi.dp(a, 40));
-        TextView title = PUi.text(a, ar.label, 20, R.color.bn_text, 800);
+        h.setMinimumHeight(PUi.dp(a, wide ? 40 : 56));
+        if (!wide) h.addView(PUi.back(a, v -> backKey(a)));   // a phone: the area is a page of its own, Back to the tiles
+        LinearLayout t = new LinearLayout(a);
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.setPadding(wide ? 0 : PUi.dp(a, 14), 0, PUi.dp(a, 8), 0);
+        TextView title = PUi.text(a, ar.label, wide ? 20 : 22, R.color.bn_text, 800);
         title.setAccessibilityHeading(true);
-        h.addView(title, PUi.weight());
+        t.addView(title);
+        if (!wide) {
+            TextView game = PUi.text(a, f.name, 12, R.color.bn_text_2, 400);
+            game.setSingleLine(true);
+            game.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            t.addView(game);
+        }
+        h.addView(t, PUi.weight());
         p.addView(h);
         LinearLayout body = new LinearLayout(a);
         body.setOrientation(LinearLayout.VERTICAL);

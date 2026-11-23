@@ -83,6 +83,13 @@ class Wiring(unittest.TestCase):
         missing = sorted(i for i in icons if not (DRAWABLE / f'pi_{i.replace("-", "_")}.xml').is_file())
         self.assertEqual([], missing, 'every icon the page names is a drawable of the app')
 
+    def test_a_phone_gets_the_areas_too(self):
+        page = (UI / 'GamePage.java').read_text(encoding='utf-8')
+        self.assertIn('public static boolean used(Context c) { return true; }', page)
+        self.assertIn('if (!wide) phoneTop(a, p, f);', page, 'a phone: the game at the top of the tiles')
+        self.assertIn('if (!wide) h.addView(PUi.back(a, v -> backKey(a)));', page, 'a phone: an area is a page of its own, with Back')
+        self.assertIn('boolean upright = !wide;', page, 'a phone: upright tiles in two columns')
+
     def test_no_separator_glyphs_in_the_pages_words(self):
         for f in ('GamePage.java', 'GameAreas.java'):
             src = (UI / f).read_text(encoding='utf-8')

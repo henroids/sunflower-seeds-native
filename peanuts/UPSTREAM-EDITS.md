@@ -2438,3 +2438,11 @@ it was built under, with its emoji).
 Peanuts-owned: `dev.peanuts.ui.GamePage` (the layout, the game's panel beside the page's column as Settings' sidebar, the tiles, an area's groups, the D-pad between panel and page, Y), `GameAreas` (the areas, every row's area, group and icon), `CheatsPage.area` / `leaveArea` / `tileLine` (Mods & Cheats inside the area: its bar of Cheats | Mods and Add, no Back, no top that stays), `SettingsPage.onBack` and `lay` and `BottomScreen.home` call `GamePage.onBack` / `left`, 44 icons in `android/app/src/peanuts/res/drawable` (drawn in `design/peanuts-native/icons/icons.py`). A narrower window keeps upstream's page (Part B).
 
 Tests: `peanuts/tests/test_game_page.py` (`GameAreasJvmTest`: the areas, the rows' places and icons, the tiles' lines; the hooks; a drawable for every icon).
+
+### Game page Part B: the same areas on a phone (2026-11-23, on Part A)
+
+A window narrower than 600 dp (a phone held upright) gets the page in areas too: Back, the cover with the name, the version, the publisher and the
+play time beside it, Play across the width, then the areas as upright tiles in two columns (icon, name, two lines of what is set). An area is a page
+of its own with Back, its name and the game's under it; Back goes to the tiles. No upstream file changes: `GamePage.used` is true for every window.
+
+Tests: `peanuts/tests/test_game_page.py` (the phone's top, the area's Back, the upright tiles).
