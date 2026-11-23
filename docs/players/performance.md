@@ -1,6 +1,6 @@
 # Performance
 
-Back to the [main page](../../.github/README.md).
+Back to the [main page](../banana-native-README.md).
 
 Donkey Kong Bananza (`040074A01BF12000`) on the tested phone (Snapdragon 8 Elite Gen 5, 16 GB), first level, frame
 generation off:
@@ -22,4 +22,4 @@ Your numbers depend on the phone, its temperature and power mode. The first visi
 shaders and pipelines are built; later visits are smoother. A hot phone throttles and the frame rate drops: a cooler
 helps. Frame generation (Settings) can take 30 fps to a 60 / 90 / 120 fps target, with some added latency.
 
-The measurements behind these numbers are in each game's note ([games table](../../dm/games/README.md#games)).
+The measurements behind these numbers are in each game's note ([games table](../banana-native-README.md#games)).

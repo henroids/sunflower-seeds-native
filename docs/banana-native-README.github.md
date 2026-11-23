@@ -102,6 +102,6 @@ most help: see the issues marked
 
 ## Licence and credits
 
-The Android app is **GPL-3.0-or-later** as a whole; nxnative's own files keep their MIT licence. See [android/NOTICE.md](../android/NOTICE.md) and the [credits](../README.md#licence-and-credits).
+The Android app is **GPL-3.0-or-later** as a whole; nxnative's own files keep their MIT licence. See [android/NOTICE.md](../android/NOTICE.md) and the [credits](../README.md#credits-and-license).
 
 Use games you own. Please don't ask for games, keys or dumps.

@@ -43,7 +43,7 @@ Back to the [guides](README.md).
   is wrong in the picture.
 - **Try the other driver** when something looks wrong, and say whether it changes.
 - **Code.** Pull requests are welcome. Each game's note says what is known and what is open; the
-  [games table](../../dm/games/README.md#games) lists them all, and [docs/agents](../agents/README.md) explains how to
+  [games table](../banana-native-README.md#games) lists them all, and [docs/agents](../agents/README.md) explains how to
   debug a game. Issues marked
   [help wanted](https://git.eden-emu.dev/moceure/BananaNative/issues?state=open&labels=help+wanted) are a
   good start.

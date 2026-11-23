@@ -20,7 +20,7 @@ JAVA_DIR = REPO / 'android/app/src/main/java/dev/nxnative/android'
 SRC = [JAVA_DIR / 'LogDigest.java', JAVA_DIR / 'ExitNotice.java', REPO / 'android/app/src/jvmtest/java/dev/nxnative/android/LogDigestJvmTest.java']
 RULES, NOISE = REPO / 'dm/tools/log_rules.tsv', REPO / 'dm/tools/log_noise.tsv'
 GRADLE = REPO / 'android/app/build.gradle'
-DOCS = 'https://git.eden-emu.dev/moceure/BananaNative/src/branch/android/'
+DOCS = 'https://github.com/henroids/sunflower-seeds-native/blob/main/'
 
 NONE, SIGNALED, LOW_MEMORY, CRASH_NATIVE = -1, 2, 3, 5
 RUN = f'v=1\ntitle={TID}\nname=Test Game\npid=1234\nstart=1700000000000\nstate=running\nlog={TID}-20261109-101010.log\n'
