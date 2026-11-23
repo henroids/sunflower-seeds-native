@@ -300,3 +300,10 @@ dm/games/0100755017EE0000/shader_files.tsv	Generated inventory of shader-bearing
 dm/games/0100755017EE0000/shader_map.tsv.conflicts.tsv	Generated control-section conflict report.
 dm/games/0100755017EE0000/pso_manifest.tsv	Generated prewarm list; do not change the shader input stamp.
 dm/games/0100755017EE0000/bf_want.tsv	Generated binding flags; do not change the shader input stamp.
+dm/games/0100563010E0C000/shader_map.tsv	a whole profile this fork added (WarioWare: Get It Together!, provisional, from a survey of the game files): every line is Peanuts'
+dm/games/0100563010E0C000/shader_map.tsv.conflicts.tsv	a whole profile this fork added (WarioWare: Get It Together!, provisional, from a survey of the game files): every line is Peanuts'
+dm/games/0100563010E0C000/shader_facts.tsv	a whole profile this fork added (WarioWare: Get It Together!, provisional, from a survey of the game files): every line is Peanuts'
+dm/games/0100563010E0C000/shader_pairs.tsv	a whole profile this fork added (WarioWare: Get It Together!, provisional, from a survey of the game files): every line is Peanuts'
+dm/games/0100563010E0C000/pso_pairs.tsv	a whole profile this fork added (WarioWare: Get It Together!, provisional, from a survey of the game files): every line is Peanuts'
+dm/games/0100563010E0C000/pso_manifest.tsv	a whole profile this fork added (WarioWare: Get It Together!, provisional, from a survey of the game files): every line is Peanuts'
+dm/games/0100563010E0C000/bf_want.tsv	a whole profile this fork added (WarioWare: Get It Together!, provisional, from a survey of the game files): every line is Peanuts'
