@@ -771,4 +771,20 @@ peanuts-fontll: $(B)/t_peanuts_fontll
 peanuts-host: peanuts-fontll
 $(B)/t_peanuts_fontll: t_peanuts_fontll.c ../hle_thread.c ../hle_fontll.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	$(CLANG) -O1 -g -Wall -Wno-format -Wno-unused-function -Wno-unused-variable $(PN_ASIF) -DDM_TEST_THREAD_ENTER -I.. $(GINC) -o $@ t_peanuts_fontll.c -lpthread -lm
+# t_cheats_android: t_cheats.c built as if for Android (its case "code cheats on Android": dm/peanuts/peanuts_cheats.inc, main's code written with the game's threads
+# stopped: compare before write, put back on off, a rewritten site refused, a key flip, threads that do not stop, a thread inside, reload), over t_peanuts_cheats_plat.c
+.PHONY: peanuts-cheats
+peanuts-cheats: $(B)/t_cheats_android
+	TMPDIR="$(abspath $(B))" $(B)/t_cheats_android 2> $(B)/t_cheats_android.log
+peanuts-host: peanuts-cheats
+$(B)/t_cheats_android: t_cheats.c t_peanuts_cheats_plat.c ../hle_cheats.c ../../peanuts/peanuts_cheats.h ../../peanuts/peanuts_cheats.inc ../dm.h ../dm_input.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-unused-function $(PN_ASIF) -I.. $(GINC) -o $@ t_cheats.c t_peanuts_cheats_plat.c -lpthread
+# t_cheats_alias: the same file with PN_CODE 0, the path of every platform but Android (the Mac's): code written through a writable alias of main, here a memfd mapped
+# twice (t_peanuts_cheats_plat.c PN_TEST_ALIAS); upstream's cases of t_cheats.c, the Android case left out
+.PHONY: peanuts-cheats-alias
+peanuts-cheats-alias: $(B)/t_cheats_alias
+	TMPDIR="$(abspath $(B))" $(B)/t_cheats_alias 2> $(B)/t_cheats_alias.log
+peanuts-host: peanuts-cheats-alias
+$(B)/t_cheats_alias: t_cheats.c t_peanuts_cheats_plat.c ../hle_cheats.c ../../peanuts/peanuts_cheats.h ../../peanuts/peanuts_cheats.inc ../dm.h ../dm_input.h $(GAME_H) | $(B)
+	$(CLANG) -O1 -g -Wall -Wno-unused-function $(PN_ASIF) -DPN_CODE=0 -DPN_TEST_ALIAS=1 -I.. $(GINC) -o $@ t_cheats.c t_peanuts_cheats_plat.c -lpthread
 # PEANUTS end
