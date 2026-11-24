@@ -301,7 +301,7 @@ public final class MainActivity extends Activity {
         trailing.addView(dev.peanuts.ui.Library.screensOffButton(this), sop);
         trailing.addView(headerButtons());
         // PEANUTS end
-        content.addView(Ui.header(this, Ui.badge(this, 44), "Sunflower Seeds Native", Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
+        content.addView(Ui.header(this, dev.peanuts.ui.Scoreboard.ON ? null : Ui.badge(this, 44), "Sunflower Seeds Native", Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand
         if (dev.peanuts.ui.Scoreboard.ON) Ui.add(content, scoreboardStatus(), 16);   // PEANUTS: the scoreboard's status row
         accessCard = accessCard();
         Ui.add(content, accessCard, 16);
