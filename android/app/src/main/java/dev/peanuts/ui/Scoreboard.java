@@ -152,7 +152,7 @@ public final class Scoreboard {
             GradientDrawable g = new GradientDrawable(); g.setColor(CELL); g.setStroke(dp(c, 2), LINE);
             cell.setBackground(g);
             cell.setPadding(dp(c, 8), dp(c, 14), dp(c, 8), dp(c, 12));
-            TextView l = new TextView(c); l.setText(pairs[i]); l.setTextColor(LABEL); l.setGravity(Gravity.CENTER); pixel(l, 10);
+            TextView l = new TextView(c); l.setText(pairs[i]); l.setTextColor(LABEL); l.setGravity(Gravity.CENTER); l.setSingleLine(); pixel(l, pairs[i].length() > 9 ? 7 : 10);   // a long label (CROWD CONTROL) smaller, on one line
             TextView v = new TextView(c); v.setText(pairs[i + 1]); v.setTextColor(i / 2 % 2 == 0 ? MINT : LAVENDER); v.setGravity(Gravity.CENTER);
             v.setSingleLine(); v.setEllipsize(TextUtils.TruncateAt.END); v.setTextSize(34); if (led != null) v.setTypeface(led);
             cell.addView(l); cell.addView(v);
@@ -162,6 +162,21 @@ public final class Scoreboard {
             row.addView(cell, lp);
         }
         return row;
+    }
+
+    /** A status cell (index k of status's row) as a button: a tap runs l */
+    public static void tap(View row, int k, View.OnClickListener l) {
+        View cell = ((LinearLayout) row).getChildAt(k);
+        cell.setClickable(true); cell.setFocusable(true); cell.setOnClickListener(l);
+        android.util.TypedValue tv = new android.util.TypedValue();
+        if (row.getContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) cell.setForeground(row.getContext().getDrawable(tv.resourceId));
+    }
+
+    /** A status cell's value (index k of status's row) changed in place */
+    public static void value(View row, int k, String v) {
+        LinearLayout cell = (LinearLayout) ((LinearLayout) row).getChildAt(k);
+        ((TextView) cell.getChildAt(1)).setText(v);
+        cell.setContentDescription(((TextView) cell.getChildAt(0)).getText() + ": " + v);
     }
 
     private static int dp(Context c, float v) { return Math.round(v * c.getResources().getDisplayMetrics().density); }

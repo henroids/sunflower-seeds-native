@@ -329,14 +329,36 @@ public final class MainActivity extends Activity {
         refresh();
     }
 
-    // PEANUTS begin: Home's status row on the scoreboard look: MLB The Show 26's frame rate cap, console mode and GPU driver, and the app's version
+    // PEANUTS begin: Home's status row on the scoreboard look, for MLB The Show 26, each cell a button: Crowd control (on / off), the console mode (Docked 1080p /
+    // Handheld 720p), the GPU driver (the driver page: pick an installed one, install another) and the app's version (checks for an update)
+    private View statusRow;
     private View scoreboardStatus() {
         String id = Prefs.MLB26;
-        int cap = Prefs.fpsCap(this, id);
+        View row = dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME);
+        dev.peanuts.ui.Scoreboard.tap(row, 0, v -> {
+            if (!Prefs.crowdGame(id)) return;
+            Prefs.hideCrowd(this, id, !Prefs.hideCrowd(this, id)); dev.peanuts.ui.Scoreboard.value(row, 0, crowdValue(id));
+        });
+        dev.peanuts.ui.Scoreboard.tap(row, 1, v -> {
+            if (ScreenMode.fixed(id) != null) return;
+            ScreenMode.set(this, id, 1 - ScreenMode.mode(this, id)); dev.peanuts.ui.Scoreboard.value(row, 1, modeValue(id));
+        });
+        dev.peanuts.ui.Scoreboard.tap(row, 2, v -> dev.peanuts.ui.DriverActivity.openForGame(this, id, "MLB The Show 26"));
+        dev.peanuts.ui.Scoreboard.tap(row, 3, v -> Updater.checkNow(this));
+        statusRow = row;
+        return row;
+    }
+    private String crowdValue(String id) { return !Prefs.crowdGame(id) ? "N/A" : Prefs.hideCrowd(this, id) ? "ON" : "OFF"; }
+    private String modeValue(String id) { return ScreenMode.mode(this, id) == 1 ? "720P" : "1080P"; }
+    private String driverValue(String id) {
         String drv = Prefs.driverChoice(this, id);
-        drv = Recommend.SYSTEM.equals(drv) ? "SYSTEM" : drv.toLowerCase(java.util.Locale.ROOT).contains("turnip") ? "TURNIP" : drv.toUpperCase(java.util.Locale.ROOT);
-        return dev.peanuts.ui.Scoreboard.status(this, "FPS CAP", cap > 0 ? String.valueOf(cap) : "GAME", "MODE", ScreenMode.mode(this, id) == 1 ? "720P" : "1080P",
-                "DRIVER", drv, "APP", BuildConfig.VERSION_NAME);
+        return Recommend.SYSTEM.equals(drv) ? "SYSTEM" : drv.toLowerCase(java.util.Locale.ROOT).contains("turnip") ? "TURNIP" : drv.toUpperCase(java.util.Locale.ROOT);
+    }
+    /** Back from the driver page or a game's settings: the row shows what is set now */
+    private void statusRefresh() {
+        if (statusRow == null) return;
+        String id = Prefs.MLB26;
+        dev.peanuts.ui.Scoreboard.value(statusRow, 0, crowdValue(id)); dev.peanuts.ui.Scoreboard.value(statusRow, 1, modeValue(id)); dev.peanuts.ui.Scoreboard.value(statusRow, 2, driverValue(id));
     }
     // PEANUTS end
 
@@ -598,6 +620,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         resumed = true;
+        statusRefresh();   // PEANUTS: the scoreboard's status row (a driver picked on its page, a setting changed on the game's)
         if (gameBox != null && Game.load(this).size() != games.size()) refresh();   // a card FrontendLaunch added while Home was in the background
         onResumeViews();
         Ondevice.resume(this);
