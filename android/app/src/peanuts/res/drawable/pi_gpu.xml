@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Peanuts icon (the GPU: a graphics card with its fan, the fan's hub the kernel), drawn by hand in icons.py's style: 24 x 24, a 1.75 round stroke. -->
+<!-- Peanuts icon, written by peanuts/scripts/icons.py. Change it there and run the script, not here. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
     <path android:pathData="M5 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2ZM7 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0ZM21.25 9.5v5M7 17v2.5M11 17v2.5" android:strokeColor="?attr/pnIconInk" android:strokeWidth="1.75"

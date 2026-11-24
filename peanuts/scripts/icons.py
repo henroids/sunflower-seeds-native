@@ -173,6 +173,18 @@ ICONS = {
     "users": [("s", "M5.5 8.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0Z"), ("s", "M3 19.5c.7-3.2 3-5 6-5s5.3 1.8 6 5"), ("s", "M15.5 4.6a3 3 0 1 1 0 5.8M17.5 14.6c2 .6 3.2 2.3 3.6 4.4"), ("k", "M7.7 8.5a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0Z")],
     "warning": [("s", "M12 4 21 19.5H3Z"), ("s", "M12 10v4"), ("k", "M10.7 16.7a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0Z")],
     "window": [("s", "M5.5 4.5H18.5A2.5 2.5 0 0 1 21 7V17A2.5 2.5 0 0 1 18.5 19.5H5.5A2.5 2.5 0 0 1 3 17V7A2.5 2.5 0 0 1 5.5 4.5Z"), ("s", "M3 9h18"), ("k", "M7.6 12H12.4A1.1 1.1 0 0 1 13.5 13.1V15.4A1.1 1.1 0 0 1 12.4 16.5H7.6A1.1 1.1 0 0 1 6.5 15.4V13.1A1.1 1.1 0 0 1 7.6 12Z")],
+
+    # Stats page tiles
+    # the SoC temperature: a thermometer, its bulb the kernel (#523, drawn by hand in this style by intermission88)
+    "temp": [("s", "M10 13.6V5.5a2 2 0 0 1 4 0v8.1a4 4 0 1 1 -4 0Z"), ("k", "M10.25 17a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0 -3.5 0Z")],
+    # the battery and its power: a battery, its charge the kernel (#523, drawn by hand in this style by intermission88)
+    "battery": [("s", "M5.5 7h11a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-11a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2ZM21 10.5v3"), ("k", "M7.25 10H12.25A0.75 0.75 0 0 1 13 10.75V13.25A0.75 0.75 0 0 1 12.25 14H7.25A0.75 0.75 0 0 1 6.5 13.25V10.75A0.75 0.75 0 0 1 7.25 10Z")],
+    # the frame time: a stopwatch, its hub the kernel (#523, drawn by hand in this style by intermission88)
+    "frame": [("s", "M5 13.5a7 7 0 1 0 14 0a7 7 0 1 0 -14 0ZM10 3.5h4M12 3.5v3M12 13.5l2.75 -2.75"), ("k", "M10.6 13.5a1.4 1.4 0 1 0 2.8 0a1.4 1.4 0 1 0 -2.8 0Z")],
+    # the GPU: a graphics card with its fan, the fan's hub the kernel (#523, drawn by hand in this style by intermission88)
+    "gpu": [("s", "M5 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2ZM7 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0ZM21.25 9.5v5M7 17v2.5M11 17v2.5"), ("k", "M8.75 12a1.25 1.25 0 1 0 2.5 0a1.25 1.25 0 1 0 -2.5 0Z")],
+    # the CPU: a chip with its pins, its die the kernel (#523, drawn by hand in this style by intermission88)
+    "cpu": [("s", "M9 7h6a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2ZM10 4v3M14 4v3M10 17v3M14 17v3M4 10h3M4 14h3M17 10h3M17 14h3"), ("k", "M11 10.25H13A0.75 0.75 0 0 1 13.75 11V13A0.75 0.75 0 0 1 13 13.75H11A0.75 0.75 0 0 1 10.25 13V11A0.75 0.75 0 0 1 11 10.25Z")],
 }
 
 
