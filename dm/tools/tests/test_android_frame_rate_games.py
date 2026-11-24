@@ -211,7 +211,7 @@ EXPECTED = {
     '010069401ADB8000': ('Unicorn Overlord', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '01006B601380E000': ("Kirby's Return to Dream Land Deluxe", 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', '60', '-'),
     '01006BB00C6F0000': ("The Legend of Zelda: Link's Awakening", 'limit', '-', 'own,60,30', 'own,60,30', 'own,60,30', '-', '-'),
-    '01006F8002326000': ('Animal Crossing: New Horizons', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', '60', '-'),
+    '01006F8002326000': ('Animal Crossing: New Horizons', 'limit', '-', 'own,60', 'own,60', 'own,60', '-', '-'),   # PEANUTS: Game owned or the 60 fps variant (speedfix60)
     '01007300020FA000': ('Astral Chain', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '01007EF00011E000': ('The Legend of Zelda: Breath of the Wild', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '01008CF01BAAC000': ('The Legend of Zelda: Echoes of Wisdom', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', 'profile 60', '-'),
