@@ -411,8 +411,22 @@ SLOT_KINDS = {abi.KIND_CBUF, abi.KIND_SAMP, abi.KIND_SAMP_TEX, abi.KIND_TEX, abi
 POOL_SUFFIX = '_cb0_40000000'   # a handle traced to no slot indexes the pools by its IDs (Program.cs QueryTextureArrayLengthFromPool; dmsh_build.py pool_arrays)
 
 
+# PEANUTS(upstream-candidate) begin: handle type 2 (Ryujinx's SeparateSamplerId), as nxnative ca26ef65 decodes it for Metal (dmsh_reflect.py decode_ubo_samp_id): the texture word in the
+# driver table c2, the sampler ID itself in a word of the game's own uniform buffer, bank (high 16 bits of slots) - 1, at word ((handle >> 14) & 0x3fff). The Witcher 3: fp_t_cb720898_2000005A
+# (texture c2 word 0x5A, sampler ID at c[10] word 0); 20,212 bindings in 6,323 of its shaders were left with an undecoded sampler slot and sampled with no sampler of the game's
+def type2_sampler(name):
+    """→ (uniform slot, byte offset) of a type-2 handle's sampler ID word, or None"""
+    m = re.fullmatch(r'[a-z]+_t\w*?_cb(\d+)_([0-9A-F]+)', name)
+    if not m: return None
+    slots, h = int(m.group(1)), int(m.group(2), 16); sb = (slots >> 16) - 1
+    return (sb - 3, ((h >> 14) & 0x3fff) * 4) if h >> 28 == 2 and slots & 0xffff == 2 and 3 <= sb <= 16 else None
+# PEANUTS(upstream-candidate) end
+
+
 def sampler_half(name):
     """The sampler of a texture name, as dmsh_build.py reflect gives the MSL <name>Smplr member: (kind, reg, off)"""
+    t2 = type2_sampler(name)   # PEANUTS(upstream-candidate): the sampler ID in a uniform word (flag BF_SAMP_RAW, set by the caller)
+    if t2: return abi.KIND_SAMP_UBO, t2[0], t2[1]
     ut = NS['decode_ubo_tex'](name)
     if ut: return (abi.KIND_SAMP_ID, ut[1][1], 0) if ut[1][0] == 'id' else (abi.KIND_SAMP_UBO, ut[1][0], ut[1][1])
     d = NS['decode_tex'](name)
@@ -491,6 +505,7 @@ def classify(stage, r, res, m):
     else: e['kind'] = abi.KIND_UNKNOWN
     if desc == spv.VK_COMBINED and e['kind'] in (abi.KIND_TEX, abi.KIND_TEX_UBO):
         e['skind'], e['sreg'], e['soff'] = sampler_half(nm)
+        if type2_sampler(nm): e['flags'] |= VK['BF_SAMP_RAW']   # PEANUTS(upstream-candidate)
     return e
 
 
