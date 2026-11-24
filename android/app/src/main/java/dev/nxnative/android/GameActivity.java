@@ -493,7 +493,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         Lsfg.env(this, env);   // frame generation: the user's Lossless.dll and the settings
         GameUpscaler.env(this, id, env);   // the Upscaler (Game settings, the in-game panel): the game's own upscaler and the present's scaling
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
-        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id)) env.add("DM_VK_GPUPROF=300");   // PEANUTS TEMPORARY: the GPU time of one frame in 300 by step, for the optimization work (remove when done)
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id)) { env.add("DM_VK_GPUPROF=300"); env.add("DM_NVN_PROF=1"); }   // PEANUTS TEMPORARY: the GPU time of one frame in 300 by step, and the CPU time of each NVN call, for the optimization work (remove when done)
         fpsModeAtStart = Prefs.paceCap(this, id);
         gameOwnedAtStart = Prefs.limited(id) && Prefs.paceCap(this, id) == FrameRateCaps.GAME_OWNED;
         if (prof != null && prof.fpsPlan120.isEmpty() && (!prof.fpsLocker.isEmpty() || !prof.fpsLockerPlan.isEmpty()) && !gameOwnedAtStart) env.add("DM_FPSLOCKER_INTERVAL=1");
