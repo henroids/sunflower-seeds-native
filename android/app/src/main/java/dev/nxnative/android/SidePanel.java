@@ -580,6 +580,12 @@ final class SidePanel extends FrameLayout {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.topMargin = Math.round(24 * getResources().getDisplayMetrics().density);
         box.addView(stop, lp);
+        Button send = new Button(act);   // PEANUTS: stop, back to the launcher, and its share sheet with this run's log (ExitWatch.stoppedToShare)
+        send.setText("Stop and share the log");
+        send.setOnClickListener(v -> padDialog(new AlertDialog.Builder(act).setTitle("Stop and share the log?").setMessage("The game ends; unsaved progress is lost. Then the home screen opens the share menu with this session's log.")
+                .setPositiveButton("Stop and share", (d, w) -> { Native.note("stopped by the user to share the log"); ExitWatch.stoppedToShare(); if (act instanceof GameActivity) ((GameActivity) act).backToFrontend(); android.os.Process.killProcess(android.os.Process.myPid()); })
+                .setNegativeButton("Keep running", null).show()));
+        box.addView(send, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         Button done = new Button(act);
         done.setText("Back to the game");
         done.setOnClickListener(v -> close());

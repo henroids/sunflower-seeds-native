@@ -87,6 +87,9 @@ final class ExitWatch {
     /** The player stopped the game (Stop, Back at a start that cannot go on): no notice */
     static void stopped() { if (owned && recordFile != null) append(recordFile, "state=stopped\n"); }
 
+    /** PEANUTS: the player stopped the game to share its log (the in-game panel's Stop and share the log): the launcher opens the share sheet with it once the game is gone */
+    static void stoppedToShare() { if (owned && recordFile != null) append(recordFile, "state=stopped\nshare=1\n"); }
+
     /** An end the game's screen told the player about itself (a screen restored into a new process): the launcher does not tell it again */
     static void shown(Context c) { append(record(c), "shown=1\n"); }
 
@@ -252,6 +255,14 @@ final class ExitWatch {
     private static boolean check(MainActivity a) {
         if (showing != null && showing.isShowing() || digesting) return false;
         Map<String, String> rec = read(a);
+        if ("1".equals(rec.get("share")) && !"1".equals(rec.get("shown"))) {   // PEANUTS: Stop and share the log: the share sheet once the game's process is gone
+            int pid = (int) num(rec.get("pid"));
+            if (pid > 0 && alive(a, pid)) return true;
+            shown(a);
+            File log = logOf(a, rec);
+            if (log != null) a.shareLog(log); else a.error("No log of that run.");
+            return false;
+        }
         if (!ExitNotice.pending(rec)) return false;
         int pid = (int) num(rec.get("pid"));
         if (pid > 0 && alive(a, pid)) return true;   // still running
