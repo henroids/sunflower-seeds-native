@@ -172,7 +172,7 @@ public final class BulbBoard {
     }
 
     private final float pitch;
-    private final Bitmap[] lit = new Bitmap[PATTERNS.length], trail = new Bitmap[PATTERNS.length];
+    private final Bitmap[] lit = new Bitmap[PATTERNS.length], trail = new Bitmap[PATTERNS.length];   // a pattern all lit; with each row's leftmost bulb out
     private final Paint board = new Paint(), seedPaint = new Paint(Paint.FILTER_BITMAP_FLAG), dead = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private Seed[] seeds = new Seed[0];
@@ -195,9 +195,11 @@ public final class BulbBoard {
         String[] s = PATTERNS[p];
         Bitmap bm = Bitmap.createBitmap(s[0].length() * ps, s.length * ps, Bitmap.Config.ARGB_8888);
         Canvas cv = new Canvas(bm); Paint b = new Paint(Paint.ANTI_ALIAS_FLAG); b.setColor(LIT);
-        for (int j = 0; j < s.length; j++)
+        for (int j = 0; j < s.length; j++) {
+            int first = s[j].indexOf('#');   // the row's trailing bulb: its leftmost lit one only, so the inner stripes keep their width through a step
             for (int i = 0; i < s[j].length(); i++)
-                if (on(s, i, j) && !(trailingOut && !on(s, i - 1, j))) cv.drawCircle((i + .5f) * ps, (j + .5f) * ps, ps * 0.36f, b);   // trailing: lit with nothing lit to its left
+                if (on(s, i, j) && !(trailingOut && i == first)) cv.drawCircle((i + .5f) * ps, (j + .5f) * ps, ps * 0.36f, b);
+        }
         return bm;
     }
 
