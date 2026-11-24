@@ -20,7 +20,7 @@ import android.widget.TextView;
  * numbers in a dot-matrix font (VT323), text in Space Grotesk, mint for the selection and the main button, amber bulbs for the logo and the icons. Only the
  * Sunflower Seeds apps (applicationId …sunflower, …sunflowertest) have it: its colours, fonts and art come from android/app/src/scoreboard (build.gradle),
  * and every hook asks ON first, so every other build keeps the upstream look. The hooks: Ui / PUi round (no corners), face (the text font), section (pixel
- * labels), header (the strip), badge and the setup cards (the bulb seed), Setting rows (tile: bulb icons), iconButton (button: the gear and the book);
+ * labels), header (the strip; no badge on Home), the setup cards (the bulb seed), Setting rows (tile: bulb icons), iconButton (button: the gear and the book);
  * BananaBackgroundView (BulbBoard: the screen as a bulb board, the seeds marching across it); MainActivity (the status row and the labelled gear on Home).
  * The fonts are OFL-1.1 (assets/fonts/*.txt, android/NOTICE.md)
  */
