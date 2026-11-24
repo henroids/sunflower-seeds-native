@@ -762,6 +762,7 @@ final class Ui {
         t.setSelected(selected);
         t.setContentDescription(label);
         t.setOnClickListener(dev.peanuts.ui.Feel.nav(l));   // PEANUTS: a rail entry clicks, and its section's pane enters (dev.peanuts.ui.Feel)
+        dev.peanuts.ui.Scoreboard.navIcon(t, emoji, label);   // PEANUTS: the scoreboard's bulb icons
         return t;
     }
 
