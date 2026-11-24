@@ -780,6 +780,8 @@ DM_VK_UB_PEEK	developer	Diagnostics			text			both
 DM_VK_UB_PEEK_AT	developer	Diagnostics			text			both						
 DM_VK_UB_PEEK_DONE	developer	Diagnostics			text			both						
 DM_VK_UNPLACE_REMAP	developer	Diagnostics			text			both						
+DM_VK_UPGRADE_INPUTS	developer	Diagnostics			text			both						
+DM_VK_UPGRADE_VALIDATE	developer	Graphics			text			both						
 DM_VK_UPLOAD_BATCH	developer	Graphics			text			both						
 DM_VK_UPLOAD_BATCH_MB	developer	Graphics			text			both						
 DM_VK_UPLOAD_INFLIGHT_MB	developer	Graphics			text			both						
