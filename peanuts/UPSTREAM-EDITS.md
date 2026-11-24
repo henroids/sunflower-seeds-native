@@ -2663,3 +2663,7 @@ Peanuts' own files, no marker: `dm/peanuts/reuse/shader_reuse.py` (`room`, `cap_
 computer keeps nothing). Tests: `peanuts/tests/test_rewrite_forks.py` (`Worker`: a rerun, the same asked again, only the boot asks), `test_rewrite_reuse.py`
 (`Review`), `test_shader_reuse.py` (other keep rules, the split's results first), `test_split_reuse.py` (past the cap), `test_reuse_check.py`
 (`CachesInUse`), `StorageScanJvmTest`. Upstream candidate: the worker's rerun, with the worker.
+
+### Fire Emblem Engage SDK alignment backport (2026-11-24)
+
+`dm/tools/sdk_patches.py` removes the fixed Engage SDK row so the existing node-area and 2 MiB alignment rules can apply. The SDK matches the same cuts as Banana Native `android`. The edit and the [game note](../dm/games/0100A6301214E000/README.md#memory) carry `PEANUTS` markers. The patch index is generated. Take upstream's matching behavior at the next sync.
