@@ -12,7 +12,7 @@ import java.util.Random;
  * Home's background on the test app's scoreboard look (Scoreboard.ON; BananaBackgroundView hands its drawing, ticks and taps here): the whole screen is a
  * board of bulbs, and seeds (the logo, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard. They are scattered at random,
  * each with its own tilt (one of six patterns), most at the baseline pace and some a little slower or faster: each step its trailing column goes out first and its leading column lights LIGHT_MS later.
- * A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace. A few bulbs of the board are dead, as on a real one: they
+ * A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace, kept MIN_APART bulbs from the others where it can be. A few bulbs of the board are dead, as on a real one: they
  * stay dark under a seed. A tap puts a seed out for RESPAWN_MS.
  * Cheap: the unlit board is one shader-filled rect, a seed is one of two prebaked bitmaps of its pattern (all lit, or its trailing column out), and every
  * time is a multiple of TICK_MS, so the view redraws at most about 16 times a second, and only when something changed
@@ -160,7 +160,8 @@ public final class BulbBoard {
     private static final long BASE_MS = 540;                                // the baseline step; about a third of the seeds step a little slower or faster
     private static final long[] PERIODS = {BASE_MS, BASE_MS, BASE_MS, BASE_MS, BASE_MS, BASE_MS, 480, 600, 600};   // a seed's step, ms (multiples of TICK_MS)
     private static final int LIT = 0xFFE9A93F, LIT_ALPHA = 92, UNLIT = 0xFF141912, DEAD = 0xFF0A0C09;
-    private static final int AREA_PER_SEED = 760;                           // bulbs of board a seed: how many seeds a screen gets
+    private static final int AREA_PER_SEED = 2000;                          // bulbs of board a seed: how many seeds a screen gets
+    private static final int MIN_APART = 30;                                // bulbs between two seeds' centres at least (the first board's lattice spacing), where there is room
     private static final float DEAD_SHARE = 0.005f;                         // the board's dead bulbs
 
     private static final class Seed {
@@ -220,17 +221,17 @@ public final class BulbBoard {
     /** A new tilt, pace and row for seed k, at column x (or, x < 0, just off the left edge), in the free-est of a few tries */
     private void place(Seed s, int k, long x, long ms) {
         s.pat = rnd.nextInt(PATTERNS.length); s.period = PERIODS[rnd.nextInt(PERIODS.length)]; s.t0 = tick(ms) + TICK_MS * rnd.nextInt(8); s.out = Long.MIN_VALUE;
-        int best = Integer.MAX_VALUE; long bx = 0; int by = 0;
-        for (int t = 0; t < 12; t++) {
-            long cx = x >= 0 ? rnd.nextInt(Math.max(1, cols)) - w(s.pat) / 2 : -w(s.pat) - rnd.nextInt(24);
-            int cy = rnd.nextInt(Math.max(1, rows - h(s.pat) / 2)) - h(s.pat) / 3;
-            int overlap = 0;
+        double best = -1; long bx = 0; int by = 0;
+        for (int t = 0; t < 40; t++) {   // the spot farthest from the other seeds, or the first at least MIN_APART from all of them
+            long cx = x >= 0 ? rnd.nextInt(Math.max(1, cols)) - w(s.pat) / 2 : -w(s.pat) - rnd.nextInt(MIN_APART);
+            int cy = rnd.nextInt(Math.max(1, rows - h(s.pat) / 2)) - h(s.pat) / 4;
+            double near = Double.MAX_VALUE;
             for (int o = 0; o < seeds.length; o++) {
                 Seed q = seeds[o]; if (o == k || q == null || q.period == 0) continue;
-                long qx = q.x(ms); int ox = (int) Math.max(0, Math.min(cx + w(s.pat), qx + w(q.pat)) - Math.max(cx, qx)), oy = Math.max(0, Math.min(cy + h(s.pat), q.y + h(q.pat)) - Math.max(cy, q.y));
-                overlap += ox * oy;
+                double dx = (cx + w(s.pat) / 2.0) - (q.x(ms) + w(q.pat) / 2.0), dy = (cy + h(s.pat) / 2.0) - (q.y + h(q.pat) / 2.0);
+                near = Math.min(near, Math.hypot(dx, dy));
             }
-            if (overlap < best) { best = overlap; bx = cx; by = cy; if (overlap == 0) break; }
+            if (near > best) { best = near; bx = cx; by = cy; if (near >= MIN_APART) break; }
         }
         s.x0 = bx; s.y = by;
     }
