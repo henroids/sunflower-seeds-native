@@ -125,6 +125,17 @@ final class Pack {
         return libraryProblem(dir, titleId) != null && playableLibrary(dir, titleId) != null && deltaShaders(dir, titleId) < 0;
     }
 
+    // PEANUTS begin: what a player reads about a build's shaders (/home/radityar/pn-build/build-text-style.md: no path, no "library" or "pack" on the main line);
+    // libraryProblem's sentence, with its folders, is for Details and the log
+    /** The build's shaders in plain words, null when they are this app version's; libraryProblem says the same with the folders, for Details */
+    static String libraryText(File dir, String titleId) {
+        if (libraryProblem(dir, titleId) == null) return null;
+        if (playableLibrary(dir, titleId) != null || legacyLibrary(dir, titleId) != null) return "Its shaders are from an earlier app version. The game plays with them until they are updated.";
+        if (libraryOf(dir) != null) return "Its shaders were made from another version of the app's list for this game. Build makes them again.";
+        return "It has no shaders for this app version yet. Build makes them.";
+    }
+    // PEANUTS end
+
     /** A library of another version made before versioned shader updates (no ABI): played with a warning when no playable one is there (ShaderLibs.legacy), null when none */
     static File legacyLibrary(File dir, String titleId) { return ShaderLibs.legacy(dir, titleId, BuildConfig.NX_DMSH_VK_CHAIN); }
 

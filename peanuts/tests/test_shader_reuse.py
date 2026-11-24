@@ -1101,6 +1101,89 @@ class Records(Base):
 
 
 
+class Unchecked(FullCheck):
+    """PEANUTS: <lib>.unchecked (UNCHECKED, critique B1/M3/M4 of the in-place upgrade): written with a library that kept shaders, taken out only when its full check
+    passes or replaces it; a dropped or replaced check leaves it, and a marker names its library by id, so a library rebuilt at that path is not taken for it"""
+    def lib_id(self, p):
+        L = delta.Library(str(p))
+        try: return sr.library_id(L)
+        finally: L.close()
+
+    def out_lib(self): return self.out / f'v-{VERSION}' / 'dmsh_vk.lib'
+    def pack_lib(self): return self.pack / f'v-{VERSION}' / 'dmsh_vk.lib'
+
+    def into_pack_marked(self):
+        """The pack step as the app runs it: the library, and its marker merged beside the pack's (PackService, CheckDue.copyMarker)"""
+        ids = sr.marker_ids(self.out_lib())
+        self.into_pack()
+        for i in ids: sr.mark_unchecked(self.pack_lib(), i)
+
+    def test_a_full_translation_has_none(self):
+        self.profile(); self.build()
+        self.assertFalse(Path(str(self.out_lib()) + sr.UNCHECKED).exists())
+
+    def test_a_build_that_kept_shaders_marks_its_library_until_the_check_passes(self):
+        self.profile(); self.build(); self.into_pack(); self.build()
+        lid = self.lib_id(self.out_lib())
+        self.assertEqual(sr.marker_ids(self.out_lib()), [lid])
+        self.into_pack_marked()
+        self.assertEqual(sr.marker_ids(self.pack_lib()), [lid])
+        self.assertEqual(self.check()[0], 0)
+        self.assertFalse(Path(str(self.pack_lib()) + sr.UNCHECKED).exists())   # checked
+
+    def test_a_dropped_check_leaves_it(self):
+        self.profile(); self.build(); self.into_pack(); self.build()
+        lid = self.lib_id(self.out_lib())
+        self.into_pack_marked()
+        saved = sr.translator_tree
+        sr.translator_tree = lambda: 'f' * 16
+        try: self.assertEqual(self.check(), (0, []))
+        finally: sr.translator_tree = saved
+        self.assertIsNone(self.todo())
+        self.assertEqual(sr.marker_ids(self.pack_lib()), [lid])
+
+    def test_a_replaced_check_leaves_it_and_a_rebuild_is_not_named(self):
+        self.profile(); self.build(); self.into_pack(); self.build()
+        a = self.lib_id(self.out_lib())
+        shutil.rmtree(self.reuse / sr.KEEP_DIR); shutil.rmtree(self.pack); shutil.rmtree(self.res, ignore_errors=True)
+        self.profile(facts={self.ps[5]: {'tex': [2]}})   # another profile: another library
+        self.build()   # nothing older left: a full translation at the same path, whose note_check replaced the due one
+        b = self.lib_id(self.out_lib())
+        self.assertIsNone(self.todo())
+        self.assertNotEqual(a, b)
+        self.assertEqual(sr.marker_ids(self.out_lib()), [a])   # the replaced library's line stays; the new library is not named in it
+
+    def test_the_same_library_made_in_full_takes_its_line_out(self):
+        self.profile(); self.build(); self.into_pack(); self.build()
+        a = self.lib_id(self.out_lib())
+        shutil.rmtree(self.reuse / sr.KEEP_DIR); shutil.rmtree(self.pack); shutil.rmtree(self.res, ignore_errors=True)
+        self.build()   # every shader translated, byte for byte the same library: a full translation of it is its check
+        self.assertEqual(self.lib_id(self.out_lib()), a)
+        self.assertFalse(Path(str(self.out_lib()) + sr.UNCHECKED).exists())
+
+    def test_the_full_translation_that_replaces_a_library(self):
+        self.profile()
+        (self.prof / 'pso_pairs.tsv').write_text(''.join(f'{self.vs[i]}\t{self.ps[i]}\n' for i in range(50)))
+        self.build(); self.into_pack()
+        lib_path = self.pack_lib()
+        L = delta.Library(str(lib_path)); inputs = L.inputs; L.close()
+        wrong = next(k for k in self.vs[60:] if k not in self.sample(self.vs + self.ps))
+        lib = self.library(lib_path); lib[wrong] = spirv_of('a translation that went wrong')
+        self.went_wrong(lib_path, lib, inputs)
+        shutil.rmtree(self.reuse / sr.KEEP_DIR)
+        self.build(); self.into_pack_marked()
+        self.assertEqual(len(sr.marker_ids(lib_path)), 1)
+        self.assertEqual(self.check()[0], sr.DIFFER)
+        self.assertFalse(Path(str(lib_path) + sr.UNCHECKED).exists())
+
+    def test_marker_lines(self):
+        lib = self.d / 'm' / 'dmsh_vk.lib'; lib.parent.mkdir()
+        sr.mark_unchecked(lib, 'a' * 32); sr.mark_unchecked(lib, 'b' * 32); sr.mark_unchecked(lib, 'a' * 32)
+        self.assertEqual(sr.marker_ids(lib), ['a' * 32, 'b' * 32])
+        sr.clear_unchecked(lib, 'a' * 32); self.assertEqual(sr.marker_ids(lib), ['b' * 32])
+        sr.clear_unchecked(lib, 'b' * 32); self.assertFalse(Path(str(lib) + sr.UNCHECKED).exists())
+
+
 class ReplacedCheck(unittest.TestCase):
     """PEANUTS: a due check that another build replaces or clears never runs, so its library's record goes (note_check; two Build folders of one game)"""
 

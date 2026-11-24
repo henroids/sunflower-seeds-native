@@ -206,6 +206,41 @@ def library_id(L):
 def record_path(d, lib_id): return Path(d) / RECORDS_DIR / f'{lib_id}.tsv'
 
 
+UNCHECKED = '.unchecked'   # <lib>.unchecked beside a library: the ids (library_id, a line each) of libraries written at that path with kept shaders whose full check has not
+# passed. vk_android_upgrade.py refuses to carry a library its marker names into a later app version, as the app does (ShaderUpgrade.candidates; critique B1). Written when a
+# build writes such a library (reuse), a line taken out only when the full check passes or replaces it (full_check): a check that is dropped, replaced by another build's
+# (note_check) or never runs leaves it. The app copies it beside the pack's library with the pack step (PackService) and writes one when it drops a check (CheckDue)
+
+
+def marker_ids(lib):
+    """The library ids the marker beside lib names (its lines of 32 hex characters; CheckDue.ids, vk_android_upgrade.py unchecked read it the same)"""
+    try: text = Path(str(lib) + UNCHECKED).read_text(encoding='utf-8', errors='replace')
+    except OSError: return []
+    out = []
+    for l in text.splitlines():
+        if re.fullmatch(r'[0-9a-f]{32}', l.strip()) and l.strip() not in out: out.append(l.strip())
+    return out
+
+
+def mark_unchecked(lib, lib_id):
+    """lib_id into the marker beside lib (written whole: a temporary file, then a rename)"""
+    ids = marker_ids(lib)
+    if lib_id in ids: return
+    p = Path(str(lib) + UNCHECKED); tmp = Path(str(p) + '.tmp')
+    tmp.write_text(''.join(i + '\n' for i in ids + [lib_id]), encoding='utf-8'); os.replace(tmp, p)
+
+
+def clear_unchecked(lib, lib_id):
+    """lib_id out of the marker beside lib; the marker goes when it names no id left (one that never named lib's id, or no id at all, is left as it is)"""
+    p = Path(str(lib) + UNCHECKED)
+    if not p.exists(): return
+    ids = marker_ids(lib)
+    rest = [i for i in ids if i != lib_id]
+    if rest == ids: return
+    if not rest: p.unlink(missing_ok=True); return
+    tmp = Path(str(p) + '.tmp'); tmp.write_text(''.join(i + '\n' for i in rest), encoding='utf-8'); os.replace(tmp, p)
+
+
 def read_record(d, lib_id):
     """{'version', 'game', 'inputs', 'tree', 'options', 'deps': {key: (digest, entry hash)}} of a library's record, None when it has none or it does not read as one"""
     if not d: return None
@@ -719,6 +754,8 @@ def full_check(argv):
         with open(Path(reuse_dir) / CHECKED, 'a', encoding='utf-8', newline='\n') as f:
             f.write(f'{todo["library"]}\t{n}\t{todo.get("kept", "")}\t{time.strftime("%Y-%m-%d %H:%M:%S")}\n')
         (Path(reuse_dir) / TODO).unlink(missing_ok=True); shutil.rmtree(root, ignore_errors=True)
+        lib = pack_library(roots, version, todo['library'])
+        if lib is not None: clear_unchecked(lib, todo['library'])   # checked: no longer unchecked (UNCHECKED)
         say(f'reuse full check: all {n} shaders of the library are a full translation\'s byte for byte ({todo.get("kept", "?")} of them kept from earlier builds)')
         return 0
     say(f'[RED] reuse full check: {len(differ)} of {n} shaders differ from a full translation ({", ".join(differ[:3])}), {len(missing)} are not in it, {len(extra)} only in it')
@@ -740,6 +777,7 @@ def full_check(argv):
             say(f'[RED] reuse full check: the full translation cannot take the library\'s place ({e}): the pack keeps the library it has; the check is still due')
             return 1
         say(f'reuse full check: the full translation is the game\'s library now ({dst})')
+        clear_unchecked(dst, todo['library'])   # the checked library is gone from that path; its replacement is a full translation
     else: say('reuse full check: the pack holds another library now: it stays as it is')
     tmp = Path(reuse_dir) / (FAILED + '.tmp')   # what the launcher's notification says: written once the pack holds what it says
     tmp.write_text(json.dumps({'library': todo['library'], 'replaced': dst is not None, 'differ_count': len(differ), 'missing_count': len(missing),
@@ -849,6 +887,9 @@ def reuse(argv):
             try:
                 tree = translator_tree()
                 note_check(reuse_dir, library_id(L), version, g.id, len(kept), inputs, tree)   # first: a library with kept shaders has its check due whatever comes next
+                lib = os.path.join(out_dir, 'dmsh_vk.lib')   # PEANUTS: its marker, until the full check passes (UNCHECKED); a library that kept nothing is a full translation
+                if kept: mark_unchecked(lib, library_id(L))
+                else: clear_unchecked(lib, library_id(L))
                 if tree is None: raise ValueError('the translator\'s source tree cannot be told')
                 write_record(reuse_dir, library_id(L), version, g.id, inputs, tree, record_of(L, out_dir, deps, zstd))
             finally: L.close()

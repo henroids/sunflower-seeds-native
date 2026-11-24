@@ -146,6 +146,36 @@ final class Job {
         return false;
     }
 
+    // PEANUTS begin: the in-place shader upgrade (dev.peanuts.build.ShaderUpgrade, PackService.upgrade)
+    /**
+     * A done job whose pack's library was just upgraded in place to this APK's version: when its apk record differs from this APK's in the shader version alone
+     * (ShaderUpgrade.onlyVkChainDiffers), it takes this APK's, so apkChanged() is false and the panel says Ready, not Resume (review M1). → whether it changed
+     */
+    synchronized boolean takeUpgrade() {
+        JSONObject a = o.optJSONObject("apk"), b = apk();
+        if (!"done".equals(state()) || a == null || !dev.peanuts.build.ShaderUpgrade.onlyVkChainDiffers(a::optString, b::optString)) return false;
+        try { o.put("apk", b); } catch (JSONException e) { throw new IllegalStateException(e); }
+        return true;
+    }
+
+    /**
+     * A job that only had the shaders left to make (adopted with its code current: identify and rewrite done, no mods) and waited for an upgrade that made them
+     * (the caller saw the pack current, Pack.libraryProblem): its shader steps and the pack step are done, and so is it, with this APK's record (review m9: a
+     * background update held during the upgrade no longer translates what the upgrade wrote). → whether it changed
+     */
+    synchronized boolean doneByUpgrade() {
+        if ("done".equals(state()) || adopted().isEmpty() || !modArgs().isEmpty() || !"done".equals(stepState("identify")) || !"done".equals(stepState("rewrite"))) return false;
+        try {
+            for (String s : new String[] {"split", "shaders", "pack"}) stepState(s, "done");
+            o.put("apk", apk());
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+        state("done", null, null);
+        return true;
+    }
+    // PEANUTS end
+
     /** Starts the chain's steps over with this APK's versions; the caller deletes their outputs */
     synchronized void resetChainSteps() throws JSONException {
         // the split is the dump's and stays valid, but a finished job deleted it: then it is made again too

@@ -815,6 +815,7 @@ public final class MainActivity extends Activity {
         new Thread(() -> {
             Game g = Folders.repack(this, card);   // a remembered pack folder that is gone: the usual search instead (app storage first)
             // An APK update whose shaders did not change: the pack's older library becomes this version's by its header (Pack.restamp), before anything else is decided
+            dev.peanuts.build.ShaderUpgrade.cleanStale(new File(g.packDir), BuildConfig.NX_DMSH_VK_CHAIN, System.currentTimeMillis());   // PEANUTS: a killed upgrade's .tmp would keep a restamp out of this version's folder
             String restamped = Pack.restamp(new File(g.packDir), g.titleId);
             if (restamped != null) android.util.Log.i("nxnative", g.titleId + ": shader library v-" + restamped + " taken over as v-" + BuildConfig.NX_DMSH_VK_CHAIN + " (restamp)");
             Problem problem = problem(g);
@@ -887,7 +888,11 @@ public final class MainActivity extends Activity {
     /** The optional shader update from the game's page: Home, then Prepare (Ondevice asks first and says what it will make) */
     // PEANUTS: the card's Update shaders opens this fork's build sheet, as the Build again row does (upstream: Ondevice.prepare(this, new File(g.gameDir), true)): a build
     // from the sheet keeps the pack's note, its companion and its builds with mods in step (dev.peanuts.build.Prepare), which upstream's own Prepare card does not know
-    void updateShaders(Game g) { page(false); dev.peanuts.ui.GameSheet.open(this, g.titleId); }
+    void updateShaders(Game g) {
+        Runnable sheet = () -> { if (isFinishing() || isDestroyed()) return; page(false); dev.peanuts.ui.GameSheet.open(this, g.titleId); };
+        if (dev.peanuts.build.ShaderUpgradeUi.before(this, g.titleId, new File(g.packDir), shaderInputs(g.titleId), false, sheet)) return;   // PEANUTS: an in-place upgrade first (seconds); the sheet then shows what is left
+        sheet.run();
+    }
 
     /** A game's page (a tap or long press on its tile; GameSettings): its settings, saves and storage under tabs, Play in its header */
     private void manage(Game g) { GameSettings.open(this, g); }
@@ -1354,7 +1359,7 @@ public final class MainActivity extends Activity {
         if (packDir.equals(pendingPackPick)) Folders.pickedPack(this, id, packDir.getPath());   // a pack folder the user picked is remembered for this game's next pick and updates
         String note = "";
         String lp = Pack.libraryProblem(packDir, id);
-        if (lp != null) note += " " + lp;
+        if (lp != null) { note += " " + Pack.libraryText(packDir, id); android.util.Log.i("nxnative", id + ": added with " + packDir + ": " + lp); }   // PEANUTS: plain words in the toast; the folders in the log
         String name;
         try { name = Pack.read(packDir).name; } catch (IOException e) { name = id; }
         Toast.makeText(this, "Added " + (name.isEmpty() ? id : name) + "." + note, Toast.LENGTH_LONG).show();
@@ -1485,6 +1490,19 @@ public final class MainActivity extends Activity {
             }
             android.util.Log.w("nxnative", g.titleId + ": Play anyway: " + b.kind + ": " + b.detail);
         }
+        // PEANUTS begin: an older app version's shaders that this version's tools upgrade in place (seconds, no game files: dev.peanuts.build.ShaderUpgradeUi)
+        // are upgraded first, behind a short wait; then, or when there is nothing to upgrade or the upgrade cannot be made, the launch goes on as before
+        if (dev.peanuts.build.ShaderUpgradeUi.before(this, g.titleId, new File(g.packDir), shaderInputs(g.titleId), true, () -> launchShaders(g, gd, dump, pickPack))) return;
+        launchShaders(g, gd, dump, pickPack);
+    }
+
+    /** PEANUTS: the profile's shader inputs for the in-place shader upgrade (ShaderUpgradeUi: a library of other shader tables gets none), null without a profile */
+    private static String shaderInputs(String titleId) { Profile p = Profile.of(titleId); return p == null ? null : p.shaderInputs; }
+
+    /** PEANUTS: launch's end, from its shader check on (split off so that it can run after an in-place shader upgrade, ShaderUpgradeUi) */
+    private void launchShaders(Game g, File gd, boolean dump, Runnable pickPack) {
+        if (isFinishing() || isDestroyed()) return;   // PEANUTS: the launcher went while the shaders were upgraded
+        // PEANUTS end
         // The host loads <pack>/shaders/v-<its DMSH_VK_CHAIN>/dmsh_vk.lib: without it the game runs but draws nothing. Say so, and offer to prepare the shaders
         // (a dump) or another pack folder
         String lp = Pack.libraryProblem(new File(g.packDir), g.titleId);

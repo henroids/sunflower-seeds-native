@@ -63,6 +63,8 @@ public final class PackService extends Service {
     /** ACTION_PAUSE's sender, for the logs (a job paused with reason "user"): notification, launcher or adb; missing = an intent from elsewhere */
     static final String EXTRA_FROM = "from";
     static final int MSG_REGISTER = 1, MSG_UNREGISTER = 2, MSG_STATE = 3;
+    /** PEANUTS: the in-place shader upgrade (upgrade below, dev.peanuts.build.ShaderUpgrade): asked by a bound client with replyTo, answered with MSG_UPGRADE_DONE */
+    static final int MSG_UPGRADE = 4, MSG_UPGRADE_DONE = 5;
     private static final String TAG = "nxpack", CHANNEL = "pack";
     private static final int NOTE = 1;
     /** Starts of one step the process may not live through before the job fails (Job.start) */
@@ -92,6 +94,10 @@ public final class PackService extends Service {
     private volatile Intent afterCheck;   // PEANUTS: a job's start that came during the check: it runs once the check has stopped
     private volatile Job checkJob;   // PEANUTS: the done job the check runs with: save and publish write and send nothing of it (a build that binds meanwhile must not take it for its own)
     private volatile Job pausedWaiting;   // PEANUTS: a job paused while it waited for the check (ACTION_PAUSE): told to the clients and the notification at the check's end
+    // PEANUTS: the in-place shader upgrade (upgrade): one at a time in the process, whatever service object asked it (a client that unbinds lets this one go
+    // while its thread runs on), and a job's start that came meanwhile (onStartCommand), run once it has ended
+    private static final java.util.concurrent.atomic.AtomicBoolean upgrading = new java.util.concurrent.atomic.AtomicBoolean();
+    private static final List<Runnable> afterUpgrade = new CopyOnWriteArrayList<>();   // every job start that came meanwhile (review m6), each re-checked when run (m9)
     private PrepareText.Failure failure;   // what the last step that failed said for the card (step() sets it with its reason; the worker thread only)
     private volatile boolean heatOverride;   // Go on anyway: the heat pause is lifted while this service runs the job
     private int batteryPct = 100, thermal;
@@ -184,7 +190,7 @@ public final class PackService extends Service {
                 && worker == null;   // not only a thread that ended: its end's post (finished, checkKept's) clears worker and checkJob, and a check started before it was forgotten (found in review)
         if (check) checking = true;   // the notification says so from the start (note)
         if (checkAsked && !check && j != null && "done".equals(j.state()) && j.apkChanged() && dev.peanuts.build.ReuseCheck.due(getNoBackupFilesDir(), j.titleId())) {
-            dev.peanuts.build.CheckDue.drop(new File(getNoBackupFilesDir(), "reuse/" + j.titleId()));   // an app update since the build: this app can never check it, and it was asked again every two minutes (found in review)
+            dev.peanuts.build.CheckDue.drop(new File(getNoBackupFilesDir(), "reuse/" + j.titleId()), j.pack());   // PEANUTS: j.pack(): the unchecked marker naming check.todo's library beside its library (CheckDue.drop, critique B1)   // an app update since the build: this app can never check it, and it was asked again every two minutes (found in review)
             try { Outputs.delete(new File(j.dir(), "split")); } catch (IOException e) { Log.w(TAG, "split: " + e.getMessage()); }   // kept for the check only
             Log.i(TAG, "check: " + j.titleId() + ": the app was updated since the build: its full check is dropped (the next build makes a library of this app)");
         }
@@ -228,6 +234,39 @@ public final class PackService extends Service {
             startForeground(job);
             return START_STICKY;
         }
+        // PEANUTS begin: a start during an in-place shader upgrade (upgrade below: seconds; the packer runs one tool at a time in this process). A job's runs once
+        // the upgrade has ended, started again then while this service is in the foreground; a check's is not run (ReuseCheck asks again another time)
+        if (upgrading.get()) {
+            if (check) {
+                checking = false;
+                boolean waiting = !afterUpgrade.isEmpty();   // a job's start waits already: its notification stays in the foreground, and the service with it
+                try { startForeground(waiting ? NOTE : NOTE_CHECK, note(waiting ? job : null), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC); } catch (RuntimeException e) { Log.w(TAG, "check: startForeground refused: " + e); }
+                if (!waiting) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId); }
+                return START_NOT_STICKY;
+            }
+            final Intent again = intent != null ? intent : new Intent(this, PackService.class).setAction(ACTION_START).putExtra(EXTRA_JOB, j.file.getPath());
+            stepLog(j, "a job starts while the game's shaders are being upgraded: it runs once that has ended (seconds)");
+            job = j;   // its notification while it waits (note), and what a client that binds is told
+            startForeground(j);
+            final File jf = j.file;
+            afterUpgrade.add(() -> {
+                // re-checked now (review m9): a job that only had this pack's shaders left, which the upgrade has just made, is done without translating them again
+                try {
+                    Job w = Job.read(jf);
+                    if (Pack.libraryProblem(w.pack(), w.titleId()) == null && w.doneByUpgrade()) {
+                        w.save();
+                        Log.i(TAG, "upgrade: " + w.titleId() + ": the job that waited had only the shaders left, which the upgrade made: it is done (" + jf + ")");
+                        publish(w, true);
+                        stopForeground(STOP_FOREGROUND_REMOVE);
+                        stopSelf();
+                        return;
+                    }
+                } catch (IOException | RuntimeException e) { Log.w(TAG, "upgrade: the job that waited: " + e); }
+                try { startForegroundService(again); } catch (RuntimeException e) { Log.w(TAG, "upgrade: the job that waited could not start: " + e); }
+            });
+            return START_STICKY;
+        }
+        // PEANUTS end
         job = j;
         if (!startForeground(j)) {
             // Android refused a foreground service here (a start from the background): the job stays as it is, the launcher's Resume starts it
@@ -554,6 +593,7 @@ public final class PackService extends Service {
         String what = "ended";
         String fixed = null;
         File rd = new File(getNoBackupFilesDir(), "reuse/" + j.titleId());
+        final String[] todo = dev.peanuts.build.CheckDue.todo(rd);   // PEANUTS: check.todo before anything can drop it: a drop marks its library (CheckDue.markIfDropped below)
         try {
             String died = dev.peanuts.build.CheckDue.died(rd);   // an earlier check whose process ended while it ran: a try (its own end never ran)
             if (died != null) dev.peanuts.build.ReuseCheck.log(new File(j.dir(), "logs"), "check: the one before ended with the packer's process; " + died);
@@ -594,6 +634,8 @@ public final class PackService extends Service {
                 // minutes for good, and held every other game's check (found in review)
                 String ended = dev.peanuts.build.CheckDue.ended(new File(nb, "reuse/" + j.titleId()), what);
                 if (ended != null) what += "; " + ended;
+                File unchecked = dev.peanuts.build.CheckDue.markIfDropped(new File(nb, "reuse/" + j.titleId()), j.pack(), todo);   // PEANUTS: dropped here or by shader_reuse.py drop_check: <lib>.unchecked beside the pack's library (critique B1: no upgrade carries it)
+                if (unchecked != null) what += "; marked " + unchecked;
                 boolean due = dev.peanuts.build.ReuseCheck.due(nb, j.titleId());
                 if (!due) Outputs.delete(new File(j.dir(), "split"));
                 fixed = dev.peanuts.build.ReuseCheck.replacedText(nb, j.titleId(), j.name(), since);
@@ -620,6 +662,105 @@ public final class PackService extends Service {
                 if (next == null) stopSelf();
             });
         }
+    }
+    // PEANUTS end
+
+    // PEANUTS begin: the in-place shader upgrade (dev.peanuts.build.ShaderUpgrade, ~/pn-build/xver-upgrade-spec.md)
+    /**
+     * MSG_UPGRADE from a bound client (dev.peanuts.build.ShaderUpgradeUi, before a game starts): vk_android_upgrade.py on the pack's older libraries the client
+     * found (ShaderUpgrade.candidates), in this process's Python as a job's tools run, on a thread of its own: --path, then the upgrade into
+     * shaders/v-&lt;DMSH_VK_CHAIN&gt;/dmsh_vk.lib (ShaderUpgrade.run). Seconds, no job.json: a pack made on a computer or imported is upgraded the same way. Only
+     * while no job or check runs (one tool at a time; a job that starts meanwhile waits for it, onStartCommand): otherwise the answer is BUSY and the launcher
+     * goes on as before. Answered with MSG_UPGRADE_DONE (code, the library it started from, the tool's summary line or why not); the tool's output goes to
+     * ShaderUpgrade.logFile, whose progress the client shows
+     */
+    private void upgrade(Message m) {
+        Messenger to = m.replyTo;
+        Bundle d = m.getData();
+        String title = d.getString(dev.peanuts.build.ShaderUpgrade.KEY_TITLE, "");
+        String pack = d.getString(dev.peanuts.build.ShaderUpgrade.KEY_PACK, "");
+        ArrayList<String> libs = d.getStringArrayList(dev.peanuts.build.ShaderUpgrade.KEY_LIBS);
+        if (to == null) return;
+        String busy = libs == null || libs.isEmpty() || pack.isEmpty() || !title.matches("[0-9A-Fa-f]{16}") ? "nothing to upgrade"
+                : engine.simulated() ? "a simulated packer" : worker != null ? "a build or a full check runs" : null;
+        if (busy != null || !upgrading.compareAndSet(false, true)) { upgradeDone(to, dev.peanuts.build.ShaderUpgrade.BUSY, "", busy != null ? busy : "another upgrade runs"); return; }
+        File log = dev.peanuts.build.ShaderUpgrade.logFile(getFilesDir(), title);
+        Thread t = new Thread(() -> {
+            int code = dev.peanuts.build.ShaderUpgrade.ERROR;
+            String from = "", line = "";
+            long t0 = SystemClock.elapsedRealtime();
+            try {
+                File dir = log.getParentFile();
+                if (dir != null) dir.mkdirs();
+                Files.write(log.toPath(), new byte[0]);   // a new log for each upgrade; the tool appends to it
+                // the build's settings that make its bytes (the zstd level of a rewritten module: the result must be a full build's byte for byte) and its threads
+                PackEngine.setenv("DMSH_VK_ZSTD_LEVEL", "6");   // as the shaders step (step below)
+                PackEngine.setenv("J", String.valueOf(Math.max(1, Math.min(8, Runtime.getRuntime().availableProcessors()))));
+                PackEngine.setenv("XLATE", "libdmsh_xlate.so");
+                PackEngine.setenv("SPIRV_VAL", "libSPIRV-Tools-shared.so");
+                PackEngine.setenv("DM_VK_UPGRADE_VALIDATE", "1");   // spirv-val on every rewritten module through the APK's SPIRV-Tools (ctypes, as the shaders step): a module that fails is no upgrade
+                Profile prof = Profile.of(title);
+                String inputs = prof == null ? "" : prof.shaderInputs;   // the profile's shader inputs: a library of other shader tables is no full build's (review M2)
+                PackEngine.setenv("DM_VK_UPGRADE_INPUTS", inputs);
+                List<File> from0 = new ArrayList<>();
+                for (String l : libs) from0.add(new File(l));
+                dev.peanuts.build.ShaderUpgrade.Result r = dev.peanuts.build.ShaderUpgrade.run(from0, dev.peanuts.build.ShaderUpgrade.target(new File(pack), BuildConfig.NX_DMSH_VK_CHAIN),
+                        title, BuildConfig.NX_DMSH_VK_CHAIN, BuildConfig.NX_DMSH_VK_ABI, inputs.isEmpty() || inputs.equals("unknown") ? null : inputs,
+                        argv -> engine.run(dev.peanuts.build.ShaderUpgrade.TOOL, argv, log.getPath()), log);
+                code = r.code;
+                if (code == dev.peanuts.build.ShaderUpgrade.UPGRADED) upgradedJobs(title, new File(pack));
+                from = r.from == null ? "" : r.from.getPath();
+                line = code == dev.peanuts.build.ShaderUpgrade.UPGRADED ? r.line : r.why;
+            } catch (Throwable e) {   // the end below runs whatever happened: an upgrade left "running" would hold every later job's start
+                Log.e(TAG, "upgrade", e);
+                line = String.valueOf(e);
+            } finally {
+                upgrading.set(false);
+                Log.i(TAG, "upgrade: " + title + " " + pack + ": code " + code + " after " + (SystemClock.elapsedRealtime() - t0) + " ms: " + line + " (log " + log + ")");
+                final int c = code;
+                final String f = from, l = line;
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    upgradeDone(to, c, f, l);
+                    List<Runnable> next = new ArrayList<>(afterUpgrade);
+                    afterUpgrade.clear();
+                    for (Runnable n : next) n.run();
+                });
+            }
+        }, "nxpack-upgrade");
+        t.start();
+    }
+
+    /**
+     * The done jobs of a pack whose library was just upgraded (review M1): each takes this APK's record (Job.takeUpgrade) when only the shader version was
+     * older, so Home's panel says Ready and offers no rebuild. The jobs looked at: the remembered one and those beside the game files of every listed game
+     * with this pack (DumpCheck.workOf, as Prepare finds them)
+     */
+    private void upgradedJobs(String title, File pack) {
+        java.util.Set<File> files = new java.util.LinkedHashSet<>();
+        File rem = Job.remembered(this);
+        if (rem != null) files.add(rem);
+        for (Game g : Game.load(this)) if (g.titleId.equalsIgnoreCase(title) && GameList.samePath(g.packDir, pack.getPath())) files.add(Job.fileOf(DumpCheck.workOf(new File(g.gameDir), g.titleId)));
+        for (File f : files) {
+            try {
+                if (!f.isFile()) continue;
+                Job j = Job.read(f);
+                if (!j.titleId().equalsIgnoreCase(title) || !GameList.samePath(j.pack().getPath(), pack.getPath()) || !j.takeUpgrade()) continue;
+                j.save();
+                Log.i(TAG, "upgrade: " + f + ": the done job takes this app's shader version");
+            } catch (IOException | RuntimeException e) {
+                Log.w(TAG, "upgrade: job " + f + ": " + e);
+            }
+        }
+    }
+
+    private static void upgradeDone(Messenger to, int code, String from, String line) {
+        Message r = Message.obtain(null, MSG_UPGRADE_DONE);
+        Bundle b = new Bundle();
+        b.putInt(dev.peanuts.build.ShaderUpgrade.KEY_CODE, code);
+        b.putString(dev.peanuts.build.ShaderUpgrade.KEY_FROM, from);
+        b.putString(dev.peanuts.build.ShaderUpgrade.KEY_LINE, line);
+        r.setData(b);
+        try { to.send(r); } catch (RemoteException e) { Log.w(TAG, "upgrade: the launcher is gone: " + e); }
     }
     // PEANUTS end
 
@@ -937,6 +1078,11 @@ public final class PackService extends Service {
             String why = tail.reason();   // the last [RED] line, or a traceback's last line after it (PrepareText.StopReason)
             failure = PrepareText.toolStopped(Job.STEP_TEXT[i], code, why, log.getPath());
             return s + " stopped with code " + code + (why != null ? ": " + why.replaceFirst("^\\[RED\\] ", "") : "") + " (log: " + log + ")";
+        }
+        if (s.equals("pack") && !checking) {   // PEANUTS: the marker of a library with kept shaders goes into the pack with it (CheckDue.copyMarker, review M3)
+            String lv = "v-" + BuildConfig.NX_DMSH_VK_CHAIN + "/" + dev.peanuts.build.ShaderUpgrade.LIB;
+            int n = dev.peanuts.build.CheckDue.copyMarker(new File(j.shaderCache(), lv), new File(pack, "shaders/" + lv));
+            if (n > 0) stepLog(j, "pack: the shaders' unchecked marker (" + n + " library id" + (n == 1 ? "" : "s") + ") is in the build beside them until their full check passes");
         }
         if (s.equals("split")) {
             Outputs.finish(split);   // every output synced, then the marker: a reboot after the step is recorded done cannot leave cut tables accepted in split/
@@ -1308,6 +1454,9 @@ public final class PackService extends Service {
                 return true;
             case MSG_UNREGISTER:
                 clients.remove(m.replyTo);
+                return true;
+            case MSG_UPGRADE:   // PEANUTS: the in-place shader upgrade
+                upgrade(m);
                 return true;
             default:
                 return false;
