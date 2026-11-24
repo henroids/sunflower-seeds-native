@@ -69,7 +69,7 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
     @Override public void doFrame(long nowNs) {
         posted = false;
         if (!running()) return;
-        if (board != null) { if (board.changed(SystemClock.uptimeMillis())) invalidate(); posted = true; Choreographer.getInstance().postFrameCallback(this); return; }   // PEANUTS: redraws only on a step
+        if (board != null) { if (board.changed(SystemClock.uptimeMillis())) invalidate(); posted = true; Choreographer.getInstance().postFrameCallbackDelayed(this, dev.peanuts.ui.BulbBoard.tickMs()); return; }   // PEANUTS: wakes once a tick, redraws only on a step
         if (lastNs == 0) lastNs = nowNs;
         long dt = nowNs - lastNs;
         if (dt >= MIN_FRAME_NS) {

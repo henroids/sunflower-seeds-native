@@ -3,30 +3,37 @@ package dev.peanuts.ui;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.text.TextUtils;
 import android.util.SparseArray;
+import java.util.HashMap;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
  * The Sunflower Seeds apps' look, "Scoreboard" (design option C): square panels on near-black, a purple header strip, labels in a pixel font (Silkscreen),
- * numbers in a dot-matrix font (VT323), text in Space Grotesk, mint for the selection and the main button. Only the Sunflower Seeds apps (applicationId …sunflower and …sunflowertest)
- * have it: its colours and fonts come from android/app/src/scoreboard (res and assets, build.gradle), and every hook asks ON first, so every other build
- * keeps the upstream look. The hooks: Ui / PUi round (no corners), face (the text font), section (pixel labels), header (the strip), badge (the bulb seed);
- * BananaBackgroundView (BulbBoard: the screen as a bulb board, the seeds marching across it); MainActivity (the status row on Home). The fonts are OFL-1.1 (assets/fonts/*.txt)
+ * numbers in a dot-matrix font (VT323), text in Space Grotesk, mint for the selection and the main button, amber bulbs for the logo and the icons. Only the
+ * Sunflower Seeds apps (applicationId …sunflower, …sunflowertest) have it: its colours, fonts and art come from android/app/src/scoreboard (build.gradle),
+ * and every hook asks ON first, so every other build keeps the upstream look. The hooks: Ui / PUi round (no corners), face (the text font), section (pixel
+ * labels), header (the strip), badge and the setup cards (the bulb seed), Setting rows (tile: bulb icons), iconButton (button: the gear and the book);
+ * BananaBackgroundView (BulbBoard: the screen as a bulb board, the seeds marching across it); MainActivity (the status row and the labelled gear on Home).
+ * The fonts are OFL-1.1 (assets/fonts/*.txt, android/NOTICE.md)
  */
 public final class Scoreboard {
     private Scoreboard() {}
 
     public static final boolean ON = dev.nxnative.android.BuildConfig.APPLICATION_ID.contains(".sunflower");   // the play app (.sunflower) and the test app (.sunflowertest)
-    public static final int STRIP = 0xFF5A59A6, ON_STRIP = 0xFFF4F2FF, CELL = 0xFF0B0F09, LINE = 0xFF2E3524, LABEL = 0xFF8A937A, MINT = 0xFFBFF2CC, LAVENDER = 0xFFD9D4F5;
+    private static final int STRIP = 0xFF5A59A6, ON_STRIP = 0xFFF4F2FF, CELL = 0xFF0B0F09, LINE = 0xFF2E3524, LABEL = 0xFF8A937A, MINT = 0xFFBFF2CC, LAVENDER = 0xFFD9D4F5;
 
     private static AssetManager assets;
     private static Typeface pixel, led;
     private static final SparseArray<Typeface> sans = new SparseArray<>();
+    private static final HashMap<String, Integer> ids = new HashMap<>();   // art name → drawable id (0: none), so a page of rows looks each up once
 
     /** Loads the fonts once (the first screen's onCreate); without them the hooks keep the system font */
     public static void init(Context c) {
@@ -37,39 +44,40 @@ public final class Scoreboard {
     }
 
     /** The seed in amber bulbs, turned 15 degrees (res/drawable-nodpi/sb_seed.png, the Sunflower Seeds apps' only), or null: the caller's own drawing */
-    public static android.graphics.drawable.Drawable seed(Context c) {
-        if (!ON) return null;
-        int id = c.getResources().getIdentifier("sb_seed", "drawable", c.getPackageName());   // by name: the other builds have no such drawable
-        return id == 0 ? null : c.getDrawable(id);
-    }
+    public static Drawable seed(Context c) { return ON ? drawable(c, "sb_seed") : null; }
 
     /** The seed for a logo spot (the setup and empty cards): the bulb seed on the scoreboard look, else the drawing res */
-    public static void logo(android.widget.ImageView v, int res) { android.graphics.drawable.Drawable d = seed(v.getContext()); if (d != null) v.setImageDrawable(d); else v.setImageResource(res); }
+    public static void logo(ImageView v, int res) { Drawable d = seed(v.getContext()); if (d != null) v.setImageDrawable(d); else v.setImageResource(res); }
 
     /** A row's icon in amber bulbs in place of its emoji, or null: the emoji stays. The art is res/drawable-nodpi/sb_ic_<the emoji's code points in hex,
      *  joined by _, without the variation selector FE0F> (🔑 is sb_ic_1f511), found by name */
-    public static android.graphics.drawable.Drawable icon(Context c, String emoji) {
+    private static Drawable icon(Context c, String emoji) {
         if (!ON || emoji == null || emoji.isEmpty()) return null;
         StringBuilder n = new StringBuilder("sb_ic");
         emoji.codePoints().filter(cp -> cp != 0xFE0F).forEach(cp -> n.append('_').append(Integer.toHexString(cp)));
-        android.graphics.drawable.Drawable d = drawable(c, n.toString());
-        return d == null ? null : new android.graphics.drawable.InsetDrawable(d, dp(c, 4));
+        Drawable d = drawable(c, n.toString());
+        return d == null ? null : new InsetDrawable(d, dp(c, 4));
     }
 
     /** An icon button's art in amber bulbs (res/drawable-nodpi/sb_<its drawable's name>: the Settings gear, the FAQ book), or null: its own stays */
-    public static android.graphics.drawable.Drawable button(Context c, int res) {
+    public static Drawable button(Context c, int res) {
         if (!ON) return null;
         try { return drawable(c, "sb_" + c.getResources().getResourceEntryName(res)); } catch (android.content.res.Resources.NotFoundException e) { return null; }
     }
 
-    private static android.graphics.drawable.Drawable drawable(Context c, String name) {
-        int id = c.getResources().getIdentifier(name, "drawable", c.getPackageName());   // by name: the other builds have none of these
+    /** The scoreboard art by name, or null: looked up by name (the other builds have none of it), once a name */
+    private static Drawable drawable(Context c, String name) {
+        Integer id;
+        synchronized (ids) {
+            id = ids.get(name);
+            if (id == null) { id = c.getResources().getIdentifier(name, "drawable", c.getPackageName()); ids.put(name, id); }
+        }
         return id == 0 ? null : c.getDrawable(id);
     }
 
     /** Puts a row's bulb icon (icon) on its emoji tile, if it has one */
     public static void tile(TextView tile, String emoji) {
-        android.graphics.drawable.Drawable d = icon(tile.getContext(), emoji);
+        Drawable d = icon(tile.getContext(), emoji);
         if (d == null) return;
         tile.setText("");
         tile.setForeground(d);

@@ -163,6 +163,7 @@ public final class BulbBoard {
     private static final int AREA_PER_SEED = 2000;                          // bulbs of board a seed: how many seeds a screen gets
     private static final int MIN_APART = 30;                                // bulbs between two seeds' centres at least (the first board's lattice spacing), where there is room
     private static final float DEAD_SHARE = 0.005f;                         // the board's dead bulbs
+    private static final int LEAD = 20;                                     // columns a seed starts off the left edge (wider than any pattern)
 
     /** One seed on its loop: it starts at column x0, steps a column every period, and on leaving on the right comes back from the left span columns later.
      *  Everything follows from the time, so a jump in time (the screen off and on again) lands each seed where it would be, never all at the left edge */
@@ -182,7 +183,6 @@ public final class BulbBoard {
         }
         int state(long ms) { return (int) (Math.max(0, ms - t0) / period) ^ (out != Long.MIN_VALUE && ms - out < RESPAWN_MS ? 0x40000000 : 0); }
     }
-    private static final int LEAD = 20;   // columns a seed starts off the left edge (wider than any pattern)
 
     private final float pitch;
     private final Bitmap[] lit = new Bitmap[PATTERNS.length];   // each pattern's bulbs, lit
@@ -292,4 +292,7 @@ public final class BulbBoard {
     }
 
     public static long respawnMs() { return RESPAWN_MS; }
+
+    /** How long the view may wait before asking changed() again: nothing moves between ticks */
+    public static long tickMs() { return TICK_MS; }
 }
