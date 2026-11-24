@@ -1167,8 +1167,11 @@ public final class Library {
         chips.addView(chipRow, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         top.addView(chips, PUi.weight());
         if (!setup && offersBuildAll(rows)) {   // Build all that need it (issue #348): it asks first and names the games
-            Button allB = PUi.button(a, "Build all…", PUi.Kind.QUIET, v -> buildAllAsk());
-            allB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_build, R.color.bn_accent), null, null, null);
+            Button allB = PUi.button(a, Scoreboard.ON ? "Build" : "Build all…", PUi.Kind.QUIET, v -> buildAllAsk());   // PEANUTS(sunflower): "Build" on the scoreboard look
+            Drawable bulb = Scoreboard.ON ? Scoreboard.button(a, R.drawable.ic_build) : null;   // PEANUTS(sunflower): the bulb wrench on Home
+            if (bulb != null) bulb.setBounds(0, 0, PUi.dp(a, 24), PUi.dp(a, 24));
+            if (bulb != null) allB.setCompoundDrawablesRelative(bulb, null, null, null);
+            else allB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_build, R.color.bn_accent), null, null, null);
             allB.setCompoundDrawablePadding(PUi.dp(a, 6));
             allB.setOnKeyListener(shoulders);
             focusRing(allB, Color.TRANSPARENT);
@@ -1176,14 +1179,16 @@ public final class Library {
             LinearLayout.LayoutParams alp = PUi.wrap(); alp.leftMargin = PUi.dp(a, 8);
             top.addView(allB, alp);
         }
-        Button findB = PUi.button(a, find.isEmpty() ? "Find" : PUi.joined("Find", find), PUi.Kind.QUIET, Haptics.on(Haptics.Word.CLICK, v -> findDialog()));
-        findB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_search, R.color.bn_accent), null, null, null);
-        findB.setCompoundDrawablePadding(PUi.dp(a, 6));
-        findB.setOnKeyListener(shoulders);
-        focusRing(findB, Color.TRANSPARENT);
-        track(findB, "find", null);
-        LinearLayout.LayoutParams flp = PUi.wrap(); flp.leftMargin = PUi.dp(a, 8);
-        top.addView(findB, flp);
+        if (!Scoreboard.ON) {   // PEANUTS(sunflower): no Find on the scoreboard look (one game)
+            Button findB = PUi.button(a, find.isEmpty() ? "Find" : PUi.joined("Find", find), PUi.Kind.QUIET, Haptics.on(Haptics.Word.CLICK, v -> findDialog()));
+            findB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_search, R.color.bn_accent), null, null, null);
+            findB.setCompoundDrawablePadding(PUi.dp(a, 6));
+            findB.setOnKeyListener(shoulders);
+            focusRing(findB, Color.TRANSPARENT);
+            track(findB, "find", null);
+            LinearLayout.LayoutParams flp = PUi.wrap(); flp.leftMargin = PUi.dp(a, 8);
+            top.addView(findB, flp);
+        }
         PUi.add(box, top, setup ? 16 : 2);
         TextView note = null;   // the scan's line, or the empty library's: it fades in when the last rebuild did not have it
         if (scanning) {

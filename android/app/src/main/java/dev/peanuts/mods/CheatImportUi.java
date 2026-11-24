@@ -37,7 +37,7 @@ public final class CheatImportUi {
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
         AlertDialog[] d = new AlertDialog[1];
-        PUi.add(box, PUi.body(a, "Cheats or a mod for this game, from this device. Peanuts never downloads any."), 0);
+        PUi.add(box, PUi.body(a, "Cheats or a mod for this game, from this device. Sunflower Seeds never downloads any."), 0);
         PUi.Setting file = new PUi.Setting(a, "", "A file", Feel.row(v -> { d[0].dismiss(); pick(a, false); })).value("A .zip or a .txt").chevron(a);
         Icons.tile((TextView) file.view.getChildAt(0), "list");
         PUi.add(box, file.view, 12);
@@ -95,8 +95,8 @@ public final class CheatImportUi {
             lines.add(new String[] {"check", CheatsPage.count(n, "cheat") + " for your version",
                     "Build " + CheatsPage.shortBuild(build) + ", the one your game was built from." + (f.groups() > 0 ? " " + CheatsPage.count(f.groups(), "group") + "." : "")});
             if (f.unsupported() > 0) lines.add(new String[] {"info", f.unsupported() + " more " + (f.unsupported() == 1 ? "is" : "are") + " not supported",
-                    "They use a part of the cheat format Peanuts does not run. They are listed and stay off."});
-            if (f.restores()) lines.add(new String[] {"info", "Restore Code is left out", "Peanuts puts the original code back by itself when you turn a cheat off."});
+                    "They use a part of the cheat format Sunflower Seeds does not run. They are listed and stay off."});
+            if (f.restores()) lines.add(new String[] {"info", "Restore Code is left out", "Sunflower Seeds puts the original code back by itself when you turn a cheat off."});
             if (!f.otherVersion.isEmpty()) lines.add(new String[] {"info", CheatsPage.count(f.otherVersion.size(), "file") + " for another version",
                     "Kept with them: they work when the game is that version."});
             if (!folder && CheatSources.FROM_ZIP.equals(from)) lines.add(new String[] {"info", "No mods in this zip", "Mods go in the same way: a zip with romfs or exefs folders."});

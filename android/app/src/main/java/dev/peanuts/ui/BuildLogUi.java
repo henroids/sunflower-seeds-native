@@ -112,7 +112,7 @@ public final class BuildLogUi {
     static void send(Activity a, File zip, String name) {
         Uri uri = BuildLogProvider.uri(a, zip);
         Intent send = new Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM, uri)
-                .putExtra(Intent.EXTRA_SUBJECT, "Peanuts Native build log: " + name).putExtra(Intent.EXTRA_TITLE, zip.getName());
+                .putExtra(Intent.EXTRA_SUBJECT, "Sunflower Seeds Native build log: " + name).putExtra(Intent.EXTRA_TITLE, zip.getName());
         send.setClipData(ClipData.newRawUri(zip.getName(), uri));
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         Intent chooser = Intent.createChooser(send, "Share the build log");

@@ -52,7 +52,7 @@ public final class GameEnv {
             try {
                 String env = Upstream.gameEnv(c, titleId);
                 String out = withDefault(env, d[1], d[2]);
-                if (!out.equals(env == null ? "" : env)) { Upstream.gameEnv(c, titleId, out); Log.i(TAG, "env " + titleId + ": " + d[1] + "=" + d[2] + " (Peanuts default)"); }
+                if (!out.equals(env == null ? "" : env)) { Upstream.gameEnv(c, titleId, out); Log.i(TAG, "env " + titleId + ": " + d[1] + "=" + d[2] + " (Sunflower Seeds default)"); }
             } catch (ReflectiveOperationException e) {
                 Log.w(TAG, "env " + titleId + ": " + e);
             }

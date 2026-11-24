@@ -93,10 +93,10 @@ public final class CheatStatus {
     public static String why(String reason, CheatFile.Cheat c) {
         String token = reason == null ? "" : reason.contains(":") ? reason.substring(0, reason.indexOf(':')) : reason;
         switch (token) {
-            case "rewritten": return "Peanuts rewrote this place of the game's code while building it, so this cheat cannot change it.";
-            case "nolist": return "This build of the game does not list the places Peanuts rewrote. Build the game again to use code cheats.";
+            case "rewritten": return "Sunflower Seeds rewrote this place of the game's code while building it, so this cheat cannot change it.";
+            case "nolist": return "This build of the game does not list the places Sunflower Seeds rewrote. Build the game again to use code cheats.";
             case "region": return "It writes a part of the game's memory this host does not give it.";
-            case "unsupported": return "It uses a part of the cheat format Peanuts does not run" + (c.why != null ? " (" + c.why + ")" : "") + ".";
+            case "unsupported": return "It uses a part of the cheat format Sunflower Seeds does not run" + (c.why != null ? " (" + c.why + ")" : "") + ".";
             default: return "The game stopped this cheat. The others go on.";
         }
     }

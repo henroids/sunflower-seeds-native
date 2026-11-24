@@ -136,17 +136,20 @@ final class AboutPage {
         g.setShape(GradientDrawable.OVAL);
         g.setColor(PUi.col(a, R.color.bn_tint));
         disc.setBackground(g);
-        disc.addView(new CrackedPeanut(a), new FrameLayout.LayoutParams(PUi.dp(a, 112), PUi.dp(a, 112), Gravity.CENTER));
+        android.graphics.drawable.Drawable seed = Scoreboard.seed(a);   // PEANUTS(sunflower): the bulb sunflower seed instead of the peanut
+        if (seed != null) { android.widget.ImageView iv = new android.widget.ImageView(a); iv.setImageDrawable(seed); iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            disc.addView(iv, new FrameLayout.LayoutParams(PUi.dp(a, 84), PUi.dp(a, 84), Gravity.CENTER)); }
+        else disc.addView(new CrackedPeanut(a), new FrameLayout.LayoutParams(PUi.dp(a, 112), PUi.dp(a, 112), Gravity.CENTER));
         card.addView(disc, new LinearLayout.LayoutParams(PUi.dp(a, 120), PUi.dp(a, 120)));
         TextView count = PUi.text(a, number(Cracked.total(a)), 30, R.color.bn_text, 800);
         count.setFontFeatureSettings("tnum");
         count.setGravity(Gravity.CENTER);
         PUi.add(card, count, 6, PUi.wrap());
-        TextView label = PUi.text(a, "Peanuts cracked", 15, R.color.bn_text, 700);
+        TextView label = PUi.text(a, COUNT_LABEL, 15, R.color.bn_text, 700);
         label.setGravity(Gravity.CENTER);
         PUi.add(card, label, 0, PUi.wrap());
-        card.setContentDescription(number(Cracked.total(a)) + " peanuts cracked");
-        Runnable update = () -> { long n = Cracked.total(a); count.setText(number(n)); card.setContentDescription(number(n) + " peanuts cracked"); };
+        card.setContentDescription(number(Cracked.total(a)) + " " + COUNT_LABEL.toLowerCase(java.util.Locale.ROOT));
+        Runnable update = () -> { long n = Cracked.total(a); count.setText(number(n)); card.setContentDescription(number(n) + " " + COUNT_LABEL.toLowerCase(java.util.Locale.ROOT)); };
         card.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) { Cracked.listen(a, update); update.run(); Cracked.settle(a); }
             @Override public void onViewDetachedFromWindow(View v) { Cracked.unlisten(update); }
@@ -154,6 +157,7 @@ final class AboutPage {
         return card;
     }
 
+    static final String COUNT_LABEL = "Sunflower Seeds Chewed";   // PEANUTS(sunflower): was "Peanuts cracked"
     static String number(long n) { return java.text.NumberFormat.getIntegerInstance().format(n); }
 
     // ---- Games ----
@@ -168,6 +172,17 @@ final class AboutPage {
 
     private static List<Game> catalog(Context c) {
         List<Game> out = new ArrayList<>();
+        if (Scoreboard.ON) {   // PEANUTS(sunflower): the games this app is built for (its profile table), not Peanuts Native's catalog
+            for (String line : dev.nxnative.android.BuildConfig.NX_PROFILES.split("\n")) {
+                String[] col = line.split("\t", -1);
+                if (col.length < 5 || col[0].isEmpty()) continue;
+                Game x = new Game(); x.name = col[1].isEmpty() ? col[0] : col[1];
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("@([0-9.]+)").matcher(col[4]);
+                while (m.find()) x.version = m.group(1);   // the newest build's display version
+                out.add(x);
+            }
+            return out;
+        }
         int id = c.getResources().getIdentifier("peanuts_games", "raw", c.getPackageName());
         if (id == 0) return out;
         try (InputStream in = c.getResources().openRawResource(id)) {

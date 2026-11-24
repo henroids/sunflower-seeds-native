@@ -85,7 +85,7 @@ public final class SettingsSections {
                     new Group("Questions and logs", r("Questions and answers", "info"), r("Share log", "share"))),
             new Section("developer", "Developer", "build", "For testing and for adb. Leave these as they are unless you were asked to change one.",
                     new Group("Testing", r("Advanced", "settings"), r("Tester settings", "build"), r("ADB control (debug)", "build"))),
-            new Section("about", "About", "peanut", "The app, the games in it and the people who made it.")));
+            new Section("about", "About", "info", "The app, the games in it and the people who made it.")));
 
     /** What each section holds, in a few words: a tablet's tile of it (SettingsPage's hub) */
     private static final String[][] SUMMARY = {
@@ -93,7 +93,7 @@ public final class SettingsSections {
             {"graphics", "GPU driver, picture and speed"}, {"controls", "Buttons, touch controls and the controller"},
             {"screens", "Both screens, a TV, rotation, keeping the screen on"}, {"users", "Users and Miis"}, {"app", "Haptics, motion and updates"},
             {"help", "Readiness check, self-test, log and answers"}, {"developer", "Advanced, tester settings and adb"},
-            {"about", "The app, its games, credits, licenses and Peanuts cracked"}};
+            {"about", "The app, its games, credits, licenses and Sunflower Seeds Chewed"}};
 
     /** A section's few words of what it holds; its line when there are none. twoScreens: the device has a second screen (Screens says so) */
     public static String summary(Section s, boolean twoScreens) {
