@@ -159,6 +159,7 @@ One row per profile; the notes are each profile's `README.md`.
 | [Pokémon Legends: Z-A](0100F43008C44000/README.md) | `0100F43008C44000` | 2.0.2 | 19.3.11 | Game Freak's Trinity engine | NVN · [AYN Thor](0100F43008C44000/README.md#peanuts-native-on-android) | <!-- PEANUTS -->
 | [Pokémon: Let's Go, Eevee!](0100187003A36000/README.md) | `0100187003A36000` | 1.0.2 | 5.4.151 | Game Freak's engine (before Sword's) | NVN <!-- PEANUTS: Peanuts-only profile --> |
 | [Pokémon: Let's Go, Pikachu!](010003F003A34000/README.md) | `010003F003A34000` | 1.0.2 | 5.4.151 | Game Freak's engine (before Sword's) | NVN <!-- PEANUTS: Peanuts-only profile --> |
+| [Pokémon Mystery Dungeon: Rescue Team DX](01003D200BAA2000/README.md) | `01003D200BAA2000` | 1.0.0 (base) | 7.4.0 | Unity 2018.3.12f1 IL2CPP, FMOD | NVN <!-- PEANUTS: Peanuts-only profile, provisional --> |
 | [Pokémon Pokopia](0400A3A01EE4C000/README.md) | `0400A3A01EE4C000` | v655360 (Switch 2) | 20.5.25 (Ounce) | Koei Tecmo's KTGL | NVN2 |
 | [Pokémon Scarlet](0100A3D008C5C000/README.md) | `0100A3D008C5C000` | 1.0.0, 4.0.0 | 13.3.5, 13.3.13 | Game Freak's Trinity engine | NVN <!-- PEANUTS: Android bring-up on 4.0.0 --> |
 | [Pokémon Shining Pearl](010018E011D92000/README.md) | `010018E011D92000` | 1.3.0 | 11.4.3 | Unity 2019.4.27f1 IL2CPP | NVN |
