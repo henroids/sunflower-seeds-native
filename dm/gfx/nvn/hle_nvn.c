@@ -109,9 +109,10 @@ static void *nvn_lookup(const char *name) {
     return NULL;
 }
 
+static void nvn_prof_arm(void);   // below: DM_NVN_PROF, armed at the first nvnBootstrapLoader
 // nvnBootstrapLoader is imported by main (defined in sdk); after it is forcibly taken over, the NVN driver in sdk is no longer referenced
 HLE_FORCE("nvnBootstrapLoader", "the NVN graphics API is replaced wholesale with a host null device (Metal behind it); the SDK's NVN driver does not run",
-          void *, h_nvnBootstrapLoader, const char *name) { return nvn_lookup(name); }
+          void *, h_nvnBootstrapLoader, const char *name) { nvn_prof_arm(); return nvn_lookup(name); }
 
 // ---------- Boolean parameters: Switch callers do not extend them, only look at the low 8 bits ----------
 #define B(x) ((x) & 0xff)
@@ -1737,6 +1738,18 @@ static const char *const g_nops[] = {
     "nvnCommandBufferShadingRateImagePalette",
     "nvnWindowFinalize",
 };
+// DM_NVN_PROF=1: implemented functions (except unimplemented stubs and present: present includes the display-link wait and is counted separately) get a timing wrapper,
+// used to break down the time spent in the "translation layer recording phase". Armed at the game's first nvnBootstrapLoader, not in the constructor below: on Android the
+// host library is loaded before the launcher sets the game's environment, so a constructor never sees DM_NVN_PROF (the game calls NVN through the slots, so wrapping them later is safe)
+static int g_nvn_prof;
+static void nvn_prof_arm(void) {
+    static int done; if (done) return; done = 1;
+    if (!getenv("DM_NVN_PROF")) return;
+    for (unsigned i = 0; i < NVN_NFUNC; i++)
+        if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && strcmp(nvn_names[i], "nvnQueuePresentTexture")) { nvn_real[i] = nvn_slot[i].fn; nvn_slot[i].fn = (void *)nvn_prof_entry; }
+    g_nvn_prof = 1;
+    LOG("[nvn] DM_NVN_PROF: NVN calls timed (the translation layer top 5 every 300 frames)");
+}
 __attribute__((constructor)) static void nvn_nops_register(void) {
     // Empty implementations overwrite the unimplemented stubs after the slot table is initialized; a misspelled name (not in main's name table) reports a failure and aborts at startup
     nvn_init_slots();
@@ -1754,10 +1767,6 @@ __attribute__((constructor)) static void nvn_nops_register(void) {
         if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && nvn_slot[i].fn != (void *)nvn_nop && strncmp(nvn_names[i], "nvnCommandBuffer", 16)) {
             nvn_big_real[i] = nvn_slot[i].fn; nvn_slot[i].fn = (void *)nvn_big_entry; nbig++;
         }
-    // DM_NVN_PROF=1: implemented functions (except unimplemented stubs and present: present includes the display-link wait and is counted separately) get a timing wrapper, used to break down the time spent in the "translation layer recording phase"
-    if (getenv("DM_NVN_PROF"))
-        for (unsigned i = 0; i < NVN_NFUNC; i++)
-            if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && strcmp(nvn_names[i], "nvnQueuePresentTexture")) { nvn_real[i] = nvn_slot[i].fn; nvn_slot[i].fn = (void *)nvn_prof_entry; }
     LOG("[nvn] null device: %u names, %u implemented (%u semantic + %u empty, %u of them on the large host stack), the other %u go to the red-reporting stub",
         NVN_NFUNC, g_nsem + nnop, g_nsem, nnop, nbig, NVN_NFUNC - g_nsem - nnop);
 }
@@ -2441,7 +2450,7 @@ NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
             }
         }
     }
-    if (nvn_real[0] || nvn_real[1]) {   // DM_NVN_PROF: record phase = time of all implemented functions except submit; submit phase = QueueSubmitCommands
+    if (g_nvn_prof) {   // DM_NVN_PROF: record phase = time of all implemented functions except submit; submit phase = QueueSubmitCommands
         static unsigned isub = ~0u; static plat_timebase_t tb; if (!tb.denom) plat_timebase(&tb);
         if (isub == ~0u) for (isub = 0; isub < NVN_NFUNC && strcmp(nvn_names[isub], "nvnQueueSubmitCommands"); isub++) {}
         uint64_t rec = 0, sub = 0;
