@@ -42,6 +42,15 @@ From the survey, before any rewrite:
 
 - Modules: 0x5a00000 (90 MB) after the rewrite. With the default 64 MB of used memory, `main` asked for a 0xc9400000 heap (pool − 64 MB) and `SetHeapSize` refused it. With `mem_used 0x6000000` it asks for 0xc7500000 (3.11 GB). Not measured in play yet.
 
+## Performance
+
+Measured from the test app's logs (the `pace`, `[nvn] timing` and `longframe` lines; `DM_VK_GPUPROF=300` in the test app for this game), on the field in an exhibition, 1.0.19.
+
+- **AYN Thor (Snapdragon 8 Gen 2), current.** About 34 fps (0.2.80, fast cores off and on alike). A frame is about 31 ms: the game's main thread runs 27–28 ms of CPU in it (guest waits 7–8 ms of that), the replay thread records in 12–13 ms, the GPU is busy about 18 ms, NVN submit and present about 0.1 ms. CPU-bound on the main thread; not thermal (headroom not reported, clocks at their caps).
+- **Sony Xperia 1 V (Snapdragon 8 Gen 2), current.** About 18 fps with fast cores off, 20.6 on (0.2.80). Main thread about 50 ms of CPU a frame, GPU 36–45 ms, replay about 24 ms; thermal headroom 0 and CPU clocks capped (2.59 and 2.84 GHz), so it throttles. Scene pass 1440×810. Costliest GPU work: `PLAYERCOMPUTESHADERS` e0818838838d85df (14 dispatches, about 6.2 ms, a per-vertex collision loop of up to 500 iterations), `SKINNINGCOMPUTE` 7f78de8d31ad556c (about 6.3 ms), 212 draws of d214bad0d2a436d7 (5.4 ms).
+- **The fastest core to the main thread instead of the replay thread (tried, reverted, 0.2.81).** Fast cores gave the busiest thread the 3.19 GHz core; that was the game's main thread. Its CPU time a frame did not drop (28.3 ms against 27.3 ms on a 2.8 GHz core) and the field fell to about 31 fps, so the replay thread keeps the fastest core (0.2.82). The main thread's time does not follow the core's clock: what it spends it on is open.
+- **Open: what the main thread spends its time on.** 0.2.82 adds `DM_NVN_PROF=1` in the test app for this game, so the log splits the NVN calls' share (the `[nvn] translation layer top 5` line) from the game's own code.
+
 ## Found on this game
 
 Boot and first frames:
