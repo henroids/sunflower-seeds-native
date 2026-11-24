@@ -39,7 +39,9 @@ static float ms_want(int fps) { return 1000.0f / (float)fps - (fps == 60 ? MS_MA
 typedef struct { const char *build, *what; uint64_t ptr_off; uint32_t field; uint8_t kind, copies; uint32_t scale; uint8_t nderef; uint16_t deref[3]; } lock_t;
 static int vsync_kind(int kind) { return kind == VSYNCS_I32 || kind == MIN_VSYNCS_I32 || kind == STEPS_I32 || kind == EXTRA_VSYNCS_U8; }   // PEANUTS: EXTRA_VSYNCS_U8 (see enum above)
 static int follows_game(int kind) { return kind == MIN_VSYNCS_I32 || kind == STEPS_I32 || kind == EXTRA_VSYNCS_U8; }   // the game still sets its present interval itself (dm_fps_lock_engine leaves these out) — PEANUTS: EXTRA_VSYNCS_U8
-static int rate_ok(int kind, int target) { return !vsync_kind(kind) || 60 % target == 0; }
+// PEANUTS: TICKS_U32 too: the frame time it writes is any rate's, but the game presents in whole vsyncs (Pokemon Sword at a 45 or 40 cap: 33.4 ms frames, the same
+// as at 30; AYN Thor, 2026-11-24), so 45 and 40 were applied and shown as caps the game did not run at
+static int rate_ok(int kind, int target) { return !(vsync_kind(kind) || kind == TICKS_U32) || 60 % target == 0; }
 static const lock_t k_locks[] = {
     // Donkey Kong Bananza v458752: sead's dynamic present interval controller (main+0x204a18, called each frame from the framework's main+0x203674). It picks the interval from
     // the last frame's start to the later of its submission and its GPU end, clamps it to [+0, +4] (its settings, 1 and 3, made in nnMain at main+0x5bf180 and copied in by

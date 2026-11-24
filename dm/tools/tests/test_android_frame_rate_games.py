@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parents[3]
 JAVA = REPO / 'android/app/src/main/java/dev/nxnative/android'
 GRADLE = REPO / 'android/app/build.gradle'
 GAMES = REPO / 'dm/games'
-VSYNC_KINDS = {'VSYNCS_I32', 'MIN_VSYNCS_I32', 'STEPS_I32', 'EXTRA_VSYNCS_U8', 'MODE_U32'}   # build.gradle vsyncKinds
+VSYNC_KINDS = {'VSYNCS_I32', 'MIN_VSYNCS_I32', 'STEPS_I32', 'EXTRA_VSYNCS_U8', 'MODE_U32', 'TICKS_U32'}   # build.gradle vsyncKinds (TICKS_U32 presents in whole vsyncs)
 STUB = 'package dev.nxnative.android;\npublic final class BuildConfig { public static final String NX_PROFILES = ""; }\n'
 HARNESS = r'''package dev.nxnative.android;
 import java.nio.file.*;
@@ -215,14 +215,14 @@ EXPECTED = {
     '01007300020FA000': ('Astral Chain', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '01007EF00011E000': ('The Legend of Zelda: Breath of the Wild', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '01008CF01BAAC000': ('The Legend of Zelda: Echoes of Wisdom', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', 'profile 60', '-'),
-    '01008DB008C2C000': ('Pokémon Shield', 'target', '-', 'own,60,45,40,30,20,15', 'own,60,45,40,30,20,15', 'own,60,45,40,30,20,15', 'profile 60', '-'),
+    '01008DB008C2C000': ('Pokémon Shield', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', 'profile 60', '-'),
     '010093801237C000': ('Metroid Dread', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '01009720213B0000': ('Captain Tsubasa 2: World Fighters', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', '60', '-'),
     '010097F018538000': ('DAVE THE DIVER', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '010099A00BC1E000': ('Resident Evil 4', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', '60', '-'),
     '0100A0F00DA68000': ('Monster Sanctuary', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', '60', '-'),
     '0100A6301214E000': ('Fire Emblem Engage', 'limit', '-', 'own,60,30,20', 'own,60,30,20', 'own,60,30,20', '-', '-'),
-    '0100ABF008968000': ('Pokémon Sword', 'target', '-', 'own,60,45,40,30,20,15', 'own,60,45,40,30,20,15', 'own,60,45,40,30,20,15', 'profile 60', '-'),
+    '0100ABF008968000': ('Pokémon Sword', 'target', '-', 'own,60,30,20,15', 'own,60,30,20,15', 'own,60,30,20,15', 'profile 60', '-'),
     '0100AD80208A8000': ('Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '0100B63016916000': ('My Time at Sandrock', 'limit', '-', 'own,60,45,40,30,20', 'own,90,60,45,40,30,20', 'own,120,90,60,45,40,30,20', '-', 'high'),
     '0100B8E016F76000': ('NieR:Automata The End of YoRHa Edition (Asian release)', 'limit', '-', 'own,60,45,40,30', 'own,60,45,40,30', 'own,60,45,40,30', '-', '-'),

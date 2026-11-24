@@ -194,7 +194,7 @@ def fpsTargetOf = { String game -> tsvRows(game, 'fps_target').with { rs -> rs.i
 // (rate_ok: not the vsync kinds, which hold only divisors of 60; a mode switch does not set a rate). The fps_target list then offers 40 and 45 (FrameRateCaps.targetCaps)
 def lockKinds = [:].withDefault { [] }
 new File(repo, 'dm/host/hle_fpslock.c').eachLine { l -> def m = (l =~ /^\s*\{\s*"([0-9a-f]{32})",\s*"[^"]*",[^,]*,[^,]*,\s*([A-Z0-9_]+)/); if (m.find()) lockKinds[m.group(1)] << m.group(2) }
-def vsyncKinds = ['VSYNCS_I32', 'MIN_VSYNCS_I32', 'STEPS_I32', 'EXTRA_VSYNCS_U8', 'MODE_U32']
+def vsyncKinds = ['VSYNCS_I32', 'MIN_VSYNCS_I32', 'STEPS_I32', 'EXTRA_VSYNCS_U8', 'MODE_U32', 'TICKS_U32']   // PEANUTS: TICKS_U32 presents in whole vsyncs (hle_fpslock.c rate_ok)
 def fpsRatesOf = { String game ->
     def only = androidBuildsOf(game)
     def mains = tsvRows(game, 'build').findAll { c -> only.isEmpty() || only.contains(c[1].trim()) }.collect { c -> c.drop(3).find { it.startsWith('main=') }?.substring(5) }.findAll { it }
