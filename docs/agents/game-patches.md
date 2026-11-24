@@ -347,7 +347,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
   - gate 24608 at `+0x850d3c`: nn::ui2d::Layout::Build main+0x850680, its build done (mov w0,#1); x19 the layout, the root pane at +0x18
   - gate 24608 at `+0x13cb50`: the game's own layout class's build main+0x13c94c, done (ldp x20,x19,[sp,#0x1e0]: x19 is still the layout); the root pane at +0x18
   - host [dkb_wide.c:34](../../dm/host/android/dkb_wide.c#L34): build check
-  - host [hle_fpslock.c:49](../../dm/host/hle_fpslock.c#L49): engine frame limit set to fps_target: sead frame-rate controller minimum interval
+  - host [hle_fpslock.c:51](../../dm/host/hle_fpslock.c#L51): engine frame limit set to fps_target: sead frame-rate controller minimum interval
 
 ### DRAGON BALL: Sparking! ZERO
 
@@ -375,9 +375,9 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `engine`**, frame rate, blocked: one Frostbite game here, judgement: Frostbite's frame regulator at a fixed pointer. Engine code other Frostbite games ship (the simulation's own rate is already set by name)
 
 - **1.8d.f570 `main`** `464512b3…`
-  - host [hle_fpslock.c:139](../../dm/host/hle_fpslock.c#L139): engine frame limit set to fps_target: FIFA frame regulator
+  - host [hle_fpslock.c:141](../../dm/host/hle_fpslock.c#L141): engine frame limit set to fps_target: FIFA frame regulator
 - **1.8d.6523 `main`** `570dc9f1…`
-  - host [hle_fpslock.c:135](../../dm/host/hle_fpslock.c#L135): engine frame limit set to fps_target: FIFA frame regulator
+  - host [hle_fpslock.c:137](../../dm/host/hle_fpslock.c#L137): engine frame limit set to fps_target: FIFA frame regulator
 
 ### FANTASY LIFE i: The Girl Who Steals Time
 
@@ -486,7 +486,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `engine`**, frame rate, blocked: one game on that engine here, judgement: Next Level Games' frame limiter target at a fixed address. The studio's engine, which its other games ship
 
 - **1.4.0 `main`** `79e5950f…`
-  - host [hle_fpslock.c:118](../../dm/host/hle_fpslock.c#L118): engine frame limit set to fps_target: NLG frame limiter target
+  - host [hle_fpslock.c:120](../../dm/host/hle_fpslock.c#L120): engine frame limit set to fps_target: NLG frame limiter target
 
 ### Mario + Rabbids Kingdom Battle
 
@@ -560,7 +560,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `engine`**, frame rate, blocked: one RE Engine game here, judgement: RE Engine's frame limit at a fixed pointer. Engine code other RE Engine games ship
 
 - **16.0.2 `main`** `c9a3dd77…`
-  - host [hle_fpslock.c:114](../../dm/host/hle_fpslock.c#L114): engine frame limit set to fps_target: RE Engine frame limit
+  - host [hle_fpslock.c:116](../../dm/host/hle_fpslock.c#L116): engine frame limit set to fps_target: RE Engine frame limit
 
 ### Need For Speed™ Hot Pursuit Remastered
 
@@ -571,11 +571,11 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 
 - **1.0.3 `main`** `799d1061…` ([patches.py:7](../../dm/games/010029B0118E8000/patches.py#L7))
   - cut `+0x4835a4`: frame limiter spin: b.gt main+0x483588 → nop (the host paces the frames)
-  - host [hle_fpslock.c:123](../../dm/host/hle_fpslock.c#L123): engine frame limit set to fps_target: Criterion 60 fps mode
-  - host [hle_fpslock.c:124](../../dm/host/hle_fpslock.c#L124): engine frame limit set to fps_target: Criterion frame ticks
-  - host [hle_fpslock.c:125](../../dm/host/hle_fpslock.c#L125): engine frame limit set to fps_target: Criterion frame ticks / 10
-  - host [hle_fpslock.c:126](../../dm/host/hle_fpslock.c#L126): engine frame limit set to fps_target: Criterion 2D game step
-  - host [hle_fpslock.c:127](../../dm/host/hle_fpslock.c#L127): engine frame limit set to fps_target: Criterion 3D game step
+  - host [hle_fpslock.c:125](../../dm/host/hle_fpslock.c#L125): engine frame limit set to fps_target: Criterion 60 fps mode
+  - host [hle_fpslock.c:126](../../dm/host/hle_fpslock.c#L126): engine frame limit set to fps_target: Criterion frame ticks
+  - host [hle_fpslock.c:127](../../dm/host/hle_fpslock.c#L127): engine frame limit set to fps_target: Criterion frame ticks / 10
+  - host [hle_fpslock.c:128](../../dm/host/hle_fpslock.c#L128): engine frame limit set to fps_target: Criterion 2D game step
+  - host [hle_fpslock.c:129](../../dm/host/hle_fpslock.c#L129): engine frame limit set to fps_target: Criterion 3D game step
 
 ### NieR:Automata The End of YoRHa Edition (010056B015FE8000)
 
@@ -594,7 +594,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
   - cut `+0x9bf4d4`: dynamic resolution: optimal frame cost 32.01 -> 16.005 ms at 60 fps (second load)
   - cut `+0x9bf4f8`: dynamic resolution: good frame cost 30 -> 15 ms at 60 fps
   - launcher capabilities: DYNAMIC_RESOLUTION
-  - host [hle_fpslock.c:226](../../dm/host/hle_fpslock.c#L226): frame interval and dynamic-resolution floor
+  - host [hle_fpslock.c:228](../../dm/host/hle_fpslock.c#L228): frame interval and dynamic-resolution floor
 
 ### NieR:Automata The End of YoRHa Edition (0100B8E016F76000)
 
@@ -613,7 +613,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
   - cut `+0x9c08e8`: dynamic resolution lower bound follows the selected preset
   - cut `+0x9c08f4`: dynamic resolution lower bound follows the selected preset
   - launcher capabilities: DYNAMIC_RESOLUTION
-  - host [hle_fpslock.c:227](../../dm/host/hle_fpslock.c#L227): frame interval and dynamic-resolution floor
+  - host [hle_fpslock.c:229](../../dm/host/hle_fpslock.c#L229): frame interval and dynamic-resolution floor
 
 ### Paper Mario: The Thousand-Year Door
 
@@ -632,7 +632,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `game`**, frame rate, blocked: one build on hand, and the function that builds the chain is not located yet, checked: main d4b150b29a931cd3 (1.0.2): the chain is that of a community cheat for this build, its first pointer lies in bss; the code that makes the chain was not found: Persona 5 Royal's present interval at the end of a fixed pointer chain. The game's own display object behind a global of main, at offsets of this build
 
 - **1.0.2 `main`** `d4b150b2…`
-  - host [hle_fpslock.c:94](../../dm/host/hle_fpslock.c#L94): engine frame limit set to fps_target: Persona 5 Royal present interval
+  - host [hle_fpslock.c:96](../../dm/host/hle_fpslock.c#L96): engine frame limit set to fps_target: Persona 5 Royal present interval
 
 ### Pokemon Pokopia
 
@@ -653,7 +653,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `engine`**, frame rate, gap, judgement: Unity's Application.targetFrameRate at a fixed address. An IL2CPP player registers the setter by its icall name, so the field can be found in any Unity game; whether to raise it stays the profile's
 
 - **1.3.0 `main`** `94ceae32…`
-  - host [hle_fpslock.c:106](../../dm/host/hle_fpslock.c#L106): engine frame limit set to fps_target: Unity targetFrameRate
+  - host [hle_fpslock.c:108](../../dm/host/hle_fpslock.c#L108): engine frame limit set to fps_target: Unity targetFrameRate
 
 ### Pokémon Shield
 
@@ -667,7 +667,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
   - cut `+0xcab198`: dress-up slot (part index) empty: skip main+0x64f970 (cbz x0 → main+0xcab1b8 instead of main+0xcab1a8)
   - cut `+0xcab224`: dress-up slot (part index) empty: skip main+0x64f970 (cbz x0 → main+0xcab244 instead of main+0xcab234)
   - cut `+0xcab274`: dress-up slot (part index + 7) empty: skip main+0x64f970 (cbz x0 → main+0xcab294 instead of main+0xcab284)
-  - host [hle_fpslock.c:102](../../dm/host/hle_fpslock.c#L102): engine frame limit set to fps_target: Game Freak frame time of interval 2
+  - host [hle_fpslock.c:104](../../dm/host/hle_fpslock.c#L104): engine frame limit set to fps_target: Game Freak frame time of interval 2
 
 ### Pokémon Shining Pearl
 
@@ -676,7 +676,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `engine`**, frame rate, gap, judgement: Unity's Application.targetFrameRate at a fixed address. An IL2CPP player registers the setter by its icall name, so the field can be found in any Unity game; whether to raise it stays the profile's
 
 - **1.3.0 `main`** `38f59cbd…`
-  - host [hle_fpslock.c:109](../../dm/host/hle_fpslock.c#L109): engine frame limit set to fps_target: Unity targetFrameRate
+  - host [hle_fpslock.c:111](../../dm/host/hle_fpslock.c#L111): engine frame limit set to fps_target: Unity targetFrameRate
 
 ### Pokémon Sword
 
@@ -685,7 +685,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `game`**, frame rate, blocked: one version of each game on hand, checked: Sword main a3b75bcd3311385a and Shield main a16802625e7826bf (1.3.2): the same offset in both: Game Freak's frame time of present interval 2 at a fixed address (Pokémon Sword and Shield). The game's own table of frame times by present interval (16666667, 33333334, 50000000 ... ns as 64-bit words), which a search for those values could find in any build
 
 - **1.3.2 `main`** `a3b75bcd…`
-  - host [hle_fpslock.c:101](../../dm/host/hle_fpslock.c#L101): engine frame limit set to fps_target: Game Freak frame time of interval 2
+  - host [hle_fpslock.c:103](../../dm/host/hle_fpslock.c#L103): engine frame limit set to fps_target: Game Freak frame time of interval 2
 
 ### Stray
 
@@ -795,7 +795,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `game`**, frame rate, blocked: one build on hand, checked: main 9f221e1afa65ba54 (1.1.0), where the row was found: Grezzo's frame governor enable and last-frame-slow bytes at a fixed address (Echoes of Wisdom). The game's own frame governor, rewritten since Link's Awakening (no least and most bytes): the game manager is a static object the frame task's code names, which a function fingerprint could find
 
 - **1.1.0 `main`** `9f221e1a…`
-  - host [hle_fpslock.c:72](../../dm/host/hle_fpslock.c#L72): engine frame limit set to fps_target: Grezzo frame governor enable
+  - host [hle_fpslock.c:74](../../dm/host/hle_fpslock.c#L74): engine frame limit set to fps_target: Grezzo frame governor enable
 
 ### The Legend of Zelda: Link's Awakening
 
@@ -806,7 +806,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 
 - **1.1.0 `main`** `909e904a…` ([patches.py:12](../../dm/games/01006BB00C6F0000/patches.py#L12))
   - cut `+0x10cd070`: physics completion task release (calls its own destructor): ldr x8,[x0] → ret (no longer destroyed; the step function rebuilds it in place every step)
-  - host [hle_fpslock.c:58](../../dm/host/hle_fpslock.c#L58): engine frame limit set to fps_target: Grezzo frame controller extra vsyncs
+  - host [hle_fpslock.c:60](../../dm/host/hle_fpslock.c#L60): engine frame limit set to fps_target: Grezzo frame controller extra vsyncs
 
 ### The Legend of Zelda: Ocarina of Time
 
@@ -933,7 +933,7 @@ Applied to the `sdk` of any build without CUTS, found by function fingerprint ([
 
 Dead code unless such a build is run; a candidate for removal, or for a build row in its profile.
 
-- `a48c0de3…`: [hle_fpslock.c:133](../../dm/host/hle_fpslock.c#L133): engine frame limit set to fps_target: FIFA frame regulator (a build no profile registers)
+- `a48c0de3…`: [hle_fpslock.c:135](../../dm/host/hle_fpslock.c#L135): engine frame limit set to fps_target: FIFA frame regulator (a build no profile registers)
 
 ## Translator rules keyed by a shader's code
 
