@@ -10,12 +10,12 @@ import java.util.Random;
 
 /**
  * Home's background on the test app's scoreboard look (Scoreboard.ON; BananaBackgroundView hands its drawing, ticks and taps here): the whole screen is a
- * board of bulbs, and seeds (the logo, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard. They are scattered at random,
- * each with its own tilt (one of six patterns), most at the baseline pace and some a little slower or faster: each step its trailing column goes out first and its leading column lights LIGHT_MS later.
- * A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace, kept MIN_APART bulbs from the others where it can be. A few bulbs of the board are dead, as on a real one: they
- * stay dark under a seed. A tap puts a seed out for RESPAWN_MS.
- * Cheap: the unlit board is one shader-filled rect, a seed is one of two prebaked bitmaps of its pattern (all lit, or its trailing column out), and every
- * time is a multiple of TICK_MS, so the view redraws at most about 16 times a second, and only when something changed
+ * board of bulbs, and seeds (the logo, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard: each step the whole seed moves
+ * over at once, keeping its shape. They are scattered at random, each with its own tilt (one of six patterns), most at the baseline pace and some a little
+ * slower or faster. A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace, kept MIN_APART bulbs from the others
+ * where it can be. A few bulbs of the board are dead, as on a real one: they stay dark under a seed. A tap puts a seed out for RESPAWN_MS.
+ * Cheap: the unlit board is one shader-filled rect, a seed one prebaked bitmap of its pattern, and every time is a multiple of TICK_MS, so the view
+ * redraws at most about 16 times a second, and only when something changed
  */
 public final class BulbBoard {
     /** The seed as bulbs, in six tilts: # lit, o a stripe (out), . not the seed's. Made from the logo's shape (sb_seed.png), each stripe one bulb a row */
@@ -156,7 +156,7 @@ public final class BulbBoard {
         },
     };
     private static final float PITCH_DP = 5f;
-    private static final long TICK_MS = 60, LIGHT_MS = 180, RESPAWN_MS = 5000;
+    private static final long TICK_MS = 60, RESPAWN_MS = 5000;
     private static final long BASE_MS = 540;                                // the baseline step; about a third of the seeds step a little slower or faster
     private static final long[] PERIODS = {BASE_MS, BASE_MS, BASE_MS, BASE_MS, BASE_MS, BASE_MS, 480, 600, 600};   // a seed's step, ms (multiples of TICK_MS)
     private static final int LIT = 0xFFE9A93F, LIT_ALPHA = 92, UNLIT = 0xFF141912, DEAD = 0xFF0A0C09;
@@ -167,12 +167,11 @@ public final class BulbBoard {
     private static final class Seed {
         int pat, y; long x0, t0, period, out = Long.MIN_VALUE;
         long x(long ms) { return x0 + Math.max(0, ms - t0) / period; }
-        boolean trailing(long ms) { long e = ms - t0; return e >= period && e % period < LIGHT_MS; }   // (the step's trailing column is out; its position is still the last)
-        int state(long ms) { long e = Math.max(0, ms - t0); return (int) (2 * (e / period) + (trailing(ms) ? 1 : 0)) ^ (out != Long.MIN_VALUE && ms - out < RESPAWN_MS ? 0x40000000 : 0); }
+        int state(long ms) { return (int) (Math.max(0, ms - t0) / period) ^ (out != Long.MIN_VALUE && ms - out < RESPAWN_MS ? 0x40000000 : 0); }
     }
 
     private final float pitch;
-    private final Bitmap[] lit = new Bitmap[PATTERNS.length], trail = new Bitmap[PATTERNS.length];   // a pattern all lit; with each row's leftmost bulb out
+    private final Bitmap[] lit = new Bitmap[PATTERNS.length];   // each pattern's bulbs, lit
     private final Paint board = new Paint(), seedPaint = new Paint(Paint.FILTER_BITMAP_FLAG), dead = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rnd = new Random();
     private Seed[] seeds = new Seed[0];
@@ -186,20 +185,18 @@ public final class BulbBoard {
         Paint b = new Paint(Paint.ANTI_ALIAS_FLAG); b.setColor(UNLIT);
         new Canvas(tile).drawCircle(ps / 2f, ps / 2f, ps * 0.36f, b);
         board.setShader(new BitmapShader(tile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT));
-        for (int p = 0; p < PATTERNS.length; p++) { lit[p] = seedBitmap(p, ps, false); trail[p] = seedBitmap(p, ps, true); }
+        for (int p = 0; p < PATTERNS.length; p++) lit[p] = seedBitmap(p, ps);
         seedPaint.setAlpha(LIT_ALPHA);
         dead.setColor(DEAD);
     }
 
-    private static Bitmap seedBitmap(int p, int ps, boolean trailingOut) {
+    private static Bitmap seedBitmap(int p, int ps) {
         String[] s = PATTERNS[p];
         Bitmap bm = Bitmap.createBitmap(s[0].length() * ps, s.length * ps, Bitmap.Config.ARGB_8888);
         Canvas cv = new Canvas(bm); Paint b = new Paint(Paint.ANTI_ALIAS_FLAG); b.setColor(LIT);
-        for (int j = 0; j < s.length; j++) {
-            int first = s[j].indexOf('#');   // the row's trailing bulb: its leftmost lit one only, so the inner stripes keep their width through a step
+        for (int j = 0; j < s.length; j++)
             for (int i = 0; i < s[j].length(); i++)
-                if (on(s, i, j) && !(trailingOut && i == first)) cv.drawCircle((i + .5f) * ps, (j + .5f) * ps, ps * 0.36f, b);
-        }
+                if (on(s, i, j)) cv.drawCircle((i + .5f) * ps, (j + .5f) * ps, ps * 0.36f, b);
         return bm;
     }
 
@@ -257,8 +254,7 @@ public final class BulbBoard {
         canvas.drawRect(0, 0, wpx, hpx, board);
         for (Seed s : seeds) {
             if (s.out != Long.MIN_VALUE && t - s.out < RESPAWN_MS) continue;
-            boolean tr = s.trailing(t);
-            canvas.drawBitmap(tr ? trail[s.pat] : lit[s.pat], (s.x(t) - (tr ? 1 : 0)) * pitch, s.y * pitch, seedPaint);
+            canvas.drawBitmap(lit[s.pat], s.x(t) * pitch, s.y * pitch, seedPaint);
         }
         float r = pitch * 0.36f;
         for (int d : deadCells) canvas.drawCircle((d % cols + .5f) * pitch, (d / cols + .5f) * pitch, r, dead);   // dead bulbs: dark, lit or not
