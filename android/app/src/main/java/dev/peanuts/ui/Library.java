@@ -1217,8 +1217,8 @@ public final class Library {
         int cell = (Math.min(widthDp(), 900) - 40 - PUi.GAP * (cols - 1)) / cols;   // Banana's 20 dp gutters and 12 dp gaps
         List<View> cells = new ArrayList<>();
         playTimes = dev.peanuts.launch.PlayTime.all(a);   // once per render: the bottom screen's card of a focused cover (bottom)
-        for (Row r : show) cells.add(coverCell(r, cell));
-        grid(cells, cols, 16);
+        if (Scoreboard.ON) { for (Row r : show) cells.add(gameCard(r)); grid(cells, fullColumns(), PUi.GAP); }   // PEANUTS(sunflower): each game a full card (the build card's shape)
+        else { for (Row r : show) cells.add(coverCell(r, cell)); grid(cells, cols, 16); }
         boolean first = lastCells == 0 && !cells.isEmpty();   // the grid shows after an empty one (the first scan ended): it enters as after a filter change
         lastCells = cells.size();
         afterRender(chipRow, keep, page, scrollY, user || first, firstRow);
@@ -1802,6 +1802,47 @@ public final class Library {
         }
         return v.isEmpty() ? null : v;
     }
+
+    // PEANUTS(sunflower) begin: a game as a full card on the scoreboard look, in the build card's shape: its tile, name, version and state, a sentence, then Settings and Play
+    private View gameCard(Row r) {
+        int st = r.status();
+        String name = r.name();
+        boolean plays = st == READY && r.game != null;
+        Runnable manageOrSheet = r.game != null ? () -> manage.accept(r.game) : () -> sheet(r.title);
+        LinearLayout c = PUi.card(a);
+        int p16 = PUi.dp(a, 16);
+        c.setPadding(p16, p16, p16, p16);
+        LinearLayout top = PUi.row(a);
+        TextView tile = PUi.tile(a, name, 52);
+        Bitmap bm = icons.get(r.id());
+        if (bm != null) PUi.tileIcon(tile, bm);
+        tiles.put(r.id(), tile);
+        top.addView(tile);
+        LinearLayout info = new LinearLayout(a);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.setPadding(PUi.dp(a, 14), 0, PUi.dp(a, 4), 0);
+        TextView n = PUi.text(a, name, 17, R.color.bn_text, 700);
+        n.setMaxLines(2);
+        n.setEllipsize(TextUtils.TruncateAt.END);
+        info.addView(n);
+        CharSequence about = r.title == null ? "" : PUi.joined(r.title.versionText(), r.title.base != null ? r.title.base.publisher : null);
+        if (about.length() > 0) info.addView(PUi.small(a, about));
+        String state = st == READY ? "Ready" : st == BUILD ? "Build needed" : a.getString(R.string.not_supported_yet);
+        TextView status = PUi.status(a, state, st == READY ? R.color.bn_accent : R.color.bn_danger);
+        status.setPadding(0, PUi.dp(a, 2), 0, 0);
+        info.addView(status);
+        top.addView(info, PUi.weight());
+        top.addView(PUi.more(a, "Manage " + name, Haptics.on(Haptics.Word.CLICK, v -> manageOrSheet.run())));
+        c.addView(top);
+        PUi.add(c, PUi.body(a, plays ? "Ready to play." : st == BUILD ? "Its pack is missing or for another version: make it again on the PC." : "This app has no profile for it."), 12);
+        View left = PUi.button(a, "Settings", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> manageOrSheet.run()));
+        PUi.Action play = PUi.action(a, R.drawable.ic_play, "Play", PUi.Kind.PRIMARY, v -> { Haptics.play(v, Haptics.Word.HEAVY); play(r); });
+        play.setEnabled(plays);
+        PUi.add(c, PUi.pair(a, left, play), 14);
+        if (firstCover == null && plays) { firstCover = play; play.setFocusedByDefault(true); }   // a controller's first focus on Home: Play
+        return c;
+    }
+    // PEANUTS(sunflower) end
 
     // ---- The build card (Ondevice's shape) ----
 
