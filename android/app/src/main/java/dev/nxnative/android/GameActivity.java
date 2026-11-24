@@ -868,6 +868,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             hostRunning = true;
             if ("java".equals(testCrash)) { Native.note("[RED] DM_TEST_CRASH=java: an exception on the main thread in 10 s"); ExitWatch.testCrash(ui); }   // =native: nxlaunch.c
             if (readinessLine != null) Native.note(readinessLine + (triedAnyway ? "; the player chose Try anyway" : ""));   // the readiness check (readinessHold)
+            Native.note("[nxlaunch] use fast cores: " + (Prefs.pinThreads(this, titleId()) ? "on" : "off"));   // PEANUTS: so a log says whether threads were placed (Native.pinThreads)
             Native.note("[nxlaunch] game: " + game + (nupFd >= 0 ? " (.nup used where it is, descriptor " + nupFd + ")" : Nup.isNup(game) ? " (.nup)" : " (folder)") + ", DM_ROMFS " + romfs
                     + ", pack " + packDir);
             Native.note("[nxlaunch] save: " + save + " (" + saveHow + ")" + (saveNote != null ? "; " + saveNote : ""));
