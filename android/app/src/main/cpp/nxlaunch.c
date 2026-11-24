@@ -555,81 +555,49 @@ JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_rumbleRoute(JNIEnv *env,
     (void)env; (void)cls; if (nxhost_rumble_route) nxhost_rumble_route(player, on);
 }
 
-// ---- Thread placement (Native.pinThreads, every 2 s while the game runs): the busiest placed thread gets the fastest cores to itself, and the rest (the replay
-// thread vk-replay, the command encoder vk-enc and the game's own threads, named "0x<id> ...") go to the cores at 75 % of the top clock or more, so none of them runs
-// on the small cores; without such cores they share the fastest. Busiest is CPU time since the last call: the replay thread in DKB (9-18 ms a frame), the game's main
-// thread in MLB The Show 26 (about 28 ms of a 30 ms frame against the replay's 13). A new thread takes the fast cores only with 20 % more time than the one there, so
-// two close threads do not trade places every call. The clusters are the cores' top clocks (cpuinfo_max_freq). Android may reset a thread to all cores, and each call
-// places the ones not where they belong. Returns the number placed by this call ----
+// ---- Thread placement (Native.pinThreads, every few seconds while the game runs): the replay thread (vk-replay, the most work a frame: 9-18 ms in DKB) gets the
+// fastest cores to itself, and the command encoder (vk-enc: 5-8 ms of work, the rest spinning for the next call, which only heats the core it is on) and the game's own
+// threads (named "0x<id> ...") go to the cores at 75 % of the top clock or more, so none of them runs on the small cores; without such cores they share the fastest. The clusters are the cores' top clocks (cpuinfo_max_freq). Android may reset a thread to all cores,
+// and each call places the ones not where they belong. Returns the number placed by this call ----
 static long cpu_max_khz(int c) {
     char path[96]; snprintf(path, sizeof path, "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", c);
     FILE *f = fopen(path, "r"); long v = 0; if (f) { if (fscanf(f, "%ld", &v) != 1) v = 0; fclose(f); }
     return v;
 }
-// A thread's user + system CPU time in clock ticks (/proc/self/task/<tid>/stat fields 14 and 15, after the ")" that ends its name); -1 if it is gone
-static long long thread_ticks(int tid) {
-    char path[64], buf[512]; snprintf(path, sizeof path, "/proc/self/task/%d/stat", tid);
-    FILE *f = fopen(path, "r"); if (!f) return -1;
-    size_t n = fread(buf, 1, sizeof buf - 1, f); fclose(f); buf[n] = 0;
-    char *p = strrchr(buf, ')'); if (!p) return -1;
-    unsigned long long ut, st;
-    if (sscanf(p + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu", &ut, &st) != 2) return -1;
-    return (long long)(ut + st);
-}
 JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_pinThreads(JNIEnv *env, jclass cls) {
     (void)env; (void)cls;
-    enum { MAXT = 256 };
-    static cpu_set_t fast, mid; static int ready, top_tid;
-    static struct { int tid; long long ticks; } last[MAXT]; static int nlast;
+    static cpu_set_t fast, mid; static int ready;
     if (!ready) {
         int n = (int)sysconf(_SC_NPROCESSORS_CONF); if (n > CPU_SETSIZE) n = CPU_SETSIZE;
         long top = 0;
         for (int c = 0; c < n; c++) { long k = cpu_max_khz(c); if (k > top) top = k; }
         if (!top) return -1;   // no cpufreq: leave the scheduler alone
         // Fast: the cores at the top clock. Middle: the others at 75 % of it or more (a mid cluster: 2.8 of 3.19 GHz on a Snapdragon 8 Gen 2, 3.53 of 4.32 on an
-        // 8 Elite), never the small cores (1.8 of 2.8 on an older big.LITTLE). Without a middle group every placed thread shares the fast cores
+        // 8 Elite), never the small cores (1.8 of 2.8 on an older big.LITTLE). Without a middle group the encoder and the game share the fast cores
         CPU_ZERO(&fast); CPU_ZERO(&mid);
         for (int c = 0; c < n; c++) { long k = cpu_max_khz(c); if (k == top) CPU_SET(c, &fast); else if (k * 4 >= top * 3) CPU_SET(c, &mid); }
         if (!CPU_COUNT(&mid)) mid = fast;
         ready = 1;
-        fprintf(stderr, "[nxlaunch] thread placement: the busiest thread on %d core(s) at %ld MHz, the others on %d%s\n",
+        fprintf(stderr, "[nxlaunch] thread placement: the replay thread on %d core(s) at %ld MHz, the encoder and the game on %d%s\n",
                 CPU_COUNT(&fast), top / 1000, CPU_COUNT(&mid), CPU_EQUAL(&mid, &fast) ? " (the same: no middle cluster)" : "");
     }
-    // Pass 1: the placed threads and their CPU time since the last call
-    int tids[MAXT], nt = 0; long long now[MAXT], used[MAXT]; char names[MAXT][16];
     DIR *d = opendir("/proc/self/task"); if (!d) return 0;
-    struct dirent *e;
-    while ((e = readdir(d)) && nt < MAXT) {
+    int placed = 0; struct dirent *e;
+    while ((e = readdir(d))) {
         int tid = atoi(e->d_name); if (tid <= 0) continue;
         char path[64], name[32] = ""; snprintf(path, sizeof path, "/proc/self/task/%d/comm", tid);
         FILE *f = fopen(path, "r"); if (!f) continue;
         if (!fgets(name, sizeof name, f)) name[0] = 0; fclose(f);
         name[strcspn(name, "\n")] = 0;
-        // Checked every call, not once: a thread may be renamed after it starts (the replay thread starts under the name of the game thread that made it)
-        if (strcmp(name, "vk-replay") && strcmp(name, "vk-enc") && strncmp(name, "0x", 2)) continue;
-        long long t = thread_ticks(tid); if (t < 0) continue;
-        long long prev = -1; for (int i = 0; i < nlast; i++) if (last[i].tid == tid) { prev = last[i].ticks; break; }
-        tids[nt] = tid; now[nt] = t; used[nt] = prev < 0 ? 0 : t - prev; snprintf(names[nt], sizeof names[nt], "%s", name); nt++;
+        int g = !strcmp(name, "vk-replay") ? 1 : !strcmp(name, "vk-enc") || !strncmp(name, "0x", 2) ? 2 : 0;
+        if (!g) continue;   // not a placed thread; looked at again next time (a thread may be renamed after it starts)
+        // Checked every call, not once: the replay thread starts under the name of the game thread that made it, and Android resets every thread to all cores
+        // when it moves the app between foreground and background
+        const cpu_set_t *to = g == 1 ? &fast : &mid; cpu_set_t cur;
+        if (!sched_getaffinity(tid, sizeof cur, &cur) && CPU_EQUAL(&cur, to)) continue;
+        if (!sched_setaffinity(tid, sizeof *to, to)) placed++;   // fails while a core is parked (core control at low load): the next call places it
     }
     closedir(d);
-    // The busiest, against the one on the fast cores now (if it still runs)
-    int best = -1, cur = -1;
-    for (int i = 0; i < nt; i++) { if (best < 0 || used[i] > used[best]) best = i; if (tids[i] == top_tid) cur = i; }
-    if (best >= 0 && used[best] > 0 && (cur < 0 || (cur != best && used[best] * 5 > used[cur] * 6))) {
-        long hz = sysconf(_SC_CLK_TCK);
-        fprintf(stderr, "[nxlaunch] thread placement: %s gets the fast cores (%lld ms of CPU in the last call's span%s)\n", names[best],
-                hz > 0 ? used[best] * 1000 / hz : used[best], cur >= 0 ? ", more than the thread there" : "");
-        top_tid = tids[best];
-    }
-    // Pass 2: place them, and keep this call's times for the next
-    int placed = 0;
-    for (int i = 0; i < nt; i++) {
-        const cpu_set_t *to = tids[i] == top_tid ? &fast : &mid; cpu_set_t c;
-        if (sched_getaffinity(tids[i], sizeof c, &c) || !CPU_EQUAL(&c, to))
-            if (!sched_setaffinity(tids[i], sizeof *to, to)) placed++;   // fails while a core is parked (core control at low load): the next call places it
-        last[i].tid = tids[i]; last[i].ticks = now[i];
-    }
-    nlast = nt;
     return placed;
 }
 JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_fpsLimitSet(JNIEnv *env, jclass cls, jint fps) { (void)env; (void)cls; if (nxhost_fps_limit_set) nxhost_fps_limit_set(fps); }
