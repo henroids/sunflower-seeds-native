@@ -603,6 +603,28 @@ JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_pinThreads(JNIEnv *env, 
     closedir(d);
     return placed;
 }
+// PEANUTS: the placement undone (Native.unpinThreads): the threads pinThreads places get every core of the device again. GameActivity places them only while Android
+// has the game out of its top-app group (a tap on another app's window on the other screen); back in top-app the scheduler places them again. Android's move between
+// cpusets did not reset them (seen on the AYN Thor, 2026-11-24: the game's threads stayed on 3-6 as the top app). Returns the number given all cores
+JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_unpinThreads(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls;
+    cpu_set_t all; CPU_ZERO(&all);
+    int n = (int)sysconf(_SC_NPROCESSORS_CONF); if (n > CPU_SETSIZE) n = CPU_SETSIZE;
+    for (int c = 0; c < n; c++) CPU_SET(c, &all);
+    DIR *d = opendir("/proc/self/task"); if (!d) return 0;
+    int freed = 0; struct dirent *e;
+    while ((e = readdir(d))) {
+        int tid = atoi(e->d_name); if (tid <= 0) continue;
+        char path[64], name[32] = ""; snprintf(path, sizeof path, "/proc/self/task/%d/comm", tid);
+        FILE *f = fopen(path, "r"); if (!f) continue;
+        if (!fgets(name, sizeof name, f)) name[0] = 0; fclose(f);
+        name[strcspn(name, "\n")] = 0;
+        if (strcmp(name, "vk-replay") && strcmp(name, "vk-enc") && strncmp(name, "0x", 2)) continue;
+        if (!sched_setaffinity(tid, sizeof all, &all)) freed++;   // the kernel keeps them to the cpuset's cores
+    }
+    closedir(d);
+    return freed;
+}
 JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_fpsLimitSet(JNIEnv *env, jclass cls, jint fps) { (void)env; (void)cls; if (nxhost_fps_limit_set) nxhost_fps_limit_set(fps); }
 // Full game speed at low frame rates, live from the in-game panel (Native.decoupleSet)
 JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_decoupleSet(JNIEnv *env, jclass cls, jboolean on) { (void)env; (void)cls; if (nxhost_fps_decouple_set) nxhost_fps_decouple_set(on ? 1 : 0); }

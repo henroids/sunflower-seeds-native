@@ -291,7 +291,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
      * window on the other screen (the AYN Thor's launcher on Screen-2) makes that app the top one, the game's process goes to foreground (GameHold keeps it
      * there), and the Thor's scheduler kept the game's threads on the small cores, 94-97 % of their running time against 42 % as the top app; with the threads
      * placed, about half ran on the middle cores and the game needed 55 % of a core where it had needed 81 % (DAVE THE DIVER, 30 fps, 2026-11-24). Back in
-     * top-app, Android's move to that cpuset gives every thread all cores again (cgroup v1 cpuset attach), so the placement ends with it
+     * top-app the placement is undone (Native.unpinThreads): Android's move between cpusets left the threads where they were placed
      */
     private final Runnable pinRun = this::pinTick;
     private boolean topResumed = true, pinnedAway;
@@ -301,6 +301,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         boolean demoted = group != null && !group.equals("top-app");
         if (!asked && demoted != pinnedAway) {
             pinnedAway = demoted;
+            if (!demoted) { try { Native.unpinThreads(); } catch (UnsatisfiedLinkError ignored) {} }   // Android's move back did not give them all cores (Thor, 2026-11-24)
             android.util.Log.i("peanuts", demoted ? "not Android's top app (cpu group " + group + "): the game's threads go to the fast cores while it lasts" : "Android's top app again: thread placement ends");
         }
         if (!asked && !demoted && topResumed) return;   // the top app, and Android placed the threads back itself: the loop ends (losing the top activity starts it again)

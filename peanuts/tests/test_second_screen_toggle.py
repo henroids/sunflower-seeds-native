@@ -64,6 +64,7 @@ class FastCoresAway(unittest.TestCase):
         self.assertIn('cpuGroup()', tick)
         self.assertIn('!group.equals("top-app")', tick)
         self.assertIn('Native.pinThreads()', tick)
+        self.assertIn('Native.unpinThreads()', tick)   # Android's move back to top-app left the threads placed (Thor, 2026-11-24)
         self.assertRegex(g, re.compile(r'onTopResumedActivityChanged\(boolean top\).*topResumed = top;.*else if \(started\) pinStart\(\);'))
         self.assertIn('indexOf(":cpu:/")', body(g, 'static String cpuGroup()', '\n    }\n'))
 
