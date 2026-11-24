@@ -91,6 +91,7 @@ final class SidePanel extends FrameLayout {
         sh.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         addView(sh, new LayoutParams(PanelLook.widthPx(Prefs.panelSize(a), dp, a.getResources().getDisplayMetrics().widthPixels), LayoutParams.MATCH_PARENT, Gravity.END));
         sheet = sh;
+        dev.peanuts.ui.Scoreboard.panelFrame(sh, tabs);   // PEANUTS: the scoreboard look's board and strip
         getViewTreeObserver().addOnGlobalFocusChangeListener(this::focusMoved);
         setVisibility(GONE);
     }
@@ -233,9 +234,10 @@ final class SidePanel extends FrameLayout {
         if (now == null || !inside(now) || isInTouchMode()) return;
         float dp = getResources().getDisplayMetrics().density;
         android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
-        d.setColor(0x26FFD54F);
-        d.setStroke(Math.round(2.5f * dp), FOCUS);
-        d.setCornerRadius(6 * dp);
+        int fc = dev.peanuts.ui.Scoreboard.focus(FOCUS);   // PEANUTS: mint and square on the scoreboard look
+        d.setColor(0x26000000 | (fc & 0xFFFFFF));
+        d.setStroke(Math.round(2.5f * dp), fc);
+        d.setCornerRadius(dev.peanuts.ui.Scoreboard.radius(6 * dp));
         now.setForeground(d);
         lit = now;
     }
@@ -244,6 +246,9 @@ final class SidePanel extends FrameLayout {
      * A dialog opened from the panel with a controller's confirm and back keys (on their press), as in the panel: Android's own fallback would take the bottom
      * button as confirm and the right one as back. Its focus starts on the safe choice (negative), so a confirm press does nothing that cannot be undone
      */
+    /** PEANUTS: a dialog of the panel's: in the app's dialog theme on the scoreboard look (its colours), else the game screen's own (DeviceDefault) */
+    private AlertDialog.Builder dialog() { return dev.peanuts.ui.Scoreboard.ON ? new AlertDialog.Builder(act, R.style.Theme_Banana_Dialog) : new AlertDialog.Builder(act); }
+
     private AlertDialog padDialog(AlertDialog d) {
         d.setOnKeyListener((di, k, e) -> {
             if (k != confirm && k != back) return false;
@@ -276,6 +281,7 @@ final class SidePanel extends FrameLayout {
             t.setTypeface(on ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
             t.setTextColor(on ? 0xFF000000 : 0xFFE8EAED);
             t.setBackgroundColor(on ? FOCUS : 0);
+            dev.peanuts.ui.Scoreboard.panelTab(t, on);   // PEANUTS
             t.setSelected(on);
             t.setFocusable(true);
             t.setOnClickListener(v -> showTab(k));
@@ -286,7 +292,7 @@ final class SidePanel extends FrameLayout {
         x.setText("✕");
         x.setGravity(Gravity.CENTER);
         x.setTextSize(18);
-        x.setTextColor(0xFFE8EAED);
+        x.setTextColor(dev.peanuts.ui.Scoreboard.ON ? 0xFFF4F2FF : 0xFFE8EAED);   // PEANUTS: pale on the scoreboard's strip
         x.setFocusable(true);
         x.setOnClickListener(v -> close());
         x.setContentDescription("Close the panel, back to the game");
@@ -300,12 +306,15 @@ final class SidePanel extends FrameLayout {
         if (tabs.getChildCount() <= TAB_NAMES.length) return;
         float sp = getResources().getDisplayMetrics().scaledDensity, fit = 16;
         android.graphics.Paint p = new android.graphics.Paint();
-        p.setTypeface(Typeface.DEFAULT_BOLD);
+        TextView t0 = (TextView) tabs.getChildAt(0);
+        boolean board = dev.peanuts.ui.Scoreboard.ON;   // PEANUTS: the scoreboard's tabs are in the pixel font, upper case: measured as drawn
+        p.setTypeface(board ? t0.getTypeface() : Typeface.DEFAULT_BOLD);
+        if (board) p.setLetterSpacing(t0.getLetterSpacing());
         p.setTextSize(16 * sp);
         for (int i = 0; i < TAB_NAMES.length; i++) {
             TextView t = (TextView) tabs.getChildAt(i);
             int room = t.getWidth() - t.getPaddingLeft() - t.getPaddingRight();
-            float w = p.measureText(TAB_NAMES[i]);
+            float w = p.measureText(board ? TAB_NAMES[i].toUpperCase(java.util.Locale.ROOT) : TAB_NAMES[i]);
             if (room > 0 && w > room) fit = Math.min(fit, 16 * room / w);
         }
         float size = Math.max(10, (float) Math.floor(fit * 2) / 2);
@@ -574,7 +583,7 @@ final class SidePanel extends FrameLayout {
         box.addView(ret);
         Button stop = new Button(act);
         stop.setText("Stop the game");
-        stop.setOnClickListener(v -> padDialog(new AlertDialog.Builder(act).setTitle("Stop the game?").setMessage("The game ends; unsaved progress is lost. The log stays for Share log.")
+        stop.setOnClickListener(v -> padDialog(dialog().setTitle("Stop the game?").setMessage("The game ends; unsaved progress is lost. The log stays for Share log.")
                 .setPositiveButton("Stop", (d, w) -> { Native.note("stopped by the user"); ExitWatch.stopped(); if (act instanceof GameActivity) ((GameActivity) act).backToFrontend(); android.os.Process.killProcess(android.os.Process.myPid()); })
                 .setNegativeButton("Keep running", null).show()));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -583,7 +592,7 @@ final class SidePanel extends FrameLayout {
         Button send = new Button(act);   // PEANUTS: stop, back to the launcher, and its share sheet with this run's log (ExitWatch.stoppedToShare)
         boolean up = LogUpload.on(act);   // with a key: straight to the log repository (LogUpload), else the share menu
         send.setText(up ? "Stop and send the log" : "Stop and share the log");
-        send.setOnClickListener(v -> padDialog(new AlertDialog.Builder(act).setTitle(up ? "Stop and send the log?" : "Stop and share the log?")
+        send.setOnClickListener(v -> padDialog(dialog().setTitle(up ? "Stop and send the log?" : "Stop and share the log?")
                 .setMessage("The game ends; unsaved progress is lost. Then " + (up ? "this session's log goes to " + LogUpload.REPO + "." : "the home screen opens the share menu with this session's log."))
                 .setPositiveButton(up ? "Stop and send" : "Stop and share", (d, w) -> { Native.note("stopped by the user to share the log"); ExitWatch.stoppedToShare(); if (act instanceof GameActivity) ((GameActivity) act).backToFrontend(); android.os.Process.killProcess(android.os.Process.myPid()); })
                 .setNegativeButton("Keep running", null).show()));
@@ -619,7 +628,7 @@ final class SidePanel extends FrameLayout {
                 for (int k = 0; k < ps.size(); k++) labels[k] = ResPresets.itemText(ps.get(k), k == 0, ps.get(k).id.equals(recPreset));
                 if (!simple) labels[ps.size()] = "Advanced (for testers)\nwindow and 3D scene set apart";
                 ResPresets.Preset cur0 = ResPresets.of(ps, Prefs.resolutionChoice(act, game()));
-                new AlertDialog.Builder(act).setTitle("Resolution").setSingleChoiceItems(labels, cur0 != null ? ps.indexOf(cur0) : simple ? -1 : ps.size(), (d, w) -> {
+                dialog().setTitle("Resolution").setSingleChoiceItems(labels, cur0 != null ? ps.indexOf(cur0) : simple ? -1 : ps.size(), (d, w) -> {
                     Prefs.resPreset(act, game(), w < ps.size() ? ps.get(w).id : ResPresets.ADVANCED);   // the game's own setting: the next start takes it too
                     if (now) {
                         int[] m = p.resolutionLive(Prefs.startWindow(act, game()));
@@ -657,7 +666,7 @@ final class SidePanel extends FrameLayout {
             labels[0] = "Default (" + Prefs.windowName(Prefs.defaultWindow(act, game()), false) + ")";
             { Profile lp = Profile.of(game()); for (int li = 0; li < Prefs.WINDOWS.length; li++) labels[li + 1] = lp != null ? lp.windowLabel(Prefs.WINDOWS[li], Prefs.WINDOW_NAMES[li]) : Prefs.WINDOW_NAMES[li]; }   // a choice the game draws at another size says so (Profile.windowLabel)
             int checked = Prefs.ownWindow(act, game()) ? 1 + Math.max(0, java.util.Arrays.asList(Prefs.WINDOWS).indexOf(cur)) : 0;
-            new AlertDialog.Builder(act).setTitle(winTitle).setSingleChoiceItems(labels, checked, (d, w) -> {
+            dialog().setTitle(winTitle).setSingleChoiceItems(labels, checked, (d, w) -> {
                 Prefs.gameWindow(act, game(), w == 0 ? null : Prefs.WINDOWS[w - 1]);   // the game's own setting: the next start takes it too
                 if (!ps.isEmpty()) Prefs.resPreset(act, game(), ResPresets.ADVANCED);   // a window chosen under Advanced keeps Advanced
                 if (now) {
@@ -848,7 +857,7 @@ final class SidePanel extends FrameLayout {
             names[0] = "Automatic";
             int checked = 0;
             for (int i = 0; i < pads.size(); i++) { names[i + 1] = pads.get(i).name; if (!chosen.isEmpty() && chosen.equals(pads.get(i).key)) checked = i + 1; }
-            padDialog(new AlertDialog.Builder(act).setTitle("Player 1").setSingleChoiceItems(names, checked, (d, w) -> {
+            padDialog(dialog().setTitle("Player 1").setSingleChoiceItems(names, checked, (d, w) -> {
                 ga.choosePlayerOne(w == 0 ? "" : pads.get(w - 1).key);
                 d.dismiss();
                 restyle(ID_ONE);
