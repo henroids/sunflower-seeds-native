@@ -93,6 +93,7 @@
 #define DMSH_VK_BF_ATOMIC 2              // image atomics on it (R32Uint / R32Sint only)
 #define DMSH_VK_BF_FETCH1D 4             // a 1D integer fetch read as 2D rows of 16384 texels (dmsh_build.py fetch1d): bind a buffer texture there as such rows
 #define DMSH_VK_BF_NOSLOT 8              // a slot kind whose slot was not decoded (reg -1)
+#define DMSH_VK_BF_SAMP_RAW 16           // PEANUTS(upstream-candidate): a SAMP_UBO sampler half whose word is the sampler ID itself (handle type 2, SeparateSamplerId), not a handle's high 12 bits
 
 // Image shape of a binding (dim): SPIR-V Dim in the low 3 bits, then these
 #define DMSH_VK_DIM_MASK 7               // 0 1D, 1 2D, 2 3D, 3 cube, 5 buffer (SPIR-V Dim values)
@@ -197,7 +198,7 @@ typedef struct {
     uint8_t dim;             // DMSH_VK_DIM_*
     int16_t sreg;            // the sampler half's reg
     uint16_t soff;           // the sampler half's off; 0xFFFF none
-    uint16_t reserved;
+    uint16_t step;           // PEANUTS: tex_ubo with a count: the bytes from one element's handle to the next, 0 = 8 (an array read by record: the record's size)
     uint32_t bytes;          // DMSH_VK_KIND_SHARED_SPILL: bytes of one workgroup's slice; else 0
 } dmsh_vk_bind;
 

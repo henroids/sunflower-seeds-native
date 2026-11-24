@@ -38,6 +38,9 @@ def scan():
         if p.endswith('.md'):
             for n in set(re.findall(r'`(' + NAME + r')', text)): docs.setdefault(n, set()).add(p)
             continue
+        if p.endswith('CMakeLists.txt'):   # PEANUTS: a build's compile definitions (DM_NSP_DIRECT) are macros, not switches
+            for l in re.findall(r'(?i)^.*compile_definitions.*$', text, re.M): macros |= set(re.findall(NAME, l))
+            continue
         if not p.endswith(CODE) and not p.startswith('scripts/'): continue
         # names the code defines as preprocessor macros (the generated profile header's DM_GAME_*, host constants) are not switches, unless something also reads
         # them from the environment (DM_GAME_ENV, which overrides the profile's macro of that name)
@@ -85,7 +88,7 @@ def fork_rows():
     if not have: return []
     read = set()
     for p in tracked():
-        if p.endswith(CODE) and (REPO / p).is_file(): read |= set(re.findall(r'getenv\(\s*"([A-Z][A-Z0-9_]*)"', (REPO / p).read_text(errors='replace')))
+        if p.endswith(CODE) and (REPO / p).is_file(): read |= set(re.findall(r'(?:getenv|env_int)\(\s*"([A-Z][A-Z0-9_]*)"', (REPO / p).read_text(errors='replace')))   # env_int: peanuts_gpufloor.c's getenv wrapper (#457)
     return [l + '\n' for l in have if l.split('\t')[0] in read]
 # PEANUTS end
 

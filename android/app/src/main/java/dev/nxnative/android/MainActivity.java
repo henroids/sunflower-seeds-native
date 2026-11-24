@@ -76,10 +76,12 @@ public final class MainActivity extends Activity {
             if (poppedText != null) poppedText.setText(poppedLine(n));
         });
         if (dev.peanuts.ui.Scoreboard.ON) frame.setBackgroundColor(getColor(R.color.bn_bg));   // PEANUTS: the scoreboard's board under its drifting bulb seeds (BananaBackgroundView)
+        dev.peanuts.ui.BottomScreen.onPop(this, () -> { long n = Prefs.addBananaPopped(this); if (poppedText != null) poppedText.setText(poppedLine(n)); });   // PEANUTS: a peanut popped on the bottom screen counts as these do (dev.peanuts.ui.BottomPanel; its own tick)
         setContentView(frame);
         PadFocus.watch(getWindow());   // a controller: the focus frame (PadFocus)
         build();
-        if (saved == null) { setIntent(gated(getIntent())); fromIntent(getIntent()); dev.peanuts.GameReturn.back(this, getIntent()); /* PEANUTS: Home made anew by the app's icon while a game runs (GameReturn) */ }   // start() reads no_pause from getIntent() too
+        if (!onHome()) dev.peanuts.ui.PagePlace.restore(saved, pageScroll());   // PEANUTS: made again (a fold, dark mode, Android ended the process): the page where it was (dev.peanuts.ui.PagePlace)
+        if (saved == null) { setIntent(gated(getIntent())); fromIntent(getIntent()); if (!dev.peanuts.GameReturn.back(this, getIntent())) dev.peanuts.users.WhoPlaysActivity.appOpened(this, getIntent()); /* PEANUTS: Home made anew by the app's icon while a game runs (GameReturn); else, opened by the icon, "Who's playing?" first with two users or more (dev.peanuts.users) */ }   // start() reads no_pause from getIntent() too
         GpuGl.probe(this, () -> { if (!isFinishing() && settingsGame != null) gameSettingsAgain(); });   // the GPU's name and, before any readiness check, the system driver's facts for the recommendations
         Updater.onStart(this);   // the release app: a newer release on GitHub opens the update popup (once per process start: not on a resume or a rotation)
         dev.peanuts.ctl.Ctl.attach(this);   // PEANUTS: control commands that waited for this screen run now (they come from dev.peanuts.ctl's own queue, never from this intent)
@@ -89,14 +91,17 @@ public final class MainActivity extends Activity {
         super.onSaveInstanceState(out);
         out.putBoolean("settings", settingsPage);
         if (settingsGame != null) out.putString("game_settings", settingsGame.gameDir);
+        if (!onHome()) dev.peanuts.ui.PagePlace.save(out, pageScroll(), advancedOpen);   // PEANUTS: the page's scroll position and focused row (dev.peanuts.ui.PagePlace)
     }
 
     /** Rotation, a window resize: the same page again */
     @Override public void onConfigurationChanged(Configuration c) {
         super.onConfigurationChanged(c);
         int y = settingsGame != null ? scrollY() : 0;
+        dev.peanuts.ui.PagePlace place = onHome() ? null : dev.peanuts.ui.PagePlace.of(pageScroll());   // PEANUTS: Settings and Advanced keep their place too, and every page its focused row (dev.peanuts.ui.PagePlace)
         build();
         if (settingsGame != null) scrollTo(y);
+        if (place != null) place.restore(pageScroll());   // PEANUTS
         if (resumed) { onResumeViews(); if (onHome()) Ondevice.resume(this); }
     }
 
@@ -109,12 +114,14 @@ public final class MainActivity extends Activity {
         advancedOpen = true;
         advancedTitleId = titleId;
         advancedName = name;
+        dev.peanuts.ui.PagePlace.cover(pageScroll());   // PEANUTS: where the page under Advanced is, for Back (dev.peanuts.ui.PagePlace)
         build();
     }
 
     private void closeAdvanced() {
         advancedOpen = false;
         build();
+        dev.peanuts.ui.PagePlace.uncover(pageScroll());   // PEANUTS: the page back where it was when Advanced opened
         if (resumed) onResumeViews();
     }
 
@@ -152,9 +159,15 @@ public final class MainActivity extends Activity {
 
     private View pageRoot() { return bananas.getParent() instanceof View ? (View) bananas.getParent() : bananas; }
 
-    /** A controller: B goes back one level (a game's page or Settings to Home), L1 / R1 switch a game page's tabs; the rest is Android's focus (D-pad, A) */
+    /** Controller shortcuts for Home and settings pages. Android handles focus and activation. */
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
         int k = e.getKeyCode();
+        // PEANUTS begin: handle Home's Settings shortcut before dispatching to the focused view
+        if (k == KeyEvent.KEYCODE_BUTTON_X && !settingsPage && settingsGame == null && !advancedOpen) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) page(true);
+            return true;
+        }
+        // PEANUTS end
         if (PadFocus.isBack(k) && (settingsPage || settingsGame != null || advancedOpen)) {
             if (e.getAction() == KeyEvent.ACTION_UP) onBackPressed();
             return true;
@@ -181,6 +194,7 @@ public final class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() {
         if (ReleasePage.back(this)) return;   // the release page over Home
+        if (dev.peanuts.ui.SettingsPage.onBack(this)) return;   // PEANUTS: a tablet's Settings: from a section's page back to the tiles of the sections (dev.peanuts.ui.SettingsPage)
         if (advancedOpen) closeAdvanced();
         else if (settingsPage || settingsGame != null) page(false);
         else super.onBackPressed();
@@ -252,7 +266,7 @@ public final class MainActivity extends Activity {
     /** The player wiki (its pages are written and kept up to date on the project's site, so the app links to it and keeps no copy) */
     static final String WIKI_URL = "https://github.com/henroids/sunflower-seeds-native/blob/main/peanuts/docs/FAQ.md";   // PEANUTS: the questions and answers, in this fork's repository (upstream: Banana Native's player wiki, which describes that app's screens and games)
 
-    /** Home's header buttons: the wiki, then Settings */
+    // PEANUTS begin: Home header actions share their icon and caption style
     private View headerButtons() {
         LinearLayout r = Ui.row(this);
         r.setGravity(android.view.Gravity.TOP);   // the gear lines up with the book, whose label hangs below
@@ -289,6 +303,7 @@ public final class MainActivity extends Activity {
         r.addView(gear, lp);
         return r;
     }
+    // PEANUTS end
 
     private void buildHome(LinearLayout content) {
         overlayRow = null;
@@ -303,6 +318,7 @@ public final class MainActivity extends Activity {
         // PEANUTS end
         content.addView(Ui.header(this, dev.peanuts.ui.Scoreboard.ON ? null : Ui.badge(this, 44), "Sunflower Seeds Native", dev.peanuts.ui.Scoreboard.ON ? null : Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand; the scoreboard look has neither badge nor build line (its status row shows the app's version)
         if (dev.peanuts.ui.Scoreboard.ON) Ui.add(content, scoreboardStatus(), 16);   // PEANUTS: the scoreboard's status row
+        dev.peanuts.ui.BottomScreen.home(this, () -> page(true));   // PEANUTS: bottom screen (dev.peanuts.ui.BottomScreen)
         accessCard = accessCard();
         Ui.add(content, accessCard, 16);
         Ondevice.attach(this, content, content.getChildCount());   // a game being prepared and its progress (hidden when there is none)
@@ -414,6 +430,12 @@ public final class MainActivity extends Activity {
         sharpRow = new Ui.Setting(this, "✨", "FSR sharpness", v -> pick("FSR sharpness", GameUpscaler.SHARP_NAMES, GameUpscaler.sharpIndex(GameUpscaler.sharp(this)),
                 w -> GameUpscaler.sharpDefault(this, GameUpscaler.SHARPS[w]))).chevron(this);
         perf.addView(sharpRow.view);
+        Ui.Setting crt = new Ui.Setting(this, "📼", "CRT filter", null).chevron(this);   // PEANUTS: the default for every game (CrtFilter)
+        crt.view.setOnClickListener(v -> new PadFocus.Builder(this).setTitle("CRT filter")
+                .setSingleChoiceItems(CrtFilter.MODES, CrtFilter.mode(this), (d, w) -> { CrtFilter.modeDefault(this, w); crt.value(CrtFilter.label(w)); d.dismiss(); })
+                .setNegativeButton("Cancel", null).show());
+        crt.value(CrtFilter.label(CrtFilter.mode(this)));
+        perf.addView(crt.view);
         drsRow = new Ui.Setting(this, "📐", "Dynamic resolution", v -> DrsSlider.dialog(this, "", Prefs.drs(this), null, true, w -> Prefs.drsDefault(this, w),
                 this::refreshSettings)).chevron(this);
         perf.addView(drsRow.view);
@@ -425,7 +447,7 @@ public final class MainActivity extends Activity {
 
         Ui.add(content, Ui.section(this, "System"), Ui.SECTION_GAP);
         LinearLayout sys = settingsCard(content);
-        gpuRow = new Ui.Setting(this, "🎮", "GPU driver", v -> GpuDriver.dialog(this, PICK_DRIVER)).chevron(this);   // custom GPU drivers (GpuDriver.java)
+        gpuRow = new Ui.Setting(this, "🎮", "GPU driver", v -> dev.peanuts.ui.DriverActivity.open(this)).chevron(this);   // PEANUTS: the GPU driver page (dev.peanuts.ui.DriverActivity) in place of GpuDriver.dialog
         sys.addView(gpuRow.view);
         timeRow = new Ui.Setting(this, "🕒", "Time of day", v -> TimeOfDay.dialog(this, this::refreshSettings)).chevron(this);   // the clock the next start gives the game (Prefs.timeOverride → DM_TIME)
         sys.addView(timeRow.view);
@@ -448,7 +470,7 @@ public final class MainActivity extends Activity {
         help.addView(new Ui.Setting(this, "📋", "Readiness check", v -> startActivityForResult(new Intent(this, ReadinessActivity.class), ReadinessActivity.REQUEST))
                 .value("Can this phone run your games?").chevron(this).view);   // (ReadinessActivity.java)
         help.addView(new Ui.Setting(this, "🧪", "Graphics self-test", v -> startActivity(new Intent(this, SelftestActivity.class))).value("Needs no game").chevron(this).view);
-        help.addView(new Ui.Setting(this, "📨", "Share log", v -> shareLog()).value("The newest log").chevron(this).view);
+        help.addView(new Ui.Setting(this, "📨", "Share log", v -> dev.peanuts.ui.BuildLogUi.shareLog(this, this::shareLog)).value("The newest log").chevron(this).view);   // PEANUTS: the newest build instead, when a build log changed after the newest run (Share build log)
         Ui.Setting up = new Ui.Setting(this, "⬆️", "Send logs to GitHub", null);   // PEANUTS: LogUpload
         up.value(LogUpload.on(this) ? "On: each session's log goes up by itself" : "Off").chevron(this);
         up.view.setOnClickListener(v -> LogUpload.settings(this, () -> up.value(LogUpload.on(this) ? "On: each session's log goes up by itself" : "Off")));
@@ -485,6 +507,7 @@ public final class MainActivity extends Activity {
         t.setTextIsSelectable(true);
         Ui.add(about, t, 10);
         refreshSettings();
+        dev.peanuts.ui.SettingsPage.lay(this, content);   // PEANUTS: these rows in ten sections, one shown: a sidebar of them on a wide window, a drawer on a phone (dev.peanuts.ui.SettingsPage)
     }
 
     /** A settings group's card of rows, under its section label */
@@ -700,7 +723,7 @@ public final class MainActivity extends Activity {
         c.addView(name, np);
         GameMeta.loadControl(new File(g.gameDir), Edition.control(this, g), m -> { if (m.icon != null) Ui.tileIcon(tile, m.icon); });   // with the edition switch on, program 1's icon
         boolean other = Profile.of(g.titleId) == null;   // no profile in this APK: it cannot run here (Profile.missing says why)
-        TextView st = other ? Ui.status(this, "Not in this app version", R.color.bn_danger) : Ui.status(this, "Checking\u2026", R.color.bn_text_2);
+        TextView st = other ? Ui.status(this, getString(R.string.not_supported_yet), R.color.bn_danger) : Ui.status(this, "Checking\u2026", R.color.bn_text_2);   // PEANUTS: shared unsupported-game label
         st.setTextSize(12);
         st.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams sp = Ui.wrap();
@@ -710,7 +733,7 @@ public final class MainActivity extends Activity {
         c.setForeground(Ui.ripple(this, Ui.round(0, dp(20), 0, 0)));   // a pressed state over the tile
         c.setOnLongClickListener(v -> { manage(g); return true; });
         if (other) {   // nothing on this tile can work in this app: the sentence is behind a badge (the page still has its folders, saves and Remove)
-            TextView n = Ui.warnChip(this, "Why?", "Not in this app version", Profile.missing(g.titleId, g.name));
+            TextView n = Ui.warnChip(this, "Why?", getString(R.string.not_supported_yet), Profile.missing(g.titleId, g.name));   // PEANUTS: shared unsupported-game label
             LinearLayout.LayoutParams wl = Ui.wrap();
             wl.topMargin = dp(8);
             c.addView(n, wl);
@@ -767,10 +790,10 @@ public final class MainActivity extends Activity {
             // Why it needs preparing, so the card does not only say "Needs preparing": no pack yet, one that cannot be read, code left unfinished, or a Prepare that
             // stopped part way (its job beside the dump: the button continues it rather than asking to start over)
             Job j = stoppedJob(gd, g.titleId);
-            Problem s = new Problem(j != null ? "Preparing not finished" : dump ? "Needs preparing" : p == null ? "No pack" : "Pack unfinished", dump || j != null);
+            Problem s = new Problem(j != null ? "Build not finished" : dump ? "Not built yet" : p == null ? "No build" : "Build unfinished", dump || j != null);
             s.resume = j != null;
             s.reason = dump || j != null ? PrepareText.needsPreparing(pd.isDirectory() && readError != null && new File(pd, "pack.tsv").isFile(), unfinished != null, j != null)
-                    : "This game has no pack that fits, and it is not a dump Prepare can start from. the game page › Folders picks a pack.";
+                    : "This game has no build that fits, and these game files cannot be built from here. Pick a build on the game page under Folders.";
             s.detail = (j != null ? j.statusText(false) + "\n\n" : "") + (readError != null ? readError : unfinished + ".android.key is missing: the rewrite of " + unfinished + " did not finish.")
                     + "\nPack: " + pd + (j != null ? "\n" + j.errorDetail() : "");
             return s;
@@ -831,6 +854,7 @@ public final class MainActivity extends Activity {
         new Thread(() -> {
             Game g = Folders.repack(this, card);   // a remembered pack folder that is gone: the usual search instead (app storage first)
             // An APK update whose shaders did not change: the pack's older library becomes this version's by its header (Pack.restamp), before anything else is decided
+            dev.peanuts.build.ShaderUpgrade.cleanStale(new File(g.packDir), BuildConfig.NX_DMSH_VK_CHAIN, System.currentTimeMillis());   // PEANUTS: a killed upgrade's .tmp would keep a restamp out of this version's folder
             String restamped = Pack.restamp(new File(g.packDir), g.titleId);
             if (restamped != null) android.util.Log.i("nxnative", g.titleId + ": shader library v-" + restamped + " taken over as v-" + BuildConfig.NX_DMSH_VK_CHAIN + " (restamp)");
             Problem problem = problem(g);
@@ -903,7 +927,11 @@ public final class MainActivity extends Activity {
     /** The optional shader update from the game's page: Home, then Prepare (Ondevice asks first and says what it will make) */
     // PEANUTS: the card's Update shaders opens this fork's build sheet, as the Build again row does (upstream: Ondevice.prepare(this, new File(g.gameDir), true)): a build
     // from the sheet keeps the pack's note, its companion and its builds with mods in step (dev.peanuts.build.Prepare), which upstream's own Prepare card does not know
-    void updateShaders(Game g) { page(false); dev.peanuts.ui.GameSheet.open(this, g.titleId); }
+    void updateShaders(Game g) {
+        Runnable sheet = () -> { if (isFinishing() || isDestroyed()) return; page(false); dev.peanuts.ui.GameSheet.open(this, g.titleId); };
+        if (dev.peanuts.build.ShaderUpgradeUi.before(this, g.titleId, new File(g.packDir), shaderInputs(g.titleId), false, sheet)) return;   // PEANUTS: an in-place upgrade first (seconds); the sheet then shows what is left
+        sheet.run();
+    }
 
     /** A game's page (a tap or long press on its tile; GameSettings): its settings, saves and storage under tabs, Play in its header */
     private void manage(Game g) { GameSettings.open(this, g); }
@@ -917,13 +945,16 @@ public final class MainActivity extends Activity {
     void gameTab(LinearLayout content, Game g, boolean savesTab) {
         String noProfile = Profile.missing(g.titleId, g.name);
         if (savesTab) {
+            UserSaves.picker(this, content, g);   // PEANUTS: whose save the rows work on, with two or more users (UserSaves, #422)
             LinearLayout saves = Ui.add(content, Ui.listCard(this), 16);
             saves.addView(new Ui.Setting(this, "💾", "Back up saves", v -> SaveUi.backup(this, g)).value(SaveUi.backupLine(this, g)).chevron(this).view);
             saves.addView(new Ui.Setting(this, "♻️", "Restore saves", v -> SaveUi.restoreList(this, g)).value("From a backup; the current save is backed up first").chevron(this).view);
             saves.addView(new Ui.Setting(this, "📥", "Import save", v -> SaveUi.importPick(this, g)).value("A .zip or a save folder").chevron(this).view);
+            UserSaves.copyRow(this, saves, g);   // PEANUTS: Copy to another user
             saves.addView(new Ui.Setting(this, "🗑", "Delete save data", v -> SaveUi.delete(this, g)).value("Backed up first; the game starts from the beginning").chevron(this).view);   // PEANUTS
-            File save = Folders.save(this, g);
+            File save = UserSaves.save(this, g);   // PEANUTS: the picked user's save (upstream: Folders.save)
             TextView where = Ui.add(content, Ui.small(this, "The save: " + (save != null ? save.getPath() : "not set")), 6);
+            UserSaves.where(where, g);   // PEANUTS: kept on the picked user's
             where.setTextSize(12);
             where.setTextIsSelectable(true);
             where.setPadding(dp(4), 0, dp(4), 0);
@@ -964,9 +995,10 @@ public final class MainActivity extends Activity {
         pack.addView(new Ui.Setting(this, "📁", "Folders", v -> Folders.dialog(this, g)).value("Game, pack and save folders").chevron(this).view);
         Ui.add(content, Ui.section(this, "More"), 16);
         LinearLayout more = Ui.add(content, Ui.listCard(this), 6);
+        CharSequence played = dev.peanuts.launch.PlayTime.line(this, g.titleId); if (played != null) more.addView(new Ui.Setting(this, "⏱️", "Played", null).value(played).view);   // PEANUTS: total play time (dev.peanuts.launch.PlayTime)
         if (noProfile == null && Shortcuts.supported(this))
             more.addView(new Ui.Setting(this, "🏠", "Add to home screen", v -> Shortcuts.pin(this, g)).value("A shortcut that starts this game").chevron(this).view);
-        more.addView(new Ui.Setting(this, "📨", "Share log", v -> shareLog(g.titleId)).value("This game's newest log").chevron(this).view);
+        more.addView(new Ui.Setting(this, "📨", "Share log…", v -> dev.peanuts.ui.BuildLogUi.shareLog(this, g.titleId, g.name, null, () -> shareLog(g.titleId))).value("This game's newest run or build").chevron(this).view);   // PEANUTS: one row asks which (dev.peanuts.ui.BuildLogUi.shareLog; upstream: Share log, shareLog(g.titleId))
         String lp = Pack.libraryProblem(new File(g.packDir), g.titleId);
         File save = Folders.save(this, g);
         Ui.Details info = Ui.details(this, "Title ID: " + g.titleId + "\nGame: " + (PickedNup.is(this, g.gameDir) ? new File(g.gameDir).getName() + " (.nup used where it is, picked with the file picker)"
@@ -1132,7 +1164,11 @@ public final class MainActivity extends Activity {
         super.onActivityResult(request, result, data);
         if (dev.peanuts.ui.LibrarySettings.result(this, request, result, data)) return;   // PEANUTS: the library's pickers (keys, folders, the sheet's files)
         if (Ondevice.activityResult(this, request, result, data)) return;
-        if (request == ReadinessActivity.REQUEST) { if (result == ReadinessActivity.FIX_DRIVER) GpuDriver.dialog(this, PICK_DRIVER); return; }   // its "Pick a GPU driver"
+        if (request == ReadinessActivity.REQUEST) { if (result == ReadinessActivity.FIX_DRIVER) dev.peanuts.ui.DriverActivity.open(this); return; }   // its "Pick a GPU driver"; PEANUTS: the GPU driver page
+        if (request == dev.peanuts.ui.DriverActivity.REQUEST_GAME) {   // PEANUTS: refresh the driver label after returning from the game's driver page
+            if (settingsGame != null) gameSettingsAgain();
+            return;
+        }
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         if (request == PICK_DRIVER) { GpuDriver.picked(this, data.getData()); return; }
         if (GameCopy.activityResult(this, request, data)) return;
@@ -1294,7 +1330,7 @@ public final class MainActivity extends Activity {
         if (!ok.isEmpty()) m.append("Added: ").append(TextUtils.join(", ", ok)).append(".");
         if (!prepare.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append("Needs Prepare: ").append(TextUtils.join(", ", prepare))
                 .append(". No pack that fits was found: its card's Prepare makes one on this phone (one game at a time).");
-        if (!unsupported.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append("Not in this app version: ").append(TextUtils.join(", ", unsupported))
+        if (!unsupported.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append(getString(R.string.not_supported_yet)).append(": ").append(TextUtils.join(", ", unsupported))   // PEANUTS: shared unsupported-game label
                 .append(". Install a build that includes them (Settings › About lists the games this one has).");
         if (!noPack.isEmpty()) m.append(m.length() > 0 ? "\n\n" : "").append("No pack found: ").append(TextUtils.join(", ", noPack))
                 .append(". Add it on its own to pick its pack folder.");
@@ -1362,7 +1398,7 @@ public final class MainActivity extends Activity {
         if (packDir.equals(pendingPackPick)) Folders.pickedPack(this, id, packDir.getPath());   // a pack folder the user picked is remembered for this game's next pick and updates
         String note = "";
         String lp = Pack.libraryProblem(packDir, id);
-        if (lp != null) note += " " + lp;
+        if (lp != null) { note += " " + Pack.libraryText(packDir, id); android.util.Log.i("nxnative", id + ": added with " + packDir + ": " + lp); }   // PEANUTS: plain words in the toast; the folders in the log
         String name;
         try { name = Pack.read(packDir).name; } catch (IOException e) { name = id; }
         Toast.makeText(this, "Added " + (name.isEmpty() ? id : name) + "." + note, Toast.LENGTH_LONG).show();
@@ -1493,6 +1529,19 @@ public final class MainActivity extends Activity {
             }
             android.util.Log.w("nxnative", g.titleId + ": Play anyway: " + b.kind + ": " + b.detail);
         }
+        // PEANUTS begin: an older app version's shaders that this version's tools upgrade in place (seconds, no game files: dev.peanuts.build.ShaderUpgradeUi)
+        // are upgraded first, behind a short wait; then, or when there is nothing to upgrade or the upgrade cannot be made, the launch goes on as before
+        if (dev.peanuts.build.ShaderUpgradeUi.before(this, g.titleId, new File(g.packDir), shaderInputs(g.titleId), true, () -> launchShaders(g, gd, dump, pickPack))) return;
+        launchShaders(g, gd, dump, pickPack);
+    }
+
+    /** PEANUTS: the profile's shader inputs for the in-place shader upgrade (ShaderUpgradeUi: a library of other shader tables gets none), null without a profile */
+    private static String shaderInputs(String titleId) { Profile p = Profile.of(titleId); return p == null ? null : p.shaderInputs; }
+
+    /** PEANUTS: launch's end, from its shader check on (split off so that it can run after an in-place shader upgrade, ShaderUpgradeUi) */
+    private void launchShaders(Game g, File gd, boolean dump, Runnable pickPack) {
+        if (isFinishing() || isDestroyed()) return;   // PEANUTS: the launcher went while the shaders were upgraded
+        // PEANUTS end
         // The host loads <pack>/shaders/v-<its DMSH_VK_CHAIN>/dmsh_vk.lib: without it the game runs but draws nothing. Say so, and offer to prepare the shaders
         // (a dump) or another pack folder
         String lp = Pack.libraryProblem(new File(g.packDir), g.titleId);
@@ -1542,7 +1591,7 @@ public final class MainActivity extends Activity {
                             + (GpuDriver.selected(this, g.titleId) != null ? "\n\nAn extra driver setting is forcing the system driver. Change that setting to use your selected driver." : ""))
                     .setPositiveButton("Choose driver", (d, w) -> {
                         gameSettings(g);
-                        GameSettings.driver(this, g, () -> gameSettings(g));
+                        dev.peanuts.ui.DriverActivity.openForGame(this, g.titleId, g.name);
                     })
                     .setNeutralButton("Play anyway", (d, w) -> startWithDriver(g))
                     .setNegativeButton("Cancel", null).show();
@@ -1556,6 +1605,7 @@ public final class MainActivity extends Activity {
         Game.touch(this, g);   // the entry played last is the one kept if the list ever holds this game twice
         Intent intent = new Intent(this, GameActivity.class).putExtra("title_id", g.titleId).putExtra("name", g.name).putExtra("game", g.gameDir).putExtra("pack", g.packDir);
         if (getIntent().getBooleanExtra("no_pause", false)) intent.putExtra("no_pause", true);
+        if (getIntent().getBooleanExtra("show_when_locked", false)) intent.putExtra("show_when_locked", true);   // PEANUTS: a test run over the lock screen (GameActivity, issue #198)
         // PEANUTS begin: the title ID the list holds for this game. A card whose edition switch is on starts program 1 as a game of its own (Edition.forPlay: another
         // title ID, the same game folder), which the list does not hold: a shortcut, the way back to the game and a control command's Play name the list's entry
         String listId = g.titleId;
@@ -1566,7 +1616,7 @@ public final class MainActivity extends Activity {
         // PEANUTS end
         dev.peanuts.ctl.Ctl.started(listId, g.gameDir, g.packDir);   // PEANUTS: a control command's Play learns that the game was started, and with which pack
         dev.peanuts.GameReturn.remember(this, listId, g.name, g.gameDir, g.packDir);   // PEANUTS: the app's icon goes back to this game while it runs (GameReturn)
-        startActivity(intent);
+        dev.peanuts.Screens.startGame(this, intent);   // PEANUTS: Swap screens falls back to the current display if Android refuses the other one (#131)
     }
 
     /** The overlay's master switch and its items (Overlay.rows); the main screen's switch follows the master switch */

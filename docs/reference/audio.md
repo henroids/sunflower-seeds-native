@@ -15,6 +15,16 @@ Check whether the SDK carries the renderer: list the `sdk` module's exports for 
 The open then goes through `CreateAudioRendererManagerByDfc`; no IPC.
 For a replaced DSP renderer the size query keeps the service's work-buffer contract; a larger local CPU representation is a backend cost. See [A sound engine's heap too small for its renderer and players](#a-sound-engines-heap-too-small-for-its-renderer-and-players).
 
+<!-- PEANUTS: the audio renderer service for an SDK with no renderer of its own -->
+### An SDK with no renderer of its own
+
+- **Symptom:** `[RED] sf: the game connects to service audren:u itself, which the host does not serve`, then `Break#1 reason=0` in `nn::diag::detail::AbortImpl` under `nn::audio::GetAudioRendererWorkBufferSize` → `CreateAudioRendererManagerForAppletByHipc`, at boot.
+- **Cause:** SDK 1.3.1's `sdk` links no renderer server: no `AudioRendererManagerImpl`, no `ExecuteAudioRendererRendering`, no DFC manager, only the IPC client (`CreateAudioRendererManagerByHipc`). Every renderer call goes to the `audren:u` service, so the host's way of running the SDK's own renderer on the CPU ([above](#running-the-sdks-own-renderer-on-the-cpu)) has nothing to run. The SDK's calls between its functions are direct branches, so they cannot be taken over one by one; its connection to the service can.
+- **Fix:** when neither `ExecuteAudioRendererRendering` is in the game's modules, the host serves `audren:u` itself (`dm/host/hle_audren_svc.c`), and `hle_audren.c` hands the SDK's calls to the SDK, whose client keeps all its own work. `hle_sf.c` gained services that read their requests: the raw arguments, the A / B / X / C buffers and the copied handles in, data, a copied handle and a new object (a domain object or a session) out (`sf_req`, `hle.h`). The manager opens renderers (`OpenAudioRenderer`, `GetWorkBufferSize`, an audio device object that answers nothing); a renderer answers its getters, `Start` / `Stop`, `QuerySystemEvent` (a kernel event a host thread signals every 5 ms while it is started) and `RequestUpdate` in the layout SDK 1.3.1's client builds and checks byte for byte (`RequestUpdateAudioRenderer`, sdk+0x1617d0; the file's header lists it): memory pools asked to attach are attached, the service mixes: a render thread renders a frame of the renderer's samples every 5 ms (clock-paced like `render_main`, into the host PCM output) from the voices (PCM16, DSP-ADPCM decoded as in the Nintendo header: 8-byte frames of 14 samples, coefficients at the voice's ADPCM parameter, history from the buffer's context), their channel resources' 24 destination volumes, the submixes' 24 × 24 volume matrices and the device sink's input buffers (downmixed to stereo), and the voices' played samples and consumed buffers come from that rendering; a stopped voice gives its buffers back. The first update of the game: `REV2`, 512 memory pools, 128 voices, one sink, an output of 0x2920 bytes, the client's own.
+- **Check:** on an AYN Thor (Turnip) the title and menu music, the opening movie's sound (two PCM16 stereo voices fed by the movie module) and the game's sound effects (DSP-ADPCM voices, one or two at a time) play through the host's output, and the voices' biquad filters (the game's low-pass, Q14 with a1 / a2 stored negated) are applied; heard by the player, not compared with a console.
+- **Open:** effects / splitters / the performance buffer are ignored (this game uses none); a renderer rate other than 48000 is resampled only linearly per block (logged `[RED]`); the mixes' buffer offsets (the running sum of the buffer counts: no field in the input) and the ADPCM context use (taken at a loop restart or a mid-stream start sample, otherwise the history carries over) are inferred.
+- **Found on:** [LEGO CITY UNDERCOVER](../../dm/games/010085500130A000/README.md) (SDK 1.3.1). A first stopgap answered the SDK's public renderer calls with nothing: past the abort, the game reached its title screen once its textures were fixed ([its note](../../dm/games/010085500130A000/README.md#resolved)).
+
 ### SDK 8's longer `AudioRendererParameter`
 
 - **Symptom:** abort with Result 0x499 in `audio::GetAudioRendererWorkBufferSize`.
@@ -337,6 +347,15 @@ For a replaced DSP renderer the size query keeps the service's work-buffer contr
 - **Found on:** [The Legend of Zelda: Ocarina of Time](../../dm/games/0400486024DEC000/README.md) (imports only the older interface; v0.3.12 and v0.3.13, every driver).
 - **Check:** `make -C dm/host/tests GAME=<id> run` (`t_opus_hw`: Reset and Finalize of the older interface reach its software state and leave the work buffer alone); on a run log, the `not silent` count of the `audren: rendered` lines.
 
+### The sdk's Opus decoder read the game's libopus tables
+
+<!-- PEANUTS -->
+- **Symptom:** voices and music muffled and thin, at full frame rate with no underruns: the decoded Opus PCM (`DM_OPUS_DUMP`) is 15-20 dB below what libopus makes of the same packets and, per CELT band, three of every four bands are 25-38 dB down (coherence near 1 in the bands kept); the game's final mix carries the loss (dialogue 8-16 kHz 16 dB under an Eden-based emulator on the same line).
+- **Cause:** the `sdk`'s libopus (fixed point, functions renamed `nncodecLibopus_*`) keeps its tables under libopus's plain names (`eMeans`, `tf_select_table`, `silk_*`, ~70 symbols) with default visibility, and the loader binds a name to the first module that defines it. Hogwarts Legacy's `main` links its own libopus 1.1-beta (floating point), so the `sdk`'s CELT decoder read `main`'s tables (float `eMeans` read as fixed-point bytes): wrong band energies. The same `sdk` code run alone (unicorn, its own tables) decodes bit-exactly as libopus. On the console this code never runs: the hardware decoder (hwopus) does the work.
+- **Fix:** `hle_codec.c`: when a game module exports libopus's own decoder (`opus_decoder_get_size`, `_init`, `opus_decode`, `opus_decoder_ctl`), the hardware decoder's C interface decodes with it, one state per game decoder, Nintendo's 8-byte packet header stripped; `DM_OPUS_SDK=1` keeps the `sdk`'s. The multi-stream and manager forms still use the `sdk`'s decoders.
+- **Found on:** [Hogwarts Legacy](../../dm/games/0100F7E00C70E000/README.md) (1.0.5, SDK 17.5.4): every hwopus stream (dialogue at 24 kHz mono, music and ambience at 48 kHz stereo).
+- **Check:** `DM_OPUS_DUMP=<file>` (each packet with its PCM) decoded again with libopus on a PC (`ffmpeg -c:a libopus` on the packets as Ogg): the same PCM (correlation 1.000, at most a few LSB apart).
+
 ## Timing and catch-up
 
 ### At least one rendered frame between two updates
@@ -354,6 +373,16 @@ For a replaced DSP renderer the size query keeps the service's work-buffer contr
 - **Fix:** an update with a full queue waits (at most 50 ms) for the render thread to play one queued frame, so catch-up frames keep real time (`hle_audren.c`). The render thread then only plays queued frames, and the driver's updates render every frame. A queued frame does not signal the renderer event (the SDK signals it in each render): signalled, an ordinary game woke, updated with nothing rendered since and rendered the next catch-up frame, so every frame became one ([Big Brain Academy: Brain vs. Brain](../../dm/games/0100620012D6E000/README.md), about 38,000 catch-up renders instead of 37).
 - **Found on:** [DRAGON QUEST XI S: Echoes of an Elusive Age – Definitive Edition](../../dm/games/01006C300E9F0000/README.md).
 - **Check:** `audren: rendered 12000 frames, N of them not silent` shows whether a game's sound reaches the output.
+
+<!-- PEANUTS begin: the sound follows the game's pace (dm/peanuts/peanuts_audiosync.c) -->
+### A game that keeps its sound in step with its frames
+
+- **Symptom:** short dropouts in cutscenes and heavy scenes, 85–115 ms of exact zeros every few seconds (every 0.5 s at 47 fps), each with a one-frame volume ramp down before and up after; the output has no underruns and every rendered frame sounds.
+- **Cause:** the game's timeline counts frames, while its sound plays in real time. Below its frame rate (a panel slower than 60 Hz: the AYN Thor's measures 59.84 Hz; dropped frames) the timeline falls behind the sound, and the game resyncs: it sets the volume of a synced stream's voices to 0, pauses them (`nn::audio::SetVoicePlayState`) and starts them again about 70 ms later, each time the sound is about 100 ms ahead.
+- **Fix:** the host plays the renderer's output at the game's pace (presented frames / the game's frame rate, against real time, and the sound's lead): within 1 % for every game (a resampler, inaudible), and fully (a WSOLA time-stretch, pitch kept) for a game seen pausing and restarting a group of voices within 300 ms twice within 60 s while it runs slow; the finding is kept in `<DM_TEMP>/audio_follow`. A game whose world runs in real time keeps real-time sound. `PN_AUDIO_FOLLOW=0` off, `1` automatic (default), `2` always.
+- **Found on:** [Super Mario Odyssey](../../dm/games/0100000000010000/README.md) 1.4.1 on the AYN Thor.
+- **Check:** `t_peanuts_audiosync` (`make -C dm/host/tests GAME=<id> peanuts-host`); on the phone the log's `peanuts: the sound follows the game's pace` lines give the pace, the lead and the tempo, and a `DM_AUDIO_DUMP` shows no runs of exact zeros inside the sound.
+<!-- PEANUTS end -->
 
 ### No virtual audio input devices (SDK 22)
 
