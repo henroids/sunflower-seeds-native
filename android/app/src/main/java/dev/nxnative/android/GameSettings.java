@@ -210,6 +210,11 @@ final class GameSettings {
         }
         if (Prefs.drsGame(id) && !simple)   // the host's dynamic resolution slider: testers only for a game with Resolution presets (Quality is the game's own dynamic resolution)
             speed.add(track(recRows, Recommend.DRS, new Ui.Setting(a, "📏", "Dynamic resolution", v -> drs(a, g, again)).value(drsValue(Prefs.drs(a, id))).chevron(a)));
+        if (Prefs.crowdGame(id)) {   // a game whose profile names its crowd's shaders (game.tsv crowd): with the speed settings, where a player looks for it
+            Ui.Setting crowd = new Ui.Setting(a, "👥", "Crowd control", null).toggle(a, Prefs.hideCrowd(a, id), (b, on) -> { Prefs.hideCrowd(a, id, on); refresh[0].run(); });
+            crowd.says("The crowd is hidden, less GPU work", "The crowd is drawn");
+            speed.add(crowd);
+        }
         speed.add(track(recRows, Recommend.DRIVER, new Ui.Setting(a, "🎮", "GPU driver", v -> driver(a, g, again)).value(driverShort(a, id)).chevron(a)));
 
         // ---- Game options: the profile's own switches ----
@@ -223,11 +228,6 @@ final class GameSettings {
             Ui.Setting hid = new Ui.Setting(a, "🚀", "Hidden layers off", null).toggle(a, Prefs.skipLayers(a, id), (b, on) -> { Prefs.skipLayers(a, id, on); refresh[0].run(); });
             hid.badge("Experimental").says("Skips layers drawn over later", "Draws every layer");
             options.add(track(recRows, Recommend.SKIP_LAYERS, hid));
-        }
-        if (Prefs.crowdGame(id)) {   // a game whose profile names its crowd's shaders (game.tsv crowd)
-            Ui.Setting crowd = new Ui.Setting(a, "👥", "Crowd control", null).toggle(a, Prefs.hideCrowd(a, id), (b, on) -> { Prefs.hideCrowd(a, id, on); refresh[0].run(); });
-            crowd.says("The crowd is hidden, less GPU work", "The crowd is drawn");
-            options.add(crowd);
         }
         if (prof != null && !prof.options.isEmpty()) {
             File packDir = g.packDir != null ? new File(g.packDir) : null;
