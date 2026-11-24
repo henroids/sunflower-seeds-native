@@ -487,6 +487,8 @@ final class Ui {
         ImageView v = new ImageView(c);
         v.setImageDrawable(icon(c, drawable, R.color.bn_text));
         v.setScaleType(ImageView.ScaleType.CENTER);
+        android.graphics.drawable.Drawable sb = dev.peanuts.ui.Scoreboard.button(c, drawable);   // PEANUTS: the test app's bulb art (the gear, the book)
+        if (sb != null) { v.setImageDrawable(sb); v.setScaleType(ImageView.ScaleType.FIT_CENTER); v.setPadding(dp(c, 8), dp(c, 8), dp(c, 8), dp(c, 8)); }
         style(c, v, k, 14);
         v.setContentDescription(description);
         v.setClickable(true);
