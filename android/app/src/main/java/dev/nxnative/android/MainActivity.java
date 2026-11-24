@@ -274,7 +274,7 @@ public final class MainActivity extends Activity {
         wiki.setOrientation(LinearLayout.VERTICAL);
         wiki.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
         wiki.addView(Ui.iconButton(this, R.drawable.ic_wiki, "Questions and answers", Ui.Kind.TONAL, v -> openLink(WIKI_URL)));   // PEANUTS: was "Player wiki" (WIKI_URL)
-        TextView label = Ui.text(this, "FAQ", 10, R.color.bn_text_2, 700);   // PEANUTS: was "WIKI" (WIKI_URL)
+        TextView label = Ui.text(this, "FAQ", 10, R.color.bn_accent, 700);   // PEANUTS: was "WIKI" (WIKI_URL)
         label.setPadding(0, Ui.dp(this, 2), 0, 0);
         label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);   // the button already says "Player wiki"
         label.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
@@ -289,7 +289,7 @@ public final class MainActivity extends Activity {
             col.setOrientation(LinearLayout.VERTICAL);
             col.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
             col.addView(gear, new LinearLayout.LayoutParams(Ui.dp(this, 44), Ui.dp(this, 44)));
-            TextView sl = Ui.text(this, "Settings", 10, R.color.bn_text_2, 700);
+            TextView sl = Ui.text(this, "Settings", 10, R.color.bn_accent, 700);
             sl.setPadding(0, Ui.dp(this, 2), 0, 0);
             sl.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);   // the button already says "Settings"
             sl.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
