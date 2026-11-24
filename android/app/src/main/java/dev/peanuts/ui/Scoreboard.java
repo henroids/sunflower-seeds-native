@@ -28,7 +28,8 @@ public final class Scoreboard {
     private Scoreboard() {}
 
     public static final boolean ON = dev.nxnative.android.BuildConfig.APPLICATION_ID.contains(".sunflower");   // the play app (.sunflower) and the test app (.sunflowertest)
-    private static final int STRIP = 0xFF5A59A6, ON_STRIP = 0xFFF4F2FF, CELL = 0xFF0B0F09, LINE = 0xFF2E3524, LABEL = 0xFF8A937A, MINT = 0xFFBFF2CC, LAVENDER = 0xFFD9D4F5;
+    static final int STRIP = 0xFF5A59A6, ON_STRIP = 0xFFF4F2FF, CELL = 0xFF0B0F09, LINE = 0xFF2E3524, LABEL = 0xFF8A937A, MINT = 0xFFBFF2CC, LAVENDER = 0xFFD9D4F5,
+            BOARD = 0xFF060805, TEXT = 0xFFE6EEC6, ON_MINT = 0xFF060805;
 
     private static AssetManager assets;
     private static Typeface pixel, led;
@@ -102,6 +103,8 @@ public final class Scoreboard {
         }
     }
 
+    static Typeface pixelFace() { return pixel; }
+
     /** A label in the pixel font, upper case (section titles, the strip, the cells' labels) */
     public static void pixel(TextView t, float sp) {
         if (pixel == null) return;
@@ -120,6 +123,15 @@ public final class Scoreboard {
         title.setTextColor(ON_STRIP);
         pixel(title, 20);
     }
+
+    /** The in-game side panel's frame (SidePanel): the board under its rows, the purple strip under its tabs */
+    public static void panelFrame(View sheet, View tabs) { if (!ON) return; sheet.setBackgroundColor(0xF0000000 | (BOARD & 0xFFFFFF)); tabs.setBackgroundColor(STRIP); }
+
+    /** One of the panel's tabs (SidePanel.tabBar): the selected one mint with dark text, the others pale on the strip, all in the pixel font */
+    public static void panelTab(TextView t, boolean on) { if (!ON) return; t.setTextColor(on ? ON_MINT : ON_STRIP); t.setBackgroundColor(on ? MINT : 0); if (pixel != null) { t.setTypeface(pixel); t.setAllCaps(true); t.setLetterSpacing(0.08f); } }
+
+    /** The panel's focus colour (its frame round the focused row, SidePanel.focusMoved): mint on the scoreboard look, else def */
+    public static int focus(int def) { return ON ? MINT : def; }
 
     /** Home's status row: one cell a value, label above, the value in the dot-matrix font (label, value pairs) */
     public static View status(Context c, String... pairs) {
