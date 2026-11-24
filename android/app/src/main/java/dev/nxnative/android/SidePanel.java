@@ -44,8 +44,8 @@ final class SidePanel extends FrameLayout {
     private final Runnable tick = this::refresh;
 
     // The tabs: each a builder of its own (build); Performance's rows refresh twice a second while it shows
-    static final String[] TAB_NAMES = {"Performance", "Display", "Controls", "General"};
-    private static final int TAB_PERF = 0, TAB_DISPLAY = 1, TAB_CONTROLS = 2, TAB_GENERAL = 3;
+    static String[] TAB_NAMES = {"Performance", "Display", "Controls", "General"};   // PEANUTS: not final, ModsPanel.opening puts Mods between Controls and General
+    private static final int TAB_PERF = 0, TAB_DISPLAY = 1, TAB_CONTROLS = 2; static int TAB_GENERAL = 3;   // PEANUTS: TAB_GENERAL not final, the last tab (4 while Mods shows: ModsPanel)
     private int tab = TAB_PERF;
     private static final int FOCUS = 0xFFFFD54F;   // the tab bar's selected tab and the focus frame: a banana yellow, dark text on it
 
@@ -109,6 +109,7 @@ final class SidePanel extends FrameLayout {
         open = true;
         if (onOpen != null) onOpen.run();
         box.removeAllViews();
+        tab = ModsPanel.opening(this, act, game(), tab);   // PEANUTS: the tabs with Mods (dev.peanuts.mods.ModsTab) when it shows, and the tab shown last
         build();
         look();
         setVisibility(VISIBLE);
@@ -138,6 +139,7 @@ final class SidePanel extends FrameLayout {
         int dir = PadPanel.ofKey(k);
         if (dir != PadPanel.NONE) { if (press) press(dir); else if (up) release(dir); return true; }
         if (!press) return true;
+        if (ModsPanel.padKey(k, findFocus(), confirm)) return true;   // PEANUTS: Y (details) and X (All off) on the Mods tab
         boolean lost = findFocus() == null || isInTouchMode();
         if (k == back) close();
         else if (k == KeyEvent.KEYCODE_BUTTON_L1 || k == KeyEvent.KEYCODE_BUTTON_R1) { if (lost) ensureFocus(); showTab(PadPanel.tab(tab, k == KeyEvent.KEYCODE_BUTTON_L1 ? -1 : 1, TAB_NAMES.length)); }
@@ -297,7 +299,7 @@ final class SidePanel extends FrameLayout {
         x.setOnClickListener(v -> close());
         x.setContentDescription("Close the panel, back to the game");
         tabs.addView(x, new LinearLayout.LayoutParams(h, h));
-        tabs.post(this::tabTextSize);
+        ModsPanel.afterLayout(tabs, this::tabTextSize);   // PEANUTS: once the bar is laid out, also at the panel's first opening (a post ran before it: no fit, which five tabs need)
     }
 
     /** One text size for all tab labels: the largest (16 sp at most, 10 at least) at which the widest label, in bold as when selected, fits its tab.
@@ -394,6 +396,7 @@ final class SidePanel extends FrameLayout {
         tabBar();
         fpsNow = lsfgNow = null;
         caps = null;
+        if (ModsPanel.build(this, act, box, tab)) return;   // PEANUTS: the Mods tab (dev.peanuts.mods.ModsTab); keeps which tab shows
         if (tab == TAB_DISPLAY) { display(); return; }
         if (tab == TAB_CONTROLS) { controls(); return; }
         if (tab == TAB_GENERAL) { general(); return; }
@@ -419,8 +422,8 @@ final class SidePanel extends FrameLayout {
         head("Frame rate cap");   // the game's own frame rate; frame generation (below, its own heading) adds frames on top
         caps = new RadioGroup(act);
         if (Prefs.limited(game())) {   // a frame limit, no locking (Prefs.PACE_CAPS)
-            int[] choices = FrameRateCaps.menu(), allowed = Prefs.paceCaps(game());
-            int cur = Prefs.paceCap(act, game());
+            int[] choices = FrameRateCaps.menu(), allowed = Prefs.paceOffered(act, game());   // PEANUTS: not above the display's highest refresh rate (fps cap audit B5)
+            int cur = Prefs.paceCap(act, game()), hz = Prefs.displayMaxHz(act);
             for (int i = 0; i < choices.length; i++) {
                 RadioButton b = new RadioButton(act);
                 b.setId(3000 + i); b.setText(Prefs.paceLabel(choices[i]));
@@ -434,20 +437,21 @@ final class SidePanel extends FrameLayout {
                 boolean startedOwned = act instanceof GameActivity && ((GameActivity)act).gameOwnedAtStart();
                 boolean restart = act instanceof GameActivity && ((GameActivity)act).fpsRestartRequired(v);
                 if (v != FrameRateCaps.GAME_OWNED && !startedOwned && !restart) {
-                    Native.fpsLimitSet(v > 0 ? v : 60);
+                    Native.fpsLimitSet(FrameRateCaps.limitRate(v, hz));   // PEANUTS: at most the display's highest rate
                     Profile p = Profile.of(game());
-                    if (p != null && !p.fpsPlan120.isEmpty()) Native.fpsCapSet(p.fpsModeTarget(v));
+                    if (p != null && p.usesFpsModeTarget()) Native.fpsCapSet(p.fpsModeTarget(FrameRateCaps.onScreen(v, hz)));   // PEANUTS: select the native engine mode with the live cap
                 }
                 refresh();
             });
         } else {
             int live = Integer.parseInt(Native.fpsCapStatus().split(" ")[0]), cur = live >= 0 ? live : Prefs.fpsCap(act, game());   // the cap in effect (env.txt or DM_CTL may have set another)
             if (Prefs.ownRate(act, game())) cur = 0;
-            int[] choices = {0, 120, 90, 60, 45, 40, 30, 20, 15};
+            int[] choices = FrameRateCaps.targetMenu();
             for (int i = 0; i < choices.length; i++) {
                 int v = choices[i];
                 RadioButton b = new RadioButton(act);
                 b.setId(2000 + i);
+                b.setEnabled(FrameRateCaps.contains(Prefs.offeredCaps(act, game()), v));   // PEANUTS: until refresh has the host's answer, what Game settings enables
                 b.setText(v == 0 ? "Game owned" : v + " fps");
                 if (v == cur || v == 0 && cur < 0) b.setChecked(true);   // a cap the launcher does not offer (40, 45 from env.txt or DM_CTL): none checked, the line below says it
                 caps.addView(b);
@@ -460,8 +464,12 @@ final class SidePanel extends FrameLayout {
             });
         }
         box.addView(caps);
-        if (Prefs.limited(game())) note("Switching to or from Game owned applies on the next start.");
+        if (Prefs.limited(game())) {
+            String why = Prefs.screenNote(act, game());   // PEANUTS: why 90 or 120 is greyed (fps cap audit B5)
+            note((why != null ? why + " " : "") + "Switching to or from Game owned applies on the next start.");
+        }
         if (Prefs.limited(game()) && Prefs.presentOnly(game())) note(Prefs.PRESENT_ONLY_NOTE);   // fps_limit_present: the limit paces the presents only
+        if (Prefs.limited(game()) && Prefs.fpsVariant(game())) note(Prefs.FPS_VARIANT_NOTE);   // PEANUTS: the cap starts another version of the game (Profile.fpsVariant)
         if (Prefs.paced(game())) {   // Full game speed at low frame rates: sead's controller at the measured rate (Game settings has the same), live in the host
             android.widget.CheckBox full = new android.widget.CheckBox(act);
             full.setText("Full game speed at low frame rates");
@@ -508,6 +516,9 @@ final class SidePanel extends FrameLayout {
         resolutionRow();
 
         picture();
+
+        head("CRT filter");   // PEANUTS: CrtFilter, live
+        CrtFilter.rows(act, box, game());
 
         head("Overlay");
         Overlay.rows(act, box, null);
@@ -568,7 +579,7 @@ final class SidePanel extends FrameLayout {
     private void general() {
         note("The game runs on behind this panel; every change applies now and is kept, except those marked for the next start.");
         panelRows();
-        cheatRows();
+        if (!ModsPanel.shows()) cheatRows();   // PEANUTS: the cheat switches are in the Mods tab when it shows
 
         Button pause = new Button(act);   // the game suspended (clock, graphics, threads, audio) until a tap on the screen, or A / Start: GameActivity.pause
         pause.setText("Pause the game");
@@ -729,9 +740,11 @@ final class SidePanel extends FrameLayout {
         int sz = live ? ga.runPictureSize() : Prefs.pictureSize(act, game());
         RadioGroup fit = new RadioGroup(act);
         fit.setOrientation(RadioGroup.HORIZONTAL);
-        String[] names = {"Fit", "Stretch"};
+        boolean canFill = GameSettings.fillable(Profile.of(game()));   // PEANUTS: Display > Fill for a game whose view follows the screen's shape (GameSettings.fillable)
+        boolean fillRun = ga != null && ga.runFill();   // PEANUTS: whether this run started with Fill
+        String[] names = canFill ? new String[] {"Fit", "Stretch", "Fill"} : new String[] {"Fit", "Stretch"};   // PEANUTS: Fill
         for (int i = 0; i < names.length; i++) { RadioButton b = new RadioButton(act); b.setId(ID_FIT + i); b.setText(names[i]); fit.addView(b); }
-        fit.check(ID_FIT + (st ? 1 : 0));
+        fit.check(ID_FIT + (canFill && GameSettings.filling(act, game()) ? 2 : st ? 1 : 0));   // PEANUTS: Fill
         box.addView(fit);
         TextView sl = new TextView(act);
         SeekBar ss = new SeekBar(act);
@@ -741,14 +754,33 @@ final class SidePanel extends FrameLayout {
         Runnable label = () -> sl.setText("Size " + PictureFit.sizeOfStep(ss.getProgress()) + " %" + (ss.getProgress() == PictureFit.steps() ? " (full)" : ""));
         label.run();
         Runnable send = () -> { if (ga != null) ga.picture(fit.getCheckedRadioButtonId() == ID_FIT + 1, PictureFit.sizeOfStep(ss.getProgress())); };
-        fit.setOnCheckedChangeListener((g, id) -> send.run());
+        // PEANUTS begin: Fill is kept at once and applies at the next start (the game's own shape number is set before its code is sealed: aspect_plan.h);
+        // Fit and Stretch after Fill clear it. One line says when this run and the stored choice differ
+        TextView fillNow = new TextView(act);
+        Runnable fillNote = () -> {
+            boolean want = canFill && GameSettings.filling(act, game());
+            fillNow.setVisibility(canFill && want != fillRun ? VISIBLE : GONE);
+            fillNow.setText(want ? "Restart the game to apply Fill." : "Restart the game to leave Fill.");
+        };
+        fit.setOnCheckedChangeListener((g, id) -> {
+            if (canFill) {
+                if (id == ID_FIT + 2) Prefs.aspect(act, game(), ScreenShape.CHOICE);
+                else if (GameSettings.filling(act, game())) Prefs.aspect(act, game(), null);
+                fillNote.run();
+            }
+            send.run();
+        });
+        // PEANUTS end
         ss.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar b, int v, boolean user) { label.run(); send.run(); }
             @Override public void onStartTrackingTouch(SeekBar b) {}
             @Override public void onStopTrackingTouch(SeekBar b) {}
         });
+        if (canFill) { box.addView(fillNow); fillNote.run(); }   // PEANUTS: Fill's restart line, under the three choices
         box.addView(sl);
         box.addView(ss);
+        if (canFill) note("Fill makes the game draw for this screen's shape, so nothing is stretched and there are no bars: from the next start."
+                + (Profile.of(game()).aspectUntested ? " Untested on this game: it may look wrong or not start; pick Fit to go back." : ""));   // PEANUTS
         note(live ? "Fit keeps the game's shape, Stretch fills the screen; below 100 % the picture is smaller, with black around it. Applies now, kept for this game."
                 : "Applies at the next start (this run takes no live changes: DM_CTL is off).");
         rows.position(box);
@@ -877,20 +909,23 @@ final class SidePanel extends FrameLayout {
             boolean other = now > 0 && chosen > 0 && held > 0 && 60 % chosen != 0 && held < chosen;
             boolean startedOwned = act instanceof GameActivity && ((GameActivity)act).gameOwnedAtStart();
             boolean restart = act instanceof GameActivity ? ((GameActivity)act).fpsRestartRequired(chosen) : (chosen == FrameRateCaps.GAME_OWNED) != startedOwned;
-            fpsNow.setVisibility(restart || other ? VISIBLE : GONE);
+            String runs = Prefs.screenRunsNote(act, game());   // PEANUTS: a stored 90 or 120 above the display's highest rate runs at that rate
+            fpsNow.setVisibility(restart || other || runs != null ? VISIBLE : GONE);
             if (restart) fpsNow.setText("Restart the game to apply " + Prefs.paceLabel(chosen) + ".");
             else if (other) fpsNow.setText("This game moves in whole frames: " + chosen + " fps runs at " + held + " fps, at full game speed.");
+            else if (runs != null) fpsNow.setText(runs);
         } else {
-            int[] choices = {0, 120, 90, 60, 45, 40, 30, 20, 15};
+            // PEANUTS: the caps the host holds now, 40 and 45 too (Prefs.offeredCaps, the stats page and adb take the same); its answer counts once the game presents
+            int[] choices = FrameRateCaps.targetMenu(), offered = Prefs.offeredCaps(act, game(), cap >= 0 && now > 0 ? rates : -1);
             for (int i = 0; i < choices.length; i++) {
-                int v = choices[i], bit = v == 15 ? 0 : v == 20 ? 1 : v == 30 ? 2 : 5;   // the host's bits: 15, 20, 30, (40, 45,) 60
-                caps.getChildAt(i).setEnabled(v == 0 || FrameRateCaps.contains(Prefs.FPS_CAPS, v) && cap >= 0 && (rates & 1 << bit) != 0);
+                int v = choices[i];
+                caps.getChildAt(i).setEnabled(v == 0 || cap >= 0 && FrameRateCaps.contains(offered, v));
             }
             // No cap in this build, or a game that picks its own frame rate: no choices (they would do nothing), one line instead
             // (rates is 0 too until the game's main is loaded: only a game that presents, now > 0, is known to pick its own)
             boolean own = cap >= 0 && rates == 0 && now > 0;
             caps.setVisibility(VISIBLE);
-            if (cap >= 0 && now > 0) Prefs.ownRate(act, game(), own);   // remember native-rate-only titles for Game settings
+            if (cap >= 0 && now > 0) { Prefs.ownRate(act, game(), own); Prefs.hostRates(act, game(), rates); }   // remember native-rate-only titles for Game settings; PEANUTS: and the rates it holds
             String s = cap < 0 ? "This build has no frame rate cap."
                     : now <= 0 ? "Starting…"
                     : own ? "This game picks its own frame rate."

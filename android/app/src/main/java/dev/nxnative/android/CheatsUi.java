@@ -29,7 +29,7 @@ import java.util.Set;
 final class CheatsUi {
     private CheatsUi() {}
 
-    static final int PICK_FILE = 60, PICK_ZIP = 61, CREATE_ZIP = 62;
+    static final int PICK_FILE = 80, PICK_ZIP = 81, CREATE_ZIP = 82;   // PEANUTS: 60 to 62 are dev.peanuts.ui.LibrarySettings' pickers, whose result handler MainActivity asks first
     private static Game pendingFor;
 
     /** The game's cheats folder in the app's own storage: the merged file a start writes (DM_CHEATS) and imported/ with the player's files */
@@ -50,9 +50,7 @@ final class CheatsUi {
         Ui.Setting sw = new Ui.Setting(a, "🧪", a.getString(R.string.cheats_title), null).toggle(a, Prefs.cheats(a, id), (b, on) -> Prefs.cheats(a, id, on));
         sw.badge("Experimental").says(a.getString(R.string.cheats_on), a.getString(R.string.cheats_off));
         add.accept(sw);
-        int n = Cheats.importedFiles(folder(a, id)).size();
-        add.accept(new Ui.Setting(a, "📄", a.getString(R.string.cheats_files_title), v -> sheet(a, g, again))
-                .value(n == 0 ? "The game's own" : "The game's own and " + n + " imported").note(a.getString(R.string.cheats_files_note)).chevron(a).sub());
+        add.accept(CheatsBridge.filesRow(a, g, again));   // PEANUTS: the game's cheat sources (.txt, .zip, a folder) in place of imported/: was the row with sheet(a, g, again), "The game's own and N imported" and R.string.cheats_files_note
     }
 
     /** The Cheat files sheet: one line per file, a tap on an imported one offers Remove; then the three actions */

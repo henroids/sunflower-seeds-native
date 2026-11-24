@@ -48,9 +48,15 @@ static void used(int64_t d) {
     while (after > peak && !atomic_compare_exchange_weak(&g_peak, &peak, after)) {}
     if (after > peak && after >> 28 != peak >> 28) LOG("[mem] Unreal heap (host malloc zone) up to %.2f GB in use", after / 1073741824.0);
 }
-static size_t align_of(uint32_t a) { return a > 16 ? a : 16; }   // 0 = DEFAULT_ALIGNMENT, 16 bytes as Binned3 gives
+static bool ue4_page_allocations;   // PEANUTS: page alignment outside the small pools (UE 4.27, #236)
+static uint32_t align_of(size_t n, uint32_t a) {
+    // UE4 Binned3 uses virtual pages outside its small pools. SDK workspaces can depend on this stronger alignment.
+    if (ue4_page_allocations && (a > 16 || n > 128 * 1024) && a < 4096) return 4096;
+    return a > 16 ? a : 16;
+}
 static void *alloc(size_t n, uint32_t a) {
-    void *p = align_of(a) == 16 ? plat_zone_malloc(g_zone, n ? n : 1) : plat_zone_memalign(g_zone, align_of(a), n ? n : 1);
+    a = align_of(n, a);   // PEANUTS: #236
+    void *p = a == 16 ? plat_zone_malloc(g_zone, n ? n : 1) : plat_zone_memalign(g_zone, a, n ? n : 1);
     if (p) used((int64_t)plat_malloc_size(p));
     return p;
 }
@@ -70,8 +76,9 @@ static void *realloc_aligned(void *p, size_t n, uint32_t a) {
     if (!n) { release(p); return NULL; }
     size_t old = plat_malloc_size(p);
     if (free_check()) check_freed(p, "reallocated");
-    if (align_of(a) == 16) { void *q = plat_zone_realloc(g_zone, p, n); if (q) used((int64_t)plat_malloc_size(q) - (int64_t)old); return q; }
-    if (!((uintptr_t)p & (align_of(a) - 1)) && old >= n) return p;
+    a = align_of(n, a);   // PEANUTS: #236
+    if (a == 16) { void *q = plat_zone_realloc(g_zone, p, n); if (q) used((int64_t)plat_malloc_size(q) - (int64_t)old); return q; }
+    if (!((uintptr_t)p & (a - 1)) && old >= n) return p;
     void *q = alloc(n, a); if (!q) return NULL;
     memcpy(q, p, old < n ? old : n); release(p); return q;
 }
@@ -96,7 +103,8 @@ static void *m_Realloc32(void *self, void *p, uint32_t n, uint32_t a) { return m
 static uint32_t m_QuantizeSize32(void *self, uint32_t n, uint32_t a) { (void)self; (void)a; size_t q = plat_malloc_good_size(n); return q > UINT32_MAX ? n : (uint32_t)q; }
 static bool m_GetAllocationSize32(void *self, void *p, uint32_t *out) { (void)self; if (!p) return false; *out = (uint32_t)plat_malloc_size(p); return true; }
 static void m_Nothing(void *self) { (void)self; }   // Trim (its bool argument is ignored), the thread-local cache setup and teardown, DumpAllocatorStats
-static void *g_vt[NSLOT];
+static void *g_vt_storage[2 + NSLOT];   // PEANUTS: keep the Itanium offset-to-top and RTTI words before the address point
+static void **const g_vt = g_vt_storage + 2;
 static const char *g_what;
 
 // Observation gate OBS_UE_MALLOC, on the cut constructor call: the object in the register the gate number's upper bits name (x0), before anything calls it
@@ -142,6 +150,7 @@ void dm_ue_heap_why(uint64_t a, uint64_t n, char *buf, size_t len) {
 
 // The host's vtable over the guest's (the trivial slots stay the guest's), and the zone behind it
 static void fill(const uint8_t *vtable, int L, const char *what) {
+    ue4_page_allocations = L == UE4_27;   // PEANUTS: #236
     memcpy(g_vt, vtable, sizeof g_vt[0] * k_lay[L].nslot);
     bool s32 = k_lay[L].size32;
     g_vt[k_lay[L].malloc_] = s32 ? (void *)m_Malloc32 : (void *)m_Malloc; g_vt[k_lay[L].realloc_] = s32 ? (void *)m_Realloc32 : (void *)m_Realloc;
@@ -163,6 +172,8 @@ void dm_ue_malloc_install(void) {
             if (L < 0) { LOG("[RED] main: Unreal's FMallocBinned3 has its name getter at slot %u, a layout the host does not know: Unreal's own allocator runs on cut code", m->ue_malloc_slot); return; }
             if (!gate_obs_present(OBS_UE_MALLOC)) { LOG("[RED] main: the fixups name Unreal's FMallocBinned3 but main has no allocator gate: the allocator would have no vtable"); return; }
             static char what[64]; snprintf(what, sizeof what, "main %.8s", m->build_id);
+            // PEANUTS(upstream-candidate): the rewriter verified this primary header. Preserve RTTI in the replacement.
+            memcpy(g_vt_storage, b + m->ue_malloc_vt - 2 * sizeof g_vt[0], 2 * sizeof g_vt[0]);
             fill(b + m->ue_malloc_vt, L, what);
             gate_obs_set(OBS_UE_MALLOC, obj_made);
             return;

@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Companions (Settings › Library › Companions): the catalog of Eden Duo companion packages, a Banana page (PUi.page, a header with Back) of list cards: the games in
+ * Companions (Settings › Screens › Companions): the catalog of Eden Duo companion packages, a Banana page (PUi.page, a header with Back) of list cards: the games in
  * the launcher's list first, with Install / Update / Remove, then every other companion. A package installs beside the game's pack (<title ID>-work/peanuts/<Name>/);
  * the game picks it up at its next start. Games without a pack yet are listed but cannot take a package.
  */
@@ -36,7 +36,7 @@ public final class CatalogActivity extends Activity {
         frame.setBackgroundColor(PUi.col(this, dev.nxnative.android.R.color.bn_bg));
         setContentView(frame);
         LinearLayout content = PUi.page(this, frame, 640);
-        content.addView(PUi.header(this, PUi.back(this, v -> finish()), "Companions", PUi.button(this, "Refresh", PUi.Kind.TONAL, v -> load())));
+        content.addView(PUi.header(this, PUi.back(this, v -> finish()), "Dual-screen companions", PUi.button(this, "Refresh", PUi.Kind.TONAL, v -> load())));
         status = PUi.small(this, "");
         PUi.add(content, status, 12);
         list = new LinearLayout(this);
@@ -53,7 +53,7 @@ public final class CatalogActivity extends Activity {
             List<Catalog.Item> it; String err = null;
             try { it = Catalog.fetch(); } catch (Exception e) { it = new ArrayList<>(); err = e.toString(); }
             final List<Catalog.Item> fit = it; final String ferr = err;
-            ui.post(() -> { games = g; items = fit; status.setText(ferr != null ? "Catalog unavailable: " + ferr : fit.size() + " companions in the catalog · " + g.size() + " games in your list"); render(); });
+            ui.post(() -> { games = g; items = fit; status.setText(ferr != null ? "The catalog could not be loaded. Check the connection, then open it again." : PUi.joined(fit.size() + " dual-screen companions in the catalog", g.size() + (g.size() == 1 ? " game" : " games") + " in your list")); render(); });
         }, "peanuts-catalog").start();
     }
 
@@ -71,7 +71,7 @@ public final class CatalogActivity extends Activity {
             }
         }
         if (!rest.isEmpty()) {
-            PUi.add(list, PUi.section(this, "Other companions · add the game first"), games.isEmpty() ? 0 : PUi.SECTION_GAP);
+            PUi.add(list, PUi.section(this, "For games you have not added yet"), games.isEmpty() ? 0 : PUi.SECTION_GAP);
             LinearLayout card = PUi.add(list, PUi.listCard(this), 8);
             for (Catalog.Item i : rest) card.addView(row(null, i));
         }
@@ -82,10 +82,10 @@ public final class CatalogActivity extends Activity {
         String name = g != null ? g.name : item.gameName;
         File root = g != null ? g.companionRoot() : null;
         String installed = root != null && item != null ? Installer.installedVersion(root, item.packageName) : null;
-        String line = item == null ? "No companion in the catalog"
-                    : installed == null ? item.version + " · " + String.format(Locale.US, "%.0f KB", item.size / 1024.0)
-                    : installed.equals(item.version) ? "installed " + installed + " · up to date" : "installed " + installed + " · update " + item.version;
-        if (g != null && root == null) line += " · build the game first";
+        String first = g != null && root == null ? "build the game first" : null;
+        CharSequence line = item == null ? PUi.joined("No dual-screen companion for this game yet", first)
+                    : installed == null ? PUi.joined(item.version, String.format(Locale.US, "%.0f KB", item.size / 1024.0), first)
+                    : installed.equals(item.version) ? PUi.joined("installed " + installed, "up to date", first) : PUi.joined("installed " + installed, "update " + item.version, first);
         boolean hasVersions = item != null && root != null;
         PUi.Setting s = new PUi.Setting(this, "🖥️", name, !hasVersions ? null : v -> dev.peanuts.ui.CompanionVersions.open(this, item.titleId, this::render)).value(line);
         if (hasVersions) s.chevron(this);
@@ -94,7 +94,7 @@ public final class CatalogActivity extends Activity {
             File froot = root;
             b.setOnClickListener(v -> {
                 if ("Remove".contentEquals(b.getText())) {
-                    PUi.confirmDanger(this, "Remove the companion?", name + "'s companion is deleted from " + froot + ". The game and its saves stay.", "Remove", () -> {
+                    PUi.confirmDanger(this, "Remove the companion?", name + "'s dual-screen companion is deleted from this device. The game and its saves stay.", "Remove", () -> {
                         new Thread(() -> {   // off the UI thread: the delete walks shared storage and waits for the package's lock
                             String err = null;
                             try { Installer.remove(froot, item.packageName, this); }   // ctx = this: refuses while the game is running (found in review)

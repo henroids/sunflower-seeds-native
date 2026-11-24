@@ -43,6 +43,9 @@ final class DriverFetch {
         {"Weab-chan/freedreno_turnip-CI", "Weab-chan Freedreno CI"},
         {"crueter/GameHub-8Elite-Drivers", "GameHub Adreno 8xx"},
         {"StevenMXZ/Adreno-Tools-Drivers", "StevenMXZ Turnip and Qualcomm"},
+        {"Balemuni/Balemunis-Aurora", "Balemuni Turnip"},   // PEANUTS: Android driver releases
+        {"JimVulkan/mali-panvk", "PanVK for Mali"},   // PEANUTS: Android driver releases
+        {"faux123/panvk-faux123-driver-rp4pro", "PanVK faux123"},   // PEANUTS: PanVK with placed memory maps (#262)
     };
 
     private static final long MAX_ZIP = 512L << 20;

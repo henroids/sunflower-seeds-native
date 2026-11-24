@@ -67,6 +67,10 @@ int nx_hex(const char *s, uint8_t *out, size_t n) {
     return s[2 * n] == 0 ? 0 : -1;
 }
 
+int nx_hex_prefix(const char *s, uint8_t out[16]) {   // a file's name that starts with an NCA id (32 hex digits) → its 16 bytes; 0 ok
+    char h[33]; if (strlen(s) < 32) return -1; memcpy(h, s, 32); h[32] = 0; return nx_hex(h, out, 16);
+}
+
 static void trim(char *s) { size_t n = strlen(s); while (n && isspace((unsigned char)s[n - 1])) s[--n] = 0; while (*s && isspace((unsigned char)*s)) memmove(s, s + 1, strlen(s)); }
 
 static int load_title_keys(const char *path) {
@@ -177,8 +181,15 @@ static int container_open(NxContainer *c, const char *path, int fd, int stream) 
         NxContainer r; memset(&r, 0, sizeof r); r.fd = c->fd; snprintf(r.path, sizeof r.path, "%s", path);
         uint64_t data; if (read_fs0(&r, root, 1, &data)) { free(r.e); goto fail; }
         (void)rsize;
-        for (int i = 0; i < r.n; i++) {   // update, normal, secure, logo: the secure partition holds the game; take every partition (an NSP-like whole)
-            if (!strcmp(r.e[i].name, "update")) continue;   // the system update partition is not a title of the game
+        // update, normal, secure, logo: the game is in the secure partition, on every card and in an XCI made from an NSP. The others hold the system update
+        // and, on older cards in normal and on cards for firmware 4.0.0 and later in logo, a second meta NCA and the icon NCA under the secure partition's
+        // names. Every partition but update was read before, so the meta NCA outside secure was opened too, and one that did not read as an NCA failed the
+        // whole XCI, in the library's scan and in Build (GitHub issue #280: "not an NCA" for a card's XCI whose keys read other games). Without a secure
+        // partition every partition but update is read, as before
+        int secure = -1;
+        for (int i = 0; i < r.n; i++) if (!strcmp(r.e[i].name, "secure")) secure = i;
+        for (int i = 0; i < r.n; i++) {
+            if (secure >= 0 ? i != secure : !strcmp(r.e[i].name, "update")) continue;   // the system update partition is not a title of the game
             if (read_fs0(c, r.e[i].off, 1, NULL)) { free(r.e); goto fail; }
         }
         free(r.e);
@@ -227,11 +238,26 @@ static int preadv_all(int fd, const NxIov *v, int nv, uint64_t off) {
     return 0;
 }
 
+// The NCA's own bytes at off (from its start): from the file, or from its store (an NCZ)
+static int nca_read(NxNca *n, void *buf, size_t len, uint64_t off) {
+    if (n->store) return n->store->raw(n->store, off, buf, len);
+    return nx_pread_all(n->fd, buf, len, n->base_off + off);
+}
+static int nca_readv(NxNca *n, const NxIov *v, int nv, uint64_t off) {
+    if (!n->store) return preadv_all(n->fd, v, nv, n->base_off + off);
+    for (int i = 0; i < nv; i++) { if (n->store->raw(n->store, off, v[i].p, v[i].n)) return -1; off += v[i].n; }
+    return 0;
+}
+
 // Plain CTR bytes of the NCA at absolute offset abs (whole file positions), counter template tmpl, into buf; ctr_read_at: the bytes at file position abs decrypted with the
 // counter of position cabs (PEANUTS: a sparse section's data lies elsewhere in the body than the virtual position its counter counts; the two differ by a multiple of 16)
 static int ctr_read_at(NxNca *n, const uint8_t tmpl[16], uint64_t abs, uint64_t cabs, uint8_t *buf, size_t len) {
     if ((abs ^ cabs) & 15) { nx_err("%s: data at %#llx with the counter of %#llx: not 16-byte aligned to each other", n->id, (unsigned long long)abs, (unsigned long long)cabs); return -1; }
     if (!len) return 0;
+    if (n->store && abs == cabs) {   // an NCZ holds its body decrypted: with this very key and counter the bytes are read as they are
+        int r = n->store->plain(n->store, n->key_raw, tmpl, abs, buf, len);
+        if (r) return r < 0 ? -1 : 0;
+    }
     // The 16-byte blocks that cover [abs, abs + len) in one read: a first block the range begins inside (hb), the whole blocks straight into buf, a last block it
     // ends inside (tb). (A read that began or ended off a block boundary took one or two 16-byte reads of its own: a system call each on a game's small reads.)
     uint8_t hb[16], tb[16], ctr[16]; size_t in = (size_t)(abs & 15), h = in ? 16 - in : 0; if (h > len) h = len;
@@ -240,7 +266,7 @@ static int ctr_read_at(NxNca *n, const uint8_t tmpl[16], uint64_t abs, uint64_t 
     if (in) { v[nv].p = hb; v[nv++].n = 16; }
     if (mid) { v[nv].p = buf + h; v[nv++].n = mid; }
     if (t) { v[nv].p = tb; v[nv++].n = 16; }
-    if (preadv_all(n->fd, v, nv, n->base_off + blk)) return -1;
+    if (nca_readv(n, v, nv, blk)) return -1;
     if (in) { ctr_for(ctr, tmpl, cabs - in); nx_aes_ctr(&n->key, ctr, hb, hb, 16); memcpy(buf, hb + in, h); }
     if (mid) { ctr_for(ctr, tmpl, cabs + h); nx_aes_ctr(&n->key, ctr, buf + h, buf + h, mid); }
     if (t) { ctr_for(ctr, tmpl, cabs + h + mid); nx_aes_ctr(&n->key, ctr, tb, tb, 16); memcpy(buf + h + mid, tb, t); }
@@ -266,7 +292,7 @@ static int sparse_read(NxNca *n, int s, uint64_t off, uint8_t *buf, size_t len) 
         if (r->patch) memset(buf, 0, k);   // storage 1: zeros (the update supplies these bytes)
         else {
             uint64_t abs = sp->phys_base + r->phys + (off - r->virt);
-            if (S->crypt_type == 1) { if (nx_pread_all(n->fd, buf, k, n->base_off + abs)) return -1; }
+            if (S->crypt_type == 1) { if (nca_read(n, buf, k, abs)) return -1; }
             else if (S->crypt_type == 3) { if (!n->key_ok) { nx_err("%s: %s", n->id, n->key_why); return -1; } if (ctr_read_at(n, S->ctr, abs, S->off + off, buf, k)) return -1; }
             else { nx_err("%s: sparse section %d uses encryption type %d (not supported)", n->id, s, S->crypt_type); return -1; }
         }
@@ -289,7 +315,7 @@ static int sparse_load(NxNca *n, int s, const uint8_t *fh) {
         if (tsize < 0x8000 || tsize > (256u << 20) || pbase + toff + tsize > n->size) NX_FAIL("%s: section %d: sparse table out of bounds", n->id, s);
         if (!(tb = malloc((size_t)tsize))) NX_FAIL("out of memory");
         uint8_t tmpl[16]; memcpy(tmpl, S->ctr, 16); uint32_t g = (uint32_t)gen << 16; for (int j = 0; j < 4; j++) { tmpl[7 - j] = (uint8_t)g; g >>= 8; }
-        if (S->crypt_type == 1 ? nx_pread_all(n->fd, tb, (size_t)tsize, n->base_off + pbase + toff) : ctr_read(n, tmpl, pbase + toff, tb, (size_t)tsize)) goto fail;
+        if (S->crypt_type == 1 ? nca_read(n, tb, (size_t)tsize, pbase + toff) : ctr_read(n, tmpl, pbase + toff, tb, (size_t)tsize)) goto fail;
         uint32_t nb = u32(tb + 4); uint64_t total = u64(tb + 8);
         if (nb == 0 || 0x4000 * ((uint64_t)nb + 1) > tsize) NX_FAIL("%s: section %d: bad sparse table (%u entry sets; wrong key or counter?)", n->id, s, nb);
         for (uint32_t i = 0; i < nb; i++) {
@@ -317,7 +343,7 @@ static int sec_read_plain(NxNca *n, int s, uint64_t off, uint8_t *buf, size_t le
     NxSection *S = &n->sec[s];
     if (off > S->size || len > S->size - off) { nx_err("%s: read past section %d (%llu + %zu > %llu)", n->id, s, (unsigned long long)off, len, (unsigned long long)S->size); return -1; }
     if (S->sparse) return sparse_read(n, s, off, buf, len);   // PEANUTS
-    if (S->crypt_type == 1) return nx_pread_all(n->fd, buf, len, n->base_off + S->off + off);
+    if (S->crypt_type == 1) return nca_read(n, buf, len, S->off + off);
     if (S->crypt_type == 3 || S->crypt_type == 4) { if (!n->key_ok) { nx_err("%s: %s", n->id, n->key_why); return -1; } return ctr_read(n, S->ctr, S->off + off, buf, len); }
     nx_err("%s: section %d uses encryption type %d (not supported)", n->id, s, S->crypt_type); return -1;
 }
@@ -600,6 +626,10 @@ int nx_sec_read(NxNca *n, int s, uint64_t off, void *buf, size_t len) { return n
 uint64_t nx_sec_chunk_end(NxNca *n, int s, uint64_t off, uint64_t want_end, uint64_t limit) {
     if (s < 0 || s > 3 || !n->sec[s].present) return want_end;
     const NxSection *S = &n->sec[s]; const NxComp *c = S->comp;
+    if (n->store && n->store->unit_end && !S->compressed && !S->sparse && S->crypt_type != 4 && want_end < limit) {   // an NCZ's blocks: one worker each
+        uint64_t end = n->store->unit_end(n->store, S->off + want_end) - S->off;
+        return end < limit ? end : limit;
+    }
     if (!S->compressed || !c || want_end >= limit || want_end <= S->data_off) return want_end;
     uint64_t v = want_end - S->data_off; if (v >= c->total) return want_end;
     const NxCompEntry *e = find_comp(c, v); if (!e || e->type != 3 || v == e->virt) return want_end;   // not inside an LZ4 entry: the boundary is free
@@ -625,13 +655,14 @@ static int find_titlekey(const NxContainer *c, const uint8_t rights[16], uint8_t
     return 0;
 }
 
-int nx_nca_open(NxNca *n, const NxContainer *c, const NxEntry *e) {
-    memset(n, 0, sizeof *n); n->fd = c->fd; n->base_off = e->off; n->size = e->size;
+int nx_nca_open(NxNca *n, const NxContainer *c, const NxEntry *e) { return nx_nca_open_store(n, c, e, NULL); }
+int nx_nca_open_store(NxNca *n, const NxContainer *c, const NxEntry *e, NxStore *store) {
+    memset(n, 0, sizeof *n); n->fd = c->fd; n->base_off = e->off; n->size = store ? store->size : e->size; n->store = store;
     snprintf(n->id, sizeof n->id, "%.40s", e->name);
     if (!nx_keys.loaded) { nx_err("keys not loaded (nximport_keys)"); return -1; }
-    if (e->size < 0xC00) { nx_err("%s: too small for an NCA", n->id); return -1; }
-    { struct stat st; if (!fstat(n->fd, &st) && ((uint64_t)st.st_size < e->off || e->size > (uint64_t)st.st_size - e->off)) { nx_err("%s: lies outside its file (%llu + %llu > %llu): a cut-off dump?", n->id, (unsigned long long)e->off, (unsigned long long)e->size, (unsigned long long)st.st_size); return -1; } }
-    if (nx_pread_all(n->fd, n->hdr, 0xC00, n->base_off)) return -1;
+    if (n->size < 0xC00) { nx_err("%s: too small for an NCA", n->id); return -1; }
+    if (!store) { struct stat st; if (!fstat(n->fd, &st) && ((uint64_t)st.st_size < e->off || e->size > (uint64_t)st.st_size - e->off)) { nx_err("%s: lies outside its file (%llu + %llu > %llu): a cut-off dump?", n->id, (unsigned long long)e->off, (unsigned long long)e->size, (unsigned long long)st.st_size); return -1; } }
+    if (nca_read(n, n->hdr, 0xC00, 0)) return -1;
     NxAes a1, a2; nx_aes_init(&a1, nx_keys.header_key); nx_aes_init(&a2, nx_keys.header_key + 16);
     nx_aes_xts_decrypt(&a1, &a2, 0, 0x200, n->hdr, n->hdr, 0x400);
     if (!memcmp(n->hdr + 0x200, "NCA3", 4)) nx_aes_xts_decrypt(&a1, &a2, 2, 0x200, n->hdr + 0x400, n->hdr + 0x400, 0x800);
@@ -647,10 +678,10 @@ int nx_nca_open(NxNca *n, const NxContainer *c, const NxEntry *e) {
         uint8_t tk[16];
         if (!find_titlekey(c, n->hdr + 0x230, tk)) snprintf(n->key_why, sizeof n->key_why, "no ticket for its rights id (not in the file, nor in title.keys)");
         else if (!nx_keys.has_titlekek[kg]) snprintf(n->key_why, sizeof n->key_why, "prod.keys has no titlekek_%02x", kg);
-        else { NxAes k; nx_aes_init(&k, nx_keys.titlekek[kg]); nx_aes_decrypt_block(&k, tk, tk); nx_aes_init(&n->key, tk); n->key_ok = 1; }
+        else { NxAes k; nx_aes_init(&k, nx_keys.titlekek[kg]); nx_aes_decrypt_block(&k, tk, tk); nx_aes_init(&n->key, tk); memcpy(n->key_raw, tk, 16); n->key_ok = 1; }
     } else {
         if (!nx_keys.has_kaek[kaek][kg]) snprintf(n->key_why, sizeof n->key_why, "prod.keys has no key_area_key_%s_%02x", kaek == 0 ? "application" : kaek == 1 ? "ocean" : "system", kg);
-        else { NxAes k; uint8_t area[0x40]; nx_aes_init(&k, nx_keys.kaek[kaek][kg]); nx_aes_ecb_decrypt(&k, n->hdr + 0x300, area, 0x40); nx_aes_init(&n->key, area + 0x20); n->key_ok = 1; }   // key 2: the CTR key
+        else { NxAes k; uint8_t area[0x40]; nx_aes_init(&k, nx_keys.kaek[kaek][kg]); nx_aes_ecb_decrypt(&k, n->hdr + 0x300, area, 0x40); nx_aes_init(&n->key, area + 0x20); memcpy(n->key_raw, area + 0x20, 16); n->key_ok = 1; }   // key 2: the CTR key
     }
     for (int i = 0; i < 4; i++) {
         const uint8_t *te = n->hdr + 0x240 + 0x10 * i, *fh = n->hdr + 0x400 + 0x200 * i; NxSection *S = &n->sec[i];
@@ -835,7 +866,11 @@ int nx_container_titles(NxContainer *c, NxTitle **out, int *count) {
         for (uint32_t k = 0; k < cc; k++) {
             size_t ro = 0x20 + ext + 0x38 * k; if (ro + 0x38 > cf->size) break;
             const uint8_t *r = b + ro; int ct = r[0x36];
-            if (ct == 1 && !t.program[0]) hexid(t.program, r + 0x20); else if (ct == 3 && !t.control[0]) hexid(t.control, r + 0x20); else if (ct == 2 && !t.data[0]) hexid(t.data, r + 0x20);
+            // a record: the content's SHA-256 (0x20), its NCA id (0x10), its size (6 bytes), its type
+            uint64_t sz = 0; for (int q = 5; q >= 0; q--) sz = sz << 8 | r[0x30 + q];
+            if (ct == 1 && !t.program[0]) { hexid(t.program, r + 0x20); memcpy(t.program_sha, r, 32); t.program_size = sz; }
+            else if (ct == 3 && !t.control[0]) { hexid(t.control, r + 0x20); memcpy(t.control_sha, r, 32); t.control_size = sz; }
+            else if (ct == 2 && !t.data[0]) { hexid(t.data, r + 0x20); memcpy(t.data_sha, r, 32); t.data_size = sz; }
         }
         free(b); nx_node_free(root); nx_nca_close(&m);
         if (t.kind < 0) continue;   // system/delta metas are not titles of the library

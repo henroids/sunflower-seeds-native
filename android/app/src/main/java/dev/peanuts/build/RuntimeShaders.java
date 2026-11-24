@@ -54,6 +54,20 @@ final class RuntimeShaders {
     }
 
     /**
+     * {shaders that did not translate or validate, total shaders} from the job file ("shaders_failed", written by the shaders step), {0, 0} when the job lacks the
+     * line or every shader was built. With Try anyway (pressed for the player, AutoRelax) the library is written without them and the build still ends as ready
+     */
+    static long[] failed(File jobFile) {
+        try {
+            JSONObject o = new JSONObject(new String(Files.readAllBytes(jobFile.toPath()), StandardCharsets.UTF_8));
+            JSONArray a = o.optJSONArray("shaders_failed");
+            return a == null || a.length() < 2 ? new long[] {0, 0} : new long[] {a.optLong(0), a.optLong(1)};
+        } catch (IOException | JSONException e) {
+            return new long[] {0, 0};
+        }
+    }
+
+    /**
      * Whether the title compiles shaders at run time at all: its profile's shader_map.tsv (in the APK's tools.zip) names GLSLC run-time
      * sources (/glslc_capture/ paths, dm/games/README.md). A pack can miss shaders for other reasons (a game version the map was not made from: Mario Kart 8 Deluxe's 135),
      * and those no game run can capture
@@ -66,6 +80,12 @@ final class RuntimeShaders {
     static int missingInPack(Context c, String titleId, File pack) throws IOException {
         File library = new File(pack, "shaders/v-" + dev.nxnative.android.BuildConfig.NX_DMSH_VK_CHAIN + "/dmsh_vk.lib");
         return RuntimeShaderMap.missing(c.getAssets().open("pack/tools.zip"), titleId, library);
+    }
+
+    /** The buttons the title's capture boot presses (RuntimeShaderMap.captureKeys), "" for none or an APK without the profile */
+    static String captureKeys(Context c, String titleId) {
+        try { return RuntimeShaderMap.captureKeys(c.getAssets().open("pack/tools.zip"), titleId); }
+        catch (IOException e) { Log.w(TAG, "capture: no capture keys for " + titleId + " (" + e.getMessage() + ")"); return ""; }
     }
 
     static File captureDir(File work) { return new File(work, "glslc_capture"); }
@@ -82,18 +102,18 @@ final class RuntimeShaders {
     boolean capture(String titleId, File work, File game, File pack, int need, Prepare.Progress p, java.util.function.BooleanSupplier cancelled) throws IOException {
         File dir = captureDir(work);
         if (captured(dir) >= need) return true;
-        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot make " + dir);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Finishing graphics setup could not make its folder. " + Prepare.RETRY_SHARE + "\n" + dir);
         // A game already running (the player's, perhaps another title) would count as this capture's start, and endGame() would then end it, unsaved
-        if (gameAlive()) throw new IOException("A game is running. Close it, then tap Build again to finish graphics setup.");
+        if (gameAlive()) throw new IOException("Finishing graphics setup needs the game to start, and a game is running. Close it, then tap Retry.");
         File save = new File(work, "shader-capture-save");
         Files.deleteIfExists(ShaderCapture.error(dir).toPath());
         try {
             p.on(0, "Finishing graphics setup");
-            Intent i = ShaderCapture.intent(c, titleId, game, pack, dir, save);
+            Intent i = ShaderCapture.intent(c, titleId, game, pack, dir, save, captureKeys(c, titleId));
             try {
                 c.startActivity(i);
             } catch (RuntimeException e) {
-                throw new IOException("Android did not let graphics setup start. Open the app and tap Build again.", e);
+                throw new IOException("Android did not let graphics setup start. Open the app and tap Retry.", e);
             }
             long t0 = SystemClock.elapsedRealtime();
             boolean seen = false;
@@ -105,15 +125,15 @@ final class RuntimeShaders {
                 if (have >= need) { p.on(100, "Finishing graphics setup"); break; }
                 long t = SystemClock.elapsedRealtime() - t0;
                 if (seen && !alive) { Log.w(TAG, "capture: the game ended with " + have + " of " + need); break; }
-                if (!seen && t > START_MS) throw new IOException("Graphics setup could not start. Tap Build again to retry.");
+                if (!seen && t > START_MS) throw new IOException("Finishing graphics setup could not start the game. " + Prepare.RETRY_SHARE);
                 if (t > CAPTURE_MS) { Log.w(TAG, "capture: " + have + " of " + need + " after " + t / 1000 + " s"); break; }
-                p.on((int) Math.min(95, 5 + have * 90L / Math.max(1, need)), "Finishing graphics setup: " + have + " of " + need);
+                p.on((int) Math.min(95, 5 + have * 90L / Math.max(1, need)), String.format(java.util.Locale.ROOT, "Finishing graphics setup: %,d of %,d", have, need));
             }
         } finally {
             endGame();   // also on cancellation, a start failure or timeout
         }
         File error = ShaderCapture.error(dir);
-        if (error.isFile()) throw new IOException("Graphics setup failed: " + new String(Files.readAllBytes(error.toPath()), StandardCharsets.UTF_8));
+        if (error.isFile()) throw new IOException("Finishing graphics setup stopped. " + Prepare.RETRY_SHARE + "\n" + new String(Files.readAllBytes(error.toPath()), StandardCharsets.UTF_8));
         return captured(dir) >= need;
     }
 
@@ -126,7 +146,7 @@ final class RuntimeShaders {
         try {
             JSONObject o = new JSONObject(new String(Files.readAllBytes(jobFile.toPath()), StandardCharsets.UTF_8));
             JSONObject steps = o.optJSONObject("steps");
-            if (steps == null) throw new IOException("The job file has no steps: " + jobFile);
+            if (steps == null) throw new IOException("Finishing graphics setup could not go on with the build. " + Prepare.RETRY_SHARE + "\njob.json has no steps: " + jobFile);
             for (String s : new String[] {"split", "shaders", "pack"}) {
                 JSONObject st = steps.optJSONObject(s);
                 if (st == null) { st = new JSONObject(); steps.put(s, st); }
@@ -134,10 +154,11 @@ final class RuntimeShaders {
             }
             o.put("state", "pending").put("step", "split").put("reason", "").put("error", "");
             o.remove("shaders_missing");
+            o.remove("shaders_failed");
             o.remove("shader_cache");
             Files.write(jobFile.toPath(), o.toString(1).getBytes(StandardCharsets.UTF_8));
         } catch (JSONException e) {
-            throw new IOException("The job file cannot be reset: " + e.getMessage());
+            throw new IOException("Finishing graphics setup could not go on with the build. " + Prepare.RETRY_SHARE + "\njob.json cannot be reset: " + e.getMessage());
         }
     }
 

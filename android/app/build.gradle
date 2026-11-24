@@ -147,7 +147,7 @@ def fpsLimitMaxOf = { String game ->
 def fpsLockerOf = { String game ->
     // PEANUTS: reviewed typed rows include dynamic elapsed FPS and full-width state caps.
     (tsvRows(game, 'fpslocker') + tsvRows(game, 'fps_memory')).collect { c ->
-        if (c.size() != 6 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['zero_i32','target_f32','frame_ms_f32','frame_ms2_f32','vsync_u32','inverse_f32','frame_scaled_f32','target_scaled_f32','time_ratio_f32','flag_cap_u8','target_i32','zero_u16','time_step_pair_f32','constant_i32','elapsed_fps_f32','flag_cap_u32_gt']) || !(c[3] ==~ /[@%]?0x[0-9a-f]+(\/0x[0-9a-f]+){0,3}/) || !(c[4] in ['1','2']))
+        if (c.size() != 6 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['zero_i32','target_f32','frame_ms_f32','frame_ms2_f32','vsync_u32','inverse_f32','frame_scaled_f32','target_scaled_f32','time_ratio_f32','flag_cap_u8','target_i32','zero_u16','time_step_pair_f32','constant_i32','elapsed_fps_f32','flag_cap_u32_gt','step_ticks_u32','target_offset_f32','frame_offset_ms_f32']) || !(c[3] ==~ /[@%]?0x[0-9a-f]+(\/0x[0-9a-f]+){0,4}/) || !(c[4] in ['1','2'])) // PEANUTS: integer fixed-step ticks, four-offset chains, rate offsets
             throw new GradleException("$game: invalid reviewed fpslocker row")
         c[1..5].join(',')
     }.join(';')
@@ -186,7 +186,21 @@ def presentOnlyOf = { String game -> tsvRows(game, 'fps_limit_present').isEmpty(
 // Whether the game's framework runs a whole number of fixed steps a frame that the host can hold (game.tsv fps_steps rows): "1", or empty. The launcher then offers
 // Hold 60 fps (Prefs.steps, Prefs.hold60: DM_FPS_HOLD60), one step a frame, where the game's own mode drops to two steps (30 fps) after a frame its work overran
 // or a host frame step (fps_target with the rewriter's FRAME_STEP stubs in the profile's patches.py: Ocarina of Time), which Hold 60 fps keeps at one vsync, late time paid back
-def stepsOf = { String game -> def pp = new File(repo, "dm/games/$game/patches.py"); def ft = tsvRows(game, 'fps_target'); (!tsvRows(game, 'fps_steps').isEmpty() || (!ft.isEmpty() && ft[0].size() > 1 && ft[0][1].trim() != '0' && pp.isFile() && pp.text.contains('FRAME_STEP'))) ? '1' : '' }
+// PEANUTS: a FRAME_STEP the profile's patches.py defines (a line "FRAME_STEP = ..."), not the word in its header comment (Link's Awakening had a Hold 60 fps row that did nothing: fps cap audit B4)
+def stepsOf = { String game -> def pp = new File(repo, "dm/games/$game/patches.py"); def ft = tsvRows(game, 'fps_target'); (!tsvRows(game, 'fps_steps').isEmpty() || (!ft.isEmpty() && ft[0].size() > 1 && ft[0][1].trim() != '0' && pp.isFile() && pp.text =~ /(?m)^\s*FRAME_STEP\s*=/)) ? '1' : '' }
+// PEANUTS begin: the profile's fps_target (empty without one or at 0): a game without a frame limit starts at it until the player picks a cap (Prefs.fpsCap; fps cap audit B3)
+def fpsTargetOf = { String game -> tsvRows(game, 'fps_target').with { rs -> rs.isEmpty() || rs[0].size() < 2 || !(rs[0][1].trim() ==~ /[1-9][0-9]*/) ? '' : rs[0][1].trim() } }
+// The rates beyond 60, 30, 20 and 15 the host's engine rows hold for the game: "40,45" when every main the app builds has a k_locks row of a rate kind in dm/host/hle_fpslock.c
+// (rate_ok: not the vsync kinds, which hold only divisors of 60; a mode switch does not set a rate). The fps_target list then offers 40 and 45 (FrameRateCaps.targetCaps)
+def lockKinds = [:].withDefault { [] }
+new File(repo, 'dm/host/hle_fpslock.c').eachLine { l -> def m = (l =~ /^\s*\{\s*"([0-9a-f]{32})",\s*"[^"]*",[^,]*,[^,]*,\s*([A-Z0-9_]+)/); if (m.find()) lockKinds[m.group(1)] << m.group(2) }
+def vsyncKinds = ['VSYNCS_I32', 'MIN_VSYNCS_I32', 'STEPS_I32', 'EXTRA_VSYNCS_U8', 'MODE_U32', 'TICKS_U32']   // PEANUTS: TICKS_U32 presents in whole vsyncs (hle_fpslock.c rate_ok)
+def fpsRatesOf = { String game ->
+    def only = androidBuildsOf(game)
+    def mains = tsvRows(game, 'build').findAll { c -> only.isEmpty() || only.contains(c[1].trim()) }.collect { c -> c.drop(3).find { it.startsWith('main=') }?.substring(5) }.findAll { it }
+    !mains.isEmpty() && mains.every { b -> lockKinds[b].any { !(it in vsyncKinds) } } ? '40,45' : ''
+}
+// PEANUTS end
 def variantsOf = { String game -> tsvRows(game, 'variant').findAll { it.size() > 1 && it[1].trim() }.collect { it[1].trim() + '=' + (it.size() > 3 && it[3].trim() ? it[3].trim() : it[1].trim()) }.join(',') }   // game.tsv variant rows: "43=4:3,..." (Game settings > Aspect ratio)
 // Profile-declared opt-in settings (game.tsv option rows: "<env>|<label>|<description>|<restart or live>", ';' between them: Profile.options)
 def optionsOf = { String game ->
@@ -255,7 +269,7 @@ def recommendOf = { String game ->
     def fail = { String why -> throw new GradleException("dm/games/$game/game.tsv: recommend: $why (dm/games/README.md \"Recommended settings\")") }
     def presets = presetsOf(game).split(';').findAll { it }.collect { it.split('\\|')[0] }
     def opts = optionsOf(game).split(';').findAll { it }.collect { it.split('\\|')[0] }
-    def limited = decoupleOf(game) == '1' || fpsLimitOf(game) != ''
+    def limited = decoupleOf(game) == '1' || fpsLimitOf(game) != '' || presentOnlyOf(game) == '1'   // PEANUTS: opt-in present pacing too (Profile.optInPresentRate)
     def dlss = dlssOf(game) == '1'
     rows.collect { c ->
         def words = c.drop(1).collectMany { it.trim().split(/\s+/) as List }.findAll { it }
@@ -287,12 +301,23 @@ def recommendOf = { String game ->
         match + '|' + set.join(' ')
     }.join(';') }
 def linkPlayOf = { String game -> tsvRows(game, 'link_play').any { it.size() > 1 && it[1].trim() == '1' } ? '1' : '' }   // opt-in join settings only for profiles with checked Link Play
+// PEANUTS: game.tsv aspect_plan rows (dm/host/aspect_plan.h): "<main build>,<kind>,m0x<offset>,<expected word>", ';' between them. The loader makes the game's own
+// 16:9 number the picture's shape for a game that needs no camera code of its own. Such a profile gets Game settings > Display > Fill (GameSettings.fillable); fixed
+// shapes under Aspect ratio are its aspect rows, if it has any (aspectsOf)
+def aspectPlanOf = { String game ->
+    tsvRows(game, 'aspect_plan').collect { c ->
+        if (c.size() != 5 || !(c[1] ==~ /[0-9a-f]{32}/) || !(c[2] in ['ratio_f32', 'width_movz', 'width_u32', 'area_width_u32', 'area_height_u32', 'nop', 'ratio_fmov', 'ratio_movz', 'ratio_movk']) || !(c[3] ==~ /m0x[0-9a-f]+/) || !(c[4] ==~ /[0-9a-f]{8}/))
+            throw new GradleException("$game: invalid aspect_plan row")
+        c[1..4].join(',')
+    }.join(';')
+}
 def aspectsOf = { String game -> tsvRows(game, 'aspect').findAll { it.size() > 1 && it[1].trim() }.collect { it[1].trim() }.join(',') }   // game.tsv aspect rows: the picture shapes whose 3D cameras the host follows, no module variant ("21:9,4:3"); Game settings > Aspect ratio
 def handheldGames = nxGames.findAll { g -> tsvRows(g, 'op_mode').any { it.size() > 1 && it[1].trim() == 'handheld' } }.join(' ')   // PEANUTS: the games whose profile says op_mode handheld (ScreenMode's default for them)
 // Whether the game has cheat files (game.tsv cheats rows: pack_android.py place_cheats copies them into the pack): "1", or empty. The launcher then offers Game settings › Cheats (Cheats.java)
 def cheatsOf = { String game -> tsvRows(game, 'cheats').isEmpty() ? '' : '1' }
 def timeOfDayOf = { String game -> tsvRows(game, 'time_of_day').any { it.size() > 1 && it[1].trim() == '1' } ? '1' : '' }   // the Game tab's Time of day row only for profiles whose day/night cycle follows the user clock
-def nxProfiles = nxGames.collect { g -> [g, nameOf(g).replaceAll(/[\t\n\\"]/, ' '), shaderTotalOf(g), shaderInputsOf(g), buildsOf(g), reqsOf(g), statusOf(g), deltaOf(g), stampOf(g), resolutionOf(g), romfsChecksOf(g), gpuTsOf(g), windowOf(g), decoupleOf(g), drsOf(g), fpsLimitOf(g), dlssOf(g), presentOnlyOf(g), stepsOf(g), tsvRows(g, 'mesh_vegetation_cut').isEmpty() ? '' : '1', optionsOf(g), sceneOf(g), presetsOf(g), skipLayersOf(g), recommendOf(g), variantsOf(g), presetFromOf(g), linkPlayOf(g), aspectsOf(g), timeOfDayOf(g), cheatsOf(g), fpsLimitMaxOf(g), fpsLockerOf(g), fpsLockerPlanOf(g), fpsLimitMinOf(g), fpsModesOf(g), fpsPlan120Of(g), crowdOf(g)].join('\\t') }.join('\\n')
+// PEANUTS: include each game's supported options in the launcher profile.
+def nxProfiles = nxGames.collect { g -> [g, nameOf(g).replaceAll(/[\t\n\\"]/, ' '), shaderTotalOf(g), shaderInputsOf(g), buildsOf(g), reqsOf(g), statusOf(g), deltaOf(g), stampOf(g), resolutionOf(g), romfsChecksOf(g), gpuTsOf(g), windowOf(g), decoupleOf(g), drsOf(g), fpsLimitOf(g), dlssOf(g), presentOnlyOf(g), stepsOf(g), tsvRows(g, 'mesh_vegetation_cut').isEmpty() ? '' : '1', optionsOf(g), sceneOf(g), presetsOf(g), skipLayersOf(g), recommendOf(g), variantsOf(g), presetFromOf(g), linkPlayOf(g), aspectsOf(g), timeOfDayOf(g), cheatsOf(g), fpsLimitMaxOf(g), fpsLockerOf(g), fpsLockerPlanOf(g), fpsLimitMinOf(g), fpsModesOf(g), fpsPlan120Of(g), tsvRows(g, 'fps_step_elapsed').isEmpty() ? '' : '1', tsvRows(g, 'fps_owned_default').isEmpty() ? '' : '1', aspectPlanOf(g), tsvRows(g, 'aspect_plan_untested').isEmpty() ? '' : '1', fpsTargetOf(g), fpsRatesOf(g), crowdOf(g)].join('\\t') }.join('\\n')   // PEANUTS: fps_owned_default, then aspect_plan and aspect_plan_untested, then fps_target and the engine rows' rates (Profile.fpsTarget, fpsRates), the last column
 def lockOf = { String key -> def f = new File(repo, 'dm/gfx/tools/dmsh_chain.lock'); f.isFile() ? (f.readLines().find { it.startsWith(key + '\t') }?.split('\t')?.getAt(1) ?: 'unknown') : 'unknown' }
 
 android {
@@ -446,6 +471,10 @@ android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/nxext
 tasks.named('preBuild') { dependsOn nxFont }
 
 // ./gradlew apk → out/nxnative-android.apk (-PnxPlay=true: nxnative-android-play.apk; -PnxApp=<suffix>: nxnative-android-<suffix>.apk)
+if (nxApp == 'peanuts') {
+    // PEANUTS: an incremental package can retain an entire replaced tools.zip as dead space. Recreate the final archive from its built inputs.
+    tasks.matching { it.name == 'packageRelease' }.configureEach { outputs.upToDateWhen { false } }
+}
 tasks.register('apk', Copy) {
     dependsOn 'assembleRelease'
     from(layout.buildDirectory.dir('outputs/apk/release')) { include '*.apk' }
@@ -471,6 +500,8 @@ if (nxPackEngine == 'native') {
     def need = ['lib/libpython3.14.so', 'lib/libnxpack.so', 'lib/libzbicdec.so', 'lib/libcra.so', 'lib/libdmsh_xlate.so', 'lib/libSPIRV-Tools-shared.so', 'python/lib/python3.14/os.py']
     // PEANUTS: HAL's .cmp containers need lz4.frame; an older stage silently lost Kirby's 9,693 particle shaders (issue #78).
     need += ['python/lib/python3.14/site-packages/lz4/frame/__init__.py', 'python/lib/python3.14/site-packages/lz4/frame/_frame.cpython-314-aarch64-linux-android.so']
+    // PEANUTS: shader_split.py's Yaz0 in C (dm/peanuts/pack_worker/nxyaz0.c); a stage without it splits in Python, many times slower (peanuts/scripts/ondevice-stage.sh <work dir> zbic adds it)
+    need += ['python/lib/python3.14/lib-dynload/_nxyaz0.cpython-314-aarch64-linux-android.so']
     need.each { if (!new File(stage, it).isFile()) throw new GradleException("$stage has no $it: run android/ondevice/build.sh <work dir> (it makes <work dir>/stage)") }
     // The stage's translator must be built from this tree: vk_android_build.py check_translator refuses any other on the phone, so an APK with a stale one fails
     // every Prepare at the shaders step (2026-11-10: a stage made before a translator change). xlate_tree.py --check-lib reads the digests the library embeds
@@ -506,8 +537,11 @@ if (nxPackEngine == 'native') {
             include 'scripts/*.py', 'dm/tools/*.py', 'dm/games/*.py', 'dm/gfx/nvn/*.h'
             include 'dm/peanuts/profile/mod_memory.tsv'   // PEANUTS: a modded variant's memory numbers, read by gen_runtime_profile.py
             include 'dm/peanuts/profile/gen_runtime_profile.py'   // PEANUTS: a build with a code mod that adds a module writes its own profile.bin with it (pack_android.py --modules); without the file every such build stopped at "Rewriting the game's code"
+            include 'dm/peanuts/reuse/*.py'   // PEANUTS: the shaders step's wrapper that keeps the older library's unchanged shaders (shader_reuse.py, issue #120)
             include 'dm/tools/rewriter_equiv/*'   // earlier rewriter files of identical output: their pack keys still count (pack_android.py EQUIV, RewriteKey)
             nxGames.each { include "dm/games/$it/**" }   // the profile of each game the APK runs
+            // PEANUTS: the phone packer needs neither the development notes nor the host's prewarm seeds (assets/profiles or compiled into the host).
+            exclude 'dm/games/*/README.md', 'dm/games/*/vk_prewarm.bin', 'dm/games/*/vk_programs.bin'   // PEANUTS: vk_programs.bin (the .programs asset, below)
             include 'dm/games/*/patches.py'   // every profile's rewriter patches: patch_nso.py lists them all in build_src.sha256, as on the Mac
             include 'dm/gfx/tools/*.py', 'dm/gfx/tools/*.lock', 'dm/gfx/tools/*.metal', 'dm/gfx/tools/*.tsv', 'dm/gfx/tools/dmsh_xlate/Program.cs', 'dm/gfx/tools/dmsh_xlate/*.csproj'
             // the other files DMSH_CHAIN hashes (dmsh_chain.py FILES): vk_android_build.py recomputes the version on the phone
@@ -563,7 +597,23 @@ if (nxGenericHost) {
         // after the first build left the task up to date and the .seed asset empty (found 2026-11-15: ten new seeds packaged as 0 bytes)
         def seeds = nxGames.collect { new File(repo, "dm/games/$it/vk_prewarm.bin") }.findAll { it.isFile() }
         inputs.property('seeds', seeds.collect { it.parentFile.name }.join(','))
+        inputs.files(nxGames.collectMany { g -> ['shader_pairs.tsv', 'pso_pairs.tsv'].collect { new File(repo, "dm/games/$g/$it") } }.findAll { it.isFile() })   // PEANUTS: the .pairs assets' inputs
+        inputs.files(nxGames.collect { new File(repo, "dm/games/$it/vk_programs.bin") }.findAll { it.isFile() })   // PEANUTS: the .programs assets' inputs
         inputs.files(seeds)
+        // PEANUTS: release seeds captured on the device are private build inputs.
+        def manifest = new File(repo, 'peanuts/prewarm-sha256.tsv')
+        def seedDir = providers.environmentVariable('PN_PREWARM_SEEDS').getOrElse('')
+        def expectedSeeds = manifest.readLines('UTF-8').collectEntries { line ->
+            def fields = line.split('\t')
+            [(fields[0]): fields[1]]
+        }
+        def releaseSeeds = nxGames.findAll { expectedSeeds.containsKey(it) }.collectEntries { title ->
+            def seed = seedDir ? new File(seedDir, "${title}.seed") : new File(repo, "dm/games/$title/vk_prewarm.bin")
+            [(title): seed]
+        }
+        inputs.file(manifest)
+        inputs.property('requireReleaseSeeds', nxRelease || !seedDir.isEmpty())
+        inputs.files(releaseSeeds.values().findAll { it.isFile() })
         outputs.dir(genDir)
         doLast {
             def run = { List<String> args ->
@@ -579,7 +629,38 @@ if (nxGenericHost) {
             project.delete(o); o.mkdirs()
             nxGames.each { g ->
                 run(['profile', g, new File(o, "${g}.profile.bin").path])
-                run(['seed', g, new File(o, "${g}.seed").path])
+                // PEANUTS: check the actual bytes written, including on a same-version rebuild.
+                def output = new File(o, "${g}.seed")
+                def seed = releaseSeeds[g]
+                if (seed?.isFile()) {
+                    def bytes = seed.bytes
+                    def digest = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+                    if (digest != expectedSeeds[g]) throw new GradleException("Prewarm seed for $g has SHA-256 $digest, expected ${expectedSeeds[g]}")
+                    output.bytes = bytes
+                } else if (seed != null && (nxRelease || seedDir)) {
+                    throw new GradleException("Missing release prewarm seed for $g. Set PN_PREWARM_SEEDS to the folder containing ${g}.seed")
+                } else {
+                    run(['seed', g, output.path])
+                }
+                // PEANUTS: the game's programs for the preparing step (vka_pso.c pp_prepare): the vertex and pixel shader keys of shader_pairs.tsv and
+                // pso_pairs.tsv, 16 bytes a row (each key's 16 hexadecimal digits as bytes), each pair once, in the tables' order
+                def seenPairs = new HashSet<String>()
+                def pairBytes = new ByteArrayOutputStream()
+                ['shader_pairs.tsv', 'pso_pairs.tsv'].each { t ->
+                    def pf = new File(repo, "dm/games/$g/$t")
+                    if (pf.isFile()) pf.eachLine { l ->
+                        def c = l.trim().split(/\s+/)
+                        if (!l.startsWith('#') && c.length >= 2 && c[0] ==~ /[0-9a-fA-F]{16}/ && c[1] ==~ /[0-9a-fA-F]{16}/ && seenPairs.add(c[0] + c[1]))
+                            pairBytes.write((c[0] + c[1]).decodeHex())
+                    }
+                }
+                new File(o, "${g}.pairs").bytes = pairBytes.toByteArray()
+                // and the profile's program list (dm/games/<id>/vk_programs.bin: 64-byte records, a run's learned programs), as it is
+                def progs = new File(repo, "dm/games/$g/vk_programs.bin")
+                if (progs.isFile()) {
+                    if (progs.length() % 64 != 0) throw new GradleException("dm/games/$g/vk_programs.bin is not a list of 64-byte records")
+                    new File(o, "${g}.programs").bytes = progs.bytes
+                }
             }
         }
     }
