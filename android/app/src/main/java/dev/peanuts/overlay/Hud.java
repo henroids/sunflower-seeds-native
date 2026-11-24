@@ -19,7 +19,7 @@ import java.util.Locale;
  * PEANUTS: the overlay's top-right block as a label / value table (Overlay.tick hands its readings here). Built from spans only, because the upstream path draws a
  * CharSequence into a bitmap and redraws when Overlay.key (text and colours) changes: one monospace face, labels padded to a fixed width, values padded to the widest,
  * a larger fps number, and the frame-time histogram as a ReplacementSpan over a placeholder whose chars encode the bars (so a new frame changes the key).
- * The style ("pill", the default, "table" or "classic") and the preset are in the launcher's preferences file, the one Prefs uses. The pill is one line: the dot,
+ * The style ("table", the default, "pill" or "classic") and the preset are in the launcher's preferences file, the one Prefs uses. The pill is one line: the dot,
  * the fps, a short histogram, 1%L and the temperature (an icon, IconSpan; Normal), with the preset's own items (HudSettings.pillItems) and any value that turns yellow or red.
  */
 public final class Hud {
@@ -62,8 +62,8 @@ public final class Hud {
         return p.contains("overlay_tag") ? p.getBoolean("overlay_tag", true) : !"pill".equals(style(p));
     }
 
-    /** The style: "pill" until the player picked one */
-    static String style(SharedPreferences p) { return p.getString(STYLE, "pill"); }
+    /** The style: "table" until the player picked one */
+    static String style(SharedPreferences p) { return p.getString(STYLE, "table"); }   // PEANUTS: Table stays the default; the pill is a choice (#538)
 
     /** The place: the player's, else the top centre for the pill and the top right for the taller table and classic blocks */
     static String corner(SharedPreferences p) { return p.getString(CORNER, "pill".equals(style(p)) ? "tc" : "tr"); }

@@ -86,7 +86,7 @@ class Wiring(unittest.TestCase):
 
     def test_pill(self):
         h = (OV / 'Hud.java').read_text()
-        self.assertIn('return p.getString(STYLE, "pill");', h)
+        self.assertIn('return p.getString(STYLE, "table");', h)
         self.assertIn('return p.getString(CORNER, "pill".equals(style(p)) ? "tc" : "tr");', h)
         self.assertIn('return p.getString(PRESET, "pill".equals(style(p)) ? "normal" : HudSettings.DEFAULT_PRESET);', h)
         self.assertIn('if ("pill".equals(style)) return fit(c, pill(', h)

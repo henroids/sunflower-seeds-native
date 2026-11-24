@@ -411,7 +411,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   prepares its shaders. 0.1.7 measured each run itself, from `last-exit.txt` to the process's end in Android's exit records; that is gone, and with it
   the file read and the binder calls. On the first look after an update from 0.1.7 the ledger so far counts as counted (`seenAtFirstLook`), so no hour
   counts twice. Tests `peanuts/tests/test_peanuts_cracked.py` (the rule on the JVM, the wiring).
-- 2026-11-24 (the overlay's pill): Overlay › Style is Pill (the default), Table or Classic. The pill (`Hud.pill`) is one line, plain: white values, grey units,
+- 2026-11-24 (the overlay's pill): Overlay › Style is Table (the default), Pill or Classic. The pill (`Hud.pill`) is one line, plain: white values, grey units,
   warm light icons (`IconSpan`, drawn in code) on its own background (`PillBg`: a dark peanut brown with a top sheen, a thin
   rim in the shell's #D9A066 and a soft inner glow); yellow and red only mark a problem (the fps number in the frame time's colour, TEMP, BAT and RAM
   by their levels), and the bars on pace are light grey for every style (`HistogramSpan`, `peanuts_graph.c`). Its histogram is 6 chars of the newest 20 frames (the
@@ -423,6 +423,6 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
   when they turn yellow or red (BAT and RAM only while their switch is on: `Overlay.tick` reads nothing else). Before the player picks one, the pill uses Normal and
   sits at the top centre; Table and Classic keep Full and the top right. Position has six places (`Hud.CORNERS` / `CORNER_IDS`, the host's `VKO_TOP_CENTER` and
   `VKO_BOTTOM_CENTER`; `pn_graph_corner` accepts 4 and 6, a bottom place is bit 2). The pill floats 6 dp off the edges with round ends, and a centred or left block
-  takes the corner's side margin on the right side (`Hud.margins`, one hook in `Overlay.Block.draw`). Players who never picked a style see the pill after the update. The build tag is off by default under the pill (`Hud.tagOn`,
+  takes the corner's side margin on the right side (`Hud.margins`, one hook in `Overlay.Block.draw`). Players who never picked a style keep the table (igawa6, landing #538: the pill is a choice, not the default). The build tag is off by default under the pill (`Hud.tagOn`,
   used by `GameActivity` in two marked lines; a player's own switch wins, and only the Full preset turns it on there).
   Tests: `t_android_ovl`, `t_peanuts_graph`, `dm/tools/tests/test_android_hud.py` (`test_pill`).
