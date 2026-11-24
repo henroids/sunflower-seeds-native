@@ -49,7 +49,7 @@ class Wiring(unittest.TestCase):
 
     def test_controls(self):
         a = (REPO / 'android/app/src/main/java/dev/nxnative/android/GameActivity.java').read_text()
-        for k in ('dev.peanuts.ui.GameControls.host(peanutsControls())', 'dev.peanuts.ui.GameControls.host(null)', 'Native.graphicsModeSet(-1, 1 - m)', 'Native.fpsCapSet(v)'):
+        for k in ('dev.peanuts.ui.GameControls.host(controlsHost = peanutsControls())', 'dev.peanuts.ui.GameControls.clear(controlsHost)', 'Native.graphicsModeSet(-1, 1 - m)', 'Native.fpsCapSet(v)'):
             self.assertIn(k, a)
         s = (UI / 'StatsView.java').read_text()
         for k in ('openControl(v, true)', 'openControl(v, false)', 'GameControls.host()', 'popup != null', 'h.capRunning()', 'fpsBlock'):

@@ -23,6 +23,8 @@ public final class Request {
     static final List<String> FILTERS = Arrays.asList("all", "building", "ready", "build", "not_in_app");
     static final List<String> COMPANION_ACTIONS = Arrays.asList("list", "install", "update", "remove");
     static final List<String> TABS = Arrays.asList("performance", "game", "saves", "storage");
+    /** game's do: stop, ctl (one raw line into the game's control file), then the live controls of the running game (GameLive.ACTIONS) */
+    static final List<String> GAME_ACTIONS = Arrays.asList("stop", "ctl", "fps_cap", "console_mode", "second_screen", "controls");
     private static final Set<String> YES = new HashSet<>(Arrays.asList("true", "1", "on", "yes")), NO = new HashSet<>(Arrays.asList("false", "0", "off", "no"));
 
     public final String cmd, id;
@@ -87,7 +89,11 @@ public final class Request {
             String a = word("do", Arrays.asList("pause", "stop", "resume", "retry", "try_anyway"));
             return "stop".equals(a) ? "pause" : a;   // one button: the build card calls it Stop, the Prepare card Pause
         }
-        if (cmd.equals("game")) { need("do"); return word("do", Arrays.asList("stop", "ctl")); }
+        if (cmd.equals("game")) {
+            if (str("do") == null && str("line") != null) return "ctl";   // a raw line alone is do=ctl
+            need("do");
+            return word("do", GAME_ACTIONS);
+        }
         if (cmd.equals("companion")) { need("do"); return word("do", COMPANION_ACTIONS); }
         return null;
     }
@@ -126,7 +132,10 @@ public final class Request {
                 if (a.equals("ctl")) {
                     String line = need("line");
                     if (line.indexOf('\n') >= 0 || line.indexOf('\r') >= 0) throw new Bad("bad_args", "line is one line");
-                } else if (!on("confirm")) throw new Bad("needs_confirm", "game stop ends the game and unsaved progress is lost: add -e confirm true");
+                } else if (a.equals("stop")) {
+                    if (!on("confirm")) throw new Bad("needs_confirm", "game stop ends the game and unsaved progress is lost: add -e confirm true");
+                } else GameLive.check(this, a);
+                titleId(false);   // the live controls: refused when another game runs
                 break;
             }
             case "screens_off": if (flag("on") == null) throw new Bad("bad_args", "screens_off needs -e on true or -e on false"); break;

@@ -259,7 +259,11 @@ public final class Ctl {
             case "set": set(r, res); break;
             case "screens_off": ScreensOff.hide(); res.ok("The screens are back."); break;
             case "job": pause(r, res); break;
-            case "game": if (r.action().equals("stop")) stopGame(res); else gameCtl(r, res); break;
+            case "game": {
+                String a = r.action();
+                if (a.equals("stop")) stopGame(res); else if (a.equals("ctl")) gameCtl(r, res); else gameLive(r, res);   // gameLive: pending until the game answers
+                break;
+            }
             case "companion": {   // pending until its thread has the answer; a change is in the library rows of the write that follows
                 boolean changes = !r.action().equals("list");
                 CompanionCmd.start(app, r, res, () -> UI.post(() -> { done(res); if (changes) libraryChanged(); }));
@@ -289,12 +293,23 @@ public final class Ctl {
         boolean own = id != null;
         if (own && !Up.hasProfile(id)) throw new Request.Bad("unknown_title", "This app has no game " + id + ".");
         boolean paced = own && Up.prefsBool("limited", id);
-        Settings.Change ch = Settings.parse(r.need("key"), r.need("value"), own, own ? (!paced && Up.prefsBool(app, "ownRate", id) ? new int[] {0} : Up.caps(paced, id)) : null, paced);
+        boolean drivers = "gpu_driver".equalsIgnoreCase(r.need("key"));   // the installed drivers are read only for the key that names one
+        Settings.Change ch = Settings.parse(r.need("key"), r.need("value"), own, own ? (!paced && Up.prefsBool(app, "ownRate", id) ? new int[] {0} : Up.caps(paced, id)) : null, paced,
+                drivers ? Up.drivers(app) : null);
         String missing = own ? Up.rowMissing(app, ch.key, id) : null;
         if (missing != null) throw new Request.Bad("not_for_this_game", "The game's settings have no such row: " + missing + ".");
+        boolean fill = ch.key.equals("display") && Integer.valueOf(2).equals(ch.value);
+        if (fill && !Up.fillable(id)) throw new Request.Bad("not_for_this_game", "This game has no Fill. Display offers Fit and Stretch.");
         Up.apply(app, ch, id);
-        res.ok(null).put("key", ch.key).put("stored", ch.value == null ? "default" : ch.value).put("effective", ch.effective);
+        res.ok(null).put("key", ch.key).put("stored", ch.value == null ? "default" : ch.key.equals("display") ? Settings.DISPLAYS.get((Integer) ch.value) : ch.value).put("effective", ch.effective);
         if (own) res.put("title_id", id);
+        Object now = Up.resolved(app, ch.key, id);
+        if (now != null) res.put("resolved", now);   // what the game (every game, without title_id) starts with, the default worked out
+        if (ch.key.equals("display")) {
+            res.put("label", Up.displayLabel(app, id));
+            if (fill && Up.fillUntested(id)) res.ok("Fill is untested on this game. It may look wrong or not start. Set display to fit to go back.").put("untested", true);
+        }
+        if (ch.key.equals("bottom_screen_games") && !PeanutsPrefs.bottomScreen(app)) res.ok("Stored, but the bottom screen is off in Settings › Library, so games do not use it until it is on.");
     }
 
     /**
@@ -344,6 +359,37 @@ public final class Ctl {
         }
         android.os.Process.killProcess(pid);
         res.ok("The game was stopped as its panel's Stop does: marked as stopped by the player, then its process ended. Unsaved progress is lost.").put("pid", pid);
+    }
+
+    /**
+     * game, do=fps_cap | console_mode | second_screen | controls (GameLive): the game runs in its own process, so the request goes there as an ordered broadcast
+     * for this package only. GameLink's receiver in the game (registered by GameActivity, not exported: only this app reaches it) does the work on the game's
+     * main thread and sets the broadcast's result; the final receiver here takes it. The result stays pending until then, and fails with no_answer when nothing
+     * came within GameLive.ANSWER_MS (or the game's screen has no receiver: the broadcast then ends with its first result code).
+     */
+    private static void gameLive(Request r, Result res) throws Request.Bad {
+        if (gamePid() < 0) throw new Request.Bad("not_running", "No game runs.");
+        String want = r.titleId(false), have = Status.record(app).get("title");
+        if (want != null && have != null && !want.equalsIgnoreCase(have)) throw new Request.Bad("other_game", "The game that runs is " + have + ", not " + want + ".");
+        Intent i = new Intent(GameLive.ACTION).setPackage(app.getPackageName()).addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+        for (Map.Entry<String, String> e : GameLive.args(r).entrySet()) i.putExtra(e.getKey(), e.getValue());
+        boolean[] over = {false};
+        Runnable late = () -> {
+            if (over[0]) return;
+            over[0] = true;
+            done(res.fail("no_answer", "The game did not answer in " + GameLive.ANSWER_MS / 1000 + " s."));
+        };
+        app.sendOrderedBroadcast(i, null, new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent x) {
+                if (over[0]) return;   // answered after the wait ended: the result says no_answer already
+                over[0] = true;
+                UI.removeCallbacks(late);
+                Bundle b = getResultExtras(false);
+                GameLive.take(getResultCode() == Activity.RESULT_OK && b != null ? b.getString(GameLive.EXTRA_ANSWER) : null, res);
+                done(res);
+            }
+        }, UI, Activity.RESULT_CANCELED, null, null);
+        UI.postDelayed(late, GameLive.ANSWER_MS);
     }
 
     /** game, do=ctl: one line into the file the running game reads its live control lines from (DM_CTL: the launcher sets it to ctl.txt at every start) */

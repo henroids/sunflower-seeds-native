@@ -730,15 +730,19 @@ final class GameSettings {
     static boolean fillable(Profile p) { return p != null && (!p.cameraAspects.isEmpty() || !p.aspectPlan.isEmpty()); }
     static boolean filling(android.content.Context a, String id) { return fillable(Profile.of(id)) && ScreenShape.CHOICE.equals(Prefs.aspect(a, id)); }
     static String displayLabel(android.content.Context a, String id) { return filling(a, id) ? "Fill the screen" : Prefs.DISPLAY_NAMES[Prefs.stretch(a, id) ? 1 : 0]; }
+    /** Display's choice w: 0 Fit, 1 Stretch, 2 Fill (a fillable game only). The dialog below and the adb control's set display (dev.peanuts.ctl.Up) both store it here */
+    static void setDisplay(android.content.Context a, String id, int w) {
+        Prefs.stretch(a, id, w == 1);
+        if (w == 2) Prefs.aspect(a, id, ScreenShape.CHOICE);   // Fill
+        else if (filling(a, id)) Prefs.aspect(a, id, null);   // Fit or Stretch after Fill: the game as shipped again
+    }
     // PEANUTS end
     private static void display(MainActivity a, Game g, Runnable done) {
         boolean fill = fillable(Profile.of(g.titleId));   // PEANUTS: a third choice for a game that can fill
         boolean guess = fill && Profile.of(g.titleId).aspectUntested;   // PEANUTS: rows nobody has seen on a device (game.tsv aspect_plan_untested)
         String[] names = fill ? new String[] {Prefs.DISPLAY_NAMES[0], Prefs.DISPLAY_NAMES[1], FILL_NAME + (guess ? ". Untested on this game: it may look wrong or not start; pick Fit to go back" : "")} : Prefs.DISPLAY_NAMES;   // PEANUTS
         new PadFocus.Builder(a).setTitle("Display · " + g.name).setSingleChoiceItems(names, filling(a, g.titleId) ? 2 : Prefs.stretch(a, g.titleId) ? 1 : 0, (x, w) -> {   // PEANUTS: names, Fill
-            Prefs.stretch(a, g.titleId, w == 1);
-            if (w == 2) Prefs.aspect(a, g.titleId, ScreenShape.CHOICE);   // PEANUTS: Fill
-            else if (filling(a, g.titleId)) Prefs.aspect(a, g.titleId, null);   // PEANUTS: Fit or Stretch after Fill: the game as shipped again
+            setDisplay(a, g.titleId, w);   // PEANUTS: setDisplay (Fill)
             x.dismiss();
             done.run();
         }).setNegativeButton("Cancel", null).show();

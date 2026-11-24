@@ -88,9 +88,13 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private volatile AudioDeviceCallback route;
     private boolean routeReady;
 
+    private dev.peanuts.ui.GameControls.Host controlsHost;   // PEANUTS: this screen's controls (GameControls.clear)
+    private android.content.BroadcastReceiver peanutsCtl;   // PEANUTS: the adb control's live game commands (dev.peanuts.ctl.GameLink)
+
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        dev.peanuts.ui.GameControls.host(peanutsControls());   // PEANUTS: the stats page's console mode and frame rate cap pop-ups
+        dev.peanuts.ui.GameControls.host(controlsHost = peanutsControls());   // PEANUTS: the stats page's console mode and frame rate cap pop-ups
+        peanutsCtl = dev.peanuts.ctl.GameLink.register(this);   // PEANUTS: the same controls for the adb control's game command, from the launcher's process
         fitOrientation();
         // PEANUTS: the game stays behind the lock screen (GitHub issue #198: after the lid closed it was drawn over the lock screen, which then had no way to the PIN
         // prompt). Only a control command asks for it (--ez show_when_locked true, as Ondevice's), for test runs on a phone that locks
@@ -1185,7 +1189,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
      * The game itself is left as it is: onStop has suspended it
      */
     @Override protected void onDestroy() {
-        dev.peanuts.ui.GameControls.host(null);   // PEANUTS: no game, no controls on the stats page
+        dev.peanuts.ui.GameControls.clear(controlsHost);   // PEANUTS: no game, no controls on the stats page (unless a newer screen of the game set its own)
+        dev.peanuts.ctl.GameLink.unregister(this, peanutsCtl);   // PEANUTS
+        peanutsCtl = null;
         runningDisplayMode.clear(this);   // PEANUTS: release this game window's display request
         dev.peanuts.Companion.stop();   // PEANUTS
         dev.peanuts.launch.PlayTime.flush(this);   // PEANUTS: total play time, what is still in memory
@@ -1378,17 +1384,21 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         GameActivity act = this;
         return new dev.peanuts.ui.GameControls.Host() {
             @Override public int consoleMode() { return ScreenMode.fixed(titleId()) != null ? -1 : ScreenMode.mode(act, titleId()); }
-            @Override public void consoleMode(int m) {
-                if (ScreenMode.fixed(titleId()) != null) return;
+            @Override public boolean consoleMode(int m) {
+                if (ScreenMode.fixed(titleId()) != null) return false;
                 ScreenMode.set(act, titleId(), m);
-                if (!Native.graphicsModeSet(-1, 1 - m)) Native.note("Console mode: this host cannot change it while the game runs; it applies at the next start");
+                if (Native.graphicsModeSet(-1, 1 - m)) return true;
+                Native.note("Console mode: this host cannot change it while the game runs; it applies at the next start");
+                return false;
             }
             @Override public int[] caps() { return Prefs.limited(titleId()) ? FrameRateCaps.menu() : new int[] {0, 120, 90, 60, 45, 40, 30, 20, 15}; }
             @Override public String capLabel(int v) {   // short, for a button: paceLabel without its "(experimental)", which capNote says once
                 if (Prefs.limited(titleId())) return v == FrameRateCaps.GAME_OWNED ? "Game owned" : (v <= 0 ? 60 : v) + " fps";
                 return v == 0 ? "Game owned" : v + " fps";
             }
-            @Override public boolean capOffered(int v) { return !Prefs.limited(titleId()) || FrameRateCaps.contains(Prefs.paceCaps(titleId()), v); }
+            // PEANUTS: a game without a frame limit list offers what Game settings' Frame rate cap row enables (GameSettings: the game's own, else the launcher's
+            // FPS_CAPS unless the game picks its own rate): every cap was offered here before, 90 and 120 refused by the host and 45 and 40 read back as 30 (fps cap audit, 2026-11-24)
+            @Override public boolean capOffered(int v) { return Prefs.limited(titleId()) ? FrameRateCaps.contains(Prefs.paceCaps(titleId()), v) : v == 0 || !Prefs.ownRate(act, titleId()) && FrameRateCaps.contains(Prefs.FPS_CAPS, v); }
             @Override public int cap() {
                 if (Prefs.limited(titleId())) return Prefs.paceCap(act, titleId());
                 if (Prefs.ownRate(act, titleId())) return 0;

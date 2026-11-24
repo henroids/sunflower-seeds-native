@@ -8,7 +8,8 @@ public final class GameControls {
     public interface Host {
         /** 0 Docked, 1 Handheld (ScreenMode); -1 when the game's Resolution sets the mode (no choice) */
         int consoleMode();
-        void consoleMode(int m);
+        /** true: applied now; false: stored, it applies at the next start (the host cannot change it while the game runs) */
+        boolean consoleMode(int m);
         /** The caps in menu order (0: game owned) */
         int[] caps();
         String capLabel(int v);
@@ -29,4 +30,7 @@ public final class GameControls {
     private GameControls() {}
     public static void host(Host h) { host = h; }
     public static Host host() { return host; }
+    /** The game screen that set h goes away: the controls go with it, unless a newer screen has set its own meanwhile (Android makes a new screen before
+     *  the old one's onDestroy when it recreates it: clearing then left the new screen without controls) */
+    public static void clear(Host h) { if (host == h) host = null; }
 }

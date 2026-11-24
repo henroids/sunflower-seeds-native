@@ -392,10 +392,9 @@ public final class Companion {
      * comes back with its page as it was. → whether something is shown now; null: nothing to do (no second display, the game in the background or stopping)
      */
     public static Boolean toggleScreen(Activity game) {
-        if (game != decidingGame || stopped || away || listenerDm == null || secondDisplay(game, listenerDm) == null) return null;
+        if (!canToggle(game)) return null;
         if (!hidden) {
-            boolean up = shown != null && shown.isShowing() || GameScreen.mode() >= 0 || screenUp && screenPage;
-            if (up) {
+            if (screenIsUp()) {
                 hidden = true;
                 GameScreen.away();
                 if (shown != null) {
@@ -415,6 +414,12 @@ public final class Companion {
         else { if (GameScreen.mode() < 0) openPage(game); else GameScreen.back(); tellPage(game, "none"); }
         return true;
     }
+
+    private static boolean canToggle(Activity game) { return game == decidingGame && !stopped && !away && listenerDm != null && secondDisplay(game, listenerDm) != null; }
+    private static boolean screenIsUp() { return shown != null && shown.isShowing() || GameScreen.mode() >= 0 || screenUp && screenPage; }
+
+    /** Whether the second display shows the companion or Peanuts' page now (what {@link #toggleScreen} would hide); null when toggleScreen could do nothing. The adb control's game command */
+    public static Boolean screenShown(Activity game) { return canToggle(game) ? !hidden && screenIsUp() : null; }
 
     /** Starts the game hold and, once the host has decided whether a companion loaded, shows it (or leaves the display alone). Keeps trying as displays come and go. */
     public static void start(Activity game, String gameName) {
