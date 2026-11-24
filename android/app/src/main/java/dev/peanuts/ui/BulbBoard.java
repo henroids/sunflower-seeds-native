@@ -12,8 +12,8 @@ import java.util.Random;
  * Home's background on the scoreboard look (Scoreboard.ON; BananaBackgroundView hands its drawing, ticks and taps here): the whole screen is a
  * board of bulbs, and seeds (the logo, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard: each step the whole seed moves
  * over at once, keeping its shape. They are scattered at random, each with its own tilt (one of six patterns), most at the baseline pace and some a little
- * slower or faster. A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace, kept MIN_APART bulbs from the others
- * where it can be. A few bulbs of the board are dead, as on a real one: they stay dark under a seed. A tap puts a seed out for RESPAWN_MS.
+ * slower or faster, scattered at first at least MIN_APART bulbs apart where there is room. Each runs on a loop of its own: one that leaves on the right comes
+ * back from the left at its own pace, in a new row and tilt drawn from the seed and the lap, so it all follows from the time (Seed). A few bulbs of the board are dead, as on a real one: they stay dark under a seed. A tap puts a seed out for RESPAWN_MS.
  * Cheap: the unlit board is one shader-filled rect, a seed one prebaked bitmap of its pattern, and every time is a multiple of TICK_MS, so the view
  * redraws at most about 16 times a second, and only when something changed
  */
@@ -164,11 +164,25 @@ public final class BulbBoard {
     private static final int MIN_APART = 30;                                // bulbs between two seeds' centres at least (the first board's lattice spacing), where there is room
     private static final float DEAD_SHARE = 0.005f;                         // the board's dead bulbs
 
-    private static final class Seed {
-        int pat, y; long x0, t0, period, out = Long.MIN_VALUE;
-        long x(long ms) { return x0 + Math.max(0, ms - t0) / period; }
+    /** One seed on its loop: it starts at column x0, steps a column every period, and on leaving on the right comes back from the left span columns later.
+     *  Everything follows from the time, so a jump in time (the screen off and on again) lands each seed where it would be, never all at the left edge */
+    private final class Seed {
+        int id, pat0, y0, span; long x0, t0, period, out = Long.MIN_VALUE;
+        private long lapAt = Long.MIN_VALUE; private int pat, y;
+        private long pos(long ms) { return x0 + LEAD + Math.max(0, ms - t0) / period; }
+        long x(long ms) { return Math.floorMod(pos(ms), (long) span) - LEAD; }
+        /** This lap's tilt and row: the placed ones on the first lap, then one drawn from the seed and the lap (the same for the same lap, however it is reached) */
+        void lap(long ms) {
+            long lap = Math.floorDiv(pos(ms), (long) span);
+            if (lap == lapAt) return;
+            lapAt = lap;
+            if (lap == 0) { pat = pat0; y = y0; return; }
+            Random r = new Random(id * 0x9E3779B97F4A7C15L + lap);
+            pat = r.nextInt(PATTERNS.length); y = r.nextInt(Math.max(1, rows - h(pat) / 2)) - h(pat) / 4;
+        }
         int state(long ms) { return (int) (Math.max(0, ms - t0) / period) ^ (out != Long.MIN_VALUE && ms - out < RESPAWN_MS ? 0x40000000 : 0); }
     }
+    private static final int LEAD = 20;   // columns a seed starts off the left edge (wider than any pattern)
 
     private final float pitch;
     private final Bitmap[] lit = new Bitmap[PATTERNS.length];   // each pattern's bulbs, lit
@@ -214,35 +228,35 @@ public final class BulbBoard {
         for (int k = 0; k < deadCells.length; k++) deadCells[k] = rnd.nextInt(cols * rows);
         int n = Math.max(5, Math.min(30, cols * rows / AREA_PER_SEED));
         seeds = new Seed[n]; shown = new int[n];
-        for (int k = 0; k < n; k++) { seeds[k] = new Seed(); place(seeds[k], k, 0, ms); }   // (scattered over the whole width at first)
+        for (int k = 0; k < n; k++) { seeds[k] = new Seed(); place(seeds[k], k, ms); }
     }
 
-    /** A new tilt, pace and row for seed k, at column x (or, x < 0, just off the left edge), in the free-est of a few tries */
-    private void place(Seed s, int k, long x, long ms) {
-        s.pat = rnd.nextInt(PATTERNS.length); s.period = PERIODS[rnd.nextInt(PERIODS.length)]; s.t0 = tick(ms) + TICK_MS * rnd.nextInt(8); s.out = Long.MIN_VALUE;
+    /** Seed k's first tilt, pace and spot, scattered over the board in the spot farthest from the seeds placed so far (or the first at least MIN_APART
+     *  from all of them), and its loop: the board's width, the widest pattern and a gap of its own, so the seeds come round at different times */
+    private void place(Seed s, int k, long ms) {
+        s.id = k; s.pat0 = rnd.nextInt(PATTERNS.length); s.period = PERIODS[rnd.nextInt(PERIODS.length)]; s.t0 = tick(ms) + TICK_MS * rnd.nextInt(8);
+        s.span = cols + LEAD + rnd.nextInt(MIN_APART);
         double best = -1; long bx = 0; int by = 0;
-        for (int t = 0; t < 40; t++) {   // the spot farthest from the other seeds, or the first at least MIN_APART from all of them
-            long cx = x >= 0 ? rnd.nextInt(Math.max(1, cols)) - w(s.pat) / 2 : -w(s.pat) - rnd.nextInt(MIN_APART);
-            int cy = rnd.nextInt(Math.max(1, rows - h(s.pat) / 2)) - h(s.pat) / 4;
+        for (int t = 0; t < 40; t++) {
+            long cx = rnd.nextInt(Math.max(1, cols)) - w(s.pat0) / 2;
+            int cy = rnd.nextInt(Math.max(1, rows - h(s.pat0) / 2)) - h(s.pat0) / 4;
             double near = Double.MAX_VALUE;
-            for (int o = 0; o < seeds.length; o++) {
-                Seed q = seeds[o]; if (o == k || q == null || q.period == 0) continue;
-                double dx = (cx + w(s.pat) / 2.0) - (q.x(ms) + w(q.pat) / 2.0), dy = (cy + h(s.pat) / 2.0) - (q.y + h(q.pat) / 2.0);
-                near = Math.min(near, Math.hypot(dx, dy));
+            for (int o = 0; o < k; o++) {
+                Seed q = seeds[o];
+                near = Math.min(near, Math.hypot((cx + w(s.pat0) / 2.0) - (q.x0 + w(q.pat0) / 2.0), (cy + h(s.pat0) / 2.0) - (q.y0 + h(q.pat0) / 2.0)));
             }
             if (near > best) { best = near; bx = cx; by = cy; if (near >= MIN_APART) break; }
         }
-        s.x0 = bx; s.y = by;
+        s.x0 = bx; s.y0 = by;
     }
+
 
     /** True when a redraw would show something new: a seed stepped, came back from a tap, or left and was placed again */
     public boolean changed(long ms) {
         if (cols == 0) return true;
         long t = tick(ms); boolean any = false;
         for (int k = 0; k < seeds.length; k++) {
-            Seed s = seeds[k];
-            if (s.x(t) > cols) place(s, k, -1, t);
-            int st = s.state(t);
+            int st = seeds[k].state(t);
             if (st != shown[k]) { shown[k] = st; any = true; }
         }
         return any;
@@ -254,6 +268,7 @@ public final class BulbBoard {
         canvas.drawRect(0, 0, wpx, hpx, board);
         for (Seed s : seeds) {
             if (s.out != Long.MIN_VALUE && t - s.out < RESPAWN_MS) continue;
+            s.lap(t);
             canvas.drawBitmap(lit[s.pat], s.x(t) * pitch, s.y * pitch, seedPaint);
         }
         float r = pitch * 0.36f;
@@ -266,6 +281,7 @@ public final class BulbBoard {
         for (int k = seeds.length - 1; k >= 0; k--) {
             Seed s = seeds[k];
             if (s.out != Long.MIN_VALUE && t - s.out < RESPAWN_MS) continue;
+            s.lap(t);
             int i = (int) (bx - s.x(t)), j = by - s.y;
             String[] p = PATTERNS[s.pat];
             if (j < 0 || j >= p.length || i < 0 || i >= p[j].length() || p[j].charAt(i) == '.') continue;
