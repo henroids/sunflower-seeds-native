@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- PEANUTS: the Sunflower Seeds test app only (-PnxAppId=sunflowertest, build.gradle): the "Scoreboard" look (dev.peanuts.ui.Scoreboard), dark in both modes.
+    <!-- PEANUTS: the Sunflower Seeds apps (-PnxAppId=sunflower…, build.gradle): the "Scoreboard" look (dev.peanuts.ui.Scoreboard), dark in both modes.
          Near-black board, square cells with olive lines, pale green text, mint for the main button and the selection, the purple for the header strip -->
     <color name="bn_bg">#FF060805</color>
     <color name="bn_card">#FF0B0F09</color>

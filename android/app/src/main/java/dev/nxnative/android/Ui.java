@@ -49,7 +49,7 @@ final class Ui {
     static GradientDrawable round(int fill, float radiusPx, int stroke, int strokePx) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(fill);
-        g.setCornerRadius(dev.peanuts.ui.Scoreboard.radius(radiusPx));   // PEANUTS: square on the test app's scoreboard look
+        g.setCornerRadius(dev.peanuts.ui.Scoreboard.radius(radiusPx));   // PEANUTS: square on the scoreboard look
         if (strokePx > 0) g.setStroke(strokePx, stroke);
         return g;
     }
@@ -62,7 +62,7 @@ final class Ui {
         return new RippleDrawable(ColorStateList.valueOf(0x336B4423), shape, mask);
     }
 
-    static Typeface face(int weight) { Typeface s = dev.peanuts.ui.Scoreboard.face(weight); return s != null ? s : Typeface.create(Typeface.SANS_SERIF, weight, false); }   // PEANUTS: Scoreboard.face (the test app's font)
+    static Typeface face(int weight) { Typeface s = dev.peanuts.ui.Scoreboard.face(weight); return s != null ? s : Typeface.create(Typeface.SANS_SERIF, weight, false); }   // PEANUTS: Scoreboard.face (the scoreboard's font)
 
     /** A vector icon (res/drawable/ic_*.xml) tinted with a palette color */
     static Drawable icon(Context c, int drawable, int colorRes) {
@@ -349,7 +349,7 @@ final class Ui {
             h.addView(col, weight());
         }
         if (trailing != null) h.addView(trailing);
-        dev.peanuts.ui.Scoreboard.strip(c, h, t);   // PEANUTS: the scoreboard's purple strip (the test app only)
+        dev.peanuts.ui.Scoreboard.strip(c, h, t);   // PEANUTS: the scoreboard's purple strip
         return h;
     }
 
@@ -487,7 +487,7 @@ final class Ui {
         ImageView v = new ImageView(c);
         v.setImageDrawable(icon(c, drawable, R.color.bn_text));
         v.setScaleType(ImageView.ScaleType.CENTER);
-        android.graphics.drawable.Drawable sb = dev.peanuts.ui.Scoreboard.button(c, drawable);   // PEANUTS: the test app's bulb art (the gear, the book)
+        android.graphics.drawable.Drawable sb = dev.peanuts.ui.Scoreboard.button(c, drawable);   // PEANUTS: the scoreboard's bulb art (the gear, the book)
         if (sb != null) { v.setImageDrawable(sb); v.setScaleType(ImageView.ScaleType.FIT_CENTER); v.setPadding(dp(c, 8), dp(c, 8), dp(c, 8), dp(c, 8)); }
         style(c, v, k, 14);
         v.setContentDescription(description);
@@ -520,7 +520,7 @@ final class Ui {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setColor(0xFF1E5B3A);
-        android.graphics.drawable.Drawable sb = dev.peanuts.ui.Scoreboard.seed(c);   // PEANUTS: the test app's bulb seed on the board's slate square
+        android.graphics.drawable.Drawable sb = dev.peanuts.ui.Scoreboard.seed(c);   // PEANUTS: the scoreboard's bulb seed on the board's slate square
         if (sb != null) { v.setImageDrawable(sb); g.setShape(GradientDrawable.RECTANGLE); g.setColor(0xFF151A1D); }
         v.setBackground(g);
         v.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -559,7 +559,7 @@ final class Ui {
             view.setOnClickListener(dev.peanuts.ui.Feel.row(l));   // PEANUTS: a row's tap ticks and dips (dev.peanuts.ui.Feel; null stays null)
             tile = text(c, emoji, 17, R.color.bn_text, 400);
             tile.setGravity(Gravity.CENTER);
-            dev.peanuts.ui.Scoreboard.tile(tile, emoji);   // PEANUTS: the test app's bulb icons
+            dev.peanuts.ui.Scoreboard.tile(tile, emoji);   // PEANUTS: the scoreboard's bulb icons
             tile.setIncludeFontPadding(false);
             tile.setBackground(round(col(c, R.color.bn_tint), dp(c, 11), 0, 0));
             tile.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);

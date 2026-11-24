@@ -119,3 +119,7 @@ It lives under `dm/host/android/` so the Mac and iPhone builds do not include it
 from Recompia revision `75dae2f2ccdada74e6b8ba12ea7de30560a84221`, whose file carries `SPDX-License-Identifier: GPL-3.0-or-later`.
 The Android adaptation keeps the game's original aspect field and corrects its completed projection. The GPL implementation lives under
 `dm/host/android/` so the Mac and iPhone host builds do not include it; the MIT files retain their own license.
+
+The Sunflower Seeds apps' scoreboard look (`android/app/src/scoreboard/assets/fonts/`) bundles three fonts from
+[Google Fonts](https://github.com/google/fonts), each under the SIL Open Font License 1.1, whose text is beside it:
+Silkscreen (Jason Kottke), VT323 (Peter Hull) and Space Grotesk (Florian Karsten).
