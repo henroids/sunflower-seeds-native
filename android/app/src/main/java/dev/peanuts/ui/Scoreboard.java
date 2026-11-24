@@ -83,6 +83,14 @@ public final class Scoreboard {
         tile.setForeground(d);
     }
 
+    /** A settings rail entry (Ui.navItem: Picture, Speed, Advanced, Game options, Controls): its bulb icon before the label instead of the emoji in its text, if it has one */
+    public static void navIcon(TextView t, String emoji, CharSequence label) {
+        Drawable d = icon(t.getContext(), emoji);
+        if (d == null) return;
+        int s = dp(t.getContext(), 26); d.setBounds(0, 0, s, s);
+        t.setText(label); t.setCompoundDrawables(d, null, null, null); t.setCompoundDrawablePadding(dp(t.getContext(), 10));
+    }
+
     /** A shape's corner radius: none on the scoreboard */
     public static float radius(float px) { return ON ? 0 : px; }
 
