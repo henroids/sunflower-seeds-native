@@ -321,7 +321,7 @@ public final class MainActivity extends Activity {
         dev.peanuts.ui.BottomScreen.home(this, () -> page(true));   // PEANUTS: bottom screen (dev.peanuts.ui.BottomScreen)
         accessCard = accessCard();
         Ui.add(content, accessCard, 16);
-        Ondevice.attach(this, content, content.getChildCount());   // a game being prepared and its progress (hidden when there is none)
+        if (!dev.peanuts.ui.Scoreboard.ON) Ondevice.attach(this, content, content.getChildCount());   // PEANUTS(sunflower): no on-device build card (packs come from the PC)   // a game being prepared and its progress (hidden when there is none)
         fixGap(content, Ui.GAP);
         gameBox = new LinearLayout(this);
         gameBox.setOrientation(LinearLayout.VERTICAL);
@@ -1007,9 +1007,9 @@ public final class MainActivity extends Activity {
         }, "nx-game-files").start();
         Ui.add(content, Ui.section(this, "Pack"), 16);
         LinearLayout pack = Ui.add(content, Ui.listCard(this), 6);
-        if (Ondevice.isDump(new File(g.gameDir)) && noProfile == null)
+        if (!dev.peanuts.ui.Scoreboard.ON && Ondevice.isDump(new File(g.gameDir)) && noProfile == null)   // PEANUTS(sunflower): no on-device builds (packs come from the PC)
             pack.addView(new Ui.Setting(this, "🔁", "Prepare again", v -> { page(false); Ondevice.prepare(this, new File(g.gameDir), true); }).value("Remakes what does not fit").chevron(this).view);
-        if (noProfile == null) pack.addView(new Ui.Setting(this, "🔨", "Build again", v -> { page(false); dev.peanuts.ui.GameSheet.open(this, g.titleId); }).value("Remakes what no longer fits · Import again").chevron(this).view);   // PEANUTS: the Build sheet (dev.peanuts.ui.GameSheet); Rebuild keeps the .nup, the sheet's Import again makes it anew
+        if (!dev.peanuts.ui.Scoreboard.ON && noProfile == null) pack.addView(new Ui.Setting(this, "🔨", "Build again", v -> { page(false); dev.peanuts.ui.GameSheet.open(this, g.titleId); }).value("Remakes what no longer fits · Import again").chevron(this).view);   // PEANUTS: the Build sheet (dev.peanuts.ui.GameSheet); Rebuild keeps the .nup, the sheet's Import again makes it anew
         if (Ondevice.shows(g))   // its card is the progress card: the job's own Manage (Forget, the deletes)
             pack.addView(new Ui.Setting(this, "⏳", "Preparing", v -> { page(false); Ondevice.manageJob(this); }).value("Forget the job or delete its files").chevron(this).view);
         pack.addView(new Ui.Setting(this, "📦", "Export pack…", v -> PackUi.exportPick(this, g)).value("One .zip, into a folder you pick").chevron(this).view);
