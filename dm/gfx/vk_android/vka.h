@@ -595,6 +595,7 @@ typedef struct {
     p_poly_offset po; float vp[16][4]; float dr[2]; int has_vp, depth_clamp; uint8_t vp_sw[16][4];
     float blend_color[4], alpha_ref;
     p_prim_restart restart; int rast_discard, tf_on;
+    int patch;                         // PEANUTS(upstream-candidate): nvnCommandBufferSetPatchSize (OP_PATCH_SIZE); NVN's default 3
     p_tf_bind tf[4];                   // PEANUTS: the transform feedback buffers bound (OP_TF_BIND), for vka_tf.c's captures
     int inited;
     uint32_t bind_gen;                 // raised by every state record but a uniform buffer bind (vka_draw.c's instanced runs: a draw that joins without its walk)
