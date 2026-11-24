@@ -32,7 +32,7 @@ too.
 
 <!-- PEANUTS begin: the Supported games table, written by peanuts/scripts/games_catalog.py from peanuts/games.tsv, peanuts/release-titles.txt and the profiles. Edit peanuts/games.tsv, not this table -->
 
-Peanuts Native 0.1.7 includes 59 games, and 15 more are coming in 0.1.8 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
+Peanuts Native 0.1.7 includes 59 games, and 16 more are coming in 0.1.8 (marked in the table). The Companion column shows whether a game appears in the Eden Duo Companions catalog, and the Contributor column the community members who brought a game to Peanuts Native. Updates are shown as version numbers or numeric update IDs.
 
 | Game | Title ID | Game update | Companion | Contributor |
 |---|---|---|---|---|
@@ -110,6 +110,7 @@ Peanuts Native 0.1.7 includes 59 games, and 15 more are coming in 0.1.8 (marked 
 | LEGO CITY UNDERCOVER (coming in 0.1.8) | `010085500130A000` | 1.0.3 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
 | LEGO MARVEL Super Heroes (coming in 0.1.8) | `01006F600FFC8000` | 1.0.1 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
 | Minecraft Dungeons II (coming in 0.1.8) | `0100A7C01B792000` | 1.1.3.0 | No | ⭐<br><a href="https://github.com/intermission88"><img src="https://img.shields.io/badge/intermission88-181717?style=flat-square&logo=github&logoColor=white" style="vertical-align: middle;" alt="intermission88"></a> |
+| The Witcher 3: Wild Hunt — Complete Edition (coming in 0.1.8) | `01003D100E9C6000` | 4.04b | No |  |
 
 <!-- PEANUTS end: the Supported games table -->
 
