@@ -11,7 +11,7 @@ import java.util.Random;
 /**
  * Home's background on the test app's scoreboard look (Scoreboard.ON; BananaBackgroundView hands its drawing, ticks and taps here): the whole screen is a
  * board of bulbs, and seeds (the logo, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard. They are scattered at random,
- * each with its own tilt (one of six patterns) and its own pace: each step its trailing column goes out first and its leading column lights LIGHT_MS later.
+ * each with its own tilt (one of six patterns), most at the baseline pace and some a little slower or faster: each step its trailing column goes out first and its leading column lights LIGHT_MS later.
  * A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace. A few bulbs of the board are dead, as on a real one: they
  * stay dark under a seed. A tap puts a seed out for RESPAWN_MS.
  * Cheap: the unlit board is one shader-filled rect, a seed is one of two prebaked bitmaps of its pattern (all lit, or its trailing column out), and every
@@ -157,7 +157,8 @@ public final class BulbBoard {
     };
     private static final float PITCH_DP = 5f;
     private static final long TICK_MS = 60, LIGHT_MS = 180, RESPAWN_MS = 5000;
-    private static final long[] PERIODS = {420, 480, 540, 600, 660, 720};   // a seed's step, ms (multiples of TICK_MS)
+    private static final long BASE_MS = 540;                                // the baseline step; about a third of the seeds step a little slower or faster
+    private static final long[] PERIODS = {BASE_MS, BASE_MS, BASE_MS, BASE_MS, BASE_MS, BASE_MS, 480, 600, 600};   // a seed's step, ms (multiples of TICK_MS)
     private static final int LIT = 0xFFE9A93F, LIT_ALPHA = 92, UNLIT = 0xFF141912, DEAD = 0xFF0A0C09;
     private static final int AREA_PER_SEED = 760;                           // bulbs of board a seed: how many seeds a screen gets
     private static final float DEAD_SHARE = 0.005f;                         // the board's dead bulbs

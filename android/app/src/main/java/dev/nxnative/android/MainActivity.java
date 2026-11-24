@@ -636,7 +636,7 @@ public final class MainActivity extends Activity {
         c.setGravity(Gravity.CENTER_HORIZONTAL);
         c.setPadding(dp(20), dp(28), dp(20), dp(20));
         ImageView im = new ImageView(this);
-        im.setImageResource(R.drawable.ic_banana_happy);
+        dev.peanuts.ui.Scoreboard.logo(im, R.drawable.ic_banana_happy);   // PEANUTS: the test app's bulb seed
         im.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         c.addView(im, new LinearLayout.LayoutParams(dp(80), dp(80)));
         TextView h = Ui.heading(this, "Add your game");

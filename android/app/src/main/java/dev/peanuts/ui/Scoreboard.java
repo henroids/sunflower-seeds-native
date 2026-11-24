@@ -43,6 +43,25 @@ public final class Scoreboard {
         return id == 0 ? null : c.getDrawable(id);
     }
 
+    /** The seed for a logo spot (the setup and empty cards): the bulb seed on the scoreboard look, else the drawing res */
+    public static void logo(android.widget.ImageView v, int res) { android.graphics.drawable.Drawable d = seed(v.getContext()); if (d != null) v.setImageDrawable(d); else v.setImageResource(res); }
+
+    /** A row's icon in amber bulbs in place of its emoji (keys, a folder, an update, firmware), or null: the emoji stays */
+    public static android.graphics.drawable.Drawable icon(Context c, String emoji) {
+        if (!ON || emoji == null) return null;
+        String n = emoji.equals("\uD83D\uDD11") ? "sb_ic_keys" : emoji.equals("\uD83D\uDCC1") ? "sb_ic_folder" : emoji.startsWith("\u2B06") ? "sb_ic_update" : emoji.equals("\uD83D\uDD24") ? "sb_ic_firmware" : null;
+        int id = n == null ? 0 : c.getResources().getIdentifier(n, "drawable", c.getPackageName());
+        return id == 0 ? null : new android.graphics.drawable.InsetDrawable(c.getDrawable(id), dp(c, 4));
+    }
+
+    /** Puts a row's bulb icon (icon) on its emoji tile, if it has one */
+    public static void tile(TextView tile, String emoji) {
+        android.graphics.drawable.Drawable d = icon(tile.getContext(), emoji);
+        if (d == null) return;
+        tile.setText("");
+        tile.setForeground(d);
+    }
+
     /** A shape's corner radius: none on the scoreboard */
     public static float radius(float px) { return ON ? 0 : px; }
 
