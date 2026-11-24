@@ -260,7 +260,9 @@ final class ExitWatch {
             if (pid > 0 && alive(a, pid)) return true;
             shown(a);
             File log = logOf(a, rec);
-            if (log != null) a.shareLog(log); else a.error("No log of that run.");
+            if (log == null) a.error("No log of that run.");
+            else if (LogUpload.on(a)) LogUpload.sendNow(a, log);   // to the log repository, with a toast
+            else a.shareLog(log);
             return false;
         }
         if (!ExitNotice.pending(rec)) return false;

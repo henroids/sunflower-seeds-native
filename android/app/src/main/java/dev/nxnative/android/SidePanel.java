@@ -581,9 +581,11 @@ final class SidePanel extends FrameLayout {
         lp.topMargin = Math.round(24 * getResources().getDisplayMetrics().density);
         box.addView(stop, lp);
         Button send = new Button(act);   // PEANUTS: stop, back to the launcher, and its share sheet with this run's log (ExitWatch.stoppedToShare)
-        send.setText("Stop and share the log");
-        send.setOnClickListener(v -> padDialog(new AlertDialog.Builder(act).setTitle("Stop and share the log?").setMessage("The game ends; unsaved progress is lost. Then the home screen opens the share menu with this session's log.")
-                .setPositiveButton("Stop and share", (d, w) -> { Native.note("stopped by the user to share the log"); ExitWatch.stoppedToShare(); if (act instanceof GameActivity) ((GameActivity) act).backToFrontend(); android.os.Process.killProcess(android.os.Process.myPid()); })
+        boolean up = LogUpload.on(act);   // with a key: straight to the log repository (LogUpload), else the share menu
+        send.setText(up ? "Stop and send the log" : "Stop and share the log");
+        send.setOnClickListener(v -> padDialog(new AlertDialog.Builder(act).setTitle(up ? "Stop and send the log?" : "Stop and share the log?")
+                .setMessage("The game ends; unsaved progress is lost. Then " + (up ? "this session's log goes to " + LogUpload.REPO + "." : "the home screen opens the share menu with this session's log."))
+                .setPositiveButton(up ? "Stop and send" : "Stop and share", (d, w) -> { Native.note("stopped by the user to share the log"); ExitWatch.stoppedToShare(); if (act instanceof GameActivity) ((GameActivity) act).backToFrontend(); android.os.Process.killProcess(android.os.Process.myPid()); })
                 .setNegativeButton("Keep running", null).show()));
         box.addView(send, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         Button done = new Button(act);
