@@ -137,6 +137,18 @@ int main(void) {
     P(nvnSamplerInitialize)(&sampler, &sb);
     EXPECT("signed integer border RGB is numeric", 1, ((samp_t *)&sampler)->p.border[0] == 1.f && ((samp_t *)&sampler)->p.border[2] == 1.f);
     P(nvnSamplerFinalize)(&sampler);
+    // agl hashes bytes [0x08..0x60) of NVNsampler to deduplicate sampler pool entries: samp_par must sit at +8 and Initialize must zero trailing bytes without overflowing 0x30 on newer SDKs.
+    {
+        EXPECT("samp_t.p starts at +8", 8, (int)offsetof(samp_t, p));
+        struct { uint64_t before; NVNsampler a, b; uint64_t after; } g = {
+            .before = UINT64_C(0x1122334455667788), .after = UINT64_C(0x8877665544332211)
+        };
+        memset(&g.a, 0xaa, sizeof g.a); memset(&g.b, 0x55, sizeof g.b);
+        P(nvnSamplerInitialize)(&g.a, &sb); P(nvnSamplerInitialize)(&g.b, &sb);
+        EXPECT("NVNsampler bytes are deterministic after Initialize", 0, memcmp(&g.a, &g.b, sizeof g.a));
+        EXPECT("NVNsampler guards untouched on default SDK", 1, g.before == UINT64_C(0x1122334455667788) && g.after == UINT64_C(0x8877665544332211));
+        P(nvnSamplerFinalize)(&g.a); P(nvnSamplerFinalize)(&g.b);
+    }
 
     // 3. Memory pool: GPU address = the storage address given by the game
     static uint8_t poolmem[1 << 20] __attribute__((aligned(4096)));
