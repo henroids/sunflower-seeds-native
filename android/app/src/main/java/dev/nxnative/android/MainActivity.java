@@ -449,6 +449,10 @@ public final class MainActivity extends Activity {
                 .value("Can this phone run your games?").chevron(this).view);   // (ReadinessActivity.java)
         help.addView(new Ui.Setting(this, "🧪", "Graphics self-test", v -> startActivity(new Intent(this, SelftestActivity.class))).value("Needs no game").chevron(this).view);
         help.addView(new Ui.Setting(this, "📨", "Share log", v -> shareLog()).value("The newest log").chevron(this).view);
+        Ui.Setting up = new Ui.Setting(this, "⬆️", "Send logs to GitHub", null);   // PEANUTS: LogUpload
+        up.value(LogUpload.on(this) ? "On: each session's log goes up by itself" : "Off").chevron(this);
+        up.view.setOnClickListener(v -> LogUpload.settings(this, () -> up.value(LogUpload.on(this) ? "On: each session's log goes up by itself" : "Off")));
+        help.addView(up.view);
         help.addView(new Ui.Setting(this, "🧰", "Tester settings", null).toggle(this, Prefs.testerRows(this), (b, on) -> Prefs.testerRows(this, on))
                 .says("Showing the rows made for testing: Advanced resolution, Upscaler and Dynamic resolution", "Hidden: a game with Resolution choices shows just those").view);   // (Prefs.simpleRes)
         if (BuildConfig.NX_PLAY || BuildConfig.NX_RELEASE) {   // a test build always takes adb's commands (Prefs.adbControl); PEANUTS: the Peanuts release has the switch too
@@ -577,6 +581,7 @@ public final class MainActivity extends Activity {
         Updater.resume(this);   // back from "Install unknown apps" with an update download waiting
         dev.peanuts.ui.LibrarySettings.resume(this);   // PEANUTS: back from Android's All files access page: a firmware folder picked before the access is read now (GitHub issue #42)
         ExitWatch.resume(this);
+        LogUpload.sendPending(this);   // PEANUTS: finished sessions' logs to the owner's log repository, when a key is set
         updateTick();   // a game that ended unexpectedly: "The game stopped unexpectedly", once (and every 2 s while a game runs and Home shows)
     }
 
