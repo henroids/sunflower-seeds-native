@@ -110,7 +110,9 @@ adb shell am start -n dev.nxnative.android.peanutsdev/dev.peanuts.ctl.Command -e
 
 `fps_cap` takes only a cap the game offers. A cap the stats page shows greyed out, or one it does not show,
 is refused with `not_offered`; `message` and `data.offered` (each `value` and `label`) list the ones it
-offers. For a game with the frame limit list some picks apply only at the next start (Game owned, or
+offers. A rate above 60 that the game has but the display cannot show (its highest refresh rate is lower) is
+refused too, and `message` says so ("This screen shows up to 60 fps."); a saved one stays saved and runs at the
+display's rate. For a game with the frame limit list some picks apply only at the next start (Game owned, or
 leaving it, and the experimental rates above 60), as the stats page and the in-game panel say:
 `data.effective` is then `next_start` and `data.running` is the cap the game runs at until then. `default`
 removes the game's own choice: the default cap is applied now when it is one of the menu's, and the game
@@ -216,7 +218,7 @@ sentence of "Pack not imported". Both dialogs stay on the screen, as after the s
 | `console_mode` | `docked`, `handheld`, `default` | yes; not for a game whose mode is fixed |
 | `res_scale` | `0.5`, `0.75`, `1`, `1.25`, `1.5`, `2`, `default` | yes; not for a game with its own Resolution rows |
 | `upscaler` | `nearest`, `bilinear`, `fsr1`, `native`, `sgsr1` (one game: also `default`) | yes; not for a game on the DLSS stand-in or with Resolution presets |
-| `fps_cap` | `default`, `own`, supported numeric target. Limited profiles offer supported targets from 20/30/40/45/60/90/120. A profile with fps_limit_min 30 rejects 20; unsupported rates are rejected. Game owned uses the game's own pacing and requires restart when entering/leaving it. `default` uses 60 for adjustable profiles. | yes; native-only games accept `own`/`default` |
+| `fps_cap` | `default`, `own`, supported numeric target. Limited profiles offer supported targets from 20/30/40/45/60/90/120, above 60 only up to the display's highest refresh rate (`message` says why). A profile with fps_limit_min 30 rejects 20; unsupported rates are rejected. The others offer 60/30/20/15, and 40/45 where the game's engine rows hold them (the same caps Game settings enables). Game owned uses the game's own pacing and requires restart when entering/leaving it. `default` uses 60 for adjustable profiles. | yes; native-only games accept `own`/`default` |
 | `overlay` | `on`, `off` | no |
 | `keep_screen_on` | `on`, `off` (Settings › Screens › Keep the screen on while preparing) | no |
 | `gpu_driver` | `system`, the folder name of an installed driver (as `Turnip_27.0.0-R2`), `default` | yes. Every game: the main screen's GPU driver (`default` is `system`). One game: its Game settings' GPU driver (`default` follows this phone's recommended driver, else every game's). A name that is not installed is `bad_value`, and `message` lists the installed ones. Installing a driver is not offered |

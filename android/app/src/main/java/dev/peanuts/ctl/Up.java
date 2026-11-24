@@ -197,6 +197,20 @@ final class Up {
     static int[] caps(boolean paced, String titleId) throws ReflectiveOperationException {
         return paced ? (int[]) call(k("Prefs"), null, "paceCaps", new Class<?>[] {String.class}, titleId) : caps(false);
     }
+    /** PEANUTS: the caps the game's Frame rate cap row enables (Prefs.offeredCaps), as stored values: what Game settings, the in-game panel and the stats page enable */
+    static int[] offeredCaps(Context c, String titleId) throws ReflectiveOperationException {
+        return ((int[]) call(k("Prefs"), null, "offeredCaps", new Class<?>[] {Context.class, String.class}, c, titleId)).clone();
+    }
+    /** PEANUTS: why a frame limit the game has is not offered (the display's limit, Prefs.screenNote), null when that is not the reason */
+    static String screenWhy(Context c, String titleId, String value, int[] offered) throws ReflectiveOperationException {
+        int v;
+        try { v = Integer.parseInt(value.trim()); } catch (NumberFormatException e) { return null; }
+        if (v <= 60) return null;
+        boolean has = false, on = false;
+        for (int x : caps(true, titleId)) has |= x == v;
+        for (int x : offered) on |= x == v;
+        return has && !on ? (String) call(k("Prefs"), null, "screenNote", new Class<?>[] {Context.class, String.class}, c, titleId) : null;
+    }
 
     /** The game's own environment lines (its Game settings) */
     static String gameEnv(Context c, String titleId) throws ReflectiveOperationException {

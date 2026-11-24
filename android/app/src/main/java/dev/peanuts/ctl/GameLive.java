@@ -39,6 +39,8 @@ public final class GameLive {
         int[] caps();
         String capLabel(int v);
         boolean capOffered(int v);
+        /** Why a cap of caps() is not offered when the game has it but the display cannot show it ("This screen shows up to 60 fps."), else null */
+        default String capWhy(int v) { return null; }
         /** The cap picked, -1 when it is none of caps(); the one the game runs at now (it differs while the picked one waits for a restart) */
         int cap();
         int capRunning();
@@ -155,7 +157,9 @@ public final class GameLive {
         Integer v = capOf(value, live);
         if (v == null || !live.capOffered(v)) {
             res.put("offered", capList(live, true));
-            throw new Request.Bad("not_offered", "This game does not offer " + (value.equals("own") ? "Game owned" : value + " fps") + ". It offers " + offeredText(live) + ".");
+            String why = v == null ? null : live.capWhy(v);   // the display's limit: the game has the cap, this screen cannot show it
+            String what = value.equals("own") ? "Game owned" : value + " fps";
+            throw new Request.Bad("not_offered", (why != null ? what + " is not offered here. " + why : "This game does not offer " + what + ".") + " It offers " + offeredText(live) + ".");
         }
         live.cap(v);
         capAnswer(live, res, true, "The frame rate cap is " + live.capLabel(v));

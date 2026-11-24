@@ -33,8 +33,8 @@ public final class Settings {
     }
 
     /**
-     * perGame: a title ID was given. caps: the frame rate caps this game's row offers (the launcher's own list for it), unused for the global value.
-     * paced: the game's row is the frame limit list, where 0 stands for 60 fps and there is no "the game's own".
+     * perGame: a title ID was given. caps: the frame rate caps this game's row enables (Prefs.offeredCaps), unused for the global value.
+     * paced: the game's row is the frame limit list, where 0 stands for 60 fps and "own" (Game owned) is stored as -2.
      */
     public static Change parse(String key, String value, boolean perGame, int[] caps, boolean paced) throws Request.Bad {
         return parse(key, value, perGame, caps, paced, null);

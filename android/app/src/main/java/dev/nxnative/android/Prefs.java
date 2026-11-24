@@ -112,13 +112,59 @@ final class Prefs {
      *  The limit is one of PACE_CAPS: 0 = 60 fps (the game's fastest rate, where the measured rate is clamped), or at most that many frames a second (paceOf) */
     static final int[] PACE_CAPS = {0, 45, 40, 30, 20};   // saved as the rate itself (fps_cap), not an index: 20 was added last, the others keep their meaning
     // PEANUTS: Optional presentation caps use the maximum from the profile.
-    static int paceMax(String titleId) { Profile p = Profile.of(titleId); return p != null && !p.decoupled && (p.fpsLimit > 0 || p.optInPresentRate()) ? p.fpsLimitMax : 60; }
-    static int[] paceCaps(String titleId) {
-        Profile p = Profile.of(titleId);
-        if (p != null && !p.fpsModes.isEmpty()) return p.fpsModeCaps();
-        // PEANUTS: Whole-step games expose only their supported divisors.
-        return p != null && (steps(titleId) || p.fpsLocker.contains(",vsync_u32,")) ? new int[] {FrameRateCaps.GAME_OWNED, 0, 30, 20} : FrameRateCaps.rates(paceMax(titleId), p == null ? 20 : p.fpsLimitMin);
+    static int paceMax(String titleId) { return FrameRateCaps.paceMax(Profile.of(titleId)); }
+    /** The frame limits the game's profile allows, whatever the display (FrameRateCaps.paceCaps); what the menus enable is paceOffered */
+    static int[] paceCaps(String titleId) { return FrameRateCaps.paceCaps(Profile.of(titleId)); }
+    // PEANUTS begin: caps above 60 only where the game's display can show them (fps cap audit B5)
+    /** The highest refresh rate of a display at its current resolution (Display.getSupportedModes; GameActivity's present and vsync Hz use it too), 60 when it cannot be read */
+    static int displayMaxHz(android.view.Display d) {
+        if (d == null) return 60;
+        int hz = Math.round(d.getRefreshRate());
+        android.view.Display.Mode current = d.getMode();
+        for (android.view.Display.Mode m : d.getSupportedModes())
+            if (current == null || m.getPhysicalWidth() == current.getPhysicalWidth() && m.getPhysicalHeight() == current.getPhysicalHeight()) hz = Math.max(hz, Math.round(m.getRefreshRate()));
+        return hz >= 30 && hz <= 240 ? hz : 60;
     }
+    /** The display the game runs on: the activity's own (the game's screen, the launcher), else the phone's built-in display (adb, a service) */
+    static int displayMaxHz(Context c) {
+        android.view.Display d = null;
+        try { if (c instanceof android.app.Activity) d = ((android.app.Activity) c).getDisplay(); } catch (RuntimeException e) { d = null; }
+        if (d == null) {
+            android.hardware.display.DisplayManager dm = (android.hardware.display.DisplayManager) c.getSystemService(Context.DISPLAY_SERVICE);
+            d = dm == null ? null : dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+        }
+        return displayMaxHz(d);
+    }
+    /** The frame limits the menus enable for a limited game: paceCaps without those above the display's highest refresh rate */
+    static int[] paceOffered(Context c, String titleId) { return FrameRateCaps.paceOffered(Profile.of(titleId), displayMaxHz(c)); }
+    /** Why a cap the profile allows is greyed on this display, null when none is: "This screen shows up to 60 fps." */
+    static String screenNote(Context c, String titleId) {
+        if (!limited(titleId)) return null;
+        int hz = displayMaxHz(c);
+        return FrameRateCaps.hidesAbove(paceCaps(titleId), hz) ? "This screen shows up to " + FrameRateCaps.screenMax(hz) + " fps." : null;
+    }
+    /** A stored limit above what the display shows is kept, and the game runs at the display's highest rate: the line that says so, or null */
+    static String screenRunsNote(Context c, String titleId) {
+        if (!limited(titleId)) return null;
+        int v = paceCap(c, titleId), hz = displayMaxHz(c), run = FrameRateCaps.onScreen(v, hz);
+        return run != v ? (v <= 0 ? 60 : v) + " fps runs at " + FrameRateCaps.limitRate(v, hz) + " fps on this screen." : null;
+    }
+    /**
+     * The caps the game's Frame rate cap row enables, as stored values: a limited game's paceOffered, else the fps_target list's (FrameRateCaps.targetCaps) from the rates the
+     * host said it holds. liveRates: the host's answer while the game runs (Native.fpsCapStatus), -1 for none: the last run's (hostRates), or the profile's alone before a run.
+     * Game settings, the in-game panel, the stats page and adb (dev.peanuts.ctl) all take it, so they enable the same caps
+     */
+    static int[] offeredCaps(Context c, String titleId, int liveRates) {
+        if (limited(titleId)) return paceOffered(c, titleId);
+        int rates = liveRates >= 0 ? liveRates : ownRate(c, titleId) ? 0 : hostRates(c, titleId);
+        return FrameRateCaps.targetCaps(Profile.of(titleId), rates);
+    }
+    static int[] offeredCaps(Context c, String titleId) { return offeredCaps(c, titleId, -1); }
+    /** The host's rates mask from the game's last run (GameActivity.noteOwnRate, the panel), -1 before one: it adds 40 and 45 for an Unreal game whose t.MaxFPS the rewriter
+     *  found, which the profile alone cannot say */
+    static int hostRates(Context c, String titleId) { return limited(titleId) ? -1 : of(c).getInt(gameKey("host_rates", titleId), -1); }
+    static void hostRates(Context c, String titleId, int mask) { if (of(c).getInt(gameKey("host_rates", titleId), -1) != mask) of(c).edit().putInt(gameKey("host_rates", titleId), mask).commit(); }
+    // PEANUTS end
     static boolean paced(String titleId) { Profile p = Profile.of(titleId); return p != null && p.decoupled; }
     /** Games the host's frame limiter caps (hle_fpslock.c fps_limit_wait, DM_FPS_LIMIT): the paced ones, and those whose profile sets a default limit (game.tsv fps_limit, a game
      *  with no limiter of its own the host can write). Both get a frame limit (PACE_CAPS) in place of 60 / 30 / 20 locking */
@@ -128,7 +174,7 @@ final class Prefs {
     static void decouple(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("decouple", titleId), on).commit(); }
     /** Games whose framework runs whole fixed steps a frame that the host holds (game.tsv fps_steps: hle_fpslock.c steps_tick), as Mario Kart World's */
     // PEANUTS: Elapsed-time hooks do not use whole-vsync steps.
-    static boolean steps(String titleId) { Profile p = Profile.of(titleId); return p != null && p.steps && !p.elapsedFrameStep && !p.fpsLocker.contains(",time_ratio_f32,") && !p.fpsLockerPlan.contains(",clock,-,1"); }
+    static boolean steps(String titleId) { return FrameRateCaps.steps(Profile.of(titleId)); }
     /** Hold 60 fps (per game, default off), for steps games at the cap of 60: one step a frame always, where the game's own mode runs two (30 fps) after a frame its work
      *  overran. A frame that runs long then plays a little slower instead of dropping to 30 (DM_FPS_HOLD60=1 at start, Native.hold60Set while it runs) */
     static boolean fullVegetation(Context c, String titleId) { return of(c).getBoolean(gameKey("full_vegetation", titleId), Recommend.bool(rec(c, titleId, Recommend.VEGETATION), true)); }
@@ -145,7 +191,7 @@ final class Prefs {
     static void hold60(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("hold60", titleId), on).commit(); }
     static final String HOLD60_TEXT = "Off: the game drops to 30 fps when it cannot keep 60, as on the console. On: the game always runs its 60 fps mode and the app does not hold frames, so it never drops to 30; the frame rate is less even and the game runs a little slower while under 60. Only with the 60 fps cap";
     // PEANUTS: Include opt-in presentation caps in the game settings.
-    static boolean limited(String titleId) { Profile p = Profile.of(titleId); return p != null && (p.decoupled || p.fpsLimit > 0 || p.optInPresentRate()); }
+    static boolean limited(String titleId) { return FrameRateCaps.limited(Profile.of(titleId)); }
     /** The profile's default frame limit (game.tsv fps_limit), 0 without one */
     static int profileLimit(String titleId) { Profile p = Profile.of(titleId); return p == null ? 0 : p.fpsLimit; }
     /** A saved cap as one of PACE_CAPS: the highest at or below it, 20 below that (the main screen's 15 for the other games). Since 20 was added a saved 20 or 15 (only the main
@@ -154,6 +200,7 @@ final class Prefs {
     static String paceLabel(int v) { return v == FrameRateCaps.GAME_OWNED ? "Game owned" : (v <= 0 ? 60 : v) + " fps" + (v > 60 ? " (experimental)" : ""); }   // saved 0 remains 60
     /** A limited game's cap as saved, without capOf (which turns 45 and 40 into 30 for the other games): its own, else its profile's fps_limit, else the main screen's default, as one of PACE_CAPS */
     static int paceCap(Context c, String titleId) {
+        migrateFpsCap(c, titleId);
         int pl = profileLimit(titleId);
         Integer r = recCap(c, titleId);   // the recommended limit comes before the profile's and the main screen's (Recommend.effective)
         Profile p = Profile.of(titleId);
@@ -405,8 +452,8 @@ final class Prefs {
 
     /**
      * The frame rate cap (the in-game panel): -1 = not set (the game profile's fps_target), 0 = the game's own, else 15, 20, 30 or 60. DM_FPS_TARGET for the host at
-     * start, and Native.fpsCapSet while the game runs. A DM_FPS_TARGET line in env.txt overrides it for a run. 40 and 45 are no longer offered (they did not hold):
-     * a stored 40 or 45 reads as the next lower cap (capOf), so an older install keeps a working choice.
+     * start, and Native.fpsCapSet while the game runs. A DM_FPS_TARGET line in env.txt overrides it for a run. The main screen offers these for every game; 40 and 45
+     * only a game's own list offers, where its engine rows hold any rate (FrameRateCaps.targetCaps): elsewhere a stored 40 or 45 reads as the next lower cap (capOf).
      */
     static final int[] FPS_CAPS = {0, 60, 30, 20, 15};
     /** A stored cap as one of FPS_CAPS: -1 and 0 as they are, else the highest offered cap at or below it (45 → 30), the game's own when none is */
@@ -419,7 +466,16 @@ final class Prefs {
     static int fpsCap(Context c) { return capOf(of(c).getInt("fps_cap", 60)); }
     static void fpsCap(Context c, int v) { of(c).edit().putInt("fps_cap", v).commit(); }
     /** The game's cap: its own (set in its Game settings or its in-game panel), else the recommended one, else the default */
-    static int fpsCap(Context c, String titleId) { Integer r = limited(titleId) ? null : recCap(c, titleId); return capOf(of(c).getInt(gameKey("fps_cap", titleId), r != null ? r : fpsCap(c))); }
+    // PEANUTS: without the player's own cap or a recommended one, a profile's fps_target beats the main screen's default 60 (-1: passed as nothing, the host starts at the
+    // profile's target; EA SPORTS FC 27's 30, fps cap audit B3); a main screen cap the player set still applies. A stored cap the game's list does not offer reads as the
+    // nearest one it does (FrameRateCaps.targetCap: 45 and 40 stay where the engine rows hold them)
+    static int fpsCap(Context c, String titleId) {
+        migrateFpsCap(c, titleId);
+        Integer r = limited(titleId) ? null : recCap(c, titleId);
+        int dflt = FrameRateCaps.targetDefault(Profile.of(titleId), of(c).contains("fps_cap") ? fpsCap(c) : null);
+        int v = of(c).getInt(gameKey("fps_cap", titleId), r != null ? r : dflt);
+        return limited(titleId) ? capOf(v) : FrameRateCaps.targetCap(v, offeredCaps(c, titleId));
+    }
     /** Whether the game starts with a cap chosen for it, its own or the recommended one (a limited game passes DM_FPS_LIMIT only then: GameActivity) */
     static boolean chosenFpsCap(Context c, String titleId) { return ownFpsCap(c, titleId) || recCap(c, titleId) != null; }
 
@@ -431,10 +487,26 @@ final class Prefs {
     static void ownRate(Context c, String titleId, boolean v) { if (ownRate(c, titleId) != v) of(c).edit().putBoolean(gameKey("own_rate", titleId), v).commit(); }
     /** null: back to the default */
     static void fpsCap(Context c, String titleId, Integer v) {
-        if (v == null) of(c).edit().remove(gameKey("fps_cap", titleId)).commit();
-        else of(c).edit().putInt(gameKey("fps_cap", titleId), v).commit();
+        if (v == null) of(c).edit().remove(gameKey("fps_cap", titleId)).putString(gameKey(FPS_LIST, titleId), fpsList(titleId)).commit();
+        else of(c).edit().putInt(gameKey("fps_cap", titleId), v).putString(gameKey(FPS_LIST, titleId), fpsList(titleId)).commit();
     }
-    static boolean ownFpsCap(Context c, String titleId) { return of(c).contains(gameKey("fps_cap", titleId)); }
+    static boolean ownFpsCap(Context c, String titleId) { migrateFpsCap(c, titleId); return of(c).contains(gameKey("fps_cap", titleId)); }
+    // PEANUTS begin: a saved cap keeps its meaning when its game moves between the two lists (fps cap audit B9: 0 is Game owned on the fps_target list, 60 fps on the
+    // frame limit list). The list a cap was saved for is kept beside it (fps_cap_list@<title ID>: "limit" or "target"); a cap saved before the marker existed was saved for
+    // the list of the rule before 0.1.8 (FrameRateCaps.legacyLimited). Once per game: afterwards the marker names the list the game is on
+    static final String FPS_LIST = "fps_cap_list";
+    static String fpsList(String titleId) { return FrameRateCaps.list(Profile.of(titleId)); }
+    static void migrateFpsCap(Context c, String titleId) {
+        SharedPreferences sp = of(c);
+        String key = gameKey("fps_cap", titleId), marker = gameKey(FPS_LIST, titleId);
+        boolean saved = sp.contains(key);
+        FrameRateCaps.Saved s = FrameRateCaps.migrateSaved(Profile.of(titleId), sp.getString(marker, null), saved ? sp.getInt(key, -1) : null);
+        if (s == null) return;   // the marker names the game's list already, or nothing to move
+        SharedPreferences.Editor e = sp.edit().putString(marker, s.marker);
+        if (saved) { if (s.cap == null) e.remove(key); else e.putInt(key, s.cap); }
+        e.commit();
+    }
+    // PEANUTS end
 
     /** Pause on return (per game, on by default): the game's screen coming back from the background shows it paused, suspended until a tap (GameActivity.onStart) */
     /** Game settings › Controls › Motion sensitivity: how far the phone's gyro turns the game's aim, a step of MOTION_PCT (100 % = the real turn, as on a console); DM_MOTION_SENS, always

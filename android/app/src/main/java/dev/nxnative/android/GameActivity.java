@@ -595,17 +595,11 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private int capDisplayHz(int maximum) {
-        android.view.Display d = getDisplay();
-        int hz = displayHz();
-        if (d != null) {
-            android.view.Display.Mode current = d.getMode();
-            for (android.view.Display.Mode m : d.getSupportedModes()) {
-                if (m.getPhysicalWidth() == current.getPhysicalWidth() && m.getPhysicalHeight() == current.getPhysicalHeight())
-                    hz = Math.max(hz, Math.round(m.getRefreshRate()));
-            }
-        }
-        return Math.max(60, Math.min(maximum, hz));
+        return Math.max(60, Math.min(maximum, Math.max(displayHz(), Prefs.displayMaxHz(getDisplay()))));   // PEANUTS: the menus' display rule (Prefs.displayMaxHz)
     }
+    /** PEANUTS: the frame limit a stored one runs at on this game's display: a 90 or 120 above the display's highest refresh rate is kept and runs at that rate (fps cap audit B5) */
+    private int onScreen(int stored) { return FrameRateCaps.onScreen(stored, Prefs.displayMaxHz(getDisplay())); }
+    private int limitRate(int stored) { return FrameRateCaps.limitRate(stored, Prefs.displayMaxHz(getDisplay())); }
 
     private Profile.Render startRender;   // the render setting this run started with (settingsEnv), null for a game without a render_cfg row
     Profile.Render startRender() { return startRender; }
@@ -616,7 +610,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private static int fpsModeAtStart;
     boolean fpsRestartRequired(int selected) {
         Profile p = Profile.of(titleId());
-        return p != null ? p.fpsRestart(fpsModeAtStart, selected) : (selected == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart;
+        return p != null ? p.fpsRestart(fpsModeAtStart, onScreen(selected)) : (selected == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart;
     }
     private String settingsEnv(String id, Pack pack, List<String> env) {   // PEANUTS: pass the pack build for FPSLocker selection
         // Game resolution: the game's own setting, else the main screen's: the window size the host gives the game (window_fn), or the graphics scale and operation
@@ -639,7 +633,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         GameUpscaler.env(this, id, env);   // the Upscaler (Game settings, the in-game panel): the game's own upscaler and the present's scaling
         env.add(CrtFilter.line(this, id));   // PEANUTS: the CRT filter (Settings › Display, Game settings, the in-game panel; CrtFilter)
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
-        fpsModeAtStart = Prefs.paceCap(this, id);
+        fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS: a supported update may lack this game's reviewed FPSLocker plan.
         boolean hasFpsPlan = prof == null || prof.fpsLockerPlanMatches(BuildCheck.builds(pack).get("main"));
         gameOwnedAtStart = !hasFpsPlan || Prefs.limited(id) && fpsModeAtStart == FrameRateCaps.GAME_OWNED;
@@ -654,19 +648,19 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             env.addAll(prof.fpsModeEnv(fpsModeAtStart));
         } else if (Prefs.paced(id)) {   // speed follows the measured rate: presents on the host's own tick at the display's refresh rate, no interval locking, and a frame limit (Prefs.PACE_CAPS)
             int pace = Prefs.paceCap(this, id);
-            env.add("DM_PRESENT_INTERVAL=display"); env.add("DM_PRESENT_HZ=" + displayHz()); env.add("DM_FPS_TARGET=0"); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60));
+            env.add("DM_PRESENT_INTERVAL=display"); env.add("DM_PRESENT_HZ=" + displayHz()); env.add("DM_FPS_TARGET=0"); env.add("DM_FPS_LIMIT=" + limitRate(pace));
             if (!Prefs.decouple(this, id)) env.add("DM_FPS_DECOUPLE=0");   // Full game speed at low frame rates off (the in-game panel changes it live)
         } else if (Prefs.limited(id)) {   // a profile's default frame limit (fps_limit), which the host applies itself: only the player's own choice is passed (60 fps = none: the game's own interval)
             if (prof != null && prof.usesFpsModeTarget()) env.add("DM_FPS_TARGET=" + prof.fpsModeTarget(fpsModeAtStart));   // PEANUTS: select the native engine mode on launch
             int maximum = Prefs.paceMax(id);
-            if (maximum > 60) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes
+            if (maximum > 60 || prof != null && prof.optInPresentRate()) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes; PEANUTS: opt-in present pacing up to 60 too (display-paced, as its profiles were measured: Star Ocean The Second Story R README)
                 int hz = capDisplayHz(maximum);
                 env.add("DM_PRESENT_HZ=" + hz); env.add("DM_VSYNC_HZ=" + hz);
                 // PEANUTS: Keep the elapsed-time target while changing display cadence.
                 if (prof == null || !prof.elapsedFrameStep) env.add("DM_FPS_TARGET=0");
                 if (prof != null && (prof.optInPresentRate() || prof.elapsedFrameStep)) env.add("DM_PRESENT_INTERVAL=display");
             }
-            if (Prefs.chosenFpsCap(this, id)) { int pace = Prefs.paceCap(this, id); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60)); }
+            if (Prefs.chosenFpsCap(this, id)) { int pace = Prefs.paceCap(this, id); env.add("DM_FPS_LIMIT=" + limitRate(pace)); }   // PEANUTS: limitRate, at most the display's highest rate
         } else if (cap >= 0) env.add("DM_FPS_TARGET=" + cap);
         if (Prefs.steps(id) && Prefs.hold60(this, id)) env.add("DM_FPS_HOLD60=1");   // Hold 60 fps: one step a frame at the cap of 60 (the in-game panel changes it live)
         String gpuNote = GpuDriver.env(this, id, env);   // the game's GPU driver, else the main screen's (DM_VK_DRIVER)
@@ -856,7 +850,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private void noteOwnRate() {
         try {
             String[] f = Native.fpsCapStatus().split(" ");
-            if (Integer.parseInt(f[0]) >= 0 && Integer.parseInt(f[2]) > 0) Prefs.ownRate(this, titleId(), Integer.parseInt(f[1]) == 0);   // presenting: main is loaded
+            if (Integer.parseInt(f[0]) >= 0 && Integer.parseInt(f[2]) > 0) { Prefs.ownRate(this, titleId(), Integer.parseInt(f[1]) == 0); Prefs.hostRates(this, titleId(), Integer.parseInt(f[1])); }   // presenting: main is loaded; PEANUTS: the rates too, for the launcher (Prefs.offeredCaps)
         } catch (RuntimeException e) { /* no answer: left as it was */ }
     }
 
@@ -1380,6 +1374,14 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     // PEANUTS begin: the second screen's stats page sets the console mode and the frame rate cap (dev.peanuts.ui.GameControls), with the same calls as
     // SidePanel's Console mode and Frame rate cap rows
+    /** PEANUTS: the rates the host holds now (Native.fpsCapStatus' second), as SidePanel.refresh takes them: none in a build without a cap, -1 (not known: the last run's,
+     *  or the profile's) until the game presents (its main is not known before) */
+    static int liveRates() {
+        try {
+            String[] f = Native.fpsCapStatus().split(" ");
+            return Integer.parseInt(f[0]) < 0 ? 0 : Integer.parseInt(f[2]) > 0 ? Integer.parseInt(f[1]) : -1;
+        } catch (RuntimeException e) { return -1; }
+    }
     private dev.peanuts.ui.GameControls.Host peanutsControls() {
         GameActivity act = this;
         return new dev.peanuts.ui.GameControls.Host() {
@@ -1391,14 +1393,17 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
                 Native.note("Console mode: this host cannot change it while the game runs; it applies at the next start");
                 return false;
             }
-            @Override public int[] caps() { return Prefs.limited(titleId()) ? FrameRateCaps.menu() : new int[] {0, 120, 90, 60, 45, 40, 30, 20, 15}; }
+            @Override public int[] caps() { return Prefs.limited(titleId()) ? FrameRateCaps.menu() : FrameRateCaps.targetMenu(); }
             @Override public String capLabel(int v) {   // short, for a button: paceLabel without its "(experimental)", which capNote says once
                 if (Prefs.limited(titleId())) return v == FrameRateCaps.GAME_OWNED ? "Game owned" : (v <= 0 ? 60 : v) + " fps";
                 return v == 0 ? "Game owned" : v + " fps";
             }
-            // PEANUTS: a game without a frame limit list offers what Game settings' Frame rate cap row enables (GameSettings: the game's own, else the launcher's
-            // FPS_CAPS unless the game picks its own rate): every cap was offered here before, 90 and 120 refused by the host and 45 and 40 read back as 30 (fps cap audit, 2026-11-24)
-            @Override public boolean capOffered(int v) { return Prefs.limited(titleId()) ? FrameRateCaps.contains(Prefs.paceCaps(titleId()), v) : v == 0 || !Prefs.ownRate(act, titleId()) && FrameRateCaps.contains(Prefs.FPS_CAPS, v); }
+            // PEANUTS: the caps the in-game panel enables (Prefs.offeredCaps: the frame limits this display shows, else the rates the host holds now): every cap was
+            // offered here before, 90 and 120 refused by the host and 45 and 40 read back as 30 (fps cap audit, 2026-11-24)
+            @Override public boolean capOffered(int v) { return FrameRateCaps.contains(Prefs.offeredCaps(act, titleId(), liveRates()), v); }
+            @Override public String capWhy(int v) {   // PEANUTS: why a cap the game has is greyed here (adb's answer)
+                return Prefs.limited(titleId()) && FrameRateCaps.contains(Prefs.paceCaps(titleId()), v) && !capOffered(v) ? Prefs.screenNote(act, titleId()) : null;
+            }
             @Override public int cap() {
                 if (Prefs.limited(titleId())) return Prefs.paceCap(act, titleId());
                 if (Prefs.ownRate(act, titleId())) return 0;
@@ -1410,16 +1415,16 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
                 Prefs.fpsCap(act, titleId(), v);
                 if (!Prefs.limited(titleId())) { Native.fpsCapSet(v); return; }
                 if (v != FrameRateCaps.GAME_OWNED && !gameOwnedAtStart() && !fpsRestartRequired(v)) {
-                    Native.fpsLimitSet(v > 0 ? v : 60);
+                    Native.fpsLimitSet(limitRate(v));   // PEANUTS: at most the display's highest rate
                     Profile p = Profile.of(titleId());
-                    if (p != null && p.usesFpsModeTarget()) Native.fpsCapSet(p.fpsModeTarget(v));
+                    if (p != null && p.usesFpsModeTarget()) Native.fpsCapSet(p.fpsModeTarget(onScreen(v)));
                 }
             }
             @Override public int capRunning() {   // SidePanel.refresh's restart test: a pick that needs a restart leaves the start's cap running
                 int v = cap();
                 if (!Prefs.limited(titleId())) return v;
                 boolean pending = fpsRestartRequired(v) || (v == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart();
-                if (!pending) return v;
+                if (!pending) return onScreen(v);   // PEANUTS: a stored 120 on a 60 Hz display runs at 60
                 // the limit the host holds now (fpsCapStatus' fourth: a pick applied live since the start), else the start's
                 String[] f = Native.fpsCapStatus().split(" ");
                 int held = f.length > 3 ? Integer.parseInt(f[3]) : 0;
@@ -1432,8 +1437,12 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             @Override public String capNote() {
                 if (!Prefs.limited(titleId())) return null;
                 int v = cap();
-                String restart = capRunning() != v ? "Restart the game to apply " + Prefs.paceLabel(v) + ". " : "";
-                return restart + "Above 60 fps is experimental. Switching to or from Game owned applies on the next start.";
+                boolean pending = fpsRestartRequired(v) || (v == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart();
+                String restart = pending ? "Restart the game to apply " + Prefs.paceLabel(v) + ". " : "";
+                // PEANUTS: "Above 60 fps is experimental" only where something above 60 is offered; the display's limit when it greys a cap or holds a stored one lower
+                String high = FrameRateCaps.above60(Prefs.paceOffered(act, titleId())) ? "Above 60 fps is experimental. " : "";
+                String runs = Prefs.screenRunsNote(act, titleId()), why = Prefs.screenNote(act, titleId());
+                return restart + (runs != null ? runs + " " : why != null ? why + " " : "") + high + "Switching to or from Game owned applies on the next start.";
             }
         };
     }

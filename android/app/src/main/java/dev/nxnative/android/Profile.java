@@ -42,6 +42,8 @@ final class Profile {
     String fpsLocker = "";   // reviewed build-gated FPSLocker memory writes, serialized by build.gradle
     int fpsLimitMin = 20;   // checked lower bound for timing correction plans
     int fpsLimitMax = 60;   // launcher-only opt-in to higher caps; does not change the runtime profile ABI
+    int fpsTarget;   // PEANUTS: game.tsv fps_target (build.gradle fpsTargetOf), 0 without one: the host's default target, which a game without a frame limit starts at until the player picks a cap (Prefs.fpsCap)
+    String fpsRates = "";   // PEANUTS: "40,45" when every Android build's main has an engine row of a rate kind (hle_fpslock.c k_locks, build.gradle fpsRatesOf): the fps_target list offers them too (FrameRateCaps.targetCaps)
     boolean drs;   // game.tsv has drs_ctl rows (build.gradle drsOf): the host can steer the game's dynamic resolution (Prefs.drsGame)
     String recommend = "";   // game.tsv recommend rows (build.gradle recommendOf): "<match>|<setting>=<value> …", ';' between them; the recommended settings per phone (Recommend, Prefs.recommended)
     String skipLayers = "";   // game.tsv skip_layers (build.gradle skipLayersOf): pixel shader keys whose draws the Speedhack setting drops (Prefs.skipLayersGame), "" = not offered
@@ -52,7 +54,10 @@ final class Profile {
     String cameraAspects = "";   // game.tsv aspect rows (build.gradle aspectsOf): "21:9,4:3", ',' between them; picture shapes the host's own 3D camera patch follows, with no module variant (Game settings › Aspect ratio)
     String variants = "";   // game.tsv variant rows (build.gradle variantsOf): "<name>=<label>", ',' between them; a native 4:3 mod is "43=4:3" (Game settings › Aspect ratio)
 
-    boolean optInPresentRate() { return presentOnly && fpsLimit == 0 && fpsLimitMax > 60 && !decoupled; } // PEANUTS: Leave present-only high rates opt-in.
+    // PEANUTS: Leave present-only rates opt-in: fps_limit_present with no fps_limit starts Game owned and offers the frame limits up to fps_limit_max (60 without one).
+    // Before 0.1.8 this also needed fps_limit_max above 60, so the max-60 profiles (Yoshi's Crafted World, Star Ocean The Second Story R, Trails in the Sky 1st
+    // Chapter, Hogwarts Legacy) fell to the fps_target list and lost their caps (fps cap audit B1; FrameRateCaps.legacyLimited keeps the old rule for saved values)
+    boolean optInPresentRate() { return presentOnly && fpsLimit == 0 && !decoupled; }
 
     int[] fpsModeCaps() {
         if (fpsModes.isEmpty()) return new int[0];
@@ -598,6 +603,8 @@ final class Profile {
             p.ownedByDefault = c.length > 38 && c[38].equals("1");   // PEANUTS: fps_owned_default
             p.aspectPlan = c.length > 39 ? c[39] : "";   // PEANUTS: aspect_plan
             p.aspectUntested = c.length > 40 && c[40].equals("1");   // PEANUTS: aspect_plan_untested
+            try { p.fpsTarget = c.length > 41 && !c[41].isEmpty() ? Math.max(0, Integer.parseInt(c[41])) : 0; } catch (NumberFormatException e) { p.fpsTarget = 0; }   // PEANUTS: fps_target
+            p.fpsRates = c.length > 42 ? c[42] : "";   // PEANUTS: the rates the engine rows hold beyond 60, 30, 20 and 15
             out.add(p);
         }
         return Collections.unmodifiableList(out);

@@ -294,8 +294,16 @@ public final class Ctl {
         if (own && !Up.hasProfile(id)) throw new Request.Bad("unknown_title", "This app has no game " + id + ".");
         boolean paced = own && Up.prefsBool("limited", id);
         boolean drivers = "gpu_driver".equalsIgnoreCase(r.need("key"));   // the installed drivers are read only for the key that names one
-        Settings.Change ch = Settings.parse(r.need("key"), r.need("value"), own, own ? (!paced && Up.prefsBool(app, "ownRate", id) ? new int[] {0} : Up.caps(paced, id)) : null, paced,
-                drivers ? Up.drivers(app) : null);
+        // PEANUTS: the caps the game's Frame rate cap row enables (Prefs.offeredCaps: the frame limits this display shows, else the rates the host held last run)
+        int[] caps = own ? Up.offeredCaps(app, id) : null;
+        Settings.Change ch;
+        try {
+            ch = Settings.parse(r.need("key"), r.need("value"), own, caps, paced, drivers ? Up.drivers(app) : null);
+        } catch (Request.Bad e) {
+            String why = own && paced && "fps_cap".equalsIgnoreCase(r.need("key")) ? Up.screenWhy(app, id, r.need("value"), caps) : null;
+            if (why != null) throw new Request.Bad(e.code, e.getMessage() + ". " + why);   // the game has the cap, this screen cannot show it
+            throw e;
+        }
         String missing = own ? Up.rowMissing(app, ch.key, id) : null;
         if (missing != null) throw new Request.Bad("not_for_this_game", "The game's settings have no such row: " + missing + ".");
         boolean fill = ch.key.equals("display") && Integer.valueOf(2).equals(ch.value);

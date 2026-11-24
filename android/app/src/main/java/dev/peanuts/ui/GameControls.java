@@ -15,6 +15,8 @@ public final class GameControls {
         String capLabel(int v);
         /** False: shown greyed out, not offered for this game */
         boolean capOffered(int v);
+        /** Why a cap the game has is greyed here ("This screen shows up to 60 fps."), null when it is offered or the game does not have it */
+        default String capWhy(int v) { return null; }
         /** The cap picked (kept for the game); -1 when it is none of caps() */
         int cap();
         /** The cap the game runs at now: the picked one, or the one it started with while the picked one waits for a restart (a limited game's 120 or Game owned) */

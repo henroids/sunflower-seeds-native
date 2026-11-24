@@ -413,8 +413,8 @@ final class SidePanel extends FrameLayout {
         head("Frame rate cap");   // the game's own frame rate; frame generation (below, its own heading) adds frames on top
         caps = new RadioGroup(act);
         if (Prefs.limited(game())) {   // a frame limit, no locking (Prefs.PACE_CAPS)
-            int[] choices = FrameRateCaps.menu(), allowed = Prefs.paceCaps(game());
-            int cur = Prefs.paceCap(act, game());
+            int[] choices = FrameRateCaps.menu(), allowed = Prefs.paceOffered(act, game());   // PEANUTS: not above the display's highest refresh rate (fps cap audit B5)
+            int cur = Prefs.paceCap(act, game()), hz = Prefs.displayMaxHz(act);
             for (int i = 0; i < choices.length; i++) {
                 RadioButton b = new RadioButton(act);
                 b.setId(3000 + i); b.setText(Prefs.paceLabel(choices[i]));
@@ -428,20 +428,21 @@ final class SidePanel extends FrameLayout {
                 boolean startedOwned = act instanceof GameActivity && ((GameActivity)act).gameOwnedAtStart();
                 boolean restart = act instanceof GameActivity && ((GameActivity)act).fpsRestartRequired(v);
                 if (v != FrameRateCaps.GAME_OWNED && !startedOwned && !restart) {
-                    Native.fpsLimitSet(v > 0 ? v : 60);
+                    Native.fpsLimitSet(FrameRateCaps.limitRate(v, hz));   // PEANUTS: at most the display's highest rate
                     Profile p = Profile.of(game());
-                    if (p != null && p.usesFpsModeTarget()) Native.fpsCapSet(p.fpsModeTarget(v));   // PEANUTS: select the native engine mode with the live cap
+                    if (p != null && p.usesFpsModeTarget()) Native.fpsCapSet(p.fpsModeTarget(FrameRateCaps.onScreen(v, hz)));   // PEANUTS: select the native engine mode with the live cap
                 }
                 refresh();
             });
         } else {
             int live = Integer.parseInt(Native.fpsCapStatus().split(" ")[0]), cur = live >= 0 ? live : Prefs.fpsCap(act, game());   // the cap in effect (env.txt or DM_CTL may have set another)
             if (Prefs.ownRate(act, game())) cur = 0;
-            int[] choices = {0, 120, 90, 60, 45, 40, 30, 20, 15};
+            int[] choices = FrameRateCaps.targetMenu();
             for (int i = 0; i < choices.length; i++) {
                 int v = choices[i];
                 RadioButton b = new RadioButton(act);
                 b.setId(2000 + i);
+                b.setEnabled(FrameRateCaps.contains(Prefs.offeredCaps(act, game()), v));   // PEANUTS: until refresh has the host's answer, what Game settings enables
                 b.setText(v == 0 ? "Game owned" : v + " fps");
                 if (v == cur || v == 0 && cur < 0) b.setChecked(true);   // a cap the launcher does not offer (40, 45 from env.txt or DM_CTL): none checked, the line below says it
                 caps.addView(b);
@@ -454,7 +455,10 @@ final class SidePanel extends FrameLayout {
             });
         }
         box.addView(caps);
-        if (Prefs.limited(game())) note("Switching to or from Game owned applies on the next start.");
+        if (Prefs.limited(game())) {
+            String why = Prefs.screenNote(act, game());   // PEANUTS: why 90 or 120 is greyed (fps cap audit B5)
+            note((why != null ? why + " " : "") + "Switching to or from Game owned applies on the next start.");
+        }
         if (Prefs.limited(game()) && Prefs.presentOnly(game())) note(Prefs.PRESENT_ONLY_NOTE);   // fps_limit_present: the limit paces the presents only
         if (Prefs.paced(game())) {   // Full game speed at low frame rates: sead's controller at the measured rate (Game settings has the same), live in the host
             android.widget.CheckBox full = new android.widget.CheckBox(act);
@@ -887,20 +891,23 @@ final class SidePanel extends FrameLayout {
             boolean other = now > 0 && chosen > 0 && held > 0 && 60 % chosen != 0 && held < chosen;
             boolean startedOwned = act instanceof GameActivity && ((GameActivity)act).gameOwnedAtStart();
             boolean restart = act instanceof GameActivity ? ((GameActivity)act).fpsRestartRequired(chosen) : (chosen == FrameRateCaps.GAME_OWNED) != startedOwned;
-            fpsNow.setVisibility(restart || other ? VISIBLE : GONE);
+            String runs = Prefs.screenRunsNote(act, game());   // PEANUTS: a stored 90 or 120 above the display's highest rate runs at that rate
+            fpsNow.setVisibility(restart || other || runs != null ? VISIBLE : GONE);
             if (restart) fpsNow.setText("Restart the game to apply " + Prefs.paceLabel(chosen) + ".");
             else if (other) fpsNow.setText("This game moves in whole frames: " + chosen + " fps runs at " + held + " fps, at full game speed.");
+            else if (runs != null) fpsNow.setText(runs);
         } else {
-            int[] choices = {0, 120, 90, 60, 45, 40, 30, 20, 15};
+            // PEANUTS: the caps the host holds now, 40 and 45 too (Prefs.offeredCaps, the stats page and adb take the same); its answer counts once the game presents
+            int[] choices = FrameRateCaps.targetMenu(), offered = Prefs.offeredCaps(act, game(), cap >= 0 && now > 0 ? rates : -1);
             for (int i = 0; i < choices.length; i++) {
-                int v = choices[i], bit = v == 15 ? 0 : v == 20 ? 1 : v == 30 ? 2 : 5;   // the host's bits: 15, 20, 30, (40, 45,) 60
-                caps.getChildAt(i).setEnabled(v == 0 || FrameRateCaps.contains(Prefs.FPS_CAPS, v) && cap >= 0 && (rates & 1 << bit) != 0);
+                int v = choices[i];
+                caps.getChildAt(i).setEnabled(v == 0 || cap >= 0 && FrameRateCaps.contains(offered, v));
             }
             // No cap in this build, or a game that picks its own frame rate: no choices (they would do nothing), one line instead
             // (rates is 0 too until the game's main is loaded: only a game that presents, now > 0, is known to pick its own)
             boolean own = cap >= 0 && rates == 0 && now > 0;
             caps.setVisibility(VISIBLE);
-            if (cap >= 0 && now > 0) Prefs.ownRate(act, game(), own);   // remember native-rate-only titles for Game settings
+            if (cap >= 0 && now > 0) { Prefs.ownRate(act, game(), own); Prefs.hostRates(act, game(), rates); }   // remember native-rate-only titles for Game settings; PEANUTS: and the rates it holds
             String s = cap < 0 ? "This build has no frame rate cap."
                     : now <= 0 ? "Starting…"
                     : own ? "This game picks its own frame rate."

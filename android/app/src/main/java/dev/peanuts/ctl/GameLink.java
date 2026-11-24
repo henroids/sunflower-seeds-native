@@ -62,6 +62,7 @@ public final class GameLink {
             @Override public int[] caps() { return h.caps(); }
             @Override public String capLabel(int v) { return h.capLabel(v); }
             @Override public boolean capOffered(int v) { return h.capOffered(v); }
+            @Override public String capWhy(int v) { return h.capWhy(v); }
             @Override public int cap() { return h.cap(); }
             @Override public int capRunning() { return h.capRunning(); }
             @Override public void cap(int v) { h.cap(v); }
