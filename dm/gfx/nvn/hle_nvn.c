@@ -994,6 +994,10 @@ NVN(nvnSamplerBuilderGetLodClamp, void, const NVNsamplerBuilder *b, float *lo, f
     const samp_par *o = &((const samp_builder_t *)b)->p; *lo = o->lod_min; *hi = o->lod_max;
 }
 NVN(nvnSamplerInitialize, NVNboolean, NVNsampler *s, const NVNsamplerBuilder *b) {
+    // Older NVN headers (SDK <= 10, NVN 53) declare NVNsampler as 0x60 bytes and agl hashes bytes 0x08..0x5f to deduplicate sampler pool entries;
+    // newer SDKs (NVN 55+) shrank NVNsampler to 0x30 bytes. Zero the full object for this SDK so trailing bytes never hold stack garbage.
+    int m = dm_sdk_major();
+    memset(s, 0, m > 0 && m <= 10 && !dm_sdk_ounce() ? 0x60 : sizeof(NVNsampler));
     samp_t *o = (samp_t *)s; o->magic = MAGIC('S', 'M', 'P', 0); o->p = ((const samp_builder_t *)b)->p; return 1;
 }
 NVN(nvnSamplerFinalize, void, NVNsampler *s) { ((samp_t *)s)->magic = 0; }

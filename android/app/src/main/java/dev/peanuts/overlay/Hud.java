@@ -27,6 +27,11 @@ public final class Hud {
     /** The launcher's SharedPreferences file (Prefs.of); a test checks it against Prefs.java */
     static final String PREFS = "launcher";
     static final String STYLE = "pn_overlay_style", PRESET = "pn_overlay_preset", CORNER = "pn_overlay_corner", SCALE = "pn_overlay_scale";
+    static final String HIDE_FOR_STATS = "pn_overlay_hide_for_stats";
+
+    /** Overlay › With bottom stats: the overlay over the game hides while the second screen shows the stats page (dev.peanuts.ui.GameScreen.statsShowing), on by default */
+    public static boolean hideForStats(Context c) { return prefs(c).getBoolean(HIDE_FOR_STATS, true); }
+
     /** The corner keys, in the host's order (vka_ovl.h: VKO_TOP_LEFT, VKO_TOP_RIGHT, VKO_BOTTOM_LEFT, VKO_BOTTOM_RIGHT) */
     static final String[] CORNERS = {"tl", "tr", "bl", "br"};
     private static int sentCorner = -1;
@@ -102,7 +107,7 @@ public final class Hud {
         if (item(c, "soc")) {
             int t = SocTemp.celsius();
             if (t != SocZones.NONE) {
-                Row r = new Row("SOC", t + "°");
+                Row r = new Row("TEMP", t + "°");
                 r.color = t >= SocTemp.HOT ? LEVEL[2] : t >= 70 ? LEVEL[1] : WHITE;
                 rows.add(r);
             }

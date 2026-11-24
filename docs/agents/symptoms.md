@@ -605,6 +605,7 @@ One line per symptom in the [subsystem references](../reference/): what you see 
 - `nvnWindowGetPresentInterval`, `nvnCommandBufferSetCopyImageStride` missing. → [SDK 8 window and copy-stride entry points](../reference/nvn-objects.md#sdk-8-window-and-copy-stride-entry-points)
 - `[RED] texture bound to an image slot lacks the shader-write usage`, and compute image writes go to a dummy texture. → [Image bindings supply shader-write intent](../reference/nvn-objects.md#image-bindings-supply-shader-write-intent)
 - memory ballooning (e.g. 18,930 MiB on Mac or out-of-memory crash on devices) during 3D scenes when processing bindless texture pool updates. → [A bindless pool churns finalized textures within a submission](../reference/nvn-objects.md#a-bindless-pool-churns-finalized-textures-within-a-submission)
+- intermittent 1-frame bloom / exposure brightness flashes in still scenes on both Turnip and Stock Qualcomm, accompanied by ~1,400 `nvnSamplerPoolRegisterSampler` calls per second (`DM_VK_SAMP_LOG=1`) and occasional wrong-LOD bindings (`lod 1..1`–`4..4` instead of `0..0`) on mip-chain passes. → [`NVNsampler` layout and uninitialized trailing bytes thrash sampler pool deduplication](../reference/nvn-objects.md#nvnsampler-layout-and-uninitialized-trailing-bytes-thrash-sampler-pool-deduplication)
 
 ## Rendering
 
