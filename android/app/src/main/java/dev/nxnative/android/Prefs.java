@@ -360,9 +360,14 @@ final class Prefs {
     static boolean drsGame(String titleId) { Profile p = Profile.of(titleId); return p != null && p.drs; }
     /** A game whose DLSS runs on the host's GSR2 stand-in (game.tsv dlss_standin): its Upscaler row in Game settings and the in-game panel offers the stand-in's modes, with Motion clarity and Temporal sharpness (GameUpscaler, DlssTune) */
     /** Whether this game's frame limit only paces the presents (game.tsv fps_limit_present): the cap screens add PRESENT_ONLY_NOTE */
-    static boolean presentOnly(String titleId) { Profile p = Profile.of(titleId); return p != null && p.presentOnly; }
+    static boolean presentOnly(String titleId) { Profile p = Profile.of(titleId); return p != null && p.presentOnly && !p.hasFpsVariant(); }   // PEANUTS: !hasFpsVariant: a variant fixes the speed (FPS_VARIANT_NOTE)
     // PEANUTS: Warn about game speed when only presentation is paced.
     static final String PRESENT_ONLY_NOTE = "Experimental for this game. Changing the frame rate may change game speed or cause bugs.";
+    // PEANUTS begin: a frame rate that starts another version of the game (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps, with tmouh's speed fix)
+    static boolean fpsVariant(String titleId) { Profile p = Profile.of(titleId); return p != null && p.hasFpsVariant(); }
+    static final String FPS_VARIANT_NOTE = "60 fps plays the game with its speed fixed for 60 fps. Your pick applies at the next start.";
+    static final String FPS_VARIANT_MISSING = "60 fps is not in this game's build, so the game started at its own frame rate. Build the game again to add it.";
+    // PEANUTS end
     static boolean dlssGame(String titleId) { Profile p = Profile.of(titleId); return p != null && p.dlss; }
     static final int[][] DRS = {{100, 100}, {80, 100}, {70, 100}, {60, 100}, {50, 100}, {40, 100}, {30, 100}};   // 30 %: the game's rate table stops at 3x (640x360 at 1080p)
     static final String[] DRS_NAMES = {"Off", "80%", "70%", "60%", "50%", "40%", "30%"};   // the lowest render size, as % of the window (always up to 100 %)
