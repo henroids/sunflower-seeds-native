@@ -557,6 +557,7 @@ final class Ui {
             view.setOnClickListener(dev.peanuts.ui.Feel.row(l));   // PEANUTS: a row's tap ticks and dips (dev.peanuts.ui.Feel; null stays null)
             tile = text(c, emoji, 17, R.color.bn_text, 400);
             tile.setGravity(Gravity.CENTER);
+            dev.peanuts.ui.Scoreboard.tile(tile, emoji);   // PEANUTS: the test app's bulb icons
             tile.setIncludeFontPadding(false);
             tile.setBackground(round(col(c, R.color.bn_tint), dp(c, 11), 0, 0));
             tile.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
