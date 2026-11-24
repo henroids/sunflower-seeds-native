@@ -40,5 +40,6 @@ final class AboutData {
             {"nx2android", "Some fixes, adapted", "MIT", "https://github.com/shirai91/nx2android"},
             {"vee", "The Miis' colours and face layout", "MIT", "https://github.com/j0lol/vee"},
             {"bcdec", "Unpacks the Mii parts' textures", "MIT", "https://github.com/iOrange/bcdec"},
+            {"ACNH 60 FPS + SpeedFix", "tmouh's 60 fps for Animal Crossing", "CC BY-NC 4.0", "https://github.com/tmouh/acnh-60fps"},
     };
 }
