@@ -102,7 +102,7 @@ final class AboutPage {
             tag.setTextIsSelectable(true);
             PUi.add(info, tag, 10, PUi.wrap());
         }
-        TextView what = PUi.body(a, "Builds your own Switch games into apps that run natively on this device. Built on Banana Native and nxnative.");
+        TextView what = PUi.body(a, "Plays your own Switch games natively on this device.");
         what.setLineSpacing(0, 1.3f);
         PUi.add(info, what, 12);
         Flow buttons = new Flow(a, PUi.dp(a, 8));

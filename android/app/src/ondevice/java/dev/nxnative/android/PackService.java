@@ -1018,9 +1018,11 @@ public final class PackService extends Service {
         String dec = null;
         for (String w : skipped) if (w.contains("own decoder") || w.contains("host failed on a")) { dec = w; break; }
         if (dec != null) {
-            failure = new PrepareText.Failure("The app could not decode " + skipped.size() + (skipped.size() == 1 ? " compressed file" : " compressed files") + " of this game. "
-                    + "Your dump is not the cause: this app version cannot build this game on the device yet. Share the log (Details).",
-                    "Not decoded: " + String.join("\n", skipped) + "\n" + log, PrepareText.FIX_RETRY);
+            // Retry runs the same decoder on the same files: nothing to offer but the log, for a later app version (2026-11-24: Retry was offered, and the card
+            // ended in the tool's own line, "the game's decoder in the Mac host failed on a 284517 1729136 byte stream; ---- host output ----")
+            failure = new PrepareText.Failure("This game cannot be built on the phone yet. " + (skipped.size() == 1 ? "One of its compressed files uses" : skipped.size() + " of its compressed files use")
+                    + " a format this app version cannot unpack. Your game files are fine. Share the build log so a later version can add it.",
+                    "Not unpacked: " + String.join("\n", skipped) + "\n" + log, PrepareText.FIX_NONE);
             return "the split could not decode " + skipped.size() + (skipped.size() == 1 ? " compressed file" : " compressed files") + " of " + j.name() + " (" + dec
                     + "): the app's limit, not the dump's";
         }

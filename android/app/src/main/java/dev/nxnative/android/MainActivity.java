@@ -259,7 +259,8 @@ public final class MainActivity extends Activity {
         return true;
     }
 
-    private String poppedLine(long n) { return "Bananas Popped: " + java.text.NumberFormat.getIntegerInstance().format(n); }
+    /** PEANUTS: the count Peanuts' About shows (dev.peanuts.ui.Cracked, made from these taps), in its words: upstream's line said "Bananas Popped" (n: the taps, now in it) */
+    private String poppedLine(long n) { return "Peanuts cracked: " + java.text.NumberFormat.getIntegerInstance().format(dev.peanuts.ui.Cracked.total(this)); }
 
     /** The player wiki (its pages are written and kept up to date on the project's site, so the app links to it and keeps no copy) */
     static final String WIKI_URL = "https://github.com/igawa6/peanuts-native/blob/main/peanuts/docs/FAQ.md";   // PEANUTS: this fork's questions and answers (upstream: Banana Native's player wiki, which describes that app's screens and games)
