@@ -50,7 +50,7 @@ public final class MainActivity extends Activity {
     private LinearLayout gameBox;   // the game cards (refresh)
     private View accessCard;
     private BananaBackgroundView bananas;   // the drifting bananas behind the screen
-    private TextView poppedText;   // Settings › About: "Bananas Popped: n" (null when Settings is not shown)
+    private TextView poppedText;   // Settings › About: "Bananas Popped: n" ("Sunflower Seeds Chewed: n" in the Sunflower Seeds apps) (null when Settings is not shown)
     private Ui.Setting overlayRow, resRow, capRow, upsRow, sharpRow, drsRow, lsfgRow, gpuRow, updateRow, timeRow;
     private boolean resumed, settingsPage;
     private boolean advancedOpen;   // the Advanced page (AdvancedPage) is open over Settings or a game's page
@@ -247,7 +247,7 @@ public final class MainActivity extends Activity {
         return true;
     }
 
-    private String poppedLine(long n) { return "Bananas Popped: " + java.text.NumberFormat.getIntegerInstance().format(n); }
+    private String poppedLine(long n) { return (dev.peanuts.ui.Scoreboard.ON ? "Sunflower Seeds Chewed: " : "Bananas Popped: ") + java.text.NumberFormat.getIntegerInstance().format(n); }   // PEANUTS: the Sunflower Seeds apps tap seeds
 
     /** The player wiki (its pages are written and kept up to date on the project's site, so the app links to it and keeps no copy) */
     static final String WIKI_URL = "https://github.com/henroids/sunflower-seeds-native/blob/main/peanuts/docs/FAQ.md";   // PEANUTS: the questions and answers, in this fork's repository (upstream: Banana Native's player wiki, which describes that app's screens and games)
