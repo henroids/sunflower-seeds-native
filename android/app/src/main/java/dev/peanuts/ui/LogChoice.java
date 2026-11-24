@@ -25,9 +25,12 @@ public final class LogChoice {
 
     /** The on-device job's steps (Job.STEPS) and how a sentence names each */
     static final String[] STEPS = {"identify", "rewrite", "split", "shaders", "pack"};
-    static final String[] STEP_WORDS = {"checking the dump", "rewriting the game's code", "finding the shaders", "translating shaders", "finishing the pack"};
+    static final String[] STEP_WORDS = {"checking the game files", "converting the game's code", "finding the shaders", "making shaders for this phone", "finishing up"};
     /** Prepare's progress words for the same steps (Prepare.STEP_TEXT), as the build log's progress lines carry them */
-    static final String[] STEP_TEXT = {"Checking the dump", "Rewriting the game's code", "Finding the shaders", "Translating shaders", "Finishing the pack"};
+    static final String[] STEP_TEXT = {"Checking the game files", "Converting the game's code", "Finding the shaders", "Making shaders for this phone", "Finishing up"};
+
+    /** The same steps' words before 0.1.8 (logs of older builds carry them) */
+    static final String[] OLD_STEP_TEXT = {"Checking the dump", "Rewriting the game's code", "Finding the shaders", "Translating shaders", "Finishing the pack"};
 
     private static final Pattern RUN_TIME = Pattern.compile("(\\d{8}-\\d{6})\\.log$");
     private static final Pattern LINE_TIME = Pattern.compile("^(\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d{3}) (.*)$");
@@ -144,7 +147,7 @@ public final class LogChoice {
         String d = detail == null ? "" : detail;
         if (d.startsWith("Trying anyway: ")) d = d.substring(15);
         if (d.startsWith("Paused: ")) { int dot = d.indexOf(". "); d = dot < 0 ? "" : d.substring(dot + 2); }
-        for (int i = 0; i < STEP_TEXT.length; i++) if (d.startsWith(STEP_TEXT[i])) return STEP_WORDS[i];
+        for (int i = 0; i < STEP_TEXT.length; i++) if (d.startsWith(STEP_TEXT[i]) || d.startsWith(OLD_STEP_TEXT[i])) return STEP_WORDS[i];
         if (d.startsWith("Checking ")) return STEP_WORDS[0];
         if (d.startsWith("Completing graphics setup")) return "completing the graphics setup";
         return "preparing the game";

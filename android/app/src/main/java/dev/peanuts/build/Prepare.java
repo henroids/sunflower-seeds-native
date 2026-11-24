@@ -47,7 +47,7 @@ final class Prepare {
 
     static final String TAG = "peanuts.build";
     private static final String[] STEPS = {"identify", "rewrite", "split", "shaders", "pack"};
-    private static final String[] STEP_TEXT = {"Checking the dump", "Rewriting the game's code", "Finding the shaders", "Translating shaders", "Finishing the pack"};
+    private static final String[] STEP_TEXT = {"Checking the game files", "Converting the game's code", "Finding the shaders", "Making shaders for this phone", "Finishing up"};
     /** How long a job may sit "running" with no job.json change and no service message before we call it stalled (the service writes at least every few seconds while it runs) */
     private static final long STALL_MS = 10 * 60 * 1000;
     /** How long Try anyway's restart waits for the failed run's end in the packer (its worker's last save and its end's message come moments after the failure) */
@@ -240,7 +240,7 @@ final class Prepare {
             jobStarted = true;
         } catch (RuntimeException e) {   // ForegroundServiceStartNotAllowedException (Android 12+): the app counts as background now
             log("PackService start refused: " + e);
-            throw new BuildListener.Failure("Android did not let the packer start in the background. The job is saved: open " + appName() + " and tap Resume on the game's card.", BuildListener.CANCELLED);
+            throw new BuildListener.Failure("Android did not let the build start in the background. Nothing is lost: open " + appName() + " and tap Resume on the game's card.", BuildListener.CANCELLED);
         }
         p.on(1, STEP_TEXT[0]);
         // 5. progress from job.json (and the service's messages while bound) until the job ends
@@ -253,7 +253,7 @@ final class Prepare {
             String fs = fromService;
             if (fs != null && fromServiceAt > lastChange) json = fs;
             if (json == null) {
-                if (SystemClock.elapsedRealtime() - lastReadable > 30000) throw new BuildListener.Failure("The job file went missing: " + file, BuildListener.OTHER);
+                if (SystemClock.elapsedRealtime() - lastReadable > 30000) { log("prepare: the job file went missing: " + file); throw new BuildListener.Failure("The build lost track of its progress. Tap Retry.", BuildListener.OTHER); }
                 continue;
             }
             lastReadable = SystemClock.elapsedRealtime();
@@ -309,7 +309,7 @@ final class Prepare {
                     lastJson = null;
                     lastChange = SystemClock.elapsedRealtime();
                     p.on(pct(si, done, total), "Trying anyway: " + STEP_TEXT[si]);
-                    try { c.startForegroundService(Upstream.packStart(c, file)); } catch (RuntimeException e) { throw new BuildListener.Failure("Android did not let the packer restart: open " + appName() + " and tap Try anyway on the game's card.", BuildListener.CANCELLED); }
+                    try { c.startForegroundService(Upstream.packStart(c, file)); } catch (RuntimeException e) { throw new BuildListener.Failure("Android did not let the build start again: open " + appName() + " and tap Try anyway on the game's card.", BuildListener.CANCELLED); }
                     continue;
                 }
                 throw new BuildListener.Failure(dev.nxnative.android.PrepareText.failureSummary(STEP_TEXT[si], err, o.optString("error_detail")), BuildListener.TOOL_STOPPED);
@@ -331,7 +331,7 @@ final class Prepare {
             p.on(pct, stepText(si, done, total, stage));
             if (SystemClock.elapsedRealtime() - lastChange > STALL_MS && !(link != null && link.alive)) {
                 log("prepare: no change of the job for " + STALL_MS / 60000 + " min and the packer is not bound: stalled at " + step);
-                throw new BuildListener.Failure("The packer stopped reporting progress. Resume from the game's card on the Home screen.", BuildListener.STALLED);
+                throw new BuildListener.Failure("The build stopped making progress. Tap Resume on the game's card to go on.", BuildListener.STALLED);
             }
         }
         throw new BuildListener.Failure("Build cancelled. The job is saved: resume from the game's card on the Home screen.", BuildListener.CANCELLED);
@@ -464,7 +464,7 @@ final class Prepare {
             jobStarted = true;
         } catch (RuntimeException e) {
             log("PackService start refused (modded): " + e);
-            throw new BuildListener.Failure("Android did not let the packer start in the background. The modded build is saved; try again from the game's Mods section (hold the cover, Game tab).", BuildListener.CANCELLED);
+            throw new BuildListener.Failure("Android did not let the build start in the background. Nothing is lost: try again from the game's Mods section (hold the cover, Game tab).", BuildListener.CANCELLED);
         }
         p.on(1, STEP_TEXT[0]);
         long lastChange = SystemClock.elapsedRealtime(), lastReadable = lastChange;
@@ -475,7 +475,7 @@ final class Prepare {
             String fs = fromService;
             if (fs != null && fromServiceAt > lastChange) json = fs;
             if (json == null) {
-                if (SystemClock.elapsedRealtime() - lastReadable > 30000) throw new BuildListener.Failure("The modded build's job file went missing: " + file, BuildListener.OTHER);
+                if (SystemClock.elapsedRealtime() - lastReadable > 30000) { log("prepare: the modded build's job file went missing: " + file); throw new BuildListener.Failure("The build with mods lost track of its progress. Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.OTHER); }
                 continue;
             }
             lastReadable = SystemClock.elapsedRealtime();
@@ -509,7 +509,7 @@ final class Prepare {
             }
             p.on(pct, stepText(si, done, total, stage));
             if (SystemClock.elapsedRealtime() - lastChange > STALL_MS && !(link != null && link.alive))
-                throw new BuildListener.Failure("The packer stopped reporting progress. Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.STALLED);
+                throw new BuildListener.Failure("The build with mods stopped making progress. Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.STALLED);
         }
         throw new BuildListener.Failure("Build cancelled.", BuildListener.CANCELLED);
     }
@@ -520,8 +520,8 @@ final class Prepare {
 
     private static String stepText(int si, long done, long total, String stage) {
         if (si == 3) {
-            if (stage.equals("library") || stage.equals("done")) return "Writing the shader library";
-            if (stage.equals("check")) return "Checking the shader library";
+            if (stage.equals("library") || stage.equals("done")) return "Saving the shaders";
+            if (stage.equals("check")) return "Checking the saved shaders";
         }
         if (stage.equals("code") && total > 0) return String.format(Locale.getDefault(), "%s (%d %%)", STEP_TEXT[si], Math.min(100, done * 100 / total));
         if (total > 0) return String.format(Locale.getDefault(), "%s: %,d of %,d%s", STEP_TEXT[si], done, total, si == 2 ? " files" : "");
@@ -531,11 +531,11 @@ final class Prepare {
     private static String reasonText(String r) {
         switch (r) {
             case "user": return "by you";
-            case "battery": return "battery below 20 %: plug in the charger to go on";
-            case "thermal": return "the phone is too hot: it goes on when it has cooled. If it is not hot, tap Go on anyway in the build notification (remembered for this device)";
-            case "timeout": return "Android's daily limit for background work";
+            case "battery": return "the battery is below 20 %. Plug in the charger to go on";
+            case "thermal": return "the phone is too hot. It goes on when it has cooled down. If the phone does not feel hot, tap Go on anyway in the build notification";
+            case "timeout": return "Android allows only so much background work a day";
             case "refused": return "Android did not let it start in the background";
-            case "apk": return "the app was updated";
+            case "apk": return "the app was updated, so the shaders are made again";
             default: return r.isEmpty() ? "stopped" : r;
         }
     }

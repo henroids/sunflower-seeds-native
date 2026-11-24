@@ -64,7 +64,7 @@ final class Ondevice {
         if (n == 0) return "Shaders up to date: nothing to translate.";
         if (n > 0 && p != null) return String.format(Locale.getDefault(), "Translating %,d new shaders (the other %,d are reused; %s, in the background).",
                 n, p.shaderTotal - n, ShaderLibs.minutesText(n));
-        return "Translating shaders from your dump (" + (p != null ? ShaderLibs.minutesText(p.shaderTotal) : "about 20-35 minutes") + ", in the background).";
+        return "Making the game's shaders for this phone (" + (p != null ? ShaderLibs.minutesText(p.shaderTotal) : "about 20-35 minutes") + ", in the background).";
     }
 
     private static final java.util.Set<String> autoTried = new java.util.HashSet<>();
@@ -589,9 +589,9 @@ final class Ondevice {
                 Runnable redo = () -> adopt(r, pd, code, shaders);
                 if (start) { redo.run(); return; }
                 int delta = shaders ? deltaShaders(pd, r.titleId) : -1;
-                String what = code && shaders ? (delta >= 0 ? "Rewriting the game's code (a few minutes). " + shadersText(pd, r.titleId)
-                                : "Rewriting the game's code (a few minutes) and translating shaders from your dump (" + ShaderLibs.jobMinutesText(Profile.of(r.titleId).shaderTotal) + ", in the background).")
-                        : code ? "Rewriting the game's code (a few minutes, in the background). Shaders up to date: nothing to translate."
+                String what = code && shaders ? (delta >= 0 ? "Converting the game's code (a few minutes). " + shadersText(pd, r.titleId)
+                                : "Converting the game's code (a few minutes) and making its shaders for this phone (" + ShaderLibs.jobMinutesText(Profile.of(r.titleId).shaderTotal) + ", in the background).")
+                        : code ? "Converting the game's code (a few minutes, in the background). The shaders are up to date."
                         : shadersText(pd, r.titleId);
                 String why = (f.build != null ? f.build + "\n\n" : again && code ? "The pack's game code was made by other tools than this app's.\n\n" : "") + (lp != null ? lp + "\n\n" : "");
                 Ui.explain(a, code ? "Update the pack?" : "Prepare shaders?", what, why + "Pack: " + pd)

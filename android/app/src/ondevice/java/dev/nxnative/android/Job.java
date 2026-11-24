@@ -30,7 +30,7 @@ import java.util.Locale;
 final class Job {
     static final int FORMAT = 2;   // 2: the shaders step writes the library too (vk_android_build.py's result cache); 1 had a library step of its own
     static final String[] STEPS = {"identify", "rewrite", "split", "shaders", "pack"};
-    static final String[] STEP_TEXT = {"Checking the dump", "Rewriting the game's code", "Finding the shaders", "Translating shaders", "Finishing the pack"};
+    static final String[] STEP_TEXT = {"Checking the game files", "Converting the game's code", "Finding the shaders", "Making shaders for this phone", "Finishing up"};
     /** Each step's share of the progress bar, roughly its time on the phone (ONDEVICE.md "Time and power"); the shaders' share is counted by shader */
     private static final int[] WEIGHT = {1, 5, 12, 78, 4};
     static final int REWRITE = 1, SHADERS = 3, PACK = 4;
@@ -554,7 +554,7 @@ final class Job {
     /** "1,234 of 22,782 · 21,548 left · about 35 min left": the status line and the notification */
     synchronized String shadersCountText() {
         String eta = etaText(shadersEta());
-        return String.format(Locale.getDefault(), "%,d of %,d · %,d left", shadersDone(), shadersTotal(), shadersLeft()) + (eta.isEmpty() ? "" : " · " + eta);
+        return String.format(Locale.getDefault(), "%,d of %,d, %,d left", shadersDone(), shadersTotal(), shadersLeft()) + (eta.isEmpty() ? "" : ", " + eta);
     }
 
     /** The shaders step's main text: delta update reuse, up-to-date state, or count during translation */
@@ -562,14 +562,14 @@ final class Job {
         long done = shadersDone(), total = shadersTotal(), kept = shadersKept(), left = shadersLeft();
         String eta = etaText(shadersEta());
         if (total == 0 && (kept > 0 || "done".equals(stepState(STEPS[SHADERS])))) {
-            return "Shaders up to date: nothing to translate";
+            return "Shaders are up to date: nothing to make";
         }
         if (kept > 0) {
-            String base = String.format(Locale.getDefault(), "Translating %,d new shaders (the other %,d are reused)", total, kept);
+            String base = String.format(Locale.getDefault(), "Making %,d new shaders (%,d kept from before)", total, kept);
             if (done > 0) {
-                base += String.format(Locale.getDefault(), ": %,d of %,d · %,d left", done, total, left);
+                base += String.format(Locale.getDefault(), ": %,d of %,d, %,d left", done, total, left);
             }
-            if (!eta.isEmpty()) base += " · " + eta;
+            if (!eta.isEmpty()) base += ", " + eta;
             return base;
         }
         return STEP_TEXT[SHADERS] + ": " + shadersCountText();
@@ -590,8 +590,8 @@ final class Job {
             String stage = step(STEPS[i]).optString("stage");
             if (!note.isEmpty())   // after the translation the step's own name would mislead: "Writing the shader library: 120 of 720 MB"
                 return stage.equals("library") || stage.equals("check") || stage.equals("done") ? PrepareText.capital(note) : PrepareText.withNote(STEP_TEXT[i], note, "");
-            if (stage.equals("library") || stage.equals("done")) return "Writing the shader library";
-            if (stage.equals("check")) return "Checking the shader library";
+            if (stage.equals("library") || stage.equals("done")) return "Saving the shaders";
+            if (stage.equals("check")) return "Checking the saved shaders";
             if (keeping()) return PrepareText.keepText(stepDone(i), stepTotal(i));
             return shadersStepText();
         }
@@ -620,9 +620,9 @@ final class Job {
             case "failed": return PrepareText.failedText(STEP_TEXT[current()], error(), o.has("fix"));
             case "pending": return "Not started yet.";
             case "paused": return "Paused: " + reasonText(reason()) + ". " + stepText() + "." + (reasonDetail().isEmpty() ? "" : "\n" + capital(reasonDetail()) + ".")
-                    + (canGoOn() && serviceAlive ? "\nIf the phone is not hot, tap Go on anyway." : "");
+                    + (canGoOn() && serviceAlive ? "\nIf the phone does not feel hot, tap Go on anyway." : "");
             case "running": return serviceAlive ? stepText() + " (" + step + ")" + quietText() + "."
-                    : "Interrupted at " + stepText() + ". Tap Resume to go on.";
+                    : "Stopped at " + PrepareText.lower(stepText()) + ". Tap Resume to go on from there.";
             default: return s;
         }
     }
@@ -632,11 +632,11 @@ final class Job {
     static String reasonText(String r) {
         switch (r) {
             case "user": return "by you";
-            case "battery": return "battery below 20 %: plug in the charger to go on";
-            case "thermal": return "the phone reports it is too hot: it goes on when it has cooled";
-            case "timeout": return "Android's daily limit for background work: open the app and tap Resume";
-            case "refused": return "Android did not let it start in the background: open the app and tap Resume";
-            case "apk": return "the app was updated with other shader tools: the shaders are translated again";
+            case "battery": return "the battery is below 20 %. Plug in the charger to go on";
+            case "thermal": return "the phone is too hot. It goes on when it has cooled down";
+            case "timeout": return "Android allows only so much background work a day. Open the app and tap Resume";
+            case "refused": return "Android did not let it start in the background. Open the app and tap Resume";
+            case "apk": return "the app was updated, so the shaders are made again";
             default: return r.isEmpty() ? "stopped" : r;
         }
     }

@@ -460,8 +460,7 @@ public final class BuildService extends Service {
             long[] f = RuntimeShaders.failed(Upstream.jobFileOf(work));
             if (f[0] <= 0) return "";
             Log.w(TAG, "shaders: " + f[0] + " of " + f[1] + " of " + name + "'s shaders are not in its library");
-            return String.format(java.util.Locale.ROOT, " %,d of its %,d shaders could not be built, so some effects may not show. The log that says which is %s.", f[0], f[1],
-                    new File(work, "ondevice/logs/shaders.log"));
+            return String.format(java.util.Locale.ROOT, " %,d of its %,d shaders could not be made, so some effects may not show. Its build log lists them.", f[0], f[1]);
         } catch (ReflectiveOperationException e) {
             return "";
         }
@@ -573,7 +572,7 @@ public final class BuildService extends Service {
             code = category(e);
             Log.w(TAG, "build " + name + ": " + message);
         } catch (RuntimeException e) {
-            message = "Build failed: " + e;
+            message = "The build stopped because of a problem in the app. Tap Retry. If it stops again, share the build log with a bug report.";
             Log.e(TAG, "build " + name, e);
             BuildLogShare.line(this, logId, "crash in the build service:\n" + Log.getStackTraceString(e).trim());
         }
@@ -617,7 +616,7 @@ public final class BuildService extends Service {
         if (!again && out.isFile() && out.length() > 0 && out.lastModified() >= newest) { log("import: imported already, the .nup is newer than every input: " + out); progress("import", IMPORT_END, "Imported already: " + out.getName()); return out; }
         if (!Importer.available()) throw new IOException("This build of the app cannot import NSP, NSZ, XCI or XCZ files yet (no importer). Use a .nup or a dump folder.");
         File keys = new File(new File(getFilesDir(), "keys"), "prod.keys");
-        if (!keys.isFile()) throw new IOException("No prod.keys: add your keys in Setup first.");
+        if (!keys.isFile()) throw new IOException("Add your keys first (Settings › Library), then build.");
         // The sizes come from the probe (the keys first): the .nup's from the titles' own records, which a compressed file's length is not, and what
         // unpacking a solid .nsz needs beside it while it imports (issue #149); a file the probe cannot size counts with its length, as before
         progress("import", 0, "Loading keys");
@@ -694,7 +693,7 @@ public final class BuildService extends Service {
                 String why = Importer.lastError(), damaged = Compressed.failure(why, name, !deleted);
                 log("import: the importer returned " + rc + ": " + why + " (after " + (System.currentTimeMillis() - importStart) / 1000 + " s)");
                 if (damaged != null) throw new BuildListener.Failure(damaged + (deleted ? kept : ""), BuildListener.FILE_DAMAGED);
-                throw new IOException("Import failed: " + why + (again ? "." + kept : ""));
+                throw new IOException("The import stopped. Tap Retry. If it stops again, share the build log with a bug report." + (again ? kept : ""));
             }
             // A pack made from the file this import replaces (Import again, or inputs newer than the .nup) was made from other game files: marked before the
             // new file takes the old one's place, so no moment has the new file with a pack that counts as up to date (PackNote, Prepare.run0)

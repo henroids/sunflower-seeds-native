@@ -489,7 +489,7 @@ public final class PackService extends Service {
                 if (fail != null) {
                     j.stepState(s, "pending");
                     stepLog(j, "failed: " + fail);
-                    j.fail(failure != null ? failure : new PrepareText.Failure(PrepareText.capital(fail) + ".", "", PrepareText.FIX_RETRY));
+                    j.fail(failure != null ? failure : new PrepareText.Failure(Job.STEP_TEXT[i] + " stopped. " + PrepareText.RETRY_SHARE, PrepareText.capital(fail) + ".", PrepareText.FIX_RETRY));   // the step's own words for Details
                     if (PrepareText.FIX_UPDATE.equals(j.fix())) j.failApk(Job.installed(this));   // this install cannot do it; another one may
                     save(j, true);
                     break;
@@ -634,7 +634,7 @@ public final class PackService extends Service {
                 if (!r.equals(shown)) {   // the card and the notification: why, the readings, and whether Go on anyway applies
                     shown = r;
                     j.state("paused", r, null);
-                    j.reasonDetail(readings(), PackPolicy.canOverride(r, thermal));
+                    j.reasonDetail(PackPolicy.plainReadings(batteryPct, charging, thermal), PackPolicy.canOverride(r, thermal));
                     save(j, true);
                 }
                 lock.wait(30_000);
@@ -839,7 +839,7 @@ public final class PackService extends Service {
         final int shaderWorkers = mem.workers;
         workers = Math.min(workers, Math.max(1, mem.workers * 2));
         stepLog(j, s + ": " + mem.why);
-        if (j.memLevel() > 0 && (s.equals("split") || s.equals("shaders"))) j.stepNote(s, "The build stopped before (most often for memory); using " + mem.workers + " worker" + (mem.workers == 1 ? "" : "s") + " now");
+        if (j.memLevel() > 0 && (s.equals("split") || s.equals("shaders"))) j.stepNote(s, "slower this time, to use less memory");
         PackEngine.setenv("DM_GAME", j.titleId());
         PackEngine.setenv("DM_REWRITE_J", "1");
         PackEngine.setenv("NX_PACK_JOBS", String.valueOf(workers));

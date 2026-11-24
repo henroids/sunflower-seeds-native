@@ -27,7 +27,7 @@ public final class PrepareTextJvmTest {
 
         PrepareText.Failure f = PrepareText.toolStopped("Translating shaders", 1, "[RED] 12 of 8157 shaders did not build: no library written (DMSH_VK_REQUIRE_ALL)", log);
         plain(f.text, "shaders that did not build");
-        check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.detail.contains(log) && f.detail.contains("12 of 8157") && f.detail.contains("exit code 1"), "Try anyway, the tool's line in Details: " + f.detail);
+        check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.detail.contains(log) && f.detail.contains("12 of 8157") && f.detail.contains("ended with code 1"), "Try anyway, the tool's line in Details: " + f.detail);
 
         f = PrepareText.toolStopped("Finding the shaders", 1, "[RED] MemoryError in 0x38f972af.fdata", log);
         plain(f.text, "memory");
@@ -42,17 +42,17 @@ public final class PrepareTextJvmTest {
                 + "the library is written without them (DMSH_VK_REQUIRE_ALL=0). abc: not in the package");
         check(miss != null && miss[0] == 120 && miss[1] == 8161, "missing shaders counted");
         String keep = PrepareText.keepText(12000, 42800);
-        check(keep.equals(String.format("Keeping the shaders already translated: %,d of %,d", 12000, 42800)), "a delta's kept shaders counted: " + keep);
-        check(PrepareText.keepText(0, 0).equals("Keeping the shaders already translated"), "no count before the first line: " + PrepareText.keepText(0, 0));
+        check(keep.equals(String.format("Keeping the shaders made before: %,d of %,d", 12000, 42800)), "a delta's kept shaders counted: " + keep);
+        check(PrepareText.keepText(0, 0).equals("Keeping the shaders made before"), "no count before the first line: " + PrepareText.keepText(0, 0));
         check(PrepareText.withNote("Finding the shaders", "reading the game's program", "").equals("Finding the shaders: reading the game's program"), "a stage line on the card");
         check(PrepareText.withNote("Finishing the pack", "", "").equals("Finishing the pack"), "no stage: the step alone");
-        check(PrepareText.withNote("Finding the shaders", "reading 1,442 files", "203 of 1,442 files").equals("Finding the shaders: reading 1,442 files · 203 of 1,442 files"), "stage and count");
+        check(PrepareText.withNote("Finding the shaders", "reading 1,442 files", "203 of 1,442 files").equals("Finding the shaders: reading 1,442 files, 203 of 1,442 files"), "stage and count");
         check(PrepareText.countText(true, 203, 1442, null).equals(String.format("%,d of %,d files", 203, 1442)), "a file count alone: " + PrepareText.countText(true, 203, 1442, null));
         check(PrepareText.countText(true, 1, 5, "40%").equals("1 of 5 files (40 % of a large file)"), "inside a large file: " + PrepareText.countText(true, 1, 5, "40%"));
         check(PrepareText.countText(false, 0, 0, null).isEmpty(), "no count yet");
         check(PrepareText.quietText(59).isEmpty(), "under a minute: nothing");
-        check(PrepareText.quietText(180).equals(" · still working, last update 3 min ago"), "quiet for 3 min: " + PrepareText.quietText(180));
-        check(PrepareText.quietText(3900).equals(String.format(" · still working, last update %d h %02d min ago", 1, 5)), "quiet for over an hour: " + PrepareText.quietText(3900));
+        check(PrepareText.quietText(180).equals(", still working (no news for 3 min)"), "quiet for 3 min: " + PrepareText.quietText(180));
+        check(PrepareText.quietText(3900).equals(String.format(", still working (no news for %d h %02d min)", 1, 5)), "quiet for over an hour: " + PrepareText.quietText(3900));
         check(PrepareText.missingShaders("[RED] 3 of the 8157 shaders to build are not in the package /x/pkg: it is not a split") == null, "the stop is not a count");
         String mt = PrepareText.missingShadersText(120, 8161, "update 655360");
         plain(mt, "missing shaders");
@@ -96,7 +96,7 @@ public final class PrepareTextJvmTest {
         check("[RED] KeyError: 'Shader/b.bfsha' (shader_split.py:3150)".equals(sr.reason), "the runner's red line: " + sr.reason);
         f = PrepareText.toolStopped("Finding the shaders", 1, sr.reason, log);
         plain(f.text, "an uncaught exception");
-        check(f.fix.equals(PrepareText.FIX_RETRY) && f.detail.startsWith("Finding the shaders: exit code 1\nKeyError: 'Shader/b.bfsha' (shader_split.py:3150)\nLog: "), "its reason in Details: " + f.detail);
+        check(f.fix.equals(PrepareText.FIX_RETRY) && f.detail.startsWith("Finding the shaders ended with code 1.\nLast error: KeyError: 'Shader/b.bfsha' (shader_split.py:3150)\nLog: "), "its reason in Details: " + f.detail);
         sr = new PrepareText.StopReason();
         for (String l : new String[] {"Traceback (most recent call last):", "File \"t.py\", line 1, in <module>", "MemoryError"}) sr.line(l);
         f = PrepareText.toolStopped("Finding the shaders", 1, sr.reason, log);
@@ -162,31 +162,36 @@ public final class PrepareTextJvmTest {
         String old = "cannot compare the dump's shaders with the app's list: /data/user/0/dev.nxnative.android/files/pack/d8f39dfec5d562c3/repo/dm/games/0400A3A01EE4C000/shader_map.tsv";
         String text = PrepareText.failedText("Translating shaders", old, false);
         plain(text, "an older job's card");
-        check(text.equals("Preparing stopped while translating shaders. Tap Retry. Details says why."), "older job: " + text);
+        check(text.equals("The build stopped while translating shaders. Tap Retry. Details says why."), "older job: " + text);
         check(PrepareText.failedDetail(old, "", false).equals(old), "older job: its error in Details");
         check(PrepareText.failedText("Translating shaders", "Some text.", true).equals("Some text.") && PrepareText.failedDetail("Some text.", "d", true).equals("d"), "a job of this version");
 
         // PEANUTS begin: the failure card receives the fields persisted in job.json.
         String step = "Finding the shaders";
         f = PrepareText.toolStopped(step, 1, "[RED] ValueError: invalid shader archive", log);
-        check(PrepareText.failureSummary(step, f.text, f.detail).equals(step + " stopped. ValueError: invalid shader archive"), "show the last error once");
+        // the card's main line says what stopped and what to do; the tool's own line is in Details (and the build log), never on the card (2026-11-24)
+        String said = PrepareText.failureSummary(step, f.text, f.detail);
+        check(said.equals(step + " stopped on an unexpected error. " + PrepareText.RETRY_SHARE) && f.detail.contains("ValueError: invalid shader archive"), "an exception: plain on the card, in Details: " + said);
+        plain(said, "an exception's card");
         f = PrepareText.toolStopped(step, 9, null, log);
-        check(PrepareText.failureSummary(step, f.text, f.detail).equals(step + " stopped. Exit code 9"), "exit code when the log had no reason");
+        check(PrepareText.failureSummary(step, f.text, f.detail).equals(step + " stopped. " + PrepareText.RETRY_SHARE), "no reason in the log: " + PrepareText.failureSummary(step, f.text, f.detail));
         f = PrepareText.toolStopped(step, 1, "[RED] ENOSPC while writing", log);
         String full = PrepareText.failureSummary(step, f.text, f.detail);
-        check(full.contains("Free some space") && full.endsWith("ENOSPC while writing"), "keep the recovery action and the tool reason");
-        check(PrepareText.failureSummary(step, "Legacy error", "").equals(step + " · Legacy error"), "old job without separate details");
-        check(PrepareText.failureSummary(step, "", "").equals(step + " stopped."), "empty failure");
+        check(full.contains("Free some space") && !full.contains("ENOSPC") && f.detail.contains("ENOSPC while writing"), "the recovery action on the card, the tool's words in Details: " + full);
+        f = PrepareText.toolStopped(step, -9, "Killed", log);
+        check(f.text.contains("Android closed it") && !f.text.contains("memory"), "killed: Android closed it, no claim of why: " + f.text);
+        check(PrepareText.failureSummary(step, "Legacy error", "").equals("Legacy error"), "old job without separate details");
+        check(PrepareText.failureSummary(step, "", "").equals(step + " stopped. " + PrepareText.RETRY_SHARE), "empty failure");
         // PEANUTS end
 
         // The progress line never says "0 of 0"
         check(PrepareText.progressLine(18, false, 0, 0, "", 0).equals("18 %"), "no total: no shader count: " + PrepareText.progressLine(18, false, 0, 0, "", 0));
-        check(PrepareText.progressLine(5, false, 0, 22852, "", 0).equals("5 %  ·  22,852 shaders to make"), PrepareText.progressLine(5, false, 0, 22852, "", 0));
-        check(PrepareText.progressLine(37, true, 1304, 22852, "about 35 min left", 70).equals("37 %  ·  21,548 shaders left  ·  about 35 min left  ·  the other 70 are reused"),
+        check(PrepareText.progressLine(5, false, 0, 22852, "", 0).equals("5 %, 22,852 shaders to make"), PrepareText.progressLine(5, false, 0, 22852, "", 0));
+        check(PrepareText.progressLine(37, true, 1304, 22852, "about 35 min left", 70).equals("37 %, 21,548 shaders left, about 35 min left, 70 kept from before"),
                 PrepareText.progressLine(37, true, 1304, 22852, "about 35 min left", 70));
-        check(PrepareText.progressLine(100, false, 0, 0, "", 22852).equals("100 %  ·  shaders up to date: nothing to translate"),
+        check(PrepareText.progressLine(100, false, 0, 0, "", 22852).equals("100 %, shaders are up to date"),
                 PrepareText.progressLine(100, false, 0, 0, "", 22852));
-        check(PrepareText.progressLine(40, false, 1234, 22852, "about 1 min left", 0).equals("40 %  ·  1,234 of 22,852 shaders"), "outside the step: no time left");
+        check(PrepareText.progressLine(40, false, 1234, 22852, "about 1 min left", 0).equals("40 %, 1,234 of 22,852 shaders"), "outside the step: no time left");
 
         // The split's count is of files, not shaders (the card read "Finding the shaders 186,583" while the game has 42,898 shaders); the other steps keep theirs
         check(PrepareText.stepCountText("Finding the shaders", true, 1203, 1890, "").equals("Finding the shaders: 1,203 of 1,890 files"), PrepareText.stepCountText("Finding the shaders", true, 1203, 1890, ""));
