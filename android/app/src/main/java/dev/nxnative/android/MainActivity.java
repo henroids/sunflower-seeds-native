@@ -313,7 +313,7 @@ public final class MainActivity extends Activity {
         trailing.setGravity(android.view.Gravity.TOP);   // as headerButtons' own row: the wiki's label hangs below its button
         LinearLayout.LayoutParams sop = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         sop.setMarginEnd(Ui.dp(this, 12));
-        trailing.addView(dev.peanuts.ui.Library.screensOffButton(this), sop);
+        if (!dev.peanuts.ui.Scoreboard.ON) trailing.addView(dev.peanuts.ui.Library.screensOffButton(this), sop);   // PEANUTS(sunflower): no Screens off on the scoreboard look
         trailing.addView(headerButtons());
         // PEANUTS end
         content.addView(Ui.header(this, dev.peanuts.ui.Scoreboard.ON ? null : Ui.badge(this, 44), "Sunflower Seeds Native", dev.peanuts.ui.Scoreboard.ON ? null : Prefs.buildId(), trailing));   // the build identifier under the title (Prefs.buildId, the part of the overlay's build tag after the app's name), so a screenshot of Home names its build; Settings › About has the full tag   // PEANUTS: rebrand; the scoreboard look has neither badge nor build line (its status row shows the app's version)

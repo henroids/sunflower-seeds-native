@@ -374,7 +374,7 @@ public final class CheatFile {
         String hold = c.hold.isEmpty() ? null : String.join(" or ", c.hold);
         switch (c.kind) {
             case UNSUPPORTED:
-                return "Peanuts cannot run this cheat: it uses a part of the cheat format the app does not run (" + c.why + "). It stays off.";
+                return "Sunflower Seeds cannot run this cheat: it uses a part of the cheat format the app does not run (" + c.why + "). It stays off.";
             case CODE:
                 if (hold != null) return "While you hold " + hold + ", it changes " + places(c.codePlaces) + " in the game's code. Let go and the original code is back.";
                 return "Changes " + places(c.codePlaces) + " in the game's code. Off puts the original code back.";

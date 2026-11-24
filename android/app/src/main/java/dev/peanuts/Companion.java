@@ -264,7 +264,7 @@ public final class Companion {
         }
         Display builtIn = listenerDm != null ? listenerDm.getDisplay(Display.DEFAULT_DISPLAY) : null;
         if (builtIn == null || !builtIn.isValid()) return;
-        if (builtIn.getState() == Display.STATE_OFF) { Log.i(TAG, "the game is on the TV and the system has turned the built-in screen off: nothing of Peanuts goes there"); return; }   // a handheld's own TV mode (the AYN firmware turns its screens off on HDMI)
+        if (builtIn.getState() == Display.STATE_OFF) { Log.i(TAG, "the game is on the TV and the system has turned the built-in screen off: nothing of Sunflower Seeds goes there"); return; }   // a handheld's own TV mode (the AYN firmware turns its screens off on HDMI)
         try {
             screenUp = true;
             screenPage = false;

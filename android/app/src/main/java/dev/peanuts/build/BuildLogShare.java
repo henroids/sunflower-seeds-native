@@ -273,7 +273,7 @@ public final class BuildLogShare {
         String meminfo = BuildMemory.readMeminfo();
         long total = BuildMemory.meminfoMb(meminfo, "MemTotal"), avail = BuildMemory.meminfoMb(meminfo, "MemAvailable");
         BuildLogBundle.Text s = new BuildLogBundle.Text();
-        s.line("Peanuts Native build log of " + name + " (" + t + ")");
+        s.line("Sunflower Seeds Native build log of " + name + " (" + t + ")");
         s.kv("made", BuildLogBundle.time(now));
         s.line("Attach this .zip to the issue as it is. It holds logs and this summary only: no keys, game files, saves or packs.");
 

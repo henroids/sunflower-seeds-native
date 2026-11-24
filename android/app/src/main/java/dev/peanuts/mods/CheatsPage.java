@@ -415,7 +415,7 @@ public final class CheatsPage {
         if (!any) {
             LinearLayout card = PUi.add(content, PUi.listCard(a), 12);
             PUi.Setting none = new PUi.Setting(a, "", "No cheats yet", Feel.row(v -> CheatImportUi.add(a, g.titleId)))
-                    .value("Add a zip, a text file or a folder with cheats for " + m.versionWords() + " (build " + shortBuild(m.build) + "). Peanuts never downloads any.");
+                    .value("Add a zip, a text file or a folder with cheats for " + m.versionWords() + " (build " + shortBuild(m.build) + "). Sunflower Seeds never downloads any.");
             rowLook(none.view, "folder");
             explainOnFocus(none.view, () -> BottomScreen.explain(a, null));
             card.addView(none.view);
@@ -449,7 +449,7 @@ public final class CheatsPage {
             for (CheatFile.Cheat c : p.masters) ms.add(c.name);
             card.addView(cardLine(a, "Always on: " + String.join(", ", ms)));
         }
-        if (p != null && !p.restores.isEmpty()) card.addView(cardLine(a, "Restore Code is left out: Peanuts puts the original code back by itself."));
+        if (p != null && !p.restores.isEmpty()) card.addView(cardLine(a, "Restore Code is left out: Sunflower Seeds puts the original code back by itself."));
         if (!enabled) { card.addView(cardLine(a, "Off: its cheats are not in the game. Tap to turn it on.")); return true; }
         if (p == null) { card.addView(cardLine(a, "None of its cheats are for " + m.versionWords() + ". Tap to see its versions.")); return true; }
 

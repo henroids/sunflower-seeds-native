@@ -8,21 +8,23 @@ package dev.peanuts.ui;
 final class AboutData {
     private AboutData() {}
 
-    static final String REPO = "https://github.com/igawa6/peanuts-native";
+    static final String REPO = "https://github.com/henroids/sunflower-seeds-native";   // PEANUTS(sunflower): this app's repository
     static final String CONTRIBUTORS = REPO + "/graphs/contributors";
 
     /** The makers: name, project, page */
     static final String[][] MADE_BY = {
+            {"henroids", "Sunflower Seeds Native", "https://github.com/henroids"},
             {"igawa6", "Peanuts Native", "https://github.com/igawa6"},
             {"moceure", "Banana Native", "https://git.eden-emu.dev/moceure"},
             {"seedds", "nxnative", "https://github.com/seedds"},
     };
 
     /** The contributors of the README's list, davdxpx first, then in the README's order */
-    static final String[] CONTRIBUTED = {"davdxpx", "intermission88", "elliott-groves", "tapionallanaire", "dnyan007", "skyhong2002", "ssv0225", "999sian", "ts-miller", "ArchOwlen"};
+    static final String[] CONTRIBUTED = {};   // PEANUTS(sunflower): this app's own contributors (Peanuts Native's are credited on its page, under Built on)
 
     /** Built on: name, what it is, its license, its page */
     static final String[][] BUILT_ON = {
+            {"Peanuts Native", "igawa6 and its contributors", "GPL-3.0-or-later", "https://github.com/igawa6/peanuts-native"},
             {"Banana Native", "moceure", "GPL-3.0-or-later", "https://git.eden-emu.dev/moceure/BananaNative"},
             {"nxnative", "seedds", "MIT", "https://github.com/seedds/nxnative"},
             {"Eden Duo", "The companions' runtime", "Its notice", "https://github.com/igawa6/eden-duo"},

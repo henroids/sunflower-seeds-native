@@ -418,7 +418,10 @@ final class BottomPanel extends Presentation {
         g.setColor(PUi.col(c, R.color.bn_card));
         g.setStroke(PUi.dp(c, 1), PUi.col(c, R.color.bn_card_stroke));
         disc.setBackground(g);
-        disc.addView(new CrackedPeanut(c), new FrameLayout.LayoutParams(PUi.dp(c, 160), PUi.dp(c, 160), Gravity.CENTER));
+        android.graphics.drawable.Drawable seed = Scoreboard.seed(c);   // PEANUTS(sunflower): the bulb sunflower seed instead of the peanut
+        if (seed != null) { android.widget.ImageView iv = new android.widget.ImageView(c); iv.setImageDrawable(seed); iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            disc.addView(iv, new FrameLayout.LayoutParams(PUi.dp(c, 120), PUi.dp(c, 120), Gravity.CENTER)); }
+        else disc.addView(new CrackedPeanut(c), new FrameLayout.LayoutParams(PUi.dp(c, 160), PUi.dp(c, 160), Gravity.CENTER));
         col.addView(disc, new LinearLayout.LayoutParams(PUi.dp(c, 168), PUi.dp(c, 168)));
         crCount = PUi.text(c, "", 32, R.color.bn_text, 800);
         crCount.setFontFeatureSettings("tnum");
@@ -453,7 +456,7 @@ final class BottomPanel extends Presentation {
     private void bindCracked() {
         Context c = getContext();
         long n = Cracked.total(c);
-        crCount.setText(AboutPage.number(n) + " cracked");
+        crCount.setText(AboutPage.number(n) + " chewed");   // PEANUTS(sunflower): sunflower seeds chewed
         long goal = CrackedCount.next(n);
         crNext.setText(AboutPage.number(goal));
         crFill.setScaleX(Math.max(0.02f, CrackedCount.progress(n)));
