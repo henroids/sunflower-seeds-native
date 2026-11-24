@@ -63,7 +63,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        dev.peanuts.ui.Scoreboard.init(this);   // PEANUTS: the test app's scoreboard fonts
+        dev.peanuts.ui.Scoreboard.init(this);   // PEANUTS: the scoreboard fonts
         if (saved != null) settingsPage = saved.getBoolean("settings");
         if (saved != null && saved.getString("game_settings") != null)   // a fold or unfold makes the activity again: the game's settings page stays open
             for (Game g : Game.load(this)) if (g.gameDir.equals(saved.getString("game_settings"))) { settingsGame = g; break; }
@@ -297,7 +297,7 @@ public final class MainActivity extends Activity {
         refresh();
     }
 
-    // PEANUTS begin: Home's status row on the test app's scoreboard look: MLB The Show 26's frame rate cap, console mode and GPU driver, and the app's version
+    // PEANUTS begin: Home's status row on the scoreboard look: MLB The Show 26's frame rate cap, console mode and GPU driver, and the app's version
     private View scoreboardStatus() {
         String id = Prefs.MLB26;
         int cap = Prefs.fpsCap(this, id);
@@ -636,7 +636,7 @@ public final class MainActivity extends Activity {
         c.setGravity(Gravity.CENTER_HORIZONTAL);
         c.setPadding(dp(20), dp(28), dp(20), dp(20));
         ImageView im = new ImageView(this);
-        dev.peanuts.ui.Scoreboard.logo(im, R.drawable.ic_banana_happy);   // PEANUTS: the test app's bulb seed
+        dev.peanuts.ui.Scoreboard.logo(im, R.drawable.ic_banana_happy);   // PEANUTS: the scoreboard's bulb seed
         im.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         c.addView(im, new LinearLayout.LayoutParams(dp(80), dp(80)));
         TextView h = Ui.heading(this, "Add your game");

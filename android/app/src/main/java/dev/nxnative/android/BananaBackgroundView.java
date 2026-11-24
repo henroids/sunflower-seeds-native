@@ -42,7 +42,7 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
         baseAlpha = night ? 40 : 72;   // low contrast: text and buttons stay readable
         paint.setAlpha(baseAlpha);
         shard.setColor(getContext().getColor(R.color.bn_banana_deep));
-        board = dev.peanuts.ui.Scoreboard.ON ? new dev.peanuts.ui.BulbBoard(c) : null;   // PEANUTS: the test app's bulb board in place of the drifting bananas
+        board = dev.peanuts.ui.Scoreboard.ON ? new dev.peanuts.ui.BulbBoard(c) : null;   // PEANUTS: the scoreboard's bulb board in place of the drifting bananas
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 

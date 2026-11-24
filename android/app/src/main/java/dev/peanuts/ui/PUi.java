@@ -487,7 +487,7 @@ public final class PUi {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setColor(0xFF1E5B3A);
-        android.graphics.drawable.Drawable sb = Scoreboard.seed(c);   // the test app's bulb seed on the board's slate square
+        android.graphics.drawable.Drawable sb = Scoreboard.seed(c);   // the scoreboard's bulb seed on the board's slate square
         if (sb != null) { v.setImageDrawable(sb); g.setShape(GradientDrawable.RECTANGLE); g.setColor(0xFF151A1D); }
         v.setBackground(g);
         v.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -523,7 +523,7 @@ public final class PUi {
             tile.setIncludeFontPadding(false);
             tile.setBackground(round(col(c, R.color.bn_tint), dp(c, 12), 0, 0));
             tile.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            Scoreboard.tile(tile, emoji);   // the test app's bulb icons
+            Scoreboard.tile(tile, emoji);   // the scoreboard's bulb icons
             view.addView(tile, new LinearLayout.LayoutParams(dp(c, 40), dp(c, 40)));
             LinearLayout col = new LinearLayout(c);
             col.setOrientation(LinearLayout.VERTICAL);

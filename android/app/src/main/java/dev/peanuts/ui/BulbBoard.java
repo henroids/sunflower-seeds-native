@@ -9,7 +9,7 @@ import android.graphics.Shader;
 import java.util.Random;
 
 /**
- * Home's background on the test app's scoreboard look (Scoreboard.ON; BananaBackgroundView hands its drawing, ticks and taps here): the whole screen is a
+ * Home's background on the scoreboard look (Scoreboard.ON; BananaBackgroundView hands its drawing, ticks and taps here): the whole screen is a
  * board of bulbs, and seeds (the logo, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard: each step the whole seed moves
  * over at once, keeping its shape. They are scattered at random, each with its own tilt (one of six patterns), most at the baseline pace and some a little
  * slower or faster. A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace, kept MIN_APART bulbs from the others
