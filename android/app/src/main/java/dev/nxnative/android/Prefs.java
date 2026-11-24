@@ -454,6 +454,11 @@ final class Prefs {
     static String skipLayersKeys(String titleId) { Profile p = Profile.of(titleId); return p == null ? "" : p.skipLayers; }
     static boolean skipLayers(Context c, String titleId) { return of(c).getBoolean(gameKey("vk_skip_layers", titleId), Recommend.bool(rec(c, titleId, Recommend.SKIP_LAYERS), false)); }
     static void skipLayers(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("vk_skip_layers", titleId), on).commit(); }
+    /** Game settings › Crowd control, for a game whose profile names its crowd's shaders (game.tsv crowd): on hides the crowd's draws (DM_VK_SKIP_VS); off by default */
+    static boolean crowdGame(String titleId) { Profile p = Profile.of(titleId); return p != null && !p.crowd.isEmpty(); }
+    static String crowdKeys(String titleId) { Profile p = Profile.of(titleId); return p == null ? "" : p.crowd; }
+    static boolean hideCrowd(Context c, String titleId) { return of(c).getBoolean(gameKey("hide_crowd", titleId), false); }
+    static void hideCrowd(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("hide_crowd", titleId), on).commit(); }
     /** Game settings › Cheats (Experimental), for a game whose profile has cheat files (Profile.cheats): off by default; while off the launcher passes no DM_CHEATS and the
      *  in-game panel has no Cheats section (Cheats.env, Cheats.panel). Reset to defaults turns it off; the toggles below stay */
     static boolean cheatsGame(String titleId) { Profile p = Profile.of(titleId); return p != null && p.cheats; }

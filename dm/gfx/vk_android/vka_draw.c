@@ -2294,7 +2294,8 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
 // A draw, timed when it is DM_VK_PROF's (every draw) or the pace line's sample (one in DM_VK_PACE_PROF, default 16: ten counter reads in a timed draw, none in the others)
 // DM_VK_SHADER_STATS=1 (live): draws and vertices per vertex / pixel / geometry shader triple, the top ones logged every 2 s as per-second rates ("shader stats"),
 // to find which shaders a slow scene spends its GPU time on. Joined draws of an instanced run (the fast path) count under the run's shaders.
-// DM_VK_SKIP_FS=<fragment key>[,...] (live, up to 8): drops all draws of those pixel shaders, to measure their GPU cost; the picture is wrong
+// DM_VK_SKIP_FS=<fragment key>[,...] (live, up to 32): drops all draws of those pixel shaders, to measure their GPU cost; the picture is wrong (Speedhack: Hidden layers off)
+// DM_VK_SKIP_VS=<vertex key>[,...] (live, up to 32): drops all draws of those vertex shaders, depth-only ones included (Crowd control: the profile's crowd row)
 typedef struct { uint64_t vs, fs, gs; double draws, verts, joined, ind, inst; } ss_ent;
 static ss_ent g_ss[4096]; static int g_ss_n, g_ss_last = -1; static uint64_t g_ss_t0, g_ss_tick;
 static uint64_t ss_now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec; }
@@ -2323,13 +2324,16 @@ static int ss_slot(uint64_t vs, uint64_t fs, uint64_t gs) {
     return -1;
 }
 static void ss_tick(void) { if (!g_ss_t0) g_ss_t0 = ss_now(); if (!(++g_ss_tick & 4095) && ss_now() - g_ss_t0 > 2000000000ull) ss_dump(); }
-static int skip_fs(uint64_t fs) {
-    static uint32_t gen = ~0u; static uint64_t keys[8]; static int nk;
+// A key list of one switch, parsed again when a switch changes (vka_env_gen), not read with getenv at every draw
+typedef struct { const char *env; uint32_t gen; int n; uint64_t k[32]; } keyset;   // gen starts at ~0u: the first look parses
+static int keyset_has(keyset *s, uint64_t key) {
     uint32_t g = atomic_load_explicit(&vka_env_gen, memory_order_relaxed);
-    if (g != gen) { gen = g; nk = 0; const char *e = getenv("DM_VK_SKIP_FS"); while (e && *e && nk < 8) { char *end; uint64_t k = strtoull(e, &end, 16); if (end == e) break; keys[nk++] = k; e = *end ? end + 1 : end; } }
-    for (int i = 0; i < nk; i++) if (keys[i] == fs) return 1;
+    if (g != s->gen) { s->gen = g; s->n = 0; const char *e = getenv(s->env);
+        while (e && *e && s->n < 32) { char *end; uint64_t k = strtoull(e, &end, 16); if (end == e) break; s->k[s->n++] = k; e = *end ? end + 1 : end; } }
+    for (int i = 0; i < s->n; i++) if (s->k[i] == key) return 1;
     return 0;
 }
+static keyset g_skip_fs = {"DM_VK_SKIP_FS", ~0u}, g_skip_vs = {"DM_VK_SKIP_VS", ~0u};
 
 // DM_VK_BISECT=<stage>:<mask hex>:<value hex> (live): drops the draws (stages 0-4) or dispatches (stage 5) whose shader of that stage has
 // key & mask == value; a draw without a shader in that stage is kept, and so is one with a geometry shader unless the stage is 2. To find a shader by halving: mask 0 drops every draw that has the stage at all
@@ -2710,7 +2714,7 @@ static void draw_body(vka_dstate *d, const p_set_rt *rt, int has_rt, const p_sci
         d->b.base_instance = (uint32_t)(dw ? dw->base_instance : di->base_instance);
         ind = 0;
     }
-    if (!mesh && sh[1] && skip_fs(sh[1]->key)) { g_skipped++; return; }
+    if (!mesh && (keyset_has(&g_skip_vs, sh[0]->key) || (sh[1] && keyset_has(&g_skip_fs, sh[1]->key)))) { g_skipped++; return; }
     if (bisect_drop(sh)) { g_skipped++; return; }
     if (!mesh && VKA_ENV("DM_VK_SHADER_STATS", 0)) {
         int slot = ss_slot(sh[0]->key, sh[1] ? sh[1]->key : 1, sh[2] ? sh[2]->key : 0); g_ss_last = slot;
