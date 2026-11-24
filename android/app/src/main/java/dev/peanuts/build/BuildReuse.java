@@ -67,7 +67,7 @@ public final class BuildReuse {
         return new Kept(shaders, modules.size(), files);
     }
 
-    /** The ready message's sentence, "" when nothing was kept: "It took 1 min 16 s: 9,564 shaders, 3 parts of the game's code and 91 game files came from earlier builds." */
+    /** The ready message's sentence, "" when nothing was kept: "It took 1 min 16 s, and 9,564 shaders, 3 parts of the game's code and 91 game files were kept from before." */
     public static String text(Kept k, long seconds) {
         if (k == null || !k.any()) return "";
         java.util.List<String> parts = new java.util.ArrayList<>();
@@ -76,6 +76,6 @@ public final class BuildReuse {
         if (k.files > 0) parts.add(String.format(Locale.ROOT, "%,d game file%s", k.files, k.files == 1 ? "" : "s"));
         String list = parts.size() == 1 ? parts.get(0) : String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
         String took = seconds >= 60 ? (seconds / 60) + " min " + (seconds % 60) + " s" : seconds + " s";
-        return " It took " + took + ": " + list + " came from earlier builds.";
+        return " It took " + took + ", and " + list + " were kept from before.";
     }
 }

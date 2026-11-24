@@ -28,8 +28,8 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
     static final String XLATE_MISMATCH = "translator does not match the lock file: ";
 
     /** The card's text for an APK whose translator does not match its tools (XLATE_MISMATCH) */
-    static final String XLATE_MISMATCH_TEXT = "This app build's shader translator does not match its own tools, so retrying will not help. Install the latest release "
-            + "of the app, or report this with the log from Details.";
+    static final String XLATE_MISMATCH_TEXT = "This app version's shader maker does not match the rest of the app, so Retry will not help. Install the latest release "
+            + "of the app, or share the build log with a bug report.";
 
     /** What a failure the app cannot name asks of the player: the card keeps the tool's own words for Details and the build log */
     static final String RETRY_SHARE = "Tap Retry. If it stops again, share the build log with a bug report.";
@@ -55,7 +55,7 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
 
     /** The warning Try anyway shows before it relaxes a check: what may go wrong, plainly */
     static final String ANYWAY_WARNING = "This goes on without the check that stopped it. The game may not start, may crash, or may draw parts wrongly or not at all. "
-            + "It has not been tested this way. Your dump and saves are not changed.";
+            + "It has not been tested this way. Your game files and saves are not changed.";
 
     static String lower(String s) { return s.isEmpty() ? s : s.substring(0, 1).toLowerCase(Locale.ROOT) + s.substring(1); }
 
@@ -118,8 +118,8 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
 
     /** The split's shaders differ from the profile's list: a dump of another version, modified or incomplete; Try anyway builds what the profile's list finds in it */
     static Failure shadersDiffer(String name, String version, String detail) {
-        return new Failure("Your dump's shaders are not the ones this app knows for " + name + " (" + version + "). The dump may be incomplete or modified: dump the game again "
-                + "and tap Retry, or Try anyway.", detail, FIX_ANYWAY);
+        return new Failure("The shaders in your game files are not the ones this app knows for " + forGame(name, version) + ", so the game files may be incomplete or "
+                + "changed. Dump the game again and tap Retry, or tap Try anyway.", detail, FIX_ANYWAY);
     }
 
     // PEANUTS begin: a split that lacks some of the profile's shaders says how many and names one, and tells add-on content (DLC) that was not imported from a dump
@@ -128,6 +128,9 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
     // (ShaderLibs.otherVersionKeys, checked first). They are said only when nothing else is known to explain the missing shaders (ShaderLibs.addonCase, the rule of
     // scripts/pack_android.py lacking_shaders), as one possible reason and no more, and are untested against a real game
     private static String count(long n) { return String.format(Locale.getDefault(), "%,d", n); }
+
+    /** The game for a main text: its name, then the version in the player's words when there is one ("Some Game, version 1.2.0"; Profile.shownVersion) */
+    private static String forGame(String name, String version) { return name + (version == null || version.isEmpty() ? "" : ", " + version); }
 
     /** A RomFS path for the card's main text, which carries no slash: "/Course/Gu_Cloud/course.ptcl" → "Course › Gu_Cloud › course.ptcl" */
     static String shown(String romfsPath) { return romfsPath.replaceFirst("^/+", "").replace("/", " › "); }
@@ -140,30 +143,29 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
      * the other failures
      */
     static Failure addonNotImported(String name, long absent, long total, String file, boolean nup, String detail) {
-        String what = nup ? "import" : "dump";
-        return new Failure(count(absent) + " of the " + count(total) + " shaders this app knows for " + name + " are missing, all of them from files your " + what
-                + " does not have (for example " + shown(file) + "). The " + what + " is incomplete; one possible reason is that the game's add-on content (DLC) was not "
-                + "part of the " + what + ": if you have DLC for this game, " + (nup ? "set the DLC folder in Settings (Library), then tap Import again in the game's sheet"
-                : "dump the game again with its DLC and tap Retry") + ". Try anyway builds without them: the game runs, and what those files hold is drawn without "
+        return new Failure(count(absent) + " of the " + count(total) + " shaders this app knows for " + name + " are missing, all of them from files that are not in your "
+                + "game files, for example " + shown(file) + ". One possible reason is DLC that was not part of the " + (nup ? "import" : "dump") + ": if you have DLC for "
+                + "this game, " + (nup ? "set the DLC folder in Settings under Library, then tap Import again in the game's sheet"
+                : "dump the game again with its DLC and tap Retry") + ". Try anyway builds without them, so what those files hold may be drawn without "
                 + "its materials.", detail, FIX_ANYWAY, CAUSE_ADDON, absent, total);
     }
 
     /** shadersDiffer with what is missing: missing of the profile's total shaders, example: a RomFS path of one, or its key */
     static Failure shadersDiffer(String name, String version, long missing, long total, String example, String detail) {
-        return new Failure("Your dump's shaders are not the ones this app knows for " + name + " (" + version + "): " + count(missing) + " of " + count(total)
-                + " are missing (for example " + (example.startsWith("/") ? "from " + shown(example) : example) + "). The dump may be incomplete or modified: dump the game "
-                + "again and tap Retry, or Try anyway.", detail, FIX_ANYWAY);
+        return new Failure(count(missing) + " of the " + count(total) + " shaders this app knows for " + forGame(name, version) + (version == null || version.isEmpty() ? "" : ",") + " are not in your game files"
+                + (example.startsWith("/") ? ", for example one from " + shown(example) : "") + ". The game files may be incomplete or changed. Dump the game again and "
+                + "tap Retry, or tap Try anyway.", detail, FIX_ANYWAY);
     }
 
     /** shadersDiffer when the dump could not be asked what it lacks: the same words, and the add-on content named as a possible reason */
     static Failure shadersDifferUnread(String name, String version, String detail) {
-        return new Failure(shadersDiffer(name, version, detail).text + " When the game has add-on content (DLC), it may not have been part of the import.", detail, FIX_ANYWAY);
+        return new Failure(shadersDiffer(name, version, detail).text + " If you have DLC for this game, it may be missing from the game files.", detail, FIX_ANYWAY);
     }
 
     /** The split read no shader at all, of a game whose profile does not say it has none (ShaderLibs.noNvnShaders): no pack is made, since it could not draw */
     static Failure noShadersRead(String name, String detail) {
-        return new Failure("The app found no shaders in your dump of " + name + ", so the game could not draw and no pack was made. Either the dump is incomplete, or "
-                + "this app version cannot read this game's shaders yet: dump the game again and tap Retry, or share the log (Details).", detail, FIX_RETRY);
+        return new Failure("The app found no shaders in the game files of " + name + ", so the game could not draw and was not built. Dump the game again, then tap "
+                + "Retry. If it stops again, share the build log with a bug report.", detail, FIX_RETRY);
     }
     // PEANUTS end
 
@@ -237,19 +239,19 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
     /**
      * A step and its count from the tool's progress lines (Job.stepText; not the shaders step's, which counts shaders). The split counts the dump's files it
      * reads, not shaders (shader_split.py's "progress: <files done>/<files>"), so its count says so: "Finding the shaders: 1,203 of 1,890 files". part: the
-     * tool's "<n>%" inside a large file, added as "(40 % of a large file)"
+     * tool's "<n>%" inside a large file, added as ", 40 % of a large file"
      */
     /** A step's count alone, for after its stage text (withNote): "203 of 1,442 files", "40 % of a large file"; "" while it has none */
     static String countText(boolean files, long done, long total, String part) {
-        String c = total > 0 ? String.format(Locale.getDefault(), files ? "%,d of %,d " + (total == 1 ? "file" : "files") : "%,d / %,d", done, total) : "";
+        String c = total > 0 ? String.format(Locale.getDefault(), files ? "%,d of %,d " + (total == 1 ? "file" : "files") : "%,d of %,d", done, total) : "";
         String p = part != null && part.matches("\\d+%") ? part.replace("%", " %") + " of a large file" : "";
-        return c.isEmpty() ? p : p.isEmpty() ? c : c + " (" + p + ")";
+        return c.isEmpty() ? p : p.isEmpty() ? c : c + ", " + p;
     }
 
     static String stepCountText(String step, boolean files, long done, long total, String part) {
         String count = files ? (total > 0 ? String.format(Locale.getDefault(), ": %,d of %,d %s", done, total, total == 1 ? "file" : "files") : "")
-                : total > 1 ? String.format(Locale.getDefault(), " %,d / %,d", done, total) : total == 1 || done == 0 ? "" : String.format(Locale.getDefault(), " %,d", done);
-        return step + count + (part != null && part.matches("\\d+%") ? " (" + part.replace("%", " %") + " of a large file)" : "");
+                : total > 1 ? String.format(Locale.getDefault(), ": %,d of %,d", done, total) : total == 1 || done == 0 ? "" : String.format(Locale.getDefault(), ": %,d", done);
+        return step + count + (part != null && part.matches("\\d+%") ? (count.isEmpty() ? ": " : ", ") + part.replace("%", " %") + " of a large file" : "");
     }
 
     /**
@@ -257,10 +259,10 @@ public final class PrepareText {   // PEANUTS: Home and Prepare use the same fai
      * was left unfinished, or a Prepare that stopped part way (a job beside the dump that is not done)
      */
     static String needsPreparing(boolean packThere, boolean unfinished, boolean jobStopped) {
-        if (jobStopped) return "Preparing was not finished. Tap Continue to go on where it stopped.";
-        if (unfinished) return "The pack's game code was left unfinished. Prepare finishes it (a few minutes; shaders are kept).";
-        if (packThere) return "The pack cannot be read. Prepare makes it again.";
-        return "No pack yet. Prepare makes one from your dump.";
+        if (jobStopped) return "The build was not finished. Tap Continue preparing to go on from where it stopped.";
+        if (unfinished) return "The game's build was left unfinished. Tap Prepare to finish it. It takes a few minutes, and the shaders are kept.";
+        if (packThere) return "The game's build cannot be read. Tap Prepare to build it again.";
+        return "Not built yet. Tap Prepare to build it from your game files.";
     }
 
     /** vk_android_build.py open_packs under Try anyway (DMSH_VK_REQUIRE_ALL=0): "[RED] <n> of the <m> shaders to build are not in the package …" */

@@ -154,8 +154,8 @@ public final class FirstImport {
 
     /** A Prepare job of the game that did not finish: the next Build would go on with it and not use the pack */
     public static String stoppedBuild(Game g, boolean running) {
-        if (running) return g.name + " is being prepared now. Wait for it to finish.";
-        return "A build of " + g.name + " stopped part way, and the next Build would go on with it instead of using a pack. "
+        if (running) return g.name + " is being built now. Wait for it to finish.";
+        return "A build of " + g.name + " stopped part way, and the next Build would go on with it instead of using the build you picked. "
                 + "Delete its working files first (the folder is under Details), then import the pack.";
     }
 

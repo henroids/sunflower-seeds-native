@@ -48,7 +48,7 @@ public final class PrepareTextJvmTest {
         check(PrepareText.withNote("Finishing the pack", "", "").equals("Finishing the pack"), "no stage: the step alone");
         check(PrepareText.withNote("Finding the shaders", "reading 1,442 files", "203 of 1,442 files").equals("Finding the shaders: reading 1,442 files, 203 of 1,442 files"), "stage and count");
         check(PrepareText.countText(true, 203, 1442, null).equals(String.format("%,d of %,d files", 203, 1442)), "a file count alone: " + PrepareText.countText(true, 203, 1442, null));
-        check(PrepareText.countText(true, 1, 5, "40%").equals("1 of 5 files (40 % of a large file)"), "inside a large file: " + PrepareText.countText(true, 1, 5, "40%"));
+        check(PrepareText.countText(true, 1, 5, "40%").equals("1 of 5 files, 40 % of a large file"), "inside a large file: " + PrepareText.countText(true, 1, 5, "40%"));
         check(PrepareText.countText(false, 0, 0, null).isEmpty(), "no count yet");
         check(PrepareText.quietText(59).isEmpty(), "under a minute: nothing");
         check(PrepareText.quietText(180).equals(", still working (no news for 3 min)"), "quiet for 3 min: " + PrepareText.quietText(180));
@@ -72,8 +72,8 @@ public final class PrepareTextJvmTest {
             f = PrepareText.toolStopped("Translating shaders", 1, red, log);
             plain(f.text, "a translator that does not match its tools");
             check(f.fix.equals(PrepareText.FIX_UPDATE), "app build mismatch: its own fix, not Retry: " + f.fix + " for " + red);
-            check(f.text.equals("Translating shaders stopped. This app build's shader translator does not match its own tools, so retrying will not help. "
-                    + "Install the latest release of the app, or report this with the log from Details."), "the mismatch text: " + f.text);
+            check(f.text.equals("Translating shaders stopped. This app version's shader maker does not match the rest of the app, so Retry will not help. "
+                    + "Install the latest release of the app, or share the build log with a bug report."), "the mismatch text: " + f.text);
             check(!f.text.contains("Tap Retry") && !f.text.contains("Try anyway"), "no Retry offered: " + f.text);
             check(f.detail.contains(red.substring(6)) && f.detail.endsWith("Log: " + log), "the tool's line and the log in Details: " + f.detail);
         }
@@ -121,39 +121,41 @@ public final class PrepareTextJvmTest {
         // PEANUTS begin: what is missing is counted and named; shaders from files the import does not have, with no add-on content in it, point at the DLC
         f = PrepareText.addonNotImported("Some Game", 12, 3400, "/Course/Extra_Town/course.ptcl", true, "detail");
         plain(f.text, "add-on content not imported");
-        check(f.text.startsWith("12 of the 3,400 shaders this app knows for Some Game are missing, all of them from files your import does not have (for example "
-                + "Course › Extra_Town › course.ptcl). The import is incomplete; one possible reason is that the game's add-on content (DLC) was not part of the "
-                + "import: if you have DLC for this game, set the DLC folder in Settings (Library), then tap Import again in the game's sheet"), "add-on content: " + f.text);
+        check(f.text.startsWith("12 of the 3,400 shaders this app knows for Some Game are missing, all of them from files that are not in your game files, for example "
+                + "Course › Extra_Town › course.ptcl. One possible reason is DLC that was not part of the import: if you have DLC for this game, set the DLC folder "
+                + "in Settings under Library, then tap Import again in the game's sheet"), "add-on content: " + f.text);
         check(!f.text.contains("usually"), "add-on content is one possible reason, not the usual one: " + f.text);
         check(!f.text.contains("delete the game's .nup"), "no file to delete by hand: Import again replaces it");
         check(f.cause.equals(PrepareText.CAUSE_ADDON) && f.lacks == 12 && f.of == 3400, "add-on content: the cause and its counts, for the build to stop and ask");
         check(f.fix.equals(PrepareText.FIX_ANYWAY) && f.text.contains("Try anyway builds without them") && !f.text.contains("dump the game again"), "add-on content: " + f.text);
         f = PrepareText.addonNotImported("Some Game", 12, 3400, "/Course/Extra_Town/course.ptcl", false, "detail");
         plain(f.text, "add-on content not in a dump folder");
-        check(f.text.contains("files your dump does not have") && f.text.contains("one possible reason is that the game's add-on content (DLC) was not part of the dump")
+        check(f.text.contains("files that are not in your game files") && f.text.contains("One possible reason is DLC that was not part of the dump")
                 && f.text.contains("dump the game again with its DLC and tap Retry") && !f.text.contains(".nup"), "a dump folder: " + f.text);
         check(f.cause.equals(PrepareText.CAUSE_ADDON), "a dump folder: the same cause");
-        f = PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", 7, 131426, "/shader/a.bfsha", "detail");
+        f = PrepareText.shadersDiffer("Pokemon Pokopia", "version 1.2.0", 7, 131426, "/shader/a.bfsha", "detail");
         plain(f.text, "shaders differ, counted");
-        check(f.text.contains("(update 655360): 7 of 131,426 are missing (for example from shader › a.bfsha). The dump may be incomplete or modified") && !f.text.contains("DLC"),
-                "shaders differ, counted: " + f.text);
-        check(PrepareText.shadersDiffer("X", "base game", 1, 2, "00000000000000aa", "").text.contains("(for example 00000000000000aa)"), "a shader without a file is named by its key");
-        f = PrepareText.shadersDifferUnread("Pokemon Pokopia", "update 655360", "detail");
+        check(f.text.startsWith("7 of the 131,426 shaders this app knows for Pokemon Pokopia, version 1.2.0, are not in your game files, for example one from shader › a.bfsha. "
+                + "The game files may be incomplete or changed") && !f.text.contains("DLC"), "shaders differ, counted: " + f.text);
+        String byKey = PrepareText.shadersDiffer("X", "", 1, 2, "00000000000000aa", "").text;
+        check(!byKey.contains("00000000000000aa") && byKey.startsWith("1 of the 2 shaders this app knows for X are not in your game files."), "a shader without a file: its key stays in Details: " + byKey);
+        check(!PrepareText.shadersDiffer("Pokemon Pokopia", "", "detail").text.contains("update"), "no raw version number on the main line");
+        f = PrepareText.shadersDifferUnread("Pokemon Pokopia", "version 1.2.0", "detail");
         plain(f.text, "shaders differ, the dump not read");
-        check(f.text.startsWith(PrepareText.shadersDiffer("Pokemon Pokopia", "update 655360", "detail").text) && f.text.endsWith("When the game has add-on content (DLC), it may not have been part of the import.")
+        check(f.text.startsWith(PrepareText.shadersDiffer("Pokemon Pokopia", "version 1.2.0", "detail").text) && f.text.endsWith("If you have DLC for this game, it may be missing from the game files.")
                 && f.fix.equals(PrepareText.FIX_ANYWAY), "the dump not read: " + f.text);
         check(f.cause.isEmpty() && PrepareText.shadersDiffer("X", "base game", 1, 2, "/a", "").cause.isEmpty() && PrepareText.crashed("Split", "x").cause.isEmpty(),
                 "only add-on content that was not imported carries a cause: the other failures are tried anyway as before");
         f = PrepareText.noShadersRead("Some Game", "detail");
         plain(f.text, "no shader read");
-        check(f.text.startsWith("The app found no shaders in your dump of Some Game") && f.fix.equals(PrepareText.FIX_RETRY) && f.cause.isEmpty() && !f.text.contains("Try anyway"),
+        check(f.text.startsWith("The app found no shaders in the game files of Some Game") && f.fix.equals(PrepareText.FIX_RETRY) && f.cause.isEmpty() && !f.text.contains("Try anyway"),
                 "no shader read: no pack, and no Try anyway: " + f.text);
         // PEANUTS end
 
         // The trigger: a job of a game this APK does not include gets one sentence and no Retry
         String missing = Profile.missing("0400A3A01EE4C000", "Pokemon Pokopia");
-        check(missing.equals("This app version does not include Pokemon Pokopia (0400A3A01EE4C000). Install a build that includes it."), "Profile.missing: " + missing);
-        check(Profile.missing("0400A3A01EE4C000", null).startsWith("This app version does not include this game (0400A3A01EE4C000)."), "Profile.missing without a name");
+        check(missing.equals("This app version does not include Pokemon Pokopia. Install an app version that includes it."), "Profile.missing: " + missing);
+        check(Profile.missing("0400A3A01EE4C000", null).startsWith("This app version does not include this game, 0400A3A01EE4C000."), "Profile.missing without a name: its title ID is all there is to name it");
         check(Profile.missing("040074A01BF12000", "Donkey Kong Bananza") == null, "a game the APK has");
         f = PrepareText.notIncluded(missing);
         check(f.fix.equals(PrepareText.FIX_NONE) && f.text.equals(missing), "not included: nothing to retry");
@@ -197,15 +199,16 @@ public final class PrepareTextJvmTest {
         check(PrepareText.stepCountText("Finding the shaders", true, 1203, 1890, "").equals("Finding the shaders: 1,203 of 1,890 files"), PrepareText.stepCountText("Finding the shaders", true, 1203, 1890, ""));
         check(PrepareText.stepCountText("Finding the shaders", true, 0, 1, "").equals("Finding the shaders: 0 of 1 file"), "one file");
         check(PrepareText.stepCountText("Finding the shaders", true, 0, 0, "").equals("Finding the shaders"), "no count yet: no 0 of 0");
-        check(PrepareText.stepCountText("Finding the shaders", true, 2, 5, "40%").equals("Finding the shaders: 2 of 5 files (40 % of a large file)"), PrepareText.stepCountText("Finding the shaders", true, 2, 5, "40%"));
-        check(PrepareText.stepCountText("Rewriting the game code", false, 3, 12, "").equals("Rewriting the game code 3 / 12"), "other steps as before");
+        check(PrepareText.stepCountText("Finding the shaders", true, 2, 5, "40%").equals("Finding the shaders: 2 of 5 files, 40 % of a large file"), PrepareText.stepCountText("Finding the shaders", true, 2, 5, "40%"));
+        check(PrepareText.stepCountText("Converting the game's code", false, 3, 12, "").equals("Converting the game's code: 3 of 12"), "other steps: a count with no slash");
+        plain(PrepareText.stepCountText("Converting the game's code", false, 3, 12, ""), "a step's count");
         check(PrepareText.stepCountText("Checking the dump", false, 1, 1, "identify").equals("Checking the dump"), "a step of one");
 
         // Needs preparing says why
-        check(PrepareText.needsPreparing(false, false, true).contains("Continue"), "a stopped Prepare continues");
+        check(PrepareText.needsPreparing(false, false, true).contains("Tap Continue preparing"), "a stopped Prepare continues, by its button's name");
         check(PrepareText.needsPreparing(true, true, false).contains("unfinished"), "unfinished code");
         check(PrepareText.needsPreparing(true, false, false).contains("cannot be read"), "unreadable pack");
-        check(PrepareText.needsPreparing(false, false, false).startsWith("No pack yet"), "no pack");
+        check(PrepareText.needsPreparing(false, false, false).startsWith("Not built yet"), "no pack");
 
         System.out.println("ok " + n);
     }

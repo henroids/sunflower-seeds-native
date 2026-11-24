@@ -35,7 +35,7 @@ public final class ReuseCheck {
     /** PackService ACTION_START's extra: run the done job's full check (PackService.checkKept) */
     public static final String EXTRA_CHECK = "pn_check";
     /** The packer's notification while it checks */
-    public static final String NOTE = "Translating every shader again, to compare with the ones kept from earlier builds. A game that starts stops it; it goes on another time.";
+    public static final String NOTE = "Making every shader again, to compare with the ones kept from before. Starting a game stops this, and it goes on another time.";
     static final String TODO = CheckDue.TODO;
 
     static File reuseDir(File noBackup, String titleId) { return new File(noBackup, "reuse/" + titleId); }

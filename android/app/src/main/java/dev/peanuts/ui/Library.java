@@ -860,7 +860,7 @@ public final class Library {
         if (qid == 0) return true;   // refused: the listener says why (a game file that is gone, no title ID)
         BuildQueue.Item qi = BuildPipeline.queued(r.titleId);
         String p = qi == null || BuildPipeline.queueNow() == null ? "" : BuildPipeline.queueNow().placeText(qi);
-        Toast.makeText(a, "Another game builds now, so " + r.name + " is prepared after it" + (p.isEmpty() ? "." : ": " + p + " in the build queue."), Toast.LENGTH_LONG).show();
+        Toast.makeText(a, "Another game is building now, so " + r.name + " builds after it" + (p.isEmpty() ? "." : ", " + p + " in the build queue."), Toast.LENGTH_LONG).show();
         if (l != null) l.followQueue();
         return true;
     }
@@ -889,7 +889,7 @@ public final class Library {
     private void buildAllAsk() {
         if (!PeanutsPrefs.hasKeys(a) || !PeanutsPrefs.hasFonts(a)) {
             Haptics.play(anchor(), Haptics.Word.REJECT);
-            new AlertDialog.Builder(a).setTitle("Build all").setMessage(!PeanutsPrefs.hasKeys(a) ? "Add your keys first (Settings › Library), then build." : "Add your firmware first (Settings › Library), then build.")
+            new AlertDialog.Builder(a).setTitle("Build all").setMessage(!PeanutsPrefs.hasKeys(a) ? "Add your keys first in Settings › Console, then build." : "Add your firmware first in Settings › Console, then build.")
                     .setPositiveButton("OK", null).show();
             return;
         }
@@ -913,9 +913,9 @@ public final class Library {
 
     private void buildAllAnswer(List<LibraryScanner.Title> need, List<LibraryScanner.Title> stale, List<String> asks) {
         String left = asks.isEmpty() ? "" : "\n\n" + names(asks) + (asks.size() == 1 ? " is" : " are") + " left out: " + (asks.size() == 1 ? "its" : "their")
-                + " sheet asks first (a file that is gone, or a version this app does not list).";
+                + " sheet asks first, for a file that is gone or an untested game version.";
         if (need.isEmpty() && stale.isEmpty()) {
-            new AlertDialog.Builder(a).setTitle("Build all").setMessage("Every game is built and fits this version of the app." + left).setPositiveButton("OK", null).show();
+            new AlertDialog.Builder(a).setTitle("Build all").setMessage("Every game is built and up to date with this app version." + left).setPositiveButton("OK", null).show();
             return;
         }
         List<String> n = new ArrayList<>(), s = new ArrayList<>();
@@ -924,8 +924,8 @@ public final class Library {
         int total = need.size() + stale.size();
         StringBuilder m = new StringBuilder();
         if (!n.isEmpty()) m.append(n.size() == 1 ? names(n) + " needs a build." : names(n) + " need a build.");
-        if (!s.isEmpty()) m.append(m.length() > 0 ? " " : "").append(names(s)).append(s.size() == 1 ? " is built, but its build is of an earlier version of the app: part of it is made again."
-                : " are built, but their builds are of an earlier version of the app: part of each is made again.");
+        if (!s.isEmpty()) m.append(m.length() > 0 ? " " : "").append(names(s)).append(s.size() == 1 ? " is built, but by an earlier app version, so part of its build is made again."
+                : " are built, but by an earlier app version, so part of each build is made again.");
         m.append(total == 1 ? "" : " They build one after the other.").append(" Before each one the queue waits while the phone is hot, the battery is low or a game runs.").append(left);
         new AlertDialog.Builder(a).setTitle(total == 1 ? "Build 1 game?" : "Build " + total + " games?").setMessage(m)
                 .setPositiveButton("Build all", (d, w) -> {
@@ -977,7 +977,7 @@ public final class Library {
 
     /** Remove from queue: the game leaves it (nothing of its files changes); asks first */
     private void removeAsk(BuildQueue.Item i) {
-        PUi.confirmDanger(a, "Remove from the queue?", i.name() + " leaves the build queue and is not built. Its files are not changed: Build adds it again.",
+        PUi.confirmDanger(a, "Remove from the queue?", i.name() + " leaves the build queue and is not built. Its files do not change, and Build adds it again.",
                 "Remove", () -> {
                     boolean ok = BuildPipeline.remove(a, i.id);
                     Haptics.play(anchor(), ok ? Haptics.Word.CLICK : Haptics.Word.REJECT);
@@ -991,7 +991,7 @@ public final class Library {
         Build b = build;
         String now = b != null && !b.failed ? "The build of " + b.name + " stops, and " : "";
         String rest = w.size() == 1 ? w.get(0).name() + " leaves the queue." : w.size() + " waiting games leave the queue.";
-        PUi.confirmDanger(a, "Stop the build queue?", now + rest + " What is written so far stays, and Build adds a game again.",
+        PUi.confirmDanger(a, "Stop the build queue?", now + rest + " What is built so far is kept, and Build adds a game again.",
                 "Stop all", () -> { Haptics.play(anchor(), Haptics.Word.CLICK); BuildPipeline.cancelAll(a); });
     }
 
@@ -1431,7 +1431,7 @@ public final class Library {
         LibraryScanner.VersionState vs = r.title == null ? LibraryScanner.VersionState.UNKNOWN : r.title.versionState;
         boolean fileGone = vs == LibraryScanner.VersionState.FILE_GONE, wrongVersion = vs == LibraryScanner.VersionState.UNSUPPORTED;
         String buildWords = fileGone ? "File gone" : wrongVersion ? "Wrong version" : "Build needed";
-        CharSequence state = building ? (stopped || queueStopped ? "Build stopped" : queued ? queuedWords(qi) : PUi.joined("Building", ownBuild ? b.percent + " %" : "preparing"))
+        CharSequence state = building ? (stopped || queueStopped ? "Build stopped" : queued ? queuedWords(qi) : PUi.joined("Building", ownBuild ? b.percent + " %" : "in progress"))
                 : st == READY ? "Ready" : st == BUILD ? buildWords : a.getString(R.string.not_supported_yet);
         // a newer update or new add-ons beside a built game's .nup (issue #120): the cover says so, and a tap asks before it takes them in ("Not now" asks no more for these)
         UpdateFound.Found found = !building && st == READY ? found(r) : null;
@@ -1661,7 +1661,7 @@ public final class Library {
 
     /** Asks first, Cancel focused */
     private Runnable stopAsk(String name) {
-        return () -> PUi.confirmDanger(a, "Stop the build?", "The build of " + name + " stops. What is written so far stays, and the next Build picks up what it can.",
+        return () -> PUi.confirmDanger(a, "Stop the build?", "The build of " + name + " stops. What it made so far is kept, and the next build goes on from there.",
                 "Stop", () -> { Haptics.play(anchor(), Haptics.Word.CLICK); BuildPipeline.cancel(a); });
     }
 
@@ -1719,7 +1719,7 @@ public final class Library {
         i.screensOff = () -> ScreensOff.show(a);
         Build b = build;
         if (b == null || !titleId.equalsIgnoreCase(b.titleId)) {
-            i.step = PUi.joined("Building", "preparing"); i.body = "Its progress is on the build card."; i.indeterminate = true;
+            i.step = PUi.joined("Building", "in progress"); i.body = "Its progress is on the game's card."; i.indeterminate = true;
             return i;
         }
         return buildInfo(b, i);
@@ -1739,7 +1739,7 @@ public final class Library {
         i.percent = b.percent; i.failed = b.failed; i.step = stepWords(b);
         if (b.failed) {
             // details and fixes stay on the build card
-            i.body = BuildListener.CANCELLED.equals(b.code) ? "You stopped the build. Its card can resume it." : "The build stopped. Its card says why and what to do next.";
+            i.body = BuildListener.CANCELLED.equals(b.code) ? "The build stopped. Tap Resume on the game's card to go on." : "The build stopped. The game's card says why and what to do.";
         } else {
             String d = b.detail.trim();
             i.body = (d.isEmpty() ? "Working" : d.endsWith(".") ? d.substring(0, d.length() - 1) : d) + ". It goes on with the screens off.";
@@ -1806,8 +1806,8 @@ public final class Library {
     private static CharSequence stepWords(Build b) {
         if (b.failed) return "Build stopped";
         switch (b.step) {
-            case "prepare": return PUi.joined("Building", "preparing the game");
-            case "companion": return PUi.joined("Building", "installing the companion");
+            case "prepare": return PUi.joined("Building", "making the game");
+            case "companion": return PUi.joined("Building", "installing the dual-screen companion");
             case "done": return "Ready";
             default: return PUi.joined("Building", "importing the game");
         }
@@ -1869,9 +1869,9 @@ public final class Library {
                     else if (nup && GameSheet.dlcFound(t))
                         left = PUi.button(a, "Import again with DLC", PUi.Kind.TONAL, Haptics.on(Haptics.Word.TICK, v -> GameSheet.importAgain(a, this, t, CompanionPort.forTitle(catalog, t.titleId), null)));
                     else left = PUi.button(a, "Open the game's sheet", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> openSheet.run()));
-                    right = PUi.button(a, "Try anyway", PUi.Kind.SOFT, v -> PUi.confirmDanger(a, "Try anyway?", "This builds " + name + " without the shaders that come with its add-on "
-                            + "content (DLC): the base game runs, and what the add-on adds is drawn without those materials. Import again with the DLC makes them later. "
-                            + "Your dumps and saves are not changed.", "Try anyway", () -> tryAnyway(t)));
+                    right = PUi.button(a, "Try anyway", PUi.Kind.SOFT, v -> PUi.confirmDanger(a, "Try anyway?", "This builds " + name + " without the shaders that come with its DLC. "
+                            + "The base game runs, and what the DLC adds is drawn without them. Import again with DLC makes them later. "
+                            + "Your game files and saves do not change.", "Try anyway", () -> tryAnyway(t)));
                     break;
                 }
                 case BuildListener.FILE_MISSING:
@@ -1940,17 +1940,17 @@ public final class Library {
             String first = b.error.split("\n")[0].trim();
             LibraryScanner.Title bt = titleFor(b.titleId);
             boolean btNup = bt != null && bt.base != null && bt.base.isNup();
-            String action = b.reimport && b.step.equals("import") && !BuildListener.OUT_OF_SPACE.equals(b.code) ? " Open the game's sheet to import again."
-                    : BuildListener.ADDON_MISSING.equals(b.code) ? (btNup && PeanutsPrefs.dlcDir(a) == null && !GameSheet.dlcFound(bt) ? " No DLC folder is set: set it below, then import again."
-                            : btNup && GameSheet.dlcFound(bt) ? " DLC for this game was found: Import again with DLC takes it." : " Add the DLC in the game's sheet (its DLC row).")
+            String action = b.reimport && b.step.equals("import") && !BuildListener.OUT_OF_SPACE.equals(b.code) ? " Open the game's sheet and tap Import again."
+                    : BuildListener.ADDON_MISSING.equals(b.code) ? (btNup && PeanutsPrefs.dlcDir(a) == null && !GameSheet.dlcFound(bt) ? " No DLC folder is set. Tap Set the DLC folder, then import the game again."
+                            : btNup && GameSheet.dlcFound(bt) ? " DLC for this game was found. Tap Import again with DLC to add it." : " Add the DLC on the DLC row of the game's sheet.")
                     : BuildListener.FILE_DAMAGED.equals(b.code) ? ""   // its message says what to do (Compressed.failure)
                     : BuildListener.FILE_MISSING.equals(b.code) ? " Open the game's sheet to pick the file again."
-                    : BuildListener.WRONG_VERSION.equals(b.code) ? " Open the game's sheet: tap “Build anyway” there if you want to try it, or pick the recommended update."
+                    : BuildListener.WRONG_VERSION.equals(b.code) ? (first.contains("Build anyway") ? "" : " To try it anyway, open the game's sheet and tap Build anyway. Or pick the update the sheet recommends.")
                     : BuildListener.INVALID_DUMP.equals(b.code) ? (bt != null && bt.base != null && dev.peanuts.build.VersionFolder.is(bt.base.file) ? ""   // its message says where the files go (GitHub issue #370)
-                            : " The dump looks incomplete or wrong. Open the game's sheet to check the files, or dump the game again.")
-                    : BuildListener.OUT_OF_SPACE.equals(b.code) ? " Free up some space, then Retry."
-                    : BuildListener.STALLED.equals(b.code) || BuildListener.CANCELLED.equals(b.code) ? " Tap Resume: it picks up where it stopped."
-                    : BuildListener.TOOL_STOPPED.equals(b.code) ? "" : " Tap Retry to open the sheet and build again.";
+                            : " Details says why. Open the game's sheet to check the files, or dump the game again.")
+                    : BuildListener.OUT_OF_SPACE.equals(b.code) ? (first.contains("Free up") ? "" : " Free up some space, then tap Retry.")
+                    : BuildListener.STALLED.equals(b.code) || BuildListener.CANCELLED.equals(b.code) ? (first.contains("Resume") ? "" : " Tap Resume to go on from where it stopped.")
+                    : BuildListener.TOOL_STOPPED.equals(b.code) || first.contains("Tap ") || first.contains(" tap ") ? "" : " Tap Retry to build again.";   // a first line that says what to tap gets no second instruction
             buildBody.setText((first.isEmpty() ? "The build stopped." : first) + action);
             buildBar.setVisibility(View.GONE);
             buildPct.setVisibility(View.GONE);
@@ -1983,12 +1983,12 @@ public final class Library {
     /** Same; say: a toast says the place of a game that goes into the queue (Build all says it once for all of them), and the notification permission is asked */
     String startBuild(GameSheet.State s, boolean say) {
         if (building(s.titleId)) return s.name + " is being built now. Wait for it to finish.";
-        if (dev.peanuts.pack.PackImport.busy(s.titleId)) return "A pack of " + s.name + " is being imported. Wait for it to finish, then build.";   // GitHub issue #44: the import writes the pack folder this build would use
+        if (dev.peanuts.pack.PackImport.busy(s.titleId)) return "Import pack is working on " + s.name + ". Wait for it to finish, then build.";   // GitHub issue #44: the import writes the pack folder this build would use
         // Keys and firmware fonts are a one-time setup requirement (owner, 2026-11-13), checked here as a cheap file-presence gate for every entry point
         // that can start a build (the sheet's Build/Build anyway/Rebuild, and Resume below): GameSheet already disables its Build button for the same
         // reason, so this is only a last line of defense, never a per-build re-validation against the importer.
-        if (!PeanutsPrefs.hasKeys(a)) return "Add your keys first (Settings › Library), then build.";
-        if (!PeanutsPrefs.hasFonts(a)) return "Add your firmware first (Settings › Console), then build.";
+        if (!PeanutsPrefs.hasKeys(a)) return "Add your keys first in Settings › Console, then build.";
+        if (!PeanutsPrefs.hasFonts(a)) return "Add your firmware first in Settings › Console, then build.";
         BuildRequest r = new BuildRequest();
         r.titleId = s.titleId; r.name = s.name; r.base = s.base; r.update = s.update;
         r.dlcs = new ArrayList<>(s.dlcs);
@@ -2017,7 +2017,7 @@ public final class Library {
             if (build != null && build.failed && build.titleId.equalsIgnoreCase(s.titleId)) build = null;   // its stopped card: this build stands for it
             BuildQueue.Item qi = BuildPipeline.queued(s.titleId);
             String p = qi == null || BuildPipeline.queueNow() == null ? "" : BuildPipeline.queueNow().placeText(qi);
-            if (say) Toast.makeText(a, s.name + (p.isEmpty() ? " waits in the build queue." : " is in the build queue: " + p + "."), Toast.LENGTH_LONG).show();
+            if (say) Toast.makeText(a, s.name + (p.isEmpty() ? " waits in the build queue." : " is in the build queue, " + p + "."), Toast.LENGTH_LONG).show();
         }
         render();
         if (say) askNotify();

@@ -94,7 +94,7 @@ public final class LogChoiceJvmTest {
         eq("Stopped responding while making shaders for this phone today at 14:40 after 40 min", LogChoice.buildLine(paused18, false, now, Z), "the step read from 0.1.8's words");
         String space = line("2026-11-21 14:00:00", "[start] build of Game (0100000000010000)") + line("2026-11-21 14:01:00", "progress import 10 %: Reading base (60 s)")
                 + line("2026-11-21 14:02:00", "[end] failed (out_of_space): No space left on the device. (after 2 min 0 s)");
-        eq("Ran out of space while importing the game today at 14:02 after 2 min", LogChoice.buildLine(space, false, now, Z), "out of space at the import");
+        eq("Ran out of space while importing the game files today at 14:02 after 2 min", LogChoice.buildLine(space, false, now, Z), "out of space at the import");
         String paused = line("2026-11-21 14:00:00", "[start] build of Game (0100000000010000)") + line("2026-11-21 14:30:00", "progress prepare 80 %: Paused: too warm. Translating shaders: 5 of 9 (1800 s)")
                 + line("2026-11-21 14:40:00", "[end] failed (stalled): The build stopped. (after 40 min 0 s)");
         eq("Stopped responding while making shaders for this phone today at 14:40 after 40 min", LogChoice.buildLine(paused, false, now, Z), "stalled, from a paused progress line");
@@ -105,7 +105,13 @@ public final class LogChoiceJvmTest {
         eq("Failed today at 14:00 after 30 s", LogChoice.buildLine(other, false, now, Z), "failed before any step");
         String companion = line("2026-11-21 14:00:00", "[start] build of Game (0100000000010000)") + line("2026-11-21 14:20:00", "progress companion 92 %: Downloading (1200 s)")
                 + line("2026-11-21 14:21:00", "[end] failed (other): The companion could not be downloaded. (after 21 min 0 s)");
-        eq("Failed while installing the companion today at 14:21 after 21 min", LogChoice.buildLine(companion, false, now, Z), "the companion step");
+        eq("Failed while installing the dual-screen companion today at 14:21 after 21 min", LogChoice.buildLine(companion, false, now, Z), "the companion step");
+        // graphics setup, in the words of 0.1.8 on and in the older ones
+        for (String g : new String[] {"Finishing graphics setup: 3 of 9", "Completing graphics setup"}) {
+            String setup = line("2026-11-21 14:00:00", "[start] build of Game (0100000000010000)") + line("2026-11-21 14:20:00", "progress prepare 90 %: " + g + " (1200 s)")
+                    + line("2026-11-21 14:21:00", "[end] failed (other): Finishing graphics setup stopped. (after 21 min 0 s)");
+            eq("Failed while finishing graphics setup today at 14:21 after 21 min", LogChoice.buildLine(setup, false, now, Z), "graphics setup: " + g);
+        }
         eq("Ended today at 13:00", LogChoice.buildLine(line("2026-11-21 13:00:00", "crash in the build service:"), false, now, Z), "lines without a start line");
         eq("null", String.valueOf(LogChoice.buildLine("", false, now, Z)), "no timed line");
 

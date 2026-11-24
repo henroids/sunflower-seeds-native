@@ -786,12 +786,12 @@ def write_library(results):
     path = os.path.join(out, VK['LIB_FILE']); tmp = path + '.tmp'
     with open(tmp, 'wb') as f:
         f.write(data); pos = 0
-        stage(f'writing the shader library: 0 of {blen >> 20:,} MB')
+        stage(f'saving the shaders: 0 of {blen >> 20:,} MB')
         for off, b in pieces:
             b = stored_bytes(b)
             f.write(b'\0' * (off - pos)); f.write(b); pos = off + len(b)
-            stage(f'writing the shader library: {pos >> 20:,} of {blen >> 20:,} MB', 0.5)
-        stage('saving the shader library to storage')
+            stage(f'saving the shaders: {pos >> 20:,} of {blen >> 20:,} MB', 0.5)
+        stage('writing the shaders to the phone\'s storage')
         assert pos == blen and f.tell() == blob_off + blen
         f.flush(); os.fsync(f.fileno())   # whole on storage before it takes the library's name (write_result)
     os.replace(tmp, path)
@@ -1185,7 +1185,7 @@ if MANIFEST and want and len(_in_m) < len(MANIFEST['hashes']):
     print(f'delta: the manifest has {len(MANIFEST["hashes"]) - len(_in_m)} shaders this key list does not build', flush=True)
 if MANIFEST:
     _cand = delta.reuse_candidates(MANIFEST, keys, heads)
-    if _cand: stage('looking for shaders the older library already has')
+    if _cand: stage('looking for shaders kept from before')
     _libs = older_libraries() if _cand else []
     def _reuse(k):
         L, ent, errs = delta.find_entry(MANIFEST, k, _libs, zstd)
@@ -1206,7 +1206,7 @@ if MANIFEST:
                 if v:
                     _from[v] += 1; REUSED.add(k); _tmps.append((tmp, k))
                     heads[k] = {'reused': v, 'ps_inputs': None}
-        if _tmps: stage(f'saving the {len(_tmps):,} kept shaders to storage')
+        if _tmps: stage(f'saving the {len(_tmps):,} shaders kept from before')
         sync_results(_tmps)
     finally:
         for L in _libs: L.close()
@@ -1365,7 +1365,7 @@ def translate_keys(ks, count=True):
     """Translate the shaders ks (pixel shaders first, then the vertex shaders their inputs pad) and write their result files"""
     for _phase in ([k for k in ks if STAGE_OF[k] != 'vs'], [k for k in ks if STAGE_OF[k] == 'vs']):
         if _phase and STAGE_OF[_phase[0]] == 'vs':   # the pixel shaders' inputs, from their results (this run's and earlier runs')
-            stage('reading what the pixel shaders take from the vertex shaders')
+            stage('checking which shaders work together')
             _need = set().union(*[PAIRS.get(k, ()) for k in _phase])
             for k in keys:
                 if STAGE_OF[k] != 'vs' and k not in PS_INPUTS:
@@ -1397,11 +1397,11 @@ def read_all():
     _missing = [k for k in ORDER if not os.path.exists(result_path(k))]
     if _missing: sys.exit(f'[RED] {len(_missing)} shaders have no result (the translator wrote neither a module nor a reason for them, from {_missing[0]}): run again')
     rs, cut = [], []
-    stage(f'reading the translated shaders: 0 of {len(ORDER):,}')
+    stage(f'gathering the shaders: 0 of {len(ORDER):,}')
     for n, k in enumerate(ORDER, 1):
         try: rs.append(read_result(k))
         except ResultCut: cut.append(k)
-        stage(f'reading the translated shaders: {n:,} of {len(ORDER):,}', 0.5)
+        stage(f'gathering the shaders: {n:,} of {len(ORDER):,}', 0.5)
     return rs, cut
 
 
@@ -1439,7 +1439,7 @@ if os.environ.get('DMSH_VK_LOOSE') == '1':
     for key, st, _, r in results:
         if st == 'ok':
             for variant, _, _, _, data in r[1]: open(os.path.join(out, 'spv', key + (f'_{variant}' if variant else '') + '.spv'), 'wb').write(data)
-stage('writing the shader library\'s index')
+stage('finishing the saved shaders')
 index = {k: r[0] for k, st, _, r in results if st == 'ok'}   # a shader kept from an older library has its stage and that library's version here, not its whole reflection
 for v in index.values():
     for b in v.get('bindings', ()): b['kind_num'] = KIND_NUM[b['kind']]
@@ -1449,7 +1449,7 @@ json.dump([{'key': k, 'st': st, 'err': e} for k, st, e, _ in results], open(os.p
 # version, each entry checked against it: a mismatch or a shader the manifest has and the library lacks is a [RED] line naming the key (the library is kept: it is what this
 # machine's tools made). A full build with a manifest checks the same, so a phone's full build is compared with the Mac's too
 progress('check')
-stage(f'checking the shader library ({len(results):,} shaders)')
+stage(f'checking the {len(results):,} saved shaders')
 _lib, _hashes = delta.library_hashes(lib, zstd, NJ); _lib.close()
 _status = {k: st for k, st, _, _ in results}
 open(os.path.join(out, delta.MANIFEST + '.tmp'), 'w').write(delta.format_manifest(VKV, GAME.id, INPUTS, {k: _hashes.get(k, '-') for k in keys}))

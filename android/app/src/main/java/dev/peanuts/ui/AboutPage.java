@@ -195,7 +195,7 @@ final class AboutPage {
         if (all.isEmpty()) { body.addView(PUi.small(a, "The list of games is not in this build.")); return; }
         List<Game> fresh = new ArrayList<>(), comp = new ArrayList<>();
         for (Game g : all) { if (g.isNew) fresh.add(g); if (g.companion) comp.add(g); }
-        String[] labels = {"All", "New in " + appVersion, "With a companion"};
+        String[] labels = {"All", "New in " + appVersion, "With a dual-screen companion"};
         int[] counts = {all.size(), fresh.size(), comp.size()};
         LinearLayout grid = new LinearLayout(a);
         grid.setOrientation(LinearLayout.VERTICAL);

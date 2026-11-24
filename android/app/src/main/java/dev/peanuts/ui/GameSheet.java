@@ -109,10 +109,11 @@ public final class GameSheet {
     /** The Companion row's line, as the sheet's choice and the disk are now */
     private CharSequence companionLine() {
         String installed = companion == null ? null : CompanionPort.installedVersion(title.companionRoot(), companion.packageName);
-        return companion == null ? "No companion in the catalog for this game"
-                : installed == null ? PUi.joined(companion.packageName + " " + companion.version, size(companion.size), installCompanion ? "Install after the build" : "Not installed after the build")
-                : installed.equals(companion.version) ? PUi.joined("installed " + installed, "up to date")
-                : PUi.joined("installed " + installed, companion.version + " " + (installCompanion ? "after the build" : "available"));
+        // a page made for this game on the second screen while it plays (map, stats, items); its package name stays out of the line
+        return companion == null ? "No dual-screen companion is available for this game"
+                : installed == null ? PUi.joined("Version " + companion.version, size(companion.size), installCompanion ? "Installs after the build" : "Not installed after the build")
+                : installed.equals(companion.version) ? PUi.joined("Version " + installed + " installed", "up to date")
+                : PUi.joined("Version " + installed + " installed", "version " + companion.version + " " + (installCompanion ? "after the build" : "available"));
     }
 
     private void render() {
@@ -127,19 +128,19 @@ public final class GameSheet {
         boolean building = lib.building(title.titleId);
         boolean nupBase = title.base != null && title.base.isNup();
         PUi.add(box, PUi.body(a, ready
-                ? "Rebuild makes again the parts of the built game that no longer fit this app version, and updates the companion. It is quick when little changed."
-                + (nupBase ? " It keeps the .nup: Import again makes that anew from your dumps, with the update and DLC found now." : "")
-                : "Build makes one .nup from the files below, prepares it, and installs the companion. About 25 minutes, in the background."), 0);
+                ? "Rebuild makes again the parts of the game's build that no longer fit this app version, and updates the dual-screen companion. It is quick when little changed."
+                + (nupBase ? " It keeps the game's .nup file. Import again makes that file again from your game files, with the update and DLC found now." : "")
+                : "Build makes one .nup file from the files below, builds the game from it and installs the dual-screen companion. It takes about 25 minutes, in the background."), 0);
         // A pack that Try anyway built without the shaders of add-on content that was not imported (PackNote, written when that build finished)
         long[] without = nupBase ? PackNote.without(title.packDir) : null;
         if (without != null) PUi.add(box, PUi.warnChip(a, "Built without DLC shaders", "Built without DLC shaders", String.format(Locale.getDefault(),
-                "Built without %,d of its %,d shaders: they come with add-on content (DLC) that was not in the import. The base game runs; what the add-on adds is "
-                + "drawn without those materials. Import again takes the DLC found now.", without[0], without[1])), 12);
+                "Built without %,d of its %,d shaders. They come with DLC that was not imported. The base game runs, and what the DLC adds is "
+                + "drawn without them. Import again takes the DLC found now.", without[0], without[1])), 12);
         // Base
         LibraryScanner.Source b = title.base;
         boolean baseGone = b != null && !b.file.exists();
         CharSequence baseLine = b == null ? "None found"
-                : baseGone ? b.file.getName() + " — this file is no longer where the app found it. Rescan, or pick the game folder again (Settings › Library)."
+                : baseGone ? b.file.getName() + ": this file is no longer where the app found it. Rescan, or pick the game folder again in Settings › Library."
                 : PUi.joined(b.file.getName(), b.version > 0 || !b.isDump() && !b.isNup() ? versionText(b.version) : null,
                         b.isDump() ? "dump folder" : b.isNup() ? ".nup" : dev.peanuts.build.Compressed.kind(b.file).isEmpty() ? "import needed" : dev.peanuts.build.Compressed.kind(b.file) + ", import needed",
                         !b.publisher.isEmpty() ? b.publisher : null);
@@ -147,7 +148,7 @@ public final class GameSheet {
         // Update
         LibraryScanner.Source newest = title.updates.isEmpty() ? null : title.updates.get(0);
         boolean updateGone = chosenUpdate != null && !chosenUpdate.file.exists();
-        CharSequence up = updateGone ? chosenUpdate.file.getName() + " — this file is no longer where the app found it. Pick it again."
+        CharSequence up = updateGone ? chosenUpdate.file.getName() + ": this file is no longer where the app found it. Pick it again."
                 : chosenUpdate == null ? PUi.joined(title.updates.isEmpty() ? "None found" : "None", "Choose…")
                 : PUi.joined(chosenUpdate.file.getName(), versionText(chosenUpdate.version) + (chosenUpdate == newest ? ", the newest found" : ""), "Choose another…");
         PUi.add(box, new PUi.Setting(a, "⬆️", "Update", v -> { if (!building) { Haptics.play(v, Haptics.Word.TICK); LibrarySettings.pickFile(a, REQ_UPDATE, "Pick the update (.nsp, .nsz, .xci or .xcz)"); } }).value(up).chevron(a).view, 0);
@@ -165,7 +166,7 @@ public final class GameSheet {
         File root = title.companionRoot();
         String installed = companion == null ? null : CompanionPort.installedVersion(root, companion.packageName);
         boolean canInstall = companion != null && !companion.version.equals(installed);
-        PUi.Setting comp = new PUi.Setting(a, "🖥️", "Companion", null).value(companionLine());
+        PUi.Setting comp = new PUi.Setting(a, "🖥️", "Dual-screen companion", null).value(companionLine());
         companionRow = comp;
         // the switch: only the row's line depends on it (the build reads the choice when it starts), so the line is written in place and the rows stay
         if (canInstall) comp.toggle(a, installCompanion, (v, on) -> {
@@ -307,7 +308,7 @@ public final class GameSheet {
         if (p.lowSpace()) {
             Haptics.play(anchor, Haptics.Word.REJECT);
             AlertDialog.Builder b = new AlertDialog.Builder(a).setTitle("Not enough free space").setMessage(Reimport.lowSpace(p)).setNegativeButton("Close", null);
-            if (p.fitsWithoutOld()) b.setNeutralButton("Delete the old file first…", (d, w) -> PUi.confirmDanger(a, "Delete the old .nup first?", Reimport.deleteFirst(p, t.name),
+            if (p.fitsWithoutOld()) b.setNeutralButton("Delete the old file first…", (d, w) -> PUi.confirmDanger(a, "Delete the old game file first?", Reimport.deleteFirst(p, t.name),
                     "Delete and import", () -> startImport(a, lib, t, companion, p, true, started)));
             b.show();
             return;
@@ -365,13 +366,13 @@ public final class GameSheet {
         LinearLayout col = new LinearLayout(a);
         col.setOrientation(LinearLayout.VERTICAL);
         col.addView(PUi.small(a, "You have: " + haveText));
-        col.addView(PUi.small(a, "This build supports: " + supports));
+        col.addView(PUi.small(a, "This app version supports: " + supports));
         int tint;
         String note;
         switch (vs) {
-            case RECOMMENDED: tint = R.color.bn_leaf; note = "Matches this build's shader tables."; break;
-            case SUPPORTED_OTHER: tint = R.color.bn_banana; note = "Supported, but builds slower the first time (a full shader scan): the shader tables are for " + recommendedText() + "."; break;
-            default: tint = R.color.bn_danger; note = "Not one of this build's versions. Build anyway may not work, or Choose another… picks the recommended update."; break;   // UNSUPPORTED
+            case RECOMMENDED: tint = R.color.bn_leaf; note = "Matches the app's list for this game."; break;
+            case SUPPORTED_OTHER: tint = R.color.bn_banana; note = "Supported, but its first build is slower because it looks at every shader. The app's list for this game is for " + recommendedText() + "."; break;
+            default: tint = R.color.bn_danger; note = "Untested game version. Build anyway may make a game that does not work. Choose another… picks the recommended update."; break;   // UNSUPPORTED
         }
         TextView n = PUi.text(a, note, 13, tint, 600);
         n.setPadding(0, PUi.dp(a, 2), 0, 0);
@@ -457,10 +458,10 @@ public final class GameSheet {
         File importDest = buildGameDir != null ? buildGameDir : (gameDir == null ? null : new File(gameDir));
         File packVolume = buildGameDir != null ? new File(buildGameDir, "pack") : a.getExternalFilesDir(null);
         String warn = SpaceEstimate.warning(importBytes + unpackBytes, packBasis, needsImport, importDest, packVolume);
-        if (warn != null) PUi.add(box, PUi.warnChip(a, "Low disk space", "Low disk space", warn + SpaceEstimate.unpackSentence(unpackBytes) + " Build still works; it may just run out partway through."), 14);
+        if (warn != null) PUi.add(box, PUi.warnChip(a, "Low disk space", "Low disk space", warn + SpaceEstimate.unpackSentence(unpackBytes) + " Build still works, but it may run out of space part way."), 14);
         else {
             long need = SpaceEstimate.totalNeeded(importBytes + unpackBytes, packBasis, needsImport);
-            PUi.add(box, PUi.small(a, "Needs about " + SpaceEstimate.words(need) + " free (a rough estimate)." + SpaceEstimate.unpackSentence(unpackBytes)), 14);
+            PUi.add(box, PUi.small(a, "Needs about " + SpaceEstimate.words(need) + " free, a rough estimate." + SpaceEstimate.unpackSentence(unpackBytes)), 14);
         }
     }
 
@@ -530,8 +531,8 @@ public final class GameSheet {
     private void startBuild() {
         if (chosenVersionState() == LibraryScanner.VersionState.UNSUPPORTED) {
             PUi.confirmDanger(a, "Build anyway?", "Version " + versionText(chosenUpdate != null ? chosenUpdate.version : title.base != null ? title.base.version : 0)
-                            + " is not one of this build's versions (it supports " + supportedShortText() + "). It goes on without that check: the game may not start, "
-                            + "may crash, or may draw parts wrongly, and the first build scans every shader (slower). Your dump and saves are not changed.",
+                            + " is untested. This app version supports " + supportedShortText() + ". The build goes on without that check, so the game may not start, "
+                            + "may crash or may draw parts wrongly, and its first build is slower because it looks at every shader. Your game files and saves do not change.",
                     "Build anyway", () -> doStartBuild(true));
         } else doStartBuild(false);
     }
@@ -540,7 +541,7 @@ public final class GameSheet {
         State s = state();
         s.buildAnyway = anyway;
         if (s.base == null) { Haptics.play(box, Haptics.Word.REJECT); Toast.makeText(a, "No base game found", Toast.LENGTH_SHORT).show(); return; }
-        if (s.home == null) { Haptics.play(box, Haptics.Word.REJECT); Toast.makeText(a, "Set the game folder first (Settings › Library)", Toast.LENGTH_LONG).show(); return; }
+        if (s.home == null) { Haptics.play(box, Haptics.Word.REJECT); Toast.makeText(a, "Set the game folder first in Settings › Library", Toast.LENGTH_LONG).show(); return; }
         String why = lib.startBuild(s);
         if (why != null) { Haptics.play(box, Haptics.Word.REJECT); new AlertDialog.Builder(a).setTitle("Build").setMessage(why).setPositiveButton("OK", null).show(); return; }
         if (lib.building(title.titleId) || Library.queued(title.titleId) != null) Haptics.play(box, Haptics.Word.HEAVY);   // the build was accepted or queued (a refusal by the pipeline says so in its own dialog)

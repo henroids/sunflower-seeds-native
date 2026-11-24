@@ -104,7 +104,7 @@ public final class CheckDue {
 
     static String text(String name, long differ, long of) {
         String what = differ > 0 && of > 0 ? String.format(Locale.ROOT, "%,d of its %,d shaders", differ, of) : "Some of its shaders";
-        return what + " came out different when made again from the start. " + name + " has the ones made from the start now; nothing to do.";
+        return what + " came out different when made again from the start. " + name + " now uses the ones made from the start, so there is nothing to do.";
     }
 
     private static String text(String json, String key) {

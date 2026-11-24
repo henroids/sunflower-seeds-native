@@ -65,7 +65,7 @@ class Words(unittest.TestCase):
 
     def test_where_the_files_go(self):
         why = self.out['extracted'][1]
-        self.assertEqual(why, 'extracted has the files of one version at its top (exefs and romfs), and Build prepares them from a folder named base. '
+        self.assertEqual(why, 'extracted has one version\'s exefs and romfs folders at its top, and Build looks for them in a folder named base. '
                               'Make a folder named base in extracted, move exefs and romfs into it, then Rescan and build again.')
         for ch in ('—', '–', '·', '!'):   # UI-RULES.md: no dashes, no middle dot, no exclamation
             self.assertNotIn(ch, why)
@@ -75,8 +75,8 @@ class Source(unittest.TestCase):
     def test_prepare_says_it_for_that_refusal(self):
         prep = (BUILD / 'Prepare.java').read_text(encoding='utf-8')
         self.assertIn('String flat = other ? null : VersionFolder.why(dump);', prep)
-        self.assertIn('if (flat != null) error = flat;', prep)
-        self.assertLess(prep.index('VersionFolder.why(dump)'), prep.index('"Cannot prepare this dump: "'))
+        self.assertIn('String head = flat != null ? flat :', prep)
+        self.assertLess(prep.index('VersionFolder.why(dump)'), prep.index('"Checking the game files stopped. The app cannot use these game files as they are."'))
         # the build card adds no "dump the game again" to it: the folder is whole, its files are one folder too high
         lib = (REPO / 'android/app/src/main/java/dev/peanuts/ui/Library.java').read_text(encoding='utf-8')
         self.assertIn('BuildListener.INVALID_DUMP.equals(b.code) ? (bt != null && bt.base != null && dev.peanuts.build.VersionFolder.is(bt.base.file) ? ""', lib)
@@ -85,7 +85,7 @@ class Source(unittest.TestCase):
         """Upstream's Prepare does not start from one version's folder (DumpLayout.versions); when it does, this message has to go"""
         dl = (UP / 'DumpLayout.java').read_text(encoding='utf-8')
         self.assertIn('a one-version folder (exefs/ at its top) has no version number: not here', dl)
-        self.assertIn('is one version\'s folder. Pick the dump folder above it, the one with base/ (and updates/).', dl)
+        self.assertIn('This folder holds one version\'s files. Pick the folder above it, the one that holds a folder named base.', dl)
 
 
 if __name__ == '__main__':

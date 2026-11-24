@@ -71,7 +71,7 @@ public final class SettingsSections {
                     new Group("Controller", r("Controller: in-game panel", "controller"), r("Mods tab", "mods"), r("Rumble", "controller"))),
             new Section("screens", "Screens", "companion", "What each screen shows, and when the screen stays on.",
                     new Group("Second screen", r("Bottom screen", "companion"), r("Games without a companion", "screens-cover"), r("Swap screens", "swap-off"),
-                            r("Companions", "companion")),
+                            r("Dual-screen companions", "companion")),
                     new Group("TV", r("TV and monitors", "tv")),
                     new Group("Display", r("Screen rotation", "screen-landscape"), r("Keep the screen on while preparing", "awake"))),
             new Section("users", "Users", "user", "Who plays, and the Miis games can use.",

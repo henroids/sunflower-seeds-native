@@ -271,8 +271,9 @@ public final class BuildPipeline {
             LISTENERS.remove(id);
             if (!wasThere) q.remove(id);
             if (running == id) running = 0;
-            ended(false, "Cannot start the build: " + e.getMessage(), BuildListener.OTHER);
-            if (l != null) MAIN.post(() -> l.done(false, "Cannot start the build: " + e.getMessage(), BuildListener.OTHER));
+            String refused = "Android did not let the build start. Tap Build again.";   // Android's own words are in the log line above
+            ended(false, refused, BuildListener.OTHER);
+            if (l != null) MAIN.post(() -> l.done(false, refused, BuildListener.OTHER));
             changed();
             return 0;
         }
@@ -305,11 +306,11 @@ public final class BuildPipeline {
 
     private static String check(Context ctx, BuildRequest r) {
         if (r == null) return "Nothing to build.";
-        if (r.titleId == null || !r.titleId.matches("[0-9A-Fa-f]{16}")) return "The game has no title ID.";
+        if (r.titleId == null || !r.titleId.matches("[0-9A-Fa-f]{16}")) return "The app cannot tell which game this is. Rescan your games, then build again.";
         if (r.base == null) return "Pick the game's base file first.";
-        if (!r.base.exists()) return "The base file is missing: " + r.base;
+        if (!r.base.exists()) { Log.w(TAG, "check: the base file is missing: " + r.base); return "The game's base file is missing. Open the game's sheet to pick it again."; }
         if (r.needsImport() && r.gameDir == null && r.buildDestination == null && dev.peanuts.PeanutsPrefs.buildDir(ctx) == null)
-            return "Choose a Build destination or set a Game folder.";
+            return "Set a Game folder in Settings › Library, or pick a Build destination, then build.";
         return null;
     }
 

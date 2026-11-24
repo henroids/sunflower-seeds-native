@@ -751,10 +751,10 @@ public final class MainActivity extends Activity {
             // Why it needs preparing, so the card does not only say "Needs preparing": no pack yet, one that cannot be read, code left unfinished, or a Prepare that
             // stopped part way (its job beside the dump: the button continues it rather than asking to start over)
             Job j = stoppedJob(gd, g.titleId);
-            Problem s = new Problem(j != null ? "Preparing not finished" : dump ? "Needs preparing" : p == null ? "No pack" : "Pack unfinished", dump || j != null);
+            Problem s = new Problem(j != null ? "Build not finished" : dump ? "Not built yet" : p == null ? "No build" : "Build unfinished", dump || j != null);
             s.resume = j != null;
             s.reason = dump || j != null ? PrepareText.needsPreparing(pd.isDirectory() && readError != null && new File(pd, "pack.tsv").isFile(), unfinished != null, j != null)
-                    : "This game has no pack that fits, and it is not a dump Prepare can start from. the game page › Folders picks a pack.";
+                    : "This game has no build that fits, and these game files cannot be built from here. Pick a build on the game page under Folders.";
             s.detail = (j != null ? j.statusText(false) + "\n\n" : "") + (readError != null ? readError : unfinished + ".android.key is missing: the rewrite of " + unfinished + " did not finish.")
                     + "\nPack: " + pd + (j != null ? "\n" + j.errorDetail() : "");
             return s;

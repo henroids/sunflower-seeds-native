@@ -99,8 +99,8 @@ public final class BuildLogUi {
 
     /** What the sheet says the bundle holds */
     static String contents(BuildLogShare.Made m) {
-        return m.files + " files, " + BuildLogBundle.size(m.bytes) + ". Holds the build's step logs, its job file, the app's own messages and a summary of this phone "
-                + "(model, Android, memory, free space). No keys, game files or saves." + (m.cut ? " Long logs are cut to their first and last part." : "");
+        return m.files + " files, " + BuildLogBundle.size(m.bytes) + ". Holds the build's step logs, its progress file, the app's own messages and a summary of this phone: "
+                + "its model, Android version, memory and free space. No keys, game files or saves." + (m.cut ? " Long logs are cut to their first and last part." : "");
     }
 
     private static String sentence(String s) {
@@ -149,7 +149,7 @@ public final class BuildLogUi {
         Context app = a.getApplicationContext();
         new Thread(() -> {
             String msg;
-            if (!zip.isFile()) msg = "The build log is no longer there (it is kept for a day). Open Share log again.";
+            if (!zip.isFile()) msg = "The build log is no longer there. A build log is kept for a day. Open Share log again.";
             else try (InputStream in = new FileInputStream(zip); OutputStream out = app.getContentResolver().openOutputStream(to, "w")) {
                 if (out == null) throw new IOException("the folder took no file");
                 byte[] b = new byte[64 << 10];

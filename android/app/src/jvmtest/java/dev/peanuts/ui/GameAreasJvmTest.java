@@ -88,13 +88,13 @@ public final class GameAreasJvmTest {
         eq("docked", GameAreas.icon(cm, "Console mode", "Something new", null));   // other words: the table's
         GameAreas.Place ss = GameAreas.place("Second screen", null, null);
         eq("screens-android", GameAreas.icon(ss, "Second screen", "Off: no second display found, the companion does not load", null));
-        eq("screens-cover", GameAreas.icon(ss, "Second screen", "Physical: the companion shows on the second display", null));
+        eq("screens-cover", GameAreas.icon(ss, "Second screen", "On: the companion shows on the second screen", null));
         eq(null, GameAreas.icon(null, "x", null, null));
 
         // the tiles' lines
         eq("Fit", GameAreas.shortValue("Fit (keep aspect)"));
         eq("As in Settings", GameAreas.shortValue("As in Settings: Custom (4 buttons moved)"));
-        eq("Catalog unavailable", GameAreas.shortValue("Catalog unavailable: catalog: fetch: java.io.FileNotFoundException: https://example"));
+        eq("Catalog not loaded", GameAreas.shortValue("Catalog not loaded. Check the connection."));
         eq("Never drops to 30", GameAreas.shortValue("Never drops to 30; less even under 60"));
         eq("Phone's language", GameAreas.shortValue("Phone's language · English (US)"));   // upstream's own separator is cut, not shown on a tile
         eq(null, GameAreas.shortValue("  "));

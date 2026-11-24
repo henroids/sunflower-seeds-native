@@ -280,8 +280,8 @@ final class Job {
     /** Details of a failed job: the technical part of why (an older job's whole message), and the game, version and folders */
     synchronized String errorDetail() {
         String d = "failed".equals(state()) ? PrepareText.failedDetail(error(), o.optString("error_detail"), o.has("fix")) : "";
-        return (d.isEmpty() ? "" : d + "\n\n") + "Game: " + name() + " (" + titleId() + "), " + Profile.versionName(version()) + (tryAnyway() ? ", Try anyway" : "")
-                + "\nDump: " + dump() + "\nPack: " + pack() + "\nWorking files: " + dir() + "\nLogs: " + new File(dir(), "logs");
+        return (d.isEmpty() ? "" : d + "\n\n") + "Game: " + name() + " (" + titleId() + "), " + Profile.versionName(version()) + (tryAnyway() ? ", built with Try anyway" : "")
+                + "\nGame files: " + dump() + "\nBuild: " + pack() + "\nWorking files: " + dir() + "\nLogs: " + new File(dir(), "logs");
     }
 
     /**
@@ -600,8 +600,8 @@ final class Job {
             String part = step(STEPS[i]).optString("stage");
             // the module being rewritten stays on the card while the rewriter's progress lines give its share (pack_android.py's "stage: rewriting main (1 of 3)")
             String what = step(STEPS[i]).optString("note");
-            String base = what.isEmpty() ? STEP_TEXT[i] + " (a few minutes)" : PrepareText.withNote(STEP_TEXT[i], what, "");
-            return part.equals("code") && t > 0 ? base + " (" + Math.min(100, d * 100 / t) + " %)" : base;
+            String base = what.isEmpty() ? STEP_TEXT[i] + ", which takes a few minutes" : PrepareText.withNote(STEP_TEXT[i], what, "");
+            return part.equals("code") && t > 0 ? (what.isEmpty() ? STEP_TEXT[i] : base) + ", " + Math.min(100, d * 100 / t) + " %" : base;
         }
         if (!note.isEmpty()) return PrepareText.withNote(STEP_TEXT[i], note, "");
         long d = stepDone(i), t = stepTotal(i);
@@ -614,14 +614,14 @@ final class Job {
     /** One line for the screen and the notification: what the job is doing or why it stopped */
     synchronized String statusText(boolean serviceAlive) {
         String s = state();
-        String step = "step " + (current() + 1) + " of " + STEPS.length;
+        String step = ", step " + (current() + 1) + " of " + STEPS.length;
         switch (s) {
             case "done": return "Ready to play.";
             case "failed": return PrepareText.failedText(STEP_TEXT[current()], error(), o.has("fix"));
             case "pending": return "Not started yet.";
             case "paused": return "Paused: " + reasonText(reason()) + ". " + stepText() + "." + (reasonDetail().isEmpty() ? "" : "\n" + capital(reasonDetail()) + ".")
                     + (canGoOn() && serviceAlive ? "\nIf the phone does not feel hot, tap Go on anyway." : "");
-            case "running": return serviceAlive ? stepText() + " (" + step + ")" + quietText() + "."
+            case "running": return serviceAlive ? stepText() + step + quietText() + "."
                     : "Stopped at " + PrepareText.lower(stepText()) + ". Tap Resume to go on from there.";
             default: return s;
         }

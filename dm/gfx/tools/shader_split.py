@@ -4225,9 +4225,9 @@ def main():
         tag = os.path.basename(os.path.dirname(os.path.abspath(romfs))) if i else ''
         stage('listing the game\'s files')
         files += sorted(((os.path.join(dp, f), (tag + '/' if tag else '') + posix_rel(os.path.join(dp, f), romfs)) for dp, _, fs in os.walk(romfs) for f in fs), key=lambda t: t[1])   # by the '/' path: the same order on every system
-        stage('reading the game\'s program')
+        stage('reading the game\'s code')
         img = nso_image(mainnso)
-        stage('looking for shaders in the game\'s program')
+        stage('looking for shaders in the game\'s code')
         if not i:
             import unityfs
             try: common = unityfs.common_strings(img)
@@ -4314,12 +4314,12 @@ def main():
         if out is None: print(f'targeted split: not taken, {why}: every file is scanned', flush=True)
     if out is None:
         print(f'split: looking for archives among {len(files):,} RomFS files', flush=True)   # each file is opened (zip_jobs): a minute or more on a large RomFS, before the first progress line
-        stage(f'looking for archives among {len(files):,} files')
+        stage(f'looking for packed files among {len(files):,} files')
         big, todo = scan_jobs(files, mains=main_v, nros=nros)
-        stage(f'reading every file of the game ({len(files):,})')
+        stage(f'reading all {len(files):,} of the game\'s files')
         cd = (os.path.join(rd, 'full') if targeted else rd) if rd else None
         out = split_tables(list(results), big, todo, dumps, J, common, zdicts, ScanCache(cd, scan_digest(inputs, big + todo + mains)) if cd else None)
-    stage('writing the shaders found')
+    stage('saving the shaders found')
     write_outputs(out, pkg, mapout, factsout, pairsout, psopairsout)
     if d := os.environ.get('DM_SPLIT_DIFF_DIR'):   # PEANUTS: the tables written, kept as final.<name> (a profile regenerated from a device's full scan: the build deletes its own copies)
         import shutil

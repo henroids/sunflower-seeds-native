@@ -139,8 +139,8 @@ public final class LogChoice {
         if (s != null) return s;
         if (step == null) return null;
         switch (step) {
-            case "import": return "importing the game";
-            case "companion": return "installing the companion";
+            case "import": return "importing the game files";
+            case "companion": return "installing the dual-screen companion";
             case "prepare": break;
             default: return null;
         }
@@ -149,8 +149,8 @@ public final class LogChoice {
         if (d.startsWith("Paused: ")) { int dot = d.indexOf(". "); d = dot < 0 ? "" : d.substring(dot + 2); }
         for (int i = 0; i < STEP_TEXT.length; i++) if (d.startsWith(STEP_TEXT[i]) || d.startsWith(OLD_STEP_TEXT[i])) return STEP_WORDS[i];
         if (d.startsWith("Checking ")) return STEP_WORDS[0];
-        if (d.startsWith("Completing graphics setup")) return "completing the graphics setup";
-        return "preparing the game";
+        if (d.startsWith("Finishing graphics setup") || d.startsWith("Completing graphics setup")) return "finishing graphics setup";   // "Completing": logs before 0.1.8
+        return "building the game";
     }
 
     /** How a build that did not finish ended, from its end line's failure category (BuildListener's codes) and where it was */
@@ -163,7 +163,7 @@ public final class LogChoice {
             case "addon_missing": return "Stopped because it needs the DLC";
             case "file_missing": return "Failed because a game file is missing";
             case "file_damaged": return "Failed because a game file is damaged";
-            case "invalid_dump": return "Failed because the dump cannot be used";
+            case "invalid_dump": return "Failed because the game files cannot be used";
             default: return at == null ? "Failed" : "Failed while " + at;
         }
     }

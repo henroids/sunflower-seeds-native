@@ -395,7 +395,7 @@ public final class FirstImportJvmTest {
         check(r.detail.contains("Working files: " + new File(t, "games/DK/" + ID + "-work")) && !target.exists(), "the details: the working files; nothing written");
         write(job, "running\t" + target);
         r = refused(() -> imp(game(null, V, target, nup), src, TITLES));
-        check(r != null && r.getMessage().startsWith("Donkey Kong Bananza is being prepared now."), "a running job");
+        check(r != null && r.getMessage().startsWith("Donkey Kong Bananza is being built now."), "a running job");
         write(job, "done\t" + target);
         check(refused(() -> imp(game(null, V, target, nup), src, TITLES)) == null, "a done job: in");
         reset();

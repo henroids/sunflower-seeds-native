@@ -48,6 +48,12 @@ final class Prepare {
     static final String TAG = "peanuts.build";
     private static final String[] STEPS = {"identify", "rewrite", "split", "shaders", "pack"};
     private static final String[] STEP_TEXT = {"Checking the game files", "Converting the game's code", "Finding the shaders", "Making shaders for this phone", "Finishing up"};
+    /** What to do after a stop with no known cause (PrepareText.RETRY_SHARE's words) */
+    static final String RETRY_SHARE = "Tap Retry. If it stops again, share the build log with a bug report.";
+    /** Where a build with mods is started again (it has no card of its own) */
+    private static final String MODS_AGAIN = "Try again from the game's Mods section: hold the cover, then open the Game tab.";
+    /** A game version none of the app's list for the game names: the card's first line (the checker's own words go to Details) */
+    private static final String UNTESTED = "This game version is untested. To try it anyway, open the game's sheet and tap Build anyway.";
     /** How long a job may sit "running" with no job.json change and no service message before we call it stalled (the service writes at least every few seconds while it runs) */
     private static final long STALL_MS = 10 * 60 * 1000;
     /** How long Try anyway's restart waits for the failed run's end in the packer (its worker's last save and its end's message come moments after the failure) */
@@ -92,14 +98,14 @@ final class Prepare {
         } catch (ReflectiveOperationException e) {
             Log.w(TAG, "prepare: upstream reflection", e);
             BuildLogShare.line(c, logId, "prepare: upstream reflection: " + e);
-            throw new IOException("This build of the app has no on-device packer the build service knows (" + e.getMessage() + ").");
+            throw new IOException("The build could not start because of a problem in the app. " + RETRY_SHARE);
         } finally {
             unbind();
         }
     }
 
     private File run0(File dump, String titleId, File destination, boolean consent, Progress p) throws IOException, ReflectiveOperationException {
-        p.on(0, "Checking " + dump.getName());
+        p.on(0, STEP_TEXT[0]);
         // 1. a job already there for this dump?
         String id = titleId;
         try { id = Upstream.titleIdOf(dump); } catch (ReflectiveOperationException | RuntimeException e) { /* DumpCheck says what is wrong */ }
@@ -133,13 +139,13 @@ final class Prepare {
         if (error != null && !anyBuild && Boolean.TRUE.equals(Upstream.get(r, "otherBuild"))) {
             if (!consent && !had) {
                 String detail = Upstream.str(Upstream.get(r, "detail"));
-                throw new BuildListener.Failure("Untested game version: " + error + (detail.isEmpty() ? "" : "\n" + detail)
-                        + "\nOpen the game's sheet and tap \"Build anyway\" if you want to try it (it may not start or may crash, and the first build scans every shader).",
+                throw new BuildListener.Failure(UNTESTED + "\n" + error + (detail.isEmpty() ? "" : "\n" + detail)
+                        + "\nBuild anyway may make a game that does not start or crashes, and its first build looks at every shader.",
                         BuildListener.WRONG_VERSION);
             }
             log("prepare: untested version (" + error + "), building anyway (the player chose Build anyway)");
             Object again = Upstream.dumpCheck(dump, fresh, true);
-            if (Upstream.get(again, "error") == null) { r = again; error = null; anyBuild = true; p.on(0, "Untested game version: preparing it anyway"); }
+            if (Upstream.get(again, "error") == null) { r = again; error = null; anyBuild = true; p.on(0, "Untested game version, building it anyway"); }
         }
         if (error != null) {
             // not a version mismatch (that already returned above): an incomplete/corrupt dump, no RomFS, the wrong title ID, a bad file name, … — a bad dump,
@@ -147,8 +153,10 @@ final class Prepare {
             boolean other = Boolean.TRUE.equals(Upstream.get(r, "otherBuild"));
             String detail = Upstream.str(Upstream.get(r, "detail"));
             String flat = other ? null : VersionFolder.why(dump);   // one version's folder: where its files go, not "pick the folder above it" (GitHub issue #370)
-            if (flat != null) error = flat;
-            throw new BuildListener.Failure((other ? "Untested game version: " : "Cannot prepare this dump: ") + error + (detail.isEmpty() ? "" : "\n" + detail),
+            // the card's first line in the player's words; the checker's own sentence (file names, folders, title IDs) goes to Details. A version's folder
+            // (VersionFolder) is the exception: its sentence is the fix, so it is the first line
+            String head = flat != null ? flat : other ? "This game version is untested." : "Checking the game files stopped. The app cannot use these game files as they are.";
+            throw new BuildListener.Failure(head + (flat != null ? "" : "\n" + error) + (detail.isEmpty() ? "" : "\n" + detail),
                     other ? BuildListener.WRONG_VERSION : BuildListener.INVALID_DUMP);
         }
         String rid = Upstream.str(Upstream.get(r, "titleId"));
@@ -162,19 +170,20 @@ final class Prepare {
             boolean same = Upstream.jobDump(existing).getPath().equals(dumpR.getPath()) && Upstream.jobVersion(existing) == version;
             if (destination != null && !destination.equals(Upstream.jobPack(existing))) {
                 if (same && !s.equals("done") && !s.isEmpty())
-                    throw new BuildListener.Failure("This game has an unfinished build in " + Upstream.jobPack(existing)
-                            + ". Select its Build destination to resume.", BuildListener.OTHER);
+                    throw new BuildListener.Failure("This game has an unfinished build in another folder. To go on with it, pick that folder as the game's "
+                            + "Build destination, then tap Build.\n" + Upstream.jobPack(existing), BuildListener.OTHER);
                 same = false;
             }
             if (same && (s.equals("running") || s.equals("paused") || s.equals("failed") || s.equals("pending"))) job = existing;   // resumed where it stopped
             else if (same && s.equals("done") && Upstream.jobPack(existing).isDirectory() && Upstream.packRead(Upstream.jobPack(existing)) != null
                     && current(Upstream.jobPack(existing), dumpR, id) && !noOrig(Upstream.jobPack(existing))) {   // (a pack an app update left behind is redone below: step 3; so is one without main.orig.bin)
                 // already prepared by an earlier run: the game only needs listing
-                p.on(100, "Already prepared");
+                p.on(100, "Already built");
                 Upstream.addGame(c, existing);
                 return Upstream.jobPack(existing);
             }
-            else if (!s.equals("done") && !s.isEmpty()) throw new BuildListener.Failure("This dump is already being prepared into another pack folder. Resume it from its card on the Home screen, or delete its working files first.", BuildListener.OTHER);
+            else if (!s.equals("done") && !s.isEmpty()) throw new BuildListener.Failure("These game files already have an unfinished build of another version. Let that build "
+                    + "finish, or delete its working files, then tap Retry.\n" + Upstream.jobPack(existing), BuildListener.OTHER);
         }
         // 3. a pack beside the dump that fits (PackCheck): adopted, or only the rest redone
         if (job == null) {
@@ -199,7 +208,7 @@ final class Prepare {
                 Upstream.jobSave(job);
                 Upstream.jobRemember(c, Upstream.jobFile(job));
                 if (!code && !sh) {
-                    p.on(100, "The pack beside the game fits: nothing to prepare");
+                    p.on(100, "The game's build is up to date, nothing to do");
                     Upstream.addGame(c, job);
                     return packDir;
                 }
@@ -240,7 +249,7 @@ final class Prepare {
             jobStarted = true;
         } catch (RuntimeException e) {   // ForegroundServiceStartNotAllowedException (Android 12+): the app counts as background now
             log("PackService start refused: " + e);
-            throw new BuildListener.Failure("Android did not let the build start in the background. Nothing is lost: open " + appName() + " and tap Resume on the game's card.", BuildListener.CANCELLED);
+            throw new BuildListener.Failure("Android did not let the build start in the background. Nothing is lost. Open " + appName() + " and tap Resume on the game's card.", BuildListener.CANCELLED);
         }
         p.on(1, STEP_TEXT[0]);
         // 5. progress from job.json (and the service's messages while bound) until the job ends
@@ -271,7 +280,7 @@ final class Prepare {
             String stage = st == null ? "" : st.optString("stage");
             if (state.equals("done")) {
                 log("prepare: the job is done");
-                p.on(100, "Pack finished");
+                p.on(100, "Build finished");
                 Object j = Upstream.jobRead(file);
                 note(Upstream.jobPack(j), o);
                 Upstream.addGame(c, j);
@@ -309,7 +318,7 @@ final class Prepare {
                     lastJson = null;
                     lastChange = SystemClock.elapsedRealtime();
                     p.on(pct(si, done, total), "Trying anyway: " + STEP_TEXT[si]);
-                    try { c.startForegroundService(Upstream.packStart(c, file)); } catch (RuntimeException e) { throw new BuildListener.Failure("Android did not let the build start again: open " + appName() + " and tap Try anyway on the game's card.", BuildListener.CANCELLED); }
+                    try { c.startForegroundService(Upstream.packStart(c, file)); } catch (RuntimeException e) { throw new BuildListener.Failure("Android did not let the build start again. Nothing is lost. Open " + appName() + " and tap Resume on the game's card.", BuildListener.CANCELLED); }
                     continue;
                 }
                 throw new BuildListener.Failure(dev.nxnative.android.PrepareText.failureSummary(STEP_TEXT[si], err, o.optString("error_detail")), BuildListener.TOOL_STOPPED);
@@ -322,7 +331,7 @@ final class Prepare {
                 if (before) { p.on(pct, STEP_TEXT[si]); continue; }
                 if (reason.equals("user") || reason.equals("timeout") || reason.equals("refused") || reason.equals("apk")) {
                     log("prepare: the job paused at " + step + " (" + reason + ")");
-                    throw new BuildListener.Failure("Preparing paused (" + reasonText(reason) + "). Resume from the game's card on the Home screen.", BuildListener.CANCELLED);
+                    throw new BuildListener.Failure(pausedText(reason) + " Tap Resume on the game's card to go on.", BuildListener.CANCELLED);
                 }
                 p.on(pct, "Paused: " + reasonText(reason) + ". " + stepText(si, done, total, stage));
                 lastChange = SystemClock.elapsedRealtime();   // a heat or battery pause is not a stall
@@ -334,7 +343,7 @@ final class Prepare {
                 throw new BuildListener.Failure("The build stopped making progress. Tap Resume on the game's card to go on.", BuildListener.STALLED);
             }
         }
-        throw new BuildListener.Failure("Build cancelled. The job is saved: resume from the game's card on the Home screen.", BuildListener.CANCELLED);
+        throw new BuildListener.Failure("Build cancelled. What it made so far is kept. Tap Resume on the game's card to go on.", BuildListener.CANCELLED);
     }
 
     /**
@@ -352,7 +361,7 @@ final class Prepare {
         } catch (ReflectiveOperationException e) {
             Log.w(TAG, "modded prepare: upstream reflection", e);
             BuildLogShare.line(c, logId, "modded prepare: upstream reflection: " + e);
-            throw new IOException("This build of the app has no on-device packer the build service knows (" + e.getMessage() + ").");
+            throw new IOException("The build with mods could not start because of a problem in the app. " + MODS_AGAIN);
         } finally {
             unbind();
         }
@@ -410,13 +419,13 @@ final class Prepare {
 
     private File runModded0(File dump, String titleId, File workDir, File packDir, String modArgs, File normalPackShaders, Progress p)
             throws IOException, ReflectiveOperationException {
-        p.on(0, "Checking " + dump.getName());
+        p.on(0, STEP_TEXT[0]);
         String id = titleId;
         try { id = Upstream.titleIdOf(dump); } catch (ReflectiveOperationException | RuntimeException e) { /* DumpCheck says what is wrong */ }
         if (id == null || id.isEmpty()) id = titleId;
         Object r = Upstream.dumpCheck(dump, true, true);   // true/true: the normal build already checked the version; a modded rebuild of the same dump never asks again
         String error = (String) Upstream.get(r, "error");
-        if (error != null) throw new BuildListener.Failure("Cannot prepare this dump for a modded build: " + error, BuildListener.INVALID_DUMP);
+        if (error != null) throw new BuildListener.Failure("The app cannot use these game files for a build with mods.\n" + error, BuildListener.INVALID_DUMP);
         String rid = Upstream.str(Upstream.get(r, "titleId"));
         if (!rid.isEmpty()) id = rid;
         // The variant's own work folder, not DumpCheck's fixed <dump>/../<id>-work convention (Job.create reads r.work directly)
@@ -464,7 +473,7 @@ final class Prepare {
             jobStarted = true;
         } catch (RuntimeException e) {
             log("PackService start refused (modded): " + e);
-            throw new BuildListener.Failure("Android did not let the build start in the background. Nothing is lost: try again from the game's Mods section (hold the cover, Game tab).", BuildListener.CANCELLED);
+            throw new BuildListener.Failure("Android did not let the build with mods start in the background. Nothing is lost. " + MODS_AGAIN, BuildListener.CANCELLED);
         }
         p.on(1, STEP_TEXT[0]);
         long lastChange = SystemClock.elapsedRealtime(), lastReadable = lastChange;
@@ -475,7 +484,7 @@ final class Prepare {
             String fs = fromService;
             if (fs != null && fromServiceAt > lastChange) json = fs;
             if (json == null) {
-                if (SystemClock.elapsedRealtime() - lastReadable > 30000) { log("prepare: the modded build's job file went missing: " + file); throw new BuildListener.Failure("The build with mods lost track of its progress. Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.OTHER); }
+                if (SystemClock.elapsedRealtime() - lastReadable > 30000) { log("prepare: the modded build's job file went missing: " + file); throw new BuildListener.Failure("The build with mods lost track of its progress. " + MODS_AGAIN, BuildListener.OTHER); }
                 continue;
             }
             lastReadable = SystemClock.elapsedRealtime();
@@ -492,24 +501,24 @@ final class Prepare {
             long done = st == null ? 0 : st.optLong("done"), total = st == null ? 0 : st.optLong("total");
             String stage = st == null ? "" : st.optString("stage");
             if (state.equals("done")) {
-                p.on(100, "Modded build finished");
+                p.on(100, "Build with mods finished");
                 return (File) Upstream.call(job.getClass(), job, "pack", new Class<?>[0]);
             }
             if (state.equals("failed")) {
                 throw new BuildListener.Failure(dev.nxnative.android.PrepareText.failureSummary(STEP_TEXT[si], o.optString("error"), o.optString("error_detail"))
-                        + "\nRetry from the game's Mods section (hold the cover, Game tab).", BuildListener.TOOL_STOPPED);
+                        + "\n" + MODS_AGAIN, BuildListener.TOOL_STOPPED);
             }
             int pct = pct(si, done, total);
             if (state.equals("paused")) {
                 if (reason.equals("user") || reason.equals("timeout") || reason.equals("refused") || reason.equals("apk"))
-                    throw new BuildListener.Failure("Building with mods paused (" + reasonText(reason) + "). Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.CANCELLED);
+                    throw new BuildListener.Failure(pausedText(reason) + " " + MODS_AGAIN, BuildListener.CANCELLED);
                 p.on(pct, "Paused: " + reasonText(reason) + ". " + stepText(si, done, total, stage));
                 lastChange = SystemClock.elapsedRealtime();
                 continue;
             }
             p.on(pct, stepText(si, done, total, stage));
             if (SystemClock.elapsedRealtime() - lastChange > STALL_MS && !(link != null && link.alive))
-                throw new BuildListener.Failure("The build with mods stopped making progress. Retry from the game's Mods section (hold the cover, Game tab).", BuildListener.STALLED);
+                throw new BuildListener.Failure("The build with mods stopped making progress. " + MODS_AGAIN, BuildListener.STALLED);
         }
         throw new BuildListener.Failure("Build cancelled.", BuildListener.CANCELLED);
     }
@@ -528,9 +537,14 @@ final class Prepare {
         return STEP_TEXT[si];
     }
 
+    /** A pause that ends the build, as the card's first sentence: "You paused the build.", "Paused: the app was updated, so the shaders are made again." */
+    private static String pausedText(String r) {
+        return r.equals("user") ? "You paused the build." : "Paused: " + reasonText(r) + ".";
+    }
+
     private static String reasonText(String r) {
         switch (r) {
-            case "user": return "by you";
+            case "user": return "you paused the build";
             case "battery": return "the battery is below 20 %. Plug in the charger to go on";
             case "thermal": return "the phone is too hot. It goes on when it has cooled down. If the phone does not feel hot, tap Go on anyway in the build notification";
             case "timeout": return "Android allows only so much background work a day";
@@ -656,7 +670,7 @@ final class Prepare {
         boolean said = false;
         while (otherRuns && !cancelled && link != null) {
             if (!said) { log("prepare: the packer still runs another job (" + otherName + "): this one starts when it has ended"); said = true; }
-            p.on(0, otherName.isEmpty() ? "Waiting for another game's Prepare to finish" : "Waiting for " + otherName + " to finish preparing");
+            p.on(0, otherName.isEmpty() ? "Waiting for another game's build to finish" : "Waiting for " + otherName + " to finish building");
             SystemClock.sleep(1000);
         }
         if (cancelled) throw new BuildListener.Failure("Build cancelled.", BuildListener.CANCELLED);

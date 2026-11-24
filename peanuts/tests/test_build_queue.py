@@ -52,7 +52,7 @@ class Wiring(unittest.TestCase):
         # and while a pack of the next game is being imported (Import pack, #44): the import writes the folder the build would use
         self.assertIn('PackImport.busy(next.titleId())) return BuildQueue.WAIT_PACK;', s)
         # the storage check before each game: the import's exact size, and a floor for the pack
-        self.assertIn('Not enough free space to import " + name + ": its .nup needs about', s)
+        self.assertIn('Not enough free space to import " + name + ": its game file needs about', s)
         self.assertIn('packFree < MIN_PACK_FREE', s)
         # a Stop in Prepare pauses the packer's job too (the next game's Prepare would wait for it), but only once this game's job was started:
         # before, the packer runs another game's job

@@ -122,7 +122,7 @@ public final class LibrarySettings {
             refreshRows();
         });
         card.addView(gamesRow.view);
-        companionsRow = new PUi.Setting(a, "🖥️", "Companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
+        companionsRow = new PUi.Setting(a, "🖥️", "Dual-screen companions", Haptics.on(Haptics.Word.TICK, v -> a.startActivity(new Intent().setClassName(a.getPackageName(), "dev.peanuts.CatalogActivity"))))
                 .chevron(a);
         card.addView(companionsRow.view);
         // Your own Miis, which games list as the console's (dev.peanuts.mii.MiiActivity, DM_MII_DB)
@@ -147,7 +147,7 @@ public final class LibrarySettings {
     }
 
     private static CharSequence companionsValue(Activity a) {
-        String base = "The catalog: install, update or remove a game's companion";
+        String base = "Pages made for one game that show on the second screen while you play, like its map or items. Install, update or remove them.";
         return PeanutsPrefs.developerReadout(a) ? PUi.joined(base, "developer readout on (long press to turn off)") : base;
     }
 

@@ -436,7 +436,7 @@ public final class BuildQueue {
         if (WAIT_BATTERY.equals(reason)) return "The battery is low. The next build starts when the phone charges.";
         if (WAIT_GAME.equals(reason)) return "A game is running. The next build starts when you close it.";
         if (WAIT_MODS.equals(reason)) return "A build with mods is running. The next build starts when it has finished.";
-        if (WAIT_PACK.equals(reason)) return "A pack of the next game is being imported. Its build starts when the import has finished.";
+        if (WAIT_PACK.equals(reason)) return "Import pack is working on the next game. Its build starts when the import has finished.";
         return "";
     }
 

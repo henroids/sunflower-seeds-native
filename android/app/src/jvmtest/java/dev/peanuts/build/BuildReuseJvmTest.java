@@ -35,13 +35,13 @@ public final class BuildReuseJvmTest {
         put(new File(logs, "split.log"), "== 2026-11-19 12:01:40 split\nsplit reuse: 91 of 93 files kept (unchanged since a split before), 2 of them scanned to check (the same), 0 not keyed (archives, files without a hash)\n", during);
         BuildReuse.Kept k = BuildReuse.read(logs, start);
         check(k.shaders == 9564 && k.modules == 4 && k.files == 91, "the last run of each step: " + k);
-        check(BuildReuse.text(k, 76).equals(" It took 1 min 16 s: 9,564 shaders, 4 parts of the game's code and 91 game files came from earlier builds."), BuildReuse.text(k, 76));
+        check(BuildReuse.text(k, 76).equals(" It took 1 min 16 s, and 9,564 shaders, 4 parts of the game's code and 91 game files were kept from before."), BuildReuse.text(k, 76));
 
         // A step that did not run in this build (Import again: no rewrite) left an earlier build's log: not counted
         put(new File(logs, "rewrite.log"), "== old\n  main: unchanged, kept\n", before);
         k = BuildReuse.read(logs, start);
         check(k.modules == 0 && k.shaders == 9564, "an earlier build's rewrite log: " + k);
-        check(BuildReuse.text(k, 67).equals(" It took 1 min 7 s: 9,564 shaders and 91 game files came from earlier builds."), BuildReuse.text(k, 67));
+        check(BuildReuse.text(k, 67).equals(" It took 1 min 7 s, and 9,564 shaders and 91 game files were kept from before."), BuildReuse.text(k, 67));
 
         // A check that failed: the kept shaders were translated again
         put(new File(logs, "shaders.log"), "== run\nreuse: lib: 9564 shaders kept (...), 202 translated to check them\n"
@@ -53,7 +53,7 @@ public final class BuildReuseJvmTest {
         put(new File(logs, "split.log"), "== run\nsplit reuse: 5 of 93 files kept\nsplit reuse: 0 of 93 files kept (unchanged since a split before)\n", during);
         k = BuildReuse.read(logs, start);
         check(!k.any() && BuildReuse.text(k, 393).isEmpty(), "nothing kept: " + k);
-        check(BuildReuse.text(new BuildReuse.Kept(1, 1, 0), 9).equals(" It took 9 s: 1 shader and 1 part of the game's code came from earlier builds."), "singular and seconds");
+        check(BuildReuse.text(new BuildReuse.Kept(1, 1, 0), 9).equals(" It took 9 s, and 1 shader and 1 part of the game's code were kept from before."), "singular and seconds");
 
         // Logs that are not there, or a log without a run line
         check(!BuildReuse.read(new File(args[0], "nothing"), start).any(), "no logs");

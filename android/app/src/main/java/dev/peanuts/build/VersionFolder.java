@@ -20,7 +20,7 @@ public final class VersionFolder {
     public static String why(File dump) {
         if (!is(dump)) return null;
         String n = dump.getName();
-        return n + " has the files of one version at its top (exefs and romfs), and Build prepares them from a folder named base. Make a folder named base in "
+        return n + " has one version's exefs and romfs folders at its top, and Build looks for them in a folder named base. Make a folder named base in "
                 + n + ", move exefs and romfs into it, then Rescan and build again.";
     }
 }

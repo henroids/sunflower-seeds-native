@@ -136,7 +136,7 @@ public final class GameAreas {
      */
     static final String[][] BY_VALUE = {
             {"Console mode", "Docked", "docked", "Handheld", "console"},
-            {"Second screen", "Physical", "screens-cover", "Off", "screens-android"}};
+            {"Second screen", "On", "screens-cover", "Off", "screens-android"}};
 
     /** The icon of a row as it is set now: by its value or its switch where the row's icon follows them, else the table's (null: keep the emoji) */
     public static String icon(Place p, String title, CharSequence value, Boolean on) {

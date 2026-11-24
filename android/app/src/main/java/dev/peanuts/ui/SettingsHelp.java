@@ -64,7 +64,7 @@ public final class SettingsHelp {
         put(m, "Bottom screen", "On a device with a second screen: the game you are on, with Play and its page, while you are in the app. Off leaves that screen to Android.", "On");
         put(m, "Games without a companion", "What the second screen shows while you play a game that has no companion: Android's own screen, the game's live stats, or its cover. The stats page's gear picks what it shows and its OLED guards.", "Android");
         put(m, "Swap screens", "Starts games on the other screen and the companion on this one, for a clip-on top screen. From the next game start.", "Off");
-        put(m, "Companions", "The catalog of companions, the second-screen pages made for games. Install, update or remove one.", null);
+        put(m, "Dual-screen companions", "Dual-screen companions are pages made for one game that show on the second screen while you play, like its map, items or stats. Install, update or remove them here.", null);
         put(m, "TV and monitors", "What a connected TV or monitor shows. System leaves it to Android and the device, as for any app. Play on the TV starts a game full screen there, and the screen it left goes black.", "System");
         put(m, "Screen rotation", "Whether a game keeps the screen in landscape, or turns with the phone.", "Landscape");
         put(m, "Keep the screen on while preparing", "Keeps the screen on while Home shows a game being prepared. Some phones stop a job once the screen goes off.", "On");

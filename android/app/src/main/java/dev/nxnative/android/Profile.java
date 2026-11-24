@@ -629,15 +629,14 @@ final class Profile {
         if (of(titleId) != null) return null;
         Profile other = otherPrograms(titleId).isEmpty() ? null : otherPrograms(titleId).get(0);
         if (other != null)   // a dump of the game alone, whose other program (a Switch 2 Edition) this APK runs: say what the dump lacks (Pack.playableIdOf)
-            return "This dump has only the Switch game (" + titleId + "). This app version runs its " + other.name + " (" + other.titleId + "), program " + program(other.titleId)
-                    + " of the game, which this dump does not hold. Dump the game again with its Nintendo Switch 2 Edition upgrade, so that the dump holds program "
-                    + program(other.titleId) + " too, then add that dump.";
+            return "These game files hold only the Switch game. This app version runs " + other.name + ", which they do not hold. Dump the game again with its "
+                    + "Nintendo Switch 2 Edition upgrade, then add the new game files.";
         return notIncluded(titleId, name);
     }
 
     /** missing's sentence for a title this APK has no profile of, whatever else it has (a dump that holds the other program says only this: DumpLayout.find) */
     static String notIncluded(String titleId, String name) {
-        return "This app version does not include " + (name == null || name.isEmpty() || name.equals(titleId) ? "this game" : name) + " (" + titleId + "). Install a build that includes it.";
+        return "This app version does not include " + (name == null || name.isEmpty() || name.equals(titleId) ? "this game, " + titleId : name) + ". Install an app version that includes it.";
     }
 
     /** A title ID without its platform byte (01 Switch, 04 Switch 2): scripts/pack_dump.py TITLE_NUMBER */
@@ -669,6 +668,13 @@ final class Profile {
 
     /** A version of a dump in words: 0 is the base game itself (no update installed; Mario Kart World 1.8.0's supported build), any other an update */
     static String versionName(long version) { return version == 0 ? "the base game" : "update " + version; }
+
+    /** A version for a card's main text: "version 1.8.0" when game.tsv names it, else "" (versionName's "update 458752" is for Details only) */
+    static String shownVersion(String titleId, long version) {
+        Profile p = of(titleId);
+        String d = p == null ? null : p.display(version);
+        return d == null ? "" : "version " + d;
+    }
 
     /** Which versions of this game the APK supports, as a sentence for a dump it refuses (DumpCheck): its builds, by display version when game.tsv names one */
     String supported() {

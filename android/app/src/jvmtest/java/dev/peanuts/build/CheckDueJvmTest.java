@@ -96,7 +96,7 @@ public final class CheckDueJvmTest {
         put(failed, "{\"library\": \"" + LIB + "\", \"replaced\": true, \"differ_count\": 300, \"missing_count\": 0, \"extra_count\": 2, \"kept\": 9564, \"differ\": [], \"of\": 9766}");
         String t = CheckDue.replacedText(d, "Animal Crossing: New Horizons", since);
         check(t != null && t.startsWith("302 of its 9,766 shaders came out different"), String.valueOf(t));
-        check(t.contains("Animal Crossing: New Horizons has the ones made from the start now"), t);
+        check(t.contains("Animal Crossing: New Horizons now uses the ones made from the start"), t);
         check(!t.contains("·") && !t.contains("—") && !t.contains("–") && !t.contains("!"), "UI rules: " + t);
         check(CheckDue.replacedText(d, "x", System.currentTimeMillis() + 60_000) == null, "an older check.failed says nothing");
         put(failed, "{\"library\": \"" + LIB + "\", \"replaced\": false, \"differ_count\": 3, \"of\": 9766}");

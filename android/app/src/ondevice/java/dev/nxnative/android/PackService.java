@@ -106,8 +106,8 @@ public final class PackService extends Service {
         super.onCreate();
         nm = getSystemService(NotificationManager.class);
         pm = getSystemService(PowerManager.class);
-        NotificationChannel ch = new NotificationChannel(CHANNEL, "Preparing a game", NotificationManager.IMPORTANCE_LOW);
-        ch.setDescription("Progress while the app prepares a game from your dump");
+        NotificationChannel ch = new NotificationChannel(CHANNEL, "Building a game", NotificationManager.IMPORTANCE_LOW);
+        ch.setDescription("Progress while the app builds a game from your game files");
         nm.createNotificationChannel(ch);
         wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "nxnative:pack");
         wake.setReferenceCounted(false);
@@ -615,7 +615,7 @@ public final class PackService extends Service {
                 if (next != null) {   // the job that started during the check: started again now, while this service is still in the foreground
                     try { startForegroundService(next); } catch (RuntimeException e) { Log.w(TAG, "check: the job that waited could not start: " + e); }
                 } else stopForeground(STOP_FOREGROUND_REMOVE);
-                if (note != null) nm.notify(NOTE + 7, new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_banana_mono).setContentTitle(j.name() + ": shaders made again")
+                if (note != null) nm.notify(NOTE + 7, new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_banana_mono).setContentTitle(j.name() + ": shaders made again from the start")
                         .setContentText(note).setStyle(new Notification.BigTextStyle().bigText(note)).setAutoCancel(true).build());
                 if (next == null) stopSelf();
             });
@@ -668,7 +668,7 @@ public final class PackService extends Service {
                 failure = new PrepareText.Failure(r.error, r.detail, r.otherBuild ? PrepareText.FIX_ANYWAY : PrepareText.FIX_RETRY);
                 return r.error;
             }
-            if (!r.titleId.equals(j.titleId()) || r.version != j.version()) return "the dump changed: it is now " + r.titleId + " " + r.version;
+            if (!r.titleId.equals(j.titleId()) || r.version != j.version()) return "the game files changed after this build started: they are now " + r.titleId + ", " + Profile.versionName(r.version);
             j.stepProgress(s, 1, 1, "identify");
             return null;
         }
@@ -790,7 +790,7 @@ public final class PackService extends Service {
                 if (!gone.isEmpty()) {
                     for (String g : gone) if (ranNow.contains(g)) {   // made in this very run and gone already: something else deletes it, a rerun would loop
                         String why = "the " + g + " step's outputs are gone right after it finished (pack folder " + pack + ")";
-                        failure = new PrepareText.Failure("The app's files for " + j.name() + " went missing while it prepared the game. Tap Retry.", why, PrepareText.FIX_RETRY);
+                        failure = new PrepareText.Failure(Job.STEP_TEXT[i] + " stopped. Some of the build's files for " + j.name() + " went missing. Tap Retry.", why, PrepareText.FIX_RETRY);
                         return why;
                     }
                     return "interrupted";   // work() sets this step pending and goes on with the first step not done
@@ -993,7 +993,7 @@ public final class PackService extends Service {
         } catch (IOException | RuntimeException | UnsatisfiedLinkError e) {
             // the app's own list is missing (work() refuses a game this APK does not include, so this is an app built without the profile's tables) or the split's
             String why = "cannot compare the dump's shaders with the app's list: " + e.getMessage();
-            failure = new PrepareText.Failure("The app could not compare your dump's shaders with its list for " + j.name() + ". Tap Retry. If it stops again, Details has the error.",
+            failure = new PrepareText.Failure("The app could not compare the shaders in your game files with its list for " + j.name() + ". " + PrepareText.RETRY_SHARE,
                     why, PrepareText.FIX_RETRY);
             return why;
         }
@@ -1021,25 +1021,26 @@ public final class PackService extends Service {
             // Retry runs the same decoder on the same files: nothing to offer but the log, for a later app version (2026-11-24: Retry was offered, and the card
             // ended in the tool's own line, "the game's decoder in the Mac host failed on a 284517 1729136 byte stream; ---- host output ----")
             failure = new PrepareText.Failure("This game cannot be built on the phone yet. " + (skipped.size() == 1 ? "One of its compressed files uses" : skipped.size() + " of its compressed files use")
-                    + " a format this app version cannot unpack. Your game files are fine. Share the build log so a later version can add it.",
+                    + " a format this app version cannot unpack, which is not a fault of your game files. Share the build log so a later version can add it.",
                     "Not unpacked: " + String.join("\n", skipped) + "\n" + log, PrepareText.FIX_NONE);
             return "the split could not decode " + skipped.size() + (skipped.size() == 1 ? " compressed file" : " compressed files") + " of " + j.name() + " (" + dec
                     + "): the app's limit, not the dump's";
         }
         // PEANUTS end
         if (!skipped.isEmpty()) {
-            failure = new PrepareText.Failure("The app could not read " + skipped.size() + (skipped.size() == 1 ? " file" : " files") + " of your dump. The file may be damaged: "
-                    + "dump the game again, then tap Retry.", "Not read: " + String.join("\n", skipped) + "\n" + log, PrepareText.FIX_RETRY);
+            failure = new PrepareText.Failure("The app could not read " + (skipped.size() == 1 ? "one of the game's files, which may be damaged" : String.format(Locale.getDefault(),
+                    "%,d of the game's files, which may be damaged", skipped.size())) + ". Dump the game again, then tap Retry.", "Not read: " + String.join("\n", skipped) + "\n" + log, PrepareText.FIX_RETRY);
             return "the split could not read " + skipped.size() + (skipped.size() == 1 ? " file" : " files") + " of the dump (" + skipped.get(0)
                     + "), so its shaders are not the ones this app knows for " + j.name() + ". The file may be damaged: dump the game again, then Retry";
         }
         // PEANUTS begin: say how many shaders are missing and name one; when every one of them comes from a file the import does not have, the import has no
         // add-on content and the tables are of this one version, DLC that was not imported is named as one possible reason (ShaderLibs.addonCase, the rule of
         // scripts/pack_android.py lacking_shaders); an import that could not be asked gets the old words and the DLC as a possible reason
-        String ver = Profile.versionName(j.version()), differs = "The split's " + have.getName() + " differs from the app's dm/games/" + j.titleId() + "/shader_map.tsv";
+        String logVer = Profile.versionName(j.version()), ver = Profile.shownVersion(j.titleId(), j.version());   // ver: the player's words for the card ("" when game.tsv names none)
+        String differs = "The shaders found in the game files (split " + have.getName() + ") differ from the app's list for this game (dm/games/" + j.titleId() + "/shader_map.tsv)";
         if (lack == null) {
             failure = PrepareText.shadersDifferUnread(j.name(), ver, differs + ".\n" + log);
-            return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + ver + ", " + have.getName() + " differs). The dump may be incomplete or "
+            return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + logVer + ", " + have.getName() + " differs). The dump may be incomplete or "
                     + "modified: dump the game again, then Retry. When the game has add-on content (DLC), it may not have been part of the import";
         }
         // PEANUTS: said only when nothing else is known to explain the missing shaders. With a union of versions (shader_versions), or a dump of a version the
@@ -1050,7 +1051,7 @@ public final class PackService extends Service {
             failure = PrepareText.addonNotImported(j.name(), lack.absent, lack.total, lack.absentFile, nup, differs + ": " + lack.missing + " of its " + lack.total
                     + " shaders are missing, all of them from files that are not in " + j.dump() + " (" + lack.absentFile + "), which has no add-on content.\n" + log);
             String what = nup ? "import" : "dump";
-            return "the dump's shaders lack " + lack.absent + " of the " + lack.total + " this app knows for " + j.name() + " (" + ver + "): all of them come from files the "
+            return "the dump's shaders lack " + lack.absent + " of the " + lack.total + " this app knows for " + j.name() + " (" + logVer + "): all of them come from files the "
                     + what + " does not have (e.g. " + lack.absentFile + "), and it has no add-on content. The " + what + " is incomplete; one possible reason is that the game's "
                     + "add-on content (DLC) was not part of the " + what + ". If you have DLC for this game: " + (nup ? "set the DLC folder in Settings, then Import again in the "
                     + "game's sheet (" + j.dump() + " is made again)" : "dump the game again with its DLC, then Retry") + ". Try anyway builds without them";
@@ -1060,12 +1061,11 @@ public final class PackService extends Service {
             failure = PrepareText.shadersDiffer(j.name(), ver, lack.missing, lack.total, lack.file.isEmpty() ? lack.key : lack.file, differs + ": " + lack.missing + " of its "
                     + lack.total + " shaders are missing (" + lack.key + from + "; " + lack.absent + " from files that are not in the dump, which has " + lack.addons
                     + " add-on content package(s)).\n" + log);
-            return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + ver + ", " + have.getName() + " differs: " + lack.missing + " of "
+            return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + logVer + ", " + have.getName() + " differs: " + lack.missing + " of "
                     + lack.total + " missing, e.g. " + lack.key + from + "). The dump may be incomplete or modified: dump the game again, then Retry";
         }
         // PEANUTS end
-        failure = PrepareText.shadersDiffer(j.name(), Profile.versionName(j.version()), "The split's " + have.getName() + " differs from the app's dm/games/" + j.titleId()
-                + "/shader_map.tsv.\n" + log);
+        failure = PrepareText.shadersDiffer(j.name(), ver, differs + ".\n" + log);
         return "the dump's shaders are not the ones this app knows for " + j.name() + " (" + Profile.versionName(j.version()) + ", " + have.getName()
                 + " differs). The dump may be incomplete or modified: dump the game again, then Retry";
     }
@@ -1087,7 +1087,7 @@ public final class PackService extends Service {
         }
         Job.deleteTree(j.splitScan(this));
         j.stepState("split", "pending");
-        failure = PrepareText.noShadersRead(j.name(), "The split read no shader from " + j.dump() + ": the pack would have an empty shader library. A game that draws "
+        failure = PrepareText.noShadersRead(j.name(), "No shader was found in " + j.dump() + ": the build would have an empty shader library. A game that draws "
                 + "through the Vulkan or OpenGL layer says \"no NVN shaders\" in its profile's shader_note (dm/games/" + j.titleId() + "/game.tsv).\nLog: "
                 + new File(new File(j.dir(), "logs"), "split.log"));
         return "the split read no shader from the dump of " + j.name() + ": the pack would have an empty shader library and the game could not draw. The dump is "
@@ -1320,8 +1320,8 @@ public final class PackService extends Service {
                 .setCategory(Notification.CATEGORY_PROGRESS).setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
                 .setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
         String name = j == null ? "a game" : j.name();
-        String sim = engine.simulated() ? " (simulated)" : "";
-        if (j == null) return b.setContentTitle("Preparing " + name + sim).setContentText("Starting…").build();
+        String sim = engine.simulated() ? ", simulated" : "";
+        if (j == null) return b.setContentTitle("Building " + name + sim).setContentText("Starting…").build();
         if ((checking || checkRunning) && j == job) return b.setContentTitle("Checking " + name + "'s shaders").setContentText(dev.peanuts.build.ReuseCheck.NOTE).setOngoing(true).build();   // PEANUTS: checkKept
         String state = j.state();
         int pct = (int) Math.round(j.overall() * 100);
@@ -1329,14 +1329,14 @@ public final class PackService extends Service {
         if (state.equals("done")) return b.setContentTitle(name + " is ready to play" + sim).setContentText("Open " + getString(R.string.app_name) + " and tap Play.")   /* PEANUTS: the app's own name */.setAutoCancel(true).build();
         boolean running = state.equals("running") && worker != null;
         boolean waiting = state.equals("paused") && worker != null;   // the policy's pause: it goes on by itself
-        b.setContentTitle((running ? "Preparing " : waiting ? "Waiting: " : state.equals("failed") ? "Could not prepare " : "Paused: ") + name + sim);
+        b.setContentTitle((running ? "Building " + name : waiting ? "Waiting to build " + name : state.equals("failed") ? "Building " + name + " stopped" : "Paused: " + name) + sim);
         Intent pause = new Intent(this, PackService.class).setAction(ACTION_PAUSE).putExtra(EXTRA_FROM, "notification");
         Notification.Action pauseAction = new Notification.Action.Builder(null, "Pause",
                 PendingIntent.getService(this, 1, pause, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT)).build();
         if (waiting) {
-            String why = Job.reasonText(j.reason()) + (j.reasonDetail().isEmpty() ? "" : "\n" + j.reasonDetail());
-            b.setContentText(Job.reasonText(j.reason())).setStyle(new Notification.BigTextStyle().bigText(j.stepText() + " · " + pct + " %\n" + why))
-                    .setSubText("Step " + (i + 1) + " of " + Job.STEPS.length + " · " + pct + " %").setOngoing(true).addAction(pauseAction);
+            String why = PrepareText.capital(Job.reasonText(j.reason())) + "." + (j.reasonDetail().isEmpty() ? "" : "\n" + PrepareText.capital(j.reasonDetail()) + ".");
+            b.setContentText(PrepareText.capital(Job.reasonText(j.reason())) + ".").setStyle(new Notification.BigTextStyle().bigText(j.stepText() + ", " + pct + " %\n" + why))
+                    .setSubText("Step " + (i + 1) + " of " + Job.STEPS.length + ", " + pct + " %").setOngoing(true).addAction(pauseAction);
             if (j.canGoOn()) {
                 Intent goOn = new Intent(this, PackService.class).setAction(ACTION_GO_ON).putExtra(EXTRA_FROM, "notification");
                 b.addAction(new Notification.Action.Builder(null, "Go on anyway",
@@ -1348,10 +1348,10 @@ public final class PackService extends Service {
             long d = j.stepDone(i), t = j.stepTotal(i);
             if (t > 1) b.setProgress((int) Math.min(t, Integer.MAX_VALUE), (int) Math.min(d, t), false);
             else b.setProgress(100, pct, false);
-            b.setContentText(j.stepText() + j.quietText()).setSubText("Step " + (i + 1) + " of " + Job.STEPS.length + " · " + pct + " %").setOngoing(true).addAction(pauseAction);
+            b.setContentText(j.stepText() + j.quietText()).setSubText("Step " + (i + 1) + " of " + Job.STEPS.length + ", " + pct + " %").setOngoing(true).addAction(pauseAction);
         } else {
-            String why = state.equals("failed") ? j.error() : Job.reasonText(j.reason());
-            b.setContentText(j.stepText() + " · " + pct + " %").setStyle(new Notification.BigTextStyle().bigText(j.stepText() + " · " + pct + " %\n" + why)).setOngoing(false);
+            String why = state.equals("failed") ? j.failureSummary() : "Paused: " + Job.reasonText(j.reason()) + ".";
+            b.setContentText(j.stepText() + ", " + pct + " %").setStyle(new Notification.BigTextStyle().bigText(j.stepText() + ", " + pct + " %\n" + why)).setOngoing(false);
             Intent resume = new Intent(this, PackService.class).setAction(ACTION_START).putExtra(EXTRA_JOB, j.file.getPath());
             b.addAction(new Notification.Action.Builder(null, state.equals("failed") ? "Retry" : "Resume",
                     PendingIntent.getForegroundService(this, 2, resume, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT)).build());
