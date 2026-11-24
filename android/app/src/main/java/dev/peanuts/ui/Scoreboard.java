@@ -16,7 +16,7 @@ import android.widget.TextView;
  * numbers in a dot-matrix font (VT323), text in Space Grotesk, mint for the selection and the main button. Only the test app (applicationId …sunflowertest)
  * has it: its colours and fonts come from android/app/src/sunflower-test (res and assets, build.gradle), and every hook asks ON first, so every other build
  * keeps the upstream look. The hooks: Ui / PUi round (no corners), face (the text font), section (pixel labels), header (the strip), badge (the bulb seed);
- * BananaBackgroundView (bulb seeds drift in place of the bananas); MainActivity (the status row on Home). The fonts are OFL-1.1 (assets/fonts/*.txt)
+ * BananaBackgroundView (BulbBoard: the screen as a bulb board, the seeds marching across it); MainActivity (the status row on Home). The fonts are OFL-1.1 (assets/fonts/*.txt)
  */
 public final class Scoreboard {
     private Scoreboard() {}
