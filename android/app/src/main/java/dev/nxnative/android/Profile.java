@@ -42,6 +42,7 @@ final class Profile {
     int fpsLimitMax = 60;   // launcher-only opt-in to higher caps; does not change the runtime profile ABI
     boolean drs;   // game.tsv has drs_ctl rows (build.gradle drsOf): the host can steer the game's dynamic resolution (Prefs.drsGame)
     String recommend = "";   // game.tsv recommend rows (build.gradle recommendOf): "<match>|<setting>=<value> …", ';' between them; the recommended settings per phone (Recommend, Prefs.recommended)
+    String crowd = "";   // game.tsv crowd (build.gradle crowdOf): the crowd's vertex shader keys, whose draws Crowd control hides (Prefs.crowdGame), "" = not offered
     String skipLayers = "";   // game.tsv skip_layers (build.gradle skipLayersOf): pixel shader keys whose draws the Speedhack setting drops (Prefs.skipLayersGame), "" = not offered
     String presetFrom = "";   // game.tsv res_preset_from rows (build.gradle presetFromOf): "<old id>=<id>", ';' between them; a stored Resolution that the profile no longer has takes the id it maps to (ResPresets.mapStored)
     boolean cheats;   // game.tsv has cheats rows (build.gradle; Prepare puts the files into the pack): Game settings › Cheats and the in-game panel's Cheats section (Cheats.java)
@@ -568,6 +569,7 @@ final class Profile {
             p.fpsLimitMin = c.length > 34 && "30".equals(c[34]) ? 30 : 20;
             p.fpsModes = c.length > 35 ? c[35] : "";
             p.fpsPlan120 = c.length > 36 ? c[36] : "";
+            p.crowd = c.length > 37 ? c[37] : "";
             out.add(p);
         }
         return Collections.unmodifiableList(out);

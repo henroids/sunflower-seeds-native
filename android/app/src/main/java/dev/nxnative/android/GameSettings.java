@@ -224,6 +224,11 @@ final class GameSettings {
             hid.badge("Experimental").says("Skips layers drawn over later", "Draws every layer");
             options.add(track(recRows, Recommend.SKIP_LAYERS, hid));
         }
+        if (Prefs.crowdGame(id)) {   // a game whose profile names its crowd's shaders (game.tsv crowd)
+            Ui.Setting crowd = new Ui.Setting(a, "👥", "Crowd control", null).toggle(a, Prefs.hideCrowd(a, id), (b, on) -> { Prefs.hideCrowd(a, id, on); refresh[0].run(); });
+            crowd.says("The crowd is hidden, less GPU work", "The crowd is drawn");
+            options.add(crowd);
+        }
         if (prof != null && !prof.options.isEmpty()) {
             File packDir = g.packDir != null ? new File(g.packDir) : null;
             java.util.Map<String, Ui.Setting> rowSettings = new java.util.LinkedHashMap<>();

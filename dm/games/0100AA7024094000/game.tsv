@@ -39,3 +39,8 @@ mem_used	0x6000000
 # ---- Shader split ----
 shader_groups	/NSW/=nsw /CROSS/=cross /AND/=and /PS4/=ps4 /FLUX/=flux /FRONTEND/=frontend /PS5/=ps5 /BOOT/=boot
 shader_note	MLB The Show 26 shaders
+
+# ---- Crowd control ----
+# The crowd's vertex shaders (every CROWDSHADER.FXBNVN vertex shader in shader_map.tsv): their draws are about 15 % of the field's GPU time and a third of its draws
+# (Thor, Xperia, RP Duo GPU profiles, 1.0.19). Game settings › Crowd control hides them; the game still simulates and sounds the crowd
+crowd	01740383acff5185,05b83d751cbda3b5,1611323033ec0663,2dc3cb726553d5cd,4ad4654c948a53ad,5604de1fbe3a3351,65b4b6da07fbc23f,6ea8a77c4b95acca,9630e66a6c7961f7,b832253c6bfd4a1f,b945de80737ff1cd,bafa001dbd77b4c9,c0ae498e2b68e20b,d214bad0d2a436d7,dc01fc02f11ca5c3,eb67fcc4008b61d4,f4b0c128766fd520,f6aa7587ed21fa89,fbbed9429195ef36
