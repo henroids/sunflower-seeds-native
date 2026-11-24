@@ -46,12 +46,25 @@ public final class Scoreboard {
     /** The seed for a logo spot (the setup and empty cards): the bulb seed on the scoreboard look, else the drawing res */
     public static void logo(android.widget.ImageView v, int res) { android.graphics.drawable.Drawable d = seed(v.getContext()); if (d != null) v.setImageDrawable(d); else v.setImageResource(res); }
 
-    /** A row's icon in amber bulbs in place of its emoji (keys, a folder, an update, firmware), or null: the emoji stays */
+    /** A row's icon in amber bulbs in place of its emoji, or null: the emoji stays. The art is res/drawable-nodpi/sb_ic_<the emoji's code points in hex,
+     *  joined by _, without the variation selector FE0F> (🔑 is sb_ic_1f511), found by name */
     public static android.graphics.drawable.Drawable icon(Context c, String emoji) {
-        if (!ON || emoji == null) return null;
-        String n = emoji.equals("\uD83D\uDD11") ? "sb_ic_keys" : emoji.equals("\uD83D\uDCC1") ? "sb_ic_folder" : emoji.startsWith("\u2B06") ? "sb_ic_update" : emoji.equals("\uD83D\uDD24") ? "sb_ic_firmware" : null;
-        int id = n == null ? 0 : c.getResources().getIdentifier(n, "drawable", c.getPackageName());
-        return id == 0 ? null : new android.graphics.drawable.InsetDrawable(c.getDrawable(id), dp(c, 4));
+        if (!ON || emoji == null || emoji.isEmpty()) return null;
+        StringBuilder n = new StringBuilder("sb_ic");
+        emoji.codePoints().filter(cp -> cp != 0xFE0F).forEach(cp -> n.append('_').append(Integer.toHexString(cp)));
+        android.graphics.drawable.Drawable d = drawable(c, n.toString());
+        return d == null ? null : new android.graphics.drawable.InsetDrawable(d, dp(c, 4));
+    }
+
+    /** An icon button's art in amber bulbs (res/drawable-nodpi/sb_<its drawable's name>: the Settings gear, the FAQ book), or null: its own stays */
+    public static android.graphics.drawable.Drawable button(Context c, int res) {
+        if (!ON) return null;
+        try { return drawable(c, "sb_" + c.getResources().getResourceEntryName(res)); } catch (android.content.res.Resources.NotFoundException e) { return null; }
+    }
+
+    private static android.graphics.drawable.Drawable drawable(Context c, String name) {
+        int id = c.getResources().getIdentifier(name, "drawable", c.getPackageName());   // by name: the other builds have none of these
+        return id == 0 ? null : c.getDrawable(id);
     }
 
     /** Puts a row's bulb icon (icon) on its emoji tile, if it has one */
