@@ -270,6 +270,22 @@ public final class MainActivity extends Activity {
         View gear = Ui.iconButton(this, R.drawable.ic_settings, "Settings", Ui.Kind.TONAL, v -> page(true));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 44), Ui.dp(this, 44));   // the size iconButton gives it
         lp.leftMargin = Ui.dp(this, 10);
+        if (dev.peanuts.ui.Scoreboard.ON) {   // PEANUTS begin: the gear labelled as the book is ("SETTINGS" under it), on Home only (headerButtons)
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            col.addView(gear, new LinearLayout.LayoutParams(Ui.dp(this, 44), Ui.dp(this, 44)));
+            TextView sl = Ui.text(this, "Settings", 10, R.color.bn_text_2, 700);
+            sl.setPadding(0, Ui.dp(this, 2), 0, 0);
+            sl.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);   // the button already says "Settings"
+            sl.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            sl.setSingleLine(true);
+            col.addView(sl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            cp.leftMargin = lp.leftMargin;
+            r.addView(col, cp);
+            return r;
+        }   // PEANUTS end
         r.addView(gear, lp);
         return r;
     }

@@ -88,5 +88,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          sh .github/scripts/release-notes.sh v "$GITHUB_SHA" > "$RUNNER_TEMP/notes.md"   # the update page's "What's new"
+          cat "$RUNNER_TEMP/notes.md"
           gh release create "v$VERSION" "android/app/out/sunflower-seeds-test-$VERSION.apk" -R "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --title "Sunflower Seeds test $VERSION" --notes ""
+            --target "$GITHUB_SHA" --title "Sunflower Seeds test $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
