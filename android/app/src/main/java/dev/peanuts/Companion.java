@@ -38,6 +38,9 @@ public final class Companion {
      * then, which goes back to whatever Android shows there. A Presentation is not closed by its activity stopping, so without this the companion stayed
      * on the bottom screen over the home screen or the other app (seen on the AYN Thor, 2026-11-15). */
     private static boolean away;
+    /** The player hid the second display's companion or page with a four-finger tap on the game ({@link #toggleScreen}): Android's own screen there until the
+     *  next one (or the next run). Nothing shows it again meanwhile: not the game's return to the front, a display that comes, or the companion loading late */
+    private static boolean hidden;
     /** Peanuts' page on the second display meanwhile (GameScreen.LOADING / PLAYING), -1 none */
     private static int wanted = -1;
     private static final long LOADING_MAX_MS = 60000;
@@ -99,7 +102,7 @@ public final class Companion {
     }
 
     private static void openPage(Activity game) {
-        if (wanted < 0 || listenerDm == null) return;
+        if (hidden || wanted < 0 || listenerDm == null) return;
         Display d = secondDisplay(game, listenerDm);
         // The built-in display only accepts an activity, which opens when the companion is ready.
         if (d != null && d.getDisplayId() != Display.DEFAULT_DISPLAY)
@@ -134,7 +137,7 @@ public final class Companion {
         away = false;
         if (stopped) return;
         tellPage(game, "free");
-        if (wanted >= 0) { if (GameScreen.mode() < 0) openPage(game); else GameScreen.back(); }
+        if (wanted >= 0 && !hidden) { if (GameScreen.mode() < 0) openPage(game); else GameScreen.back(); }
         place(game);   // the game may come back on another display (Recents): it goes home first, the companion is shown after that
     }
 
@@ -193,6 +196,7 @@ public final class Companion {
                 show(game, decidingGameName, dm);
                 return;
             case ScreenPlace.SHOW:
+                if (hidden) return;   // a four-finger tap hid it (toggleScreen)
                 if (shown != null) {
                     if (shown.isShowing()) return;
                     try { shown.show(); try { Bridge.present(true); } catch (UnsatisfiedLinkError ignored) {} return; }
@@ -381,6 +385,37 @@ public final class Companion {
         } catch (RuntimeException e) { return false; }
     }
 
+    /**
+     * A four-finger tap on the game's screen (GameActivity.fourFingerTap): the second display's companion or Peanuts' page is hidden, and Android's own screen is
+     * there (the AYN Thor's launcher on Screen-2) until the next four-finger tap, which shows it again. With nothing of Peanuts' there (no companion, Settings ›
+     * Games without a companion off), the tap brings the game's page for this run. Hidden the way {@link #away} hides it: the windows stay, so the companion
+     * comes back with its page as it was. → whether something is shown now; null: nothing to do (no second display, the game in the background or stopping)
+     */
+    public static Boolean toggleScreen(Activity game) {
+        if (game != decidingGame || stopped || away || listenerDm == null || secondDisplay(game, listenerDm) == null) return null;
+        if (!hidden) {
+            boolean up = shown != null && shown.isShowing() || GameScreen.mode() >= 0 || screenUp && screenPage;
+            if (up) {
+                hidden = true;
+                GameScreen.away();
+                if (shown != null) {
+                    try { shown.hide(); } catch (RuntimeException ignored) {}
+                    try { Bridge.present(false); } catch (UnsatisfiedLinkError ignored) {}   // as away(): the runtime is told, held fingers are released
+                }
+                if (screenUp && screenPage) { screenUp = false; screenPage = false; CompanionScreen.close(); }   // the companion on the built-in display (Swap screens, the TV)
+                tell(game, "none");
+                Log.i(TAG, "four-finger tap: the second screen is Android's until the next one");
+                return false;
+            }
+            if (!allowed && wanted < 0) wanted = GameScreen.PLAYING;   // nothing of Peanuts' there: the game's page for this run
+        }
+        hidden = false;
+        Log.i(TAG, "four-finger tap: the " + (allowed ? "companion" : "game's page") + " is back on the second screen");
+        if (allowed) place(game);
+        else { if (GameScreen.mode() < 0) openPage(game); else GameScreen.back(); tellPage(game, "none"); }
+        return true;
+    }
+
     /** Starts the game hold and, once the host has decided whether a companion loaded, shows it (or leaves the display alone). Keeps trying as displays come and go. */
     public static void start(Activity game, String gameName) {
         if (listener != null) return;
@@ -391,6 +426,7 @@ public final class Companion {
         preparedSeen = false;
         allowed = false;
         away = false;
+        hidden = false;
         screenUp = false;
         screenPage = false;
         tvRun = game.getIntent().getBooleanExtra(Screens.TV, false);
@@ -474,7 +510,7 @@ public final class Companion {
     }
 
     private static void show(Activity game, String gameName, DisplayManager dm) {
-        if (shown != null || screenUp && screenPage || away || game.isFinishing() || game.isDestroyed()) return;   // away: shown again by back()
+        if (shown != null || screenUp && screenPage || away || hidden || game.isFinishing() || game.isDestroyed()) return;   // away: shown again by back(); hidden: by toggleScreen
         Display d = secondDisplay(game, dm);
         if (d == null) { Log.i(TAG, "no second display: companion not shown"); tell(game, "none"); return; }
         if (d.getDisplayId() == Display.DEFAULT_DISPLAY) {   // Swap screens or the TV: Android takes no Presentation there, the page gets an activity (CompanionScreen)

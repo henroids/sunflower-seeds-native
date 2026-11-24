@@ -285,16 +285,80 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     private boolean overlayOn() { return overlayEnv != null ? overlayEnv : Prefs.overlay(this); }
 
-    /** Thread placement (Native.pinThreads): every 5 s, for threads the game and the replay start later; stops when the phone reports no clocks */
+    /**
+     * Thread placement (Native.pinThreads): every 5 s, for threads the game and the replay start later; stops when the phone reports no clocks. Use fast cores
+     * (Game settings) keeps it on for the whole run. Without it, it runs while Android has the game's process out of its top-app group: a tap on another app's
+     * window on the other screen (the AYN Thor's launcher on Screen-2) makes that app the top one, the game's process goes to foreground (GameHold keeps it
+     * there), and the Thor's scheduler kept the game's threads on the small cores, 94-97 % of their running time against 42 % as the top app; with the threads
+     * placed, about half ran on the middle cores and the game needed 55 % of a core where it had needed 81 % (DAVE THE DIVER, 30 fps, 2026-11-24). Back in
+     * top-app, Android's move to that cpuset gives every thread all cores again (cgroup v1 cpuset attach), so the placement ends with it
+     */
     private final Runnable pinRun = this::pinTick;
+    private boolean topResumed = true, pinnedAway;
     private void pinTick() {
-        if (Native.pinThreads() < 0) return;
-        ui.postDelayed(pinRun, 5000);
+        boolean asked = Prefs.pinThreads(this, titleId());
+        String group = asked ? null : cpuGroup();
+        boolean demoted = group != null && !group.equals("top-app");
+        if (!asked && demoted != pinnedAway) {
+            pinnedAway = demoted;
+            android.util.Log.i("peanuts", demoted ? "not Android's top app (cpu group " + group + "): the game's threads go to the fast cores while it lasts" : "Android's top app again: thread placement ends");
+        }
+        if (!asked && !demoted && topResumed) return;   // the top app, and Android placed the threads back itself: the loop ends (losing the top activity starts it again)
+        if ((asked || demoted) && Native.pinThreads() < 0) return;
+        ui.postDelayed(pinRun, asked ? 5000 : 1000);   // not the top activity: looked at each second (the group follows a moment after)
     }
     /** At the start and when a recreated screen attaches to the running game (attach: the old screen's loops were stopped); one loop, never two */
     private void pinStart() {
         ui.removeCallbacks(pinRun);
-        if (Prefs.pinThreads(this, titleId())) ui.postDelayed(pinRun, 2000);
+        if (Prefs.pinThreads(this, titleId()) || !topResumed) ui.postDelayed(pinRun, 2000);
+    }
+    /** This process's cgroup for the CPU ("top-app", "foreground", "background", ...) from /proc/self/cgroup; null when it cannot be read */
+    static String cpuGroup() {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/self/cgroup"))) {
+            for (String l; (l = r.readLine()) != null; ) { int i = l.indexOf(":cpu:/"); if (i >= 0) return l.substring(i + 6).trim(); }
+        } catch (java.io.IOException | RuntimeException ignored) {}
+        return null;
+    }
+
+    /**
+     * A four-finger tap on the game's screen hides or shows the companion or Peanuts' page on the second display (dev.peanuts.Companion.toggleScreen): four
+     * fingers down within FOUR_DOWN_MS of the first, lifted within FOUR_UP_MS, none moving more than FOUR_SLOP_DP. From the fourth finger on the game gets a cancel
+     * for every touch and nothing more until the last finger is up, so the gesture never reaches it as fingers (a game's own four-finger touch has to start slower)
+     */
+    private static final long FOUR_DOWN_MS = 350, FOUR_UP_MS = 600;
+    private static final float FOUR_SLOP_DP = 40;
+    private long fourFirst, fourAt;
+    private boolean fourHeld, fourSpoiled;
+    private final float[] fourX = new float[4], fourY = new float[4];
+    @Override public boolean dispatchTouchEvent(MotionEvent e) {
+        int act = e.getActionMasked();
+        if (act == MotionEvent.ACTION_DOWN) { fourFirst = e.getEventTime(); fourHeld = false; fourSpoiled = false; }
+        if (!fourHeld && act == MotionEvent.ACTION_POINTER_DOWN && e.getPointerCount() == 4 && e.getEventTime() - fourFirst <= FOUR_DOWN_MS) {
+            fourHeld = true; fourAt = e.getEventTime();
+            for (int i = 0; i < 4; i++) { fourX[i] = e.getX(i); fourY[i] = e.getY(i); }
+            MotionEvent cancel = MotionEvent.obtain(e);
+            cancel.setAction(MotionEvent.ACTION_CANCEL);
+            super.dispatchTouchEvent(cancel);   // the game lets go of the three fingers it had
+            cancel.recycle();
+            return true;
+        }
+        if (!fourHeld) return super.dispatchTouchEvent(e);
+        float slop = FOUR_SLOP_DP * getResources().getDisplayMetrics().density;
+        if (act == MotionEvent.ACTION_POINTER_DOWN) fourSpoiled = true;   // a fifth finger
+        if (act == MotionEvent.ACTION_MOVE)
+            for (int i = 0; i < Math.min(4, e.getPointerCount()); i++) if (Math.hypot(e.getX(i) - fourX[i], e.getY(i) - fourY[i]) > slop) fourSpoiled = true;
+        if (act == MotionEvent.ACTION_CANCEL) { fourHeld = false; return true; }
+        if (act == MotionEvent.ACTION_UP) {
+            fourHeld = false;
+            if (!fourSpoiled && e.getEventTime() - fourAt <= FOUR_UP_MS) fourFingerTap();
+        }
+        return true;
+    }
+    private void fourFingerTap() {
+        Boolean shown = dev.peanuts.Companion.toggleScreen(this);
+        if (shown == null) return;
+        if (rootView != null) rootView.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM);
+        Toast.makeText(this, shown ? "Second screen back. Four-finger tap to hide it." : "Second screen hidden. Four-finger tap to show it.", Toast.LENGTH_SHORT).show();
     }
 
     /**
@@ -1407,7 +1471,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (hasFocus) getWindow().getDecorView().requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK);
     }
 
-    @Override public void onTopResumedActivityChanged(boolean top) { super.onTopResumedActivityChanged(top); if (top) dev.peanuts.Companion.gameOnTop(this); }   // PEANUTS: back in front (Recents may have moved it to another display): the game goes back to its display, the companion where it belongs (#183)
+    @Override public void onTopResumedActivityChanged(boolean top) { super.onTopResumedActivityChanged(top); topResumed = top; if (top) dev.peanuts.Companion.gameOnTop(this); else if (started) pinStart(); }   // PEANUTS: back in front (Recents may have moved it to another display): the game goes back to its display, the companion where it belongs (#183)
     @Override protected void onStart() {
         super.onStart();
         if (!started) return;

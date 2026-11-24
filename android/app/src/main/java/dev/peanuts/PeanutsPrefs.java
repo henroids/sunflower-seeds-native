@@ -128,8 +128,11 @@ public final class PeanutsPrefs {
     /** Settings > Library > Bottom screen, on by default */
     public static boolean bottomScreen(Context c) { return of(c).getBoolean("bottom_screen", true); }
     public static void bottomScreen(Context c, boolean on) { of(c).edit().putBoolean("bottom_screen", on).apply(); }
-    /** Settings > Library > Games without a companion: their cover stays on the second display, off by default */
-    public static boolean bottomScreenInGames(Context c) { return of(c).getBoolean("bottom_screen_games", false); }
+    /** Settings > Library > Games without a companion: Peanuts' page (live stats or the cover) stays on the second display, on by default. A tap on another
+     *  app's screen there (the AYN Thor's launcher) made that app the top one and moved the game's process from Android's top-app group to foreground, where the
+     *  Thor's scheduler kept its threads on the small cores (94-97 % of their running time, measured 2026-11-24); a tap on Peanuts' page keeps the game the top
+     *  app (the page is a window of the game's process). Off before: a player's own choice stays */
+    public static boolean bottomScreenInGames(Context c) { return of(c).getBoolean("bottom_screen_games", true); }
     public static void bottomScreenInGames(Context c, boolean on) {
         SharedPreferences.Editor e = of(c).edit().putBoolean("bottom_screen_games", on);
         if (on && !of(c).contains("bottom_screen_games_page")) e.putString("bottom_screen_games_page", GAMES_STATS);   // turned on now: the stats page, not the upgrade's cover

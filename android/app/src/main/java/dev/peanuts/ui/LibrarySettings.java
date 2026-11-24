@@ -182,8 +182,8 @@ public final class LibrarySettings {
             gamesRow.value(!on ? "Needs Bottom screen on."
                     : !PeanutsPrefs.bottomScreenInGames(a) ? "Android's own screen while you play. Tap for the game's live stats there."
                     : PeanutsPrefs.bottomScreenGamesPage(a).equals(PeanutsPrefs.GAMES_STATS)
-                    ? "Stats: frame rate, frame times, GPU, CPU, temperature, battery and the game's RAM while you play. Tap for the game's cover instead."
-                    : "The game's cover stays on the second screen while you play. Tap to leave it to Android.");
+                    ? "Stats: frame rate, frame times, GPU, CPU, temperature, battery and the game's RAM while you play. A four-finger tap on the game hides or shows it. Tap for the game's cover instead."
+                    : "The game's cover stays on the second screen while you play. A four-finger tap on the game hides or shows it. Tap to leave it to Android.");
         }
     }
 
