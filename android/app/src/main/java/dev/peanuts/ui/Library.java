@@ -1166,12 +1166,9 @@ public final class Library {
         }
         chips.addView(chipRow, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         top.addView(chips, PUi.weight());
-        if (!setup && offersBuildAll(rows)) {   // Build all that need it (issue #348): it asks first and names the games
-            Button allB = PUi.button(a, Scoreboard.ON ? "Build" : "Build all…", PUi.Kind.QUIET, v -> buildAllAsk());   // PEANUTS(sunflower): "Build" on the scoreboard look
-            Drawable bulb = Scoreboard.ON ? Scoreboard.button(a, R.drawable.ic_build) : null;   // PEANUTS(sunflower): the bulb wrench on Home
-            if (bulb != null) bulb.setBounds(0, 0, PUi.dp(a, 24), PUi.dp(a, 24));
-            if (bulb != null) allB.setCompoundDrawablesRelative(bulb, null, null, null);
-            else allB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_build, R.color.bn_accent), null, null, null);
+        if (!setup && !Scoreboard.ON && offersBuildAll(rows)) {   // PEANUTS(sunflower): no Build all on the scoreboard look (packs come from the PC)   // Build all that need it (issue #348): it asks first and names the games
+            Button allB = PUi.button(a, "Build all…", PUi.Kind.QUIET, v -> buildAllAsk());
+            allB.setCompoundDrawablesRelativeWithIntrinsicBounds(PUi.icon(a, R.drawable.ic_build, R.color.bn_accent), null, null, null);
             allB.setCompoundDrawablePadding(PUi.dp(a, 6));
             allB.setOnKeyListener(shoulders);
             focusRing(allB, Color.TRANSPARENT);
