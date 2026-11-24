@@ -365,3 +365,4 @@ dm/games/01003D100E9C6000/shader_facts_manual.tsv	tables shader_split.py wrote f
 dm/games/01003D100E9C6000/shader_map.tsv	tables shader_split.py wrote for The Witcher 3 (EU), and the manual facts taken from nxnative's RU profile; game.tsv and README.md carry the PEANUTS markers
 dm/games/01003D100E9C6000/shader_map.tsv.conflicts.tsv	tables shader_split.py wrote for The Witcher 3 (EU), and the manual facts taken from nxnative's RU profile; game.tsv and README.md carry the PEANUTS markers
 dm/games/01003D100E9C6000/shader_pairs.tsv	tables shader_split.py wrote for The Witcher 3 (EU), and the manual facts taken from nxnative's RU profile; game.tsv and README.md carry the PEANUTS markers
+dm/games/01006F8002326000/speedfix60/NOTICE.md	the third-party licence notice of tmouh's ACNH 60 FPS + SpeedFix data (CC BY-NC 4.0): a licence text, kept as the licence asks, with no marker line

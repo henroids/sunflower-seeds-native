@@ -460,6 +460,7 @@ final class SidePanel extends FrameLayout {
             note((why != null ? why + " " : "") + "Switching to or from Game owned applies on the next start.");
         }
         if (Prefs.limited(game()) && Prefs.presentOnly(game())) note(Prefs.PRESENT_ONLY_NOTE);   // fps_limit_present: the limit paces the presents only
+        if (Prefs.limited(game()) && Prefs.fpsVariant(game())) note(Prefs.FPS_VARIANT_NOTE);   // PEANUTS: the cap starts another version of the game (Profile.fpsVariant)
         if (Prefs.paced(game())) {   // Full game speed at low frame rates: sead's controller at the measured rate (Game settings has the same), live in the host
             android.widget.CheckBox full = new android.widget.CheckBox(act);
             full.setText("Full game speed at low frame rates");

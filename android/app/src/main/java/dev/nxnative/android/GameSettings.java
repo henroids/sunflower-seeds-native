@@ -205,6 +205,7 @@ final class GameSettings {
         // ---- Speed ----
         Ui.Setting cap = speed.add(track(recRows, Recommend.FPS_CAP, new Ui.Setting(a, "⏱️", "Frame rate cap", v -> cap(a, g, again)).value(capLabel(a, id)).chevron(a)));
         if (Prefs.limited(id) && Prefs.presentOnly(id)) { cap.badge("Experimental"); speed.info += " " + Prefs.PRESENT_ONLY_NOTE; }
+        if (Prefs.limited(id) && Prefs.fpsVariant(id)) speed.info += " " + Prefs.FPS_VARIANT_NOTE;   // PEANUTS: the cap starts another version of the game (Profile.fpsVariant)
         if (Prefs.steps(id)) {   // a framework of whole steps a frame (fps_steps): Hold 60 fps keeps one step at the cap of 60. The in-game panel changes it live
             Ui.Setting hold = new Ui.Setting(a, "🎯", "Hold 60 fps", null).toggle(a, Prefs.hold60(a, id), (b, on) -> { Prefs.hold60(a, id, on); refresh[0].run(); });
             hold.says("Never drops to 30; less even under 60", "Drops to 30 when 60 does not hold");

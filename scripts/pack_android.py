@@ -777,7 +777,7 @@ def variants(g):
     return [(v[0], (v[1] if len(v) > 1 and v[1] else 'main').replace(',', ' ').split()) for v in g.values('variant') if v and v[0]]
 
 
-def rewrite_variants(py, srcs, out, g, in_process=False):
+def rewrite_variants(py, srcs, out, g, in_process=False, modded=()):   # PEANUTS: modded
     """Each variant row's modules rewritten again with DM_PATCH_VARIANT=<name> (patch_nso.py VARIANT_CUTS: a game's native 4:3 mod) into out/<name>/,
     keyed '<the module's rewrite_key> variant=<name>' (the launcher's PackCheck checks it the same way); a module whose key matches is kept. Both versions
     stay in the pack, so the launcher's Game settings › Aspect ratio switches between them without another Prepare: the host loads a module from
@@ -798,6 +798,10 @@ def rewrite_variants(py, srcs, out, g, in_process=False):
             else:
                 with open(log, 'w') as f:
                     rc = subprocess.call([py, str(REPO / 'dm/tools/patch_nso.py'), *args], env=child_env(DM_GAME=g.id, DM_PATCH_VARIANT=v), stdout=f, stderr=subprocess.STDOUT)
+            if rc and m in modded:   # PEANUTS: a build with code mods: the variant's cuts assert the game's own bytes, which a mod changed (Animal Crossing: New Horizons'
+                # 60 fps speed fix imported as a mod beside its built-in variant). That build has no variant of its own; the pack is made all the same
+                print(f'  variant {v}: not made, a mod changes {m} (patch_nso.py exit code {rc}: {" / ".join(log.read_text(errors="replace").splitlines()[-2:])})', flush=True)
+                shutil.rmtree(vout, ignore_errors=True); break
             if rc:
                 tail = log.read_text(errors='replace').splitlines()[-20:]
                 raise Error(f'patch_nso.py exit code {rc} on {m} (variant {v}):\n' + '\n'.join(tail))
@@ -1095,6 +1099,46 @@ def scene_overlays(g, romfs, out):
     return [(m[0], f'scene_res/{m[0]}') for m in made]
 
 
+# PEANUTS begin: a variant's own game data and the pack.tsv rows of complete variants (Animal Crossing: New Horizons' 60 fps speed fix, dm/games/01006F8002326000/speedfix60)
+def variant_cut_builds(g):
+    """{(variant, build ID)} of the profile's patches.py VARIANT_CUTS (the builds each variant has cuts for: patch_nso.py rewrites any other build without them)"""
+    pp = g.dir / 'patches.py'
+    if not pp.is_file(): return set()
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(f'patches_{g.id}', pp); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)   # pyright: ignore[reportOptionalMemberAccess]
+    return {(v, b) for v, builds in getattr(m, 'VARIANT_CUTS', {}).items() for b in builds}
+
+
+def variant_overlays(g, romfs, out, ids):
+    """The variants the pack holds complete, [(variant, its RomFS overlay folder in the pack or '-')]: each module of the variant row rewritten into out/<variant>/
+    with its key, every one of them a build the variant has cuts for (variant_cut_builds), and its game.tsv variant_romfs rows (dm/tools/romfs_rows.py) applied to
+    this RomFS into out/<variant>/romfs/. Anything else (another game version, a build with code mods, rows that do not apply) is a line in the log and no row: the
+    launcher then does not start the variant (Pack.variantReady). The pack is made all the same"""
+    rows = {r[0]: r[1] for r in g.values('variant_romfs') if len(r) > 1}
+    out_rows = []
+    for v, mods in variants(g):
+        vout = out / v
+        lacking = [m for m in mods if not (vout / f'{m}.patched.bin').is_file() or not (vout / f'{m}.android.key').is_file()]
+        uncut = [m for m in mods if m in ids and (v, ids[m]) not in variant_cut_builds(g)]
+        if lacking or uncut:
+            print(f'[YELLOW] variant {v} not offered: ' + '; '.join(([f'no rewritten {", ".join(lacking)}'] if lacking else [])
+                  + ([f'no cuts for build {", ".join(ids[m] for m in uncut)} of {", ".join(uncut)}'] if uncut else [])), flush=True)
+            shutil.rmtree(vout / 'romfs', ignore_errors=True); continue
+        if v not in rows: out_rows.append((v, '-')); continue
+        label = next((r[2] for r in g.values('variant') if r and r[0] == v and len(r) > 2), v)
+        stage(f'making the {label.replace("fps", " fps")} game data from your game files')
+        sys.path.insert(0, str(REPO / 'dm/tools'))
+        import romfs_rows
+        try: made = romfs_rows.make(g.dir / rows[v], str(romfs), vout / 'romfs')
+        except (romfs_rows.Error, OSError) as e:
+            print(f'[YELLOW] variant {v} not offered: its game data rows do not apply to these game files: {e}', flush=True)
+            shutil.rmtree(vout / 'romfs', ignore_errors=True); continue
+        print(f'  variant {v}: {len(made)} game files made from yours ({", ".join(made)})', flush=True)
+        out_rows.append((v, f'{v}/romfs'))
+    return out_rows
+# PEANUTS end
+
+
 def work_dir(out, app):
     """The work folder the shader split and library cache go to (android-shaders/): the pack's own <title ID>-work, so a pack folder picked elsewhere (--out) takes
     the extracted shaders with it instead of leaving them beside the game. The default pack, <game folder>/../<title ID>-work/android-pack, gives the same folder as before"""
@@ -1265,7 +1309,7 @@ def main():
                 rewrite(sys.executable, srcs | nros, out, max(1, a.j), g, a.in_process, xmod_files)   # PEANUTS: xmod_files
                 for _m, _src in (srcs | nros).items():   # PEANUTS: what each module was made from, for the next build's rewrite_reuse.keep (issue #120)
                     if _m not in (xmod_files or {}): pn_reuse().record(_m, _src, out, g, REWRITER)
-                rewrite_variants(sys.executable, srcs, out, g, a.in_process)   # game.tsv variant rows (a native 4:3 mod) into <pack>/<variant>/
+                rewrite_variants(sys.executable, srcs, out, g, a.in_process, set(mod_exefs) | set(patched))   # game.tsv variant rows (a native 4:3 mod) into <pack>/<variant>/; PEANUTS: none of a mod's modules
             finally: shutil.rmtree(out / '.nup-src', ignore_errors=True)   # the module copies a NUP game's rewrite read (rewriter_src)
             place_nros(work / 'android-nro' if nros else None, out)
         if a.code_only: print(f'done: the modules in {out} (--code-only: pack.tsv and the shaders unchanged)'); return
@@ -1277,6 +1321,7 @@ def main():
         # a program n > 0 splits program 0's RomFS (its conorig) and the add-ons with its own main: its own RomFS holds no shaders (Wonder's program 1: one text file)
         shaders = None if a.no_shaders else pack_shaders(a, g, work, out, vdir, (conorig, exe) if a.program else (romfs, exe), list(dlc.values()) if a.program else ())
         scenes = scene_overlays(g, romfs, out)
+        ready = variant_overlays(g, romfs, out, ids)   # PEANUTS: complete variants and their game data (pack.tsv variant rows)
         top = folder.parent if pack_dump.nup.is_nup(folder) else folder   # a NUP file's paths are `<name>.nup:<package>/...`, relative to its folder
         rel = lambda p: p.relative_to(top).as_posix()
         rows = [('format', str(FORMAT)), ('title_id', f'{app:016X}'), ('name', g.get('name', '')), ('version', str(ver)), ('target', 'android'),
@@ -1286,7 +1331,7 @@ def main():
                 *[('aoc', f'{pack_dump.dlc_index(tid, app)}\t{rel(p)}') for tid, p in sorted(dlc.items())],
                 # program n > 0: which program it is, the application (its save and add-ons), and each program index's RomFS (DM_ROMFS_PROGRAM_<i>: 0 is the game's, "conorig")
                 *([('program', str(a.program)), ('application', f'{app0:016X}'), ('romfs_program', f'0\t{rel(conorig)}'), ('romfs_program', f'{a.program}\t{rel(romfs)}')] if a.program else []),
-                *([('shaders', shaders.relative_to(out).as_posix())] if shaders else []), *[('scene_res', f'{n}\t{p}') for n, p in scenes], ('packer', commit()), *([('made_by', a.made_by)] if a.made_by else [])]
+                *([('shaders', shaders.relative_to(out).as_posix())] if shaders else []), *[('scene_res', f'{n}\t{p}') for n, p in scenes], *[('variant', f'{v}\t{p}') for v, p in ready], ('packer', commit()), *([('made_by', a.made_by)] if a.made_by else [])]   # PEANUTS: variant rows
         stage('listing the build\'s files')
         tmp = out / 'pack.tsv.partial'
         write_lf(tmp, ''.join(f'{k}\t{v}\n' for k, v in rows)); os.replace(tmp, out / 'pack.tsv')

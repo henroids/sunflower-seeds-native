@@ -202,6 +202,9 @@ real work of running Switch games natively on Android and is built on [nxnative]
 by seedds (MIT). Some fixes are adapted from [nx2android](https://github.com/shirai91/nx2android) (MIT).
 The Miis are drawn with the colour tables and face layout of [vee](https://github.com/j0lol/vee) (MIT) and their textures decoded with
 [bcdec](https://github.com/iOrange/bcdec) (MIT). <!-- PEANUTS: the Mii drawing's sources (android/NOTICE.md) -->
+Animal Crossing: New Horizons' 60 fps choice uses [ACNH 60 FPS + SpeedFix](https://github.com/tmouh/acnh-60fps) v1.4.5 by tmouh
+(CC BY-NC 4.0), converted to rows of changed bytes (`dm/games/01006F8002326000/speedfix60/NOTICE.md`). <!-- PEANUTS -->
+
 
 The companion runtime and package format come from [Eden Duo](https://github.com/igawa6/eden-duo).
 

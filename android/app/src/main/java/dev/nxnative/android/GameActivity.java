@@ -608,6 +608,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private static boolean gameOwnedAtStart;
     boolean gameOwnedAtStart() { return gameOwnedAtStart; }
     private static int fpsModeAtStart;
+    // PEANUTS: the variant this run started (Profile.fpsVariant), null for none; whether the cap asked for one the pack does not hold complete (the panel says so)
+    private static String fpsVariantAtStart;
+    private static boolean fpsVariantMissing;
     boolean fpsRestartRequired(int selected) {
         Profile p = Profile.of(titleId());
         return p != null ? p.fpsRestart(fpsModeAtStart, onScreen(selected)) : (selected == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart;
@@ -634,6 +637,20 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         env.add(CrtFilter.line(this, id));   // PEANUTS: the CRT filter (Settings › Display, Game settings, the in-game panel; CrtFilter)
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
+        // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
+        // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why
+        fpsVariantAtStart = null; fpsVariantMissing = false;
+        if (prof != null && prof.hasFpsVariant() && Prefs.limited(id) && fpsModeAtStart != FrameRateCaps.GAME_OWNED) {
+            String fv = prof.fpsVariant(FrameRateCaps.limitRate(fpsModeAtStart, Prefs.displayMaxHz(getDisplay())));
+            if (fv != null && pack != null && pack.variantReady(fv)) fpsVariantAtStart = fv;
+            else {
+                fpsVariantMissing = true;
+                fpsModeAtStart = FrameRateCaps.GAME_OWNED;
+                String note = "[nxlaunch] frame rate: the build has no complete " + fv + " variant (pack.tsv variant row and " + fv + "/main.patched.bin): started Game owned";
+                if (!unknownNotes.contains(note)) unknownNotes.add(note);   // settingsEnv runs for the readiness check too
+            }
+        }
+        // PEANUTS end
         // PEANUTS: a supported update may lack this game's reviewed FPSLocker plan.
         boolean hasFpsPlan = prof == null || prof.fpsLockerPlanMatches(BuildCheck.builds(pack).get("main"));
         gameOwnedAtStart = !hasFpsPlan || Prefs.limited(id) && fpsModeAtStart == FrameRateCaps.GAME_OWNED;
@@ -684,6 +701,12 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         boolean aspectPlanOk = prof == null || prof.aspectPlanMatches(BuildCheck.builds(pack).get("main"));
         if (prof != null && aspectPlanOk && !prof.aspectPlan.isEmpty()) env.add("DM_ASPECT_PLAN=" + prof.aspectPlan);
         runFill = aspectPlanOk && variant == null && ScreenShape.CHOICE.equals(aspect) && GameSettings.fillable(Profile.of(id));   // PEANUTS: Display > Fill at this start
+        if (fpsVariantAtStart != null) {   // PEANUTS: the frame rate's variant (its code; its RomFS overlay goes in with the start's other overlays) wins over an aspect variant: one main a run
+            env.add("DM_PATCH_VARIANT=" + fpsVariantAtStart);
+            env.add("DM_PRESENT_INTERVAL=display");   // the variant is made for one frame a display tick (Animal Crossing: New Horizons' mod sets the swap interval to 1)
+            if (variant != null) shapeNote = "[nxlaunch] aspect ratio: the " + variant + " variant is not started with the frame rate's " + fpsVariantAtStart + " variant";
+            variant = null;
+        }
         if (variant != null) {   // Game settings › Aspect ratio: the pack's native-aspect modules (<pack>/<variant>/, loader.c) and the picture shown at that aspect
             env.add("DM_PATCH_VARIANT=" + variant);
             env.add("DM_VK_PICTURE_ASPECT=" + aspect);
@@ -977,6 +1000,12 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             // (hle_cheats.c reads a single flat folder by build ID); a "code" mod's exefs/exefs_patches never reach this process at all.
             String modOverlay = dev.peanuts.mods.ModRuntime.romfsOverlayEnv(this, game.isDirectory() ? game : game.getParentFile(), id, sceneOverlay, packDir);   // PEANUTS: mods beside the game; packDir: a code mod's files only with its build
             if (modOverlay != null) env.add(modOverlay);
+            File fpsRomfs = fpsVariantAtStart == null ? null : pack.variantRomfs(fpsVariantAtStart);   // PEANUTS: the frame rate variant's game data (made by the pack step from the player's own files), first: its code needs it
+            if (fpsRomfs != null) {
+                String chain = null;
+                for (String kv : env) if (kv.startsWith(SceneRes.ENV + "=")) chain = kv.substring(SceneRes.ENV.length() + 1);   // the line in force so far (the mods' or the scene's): kept after it
+                env.add(SceneRes.ENV + "=" + fpsRomfs.getPath() + (chain != null && !chain.isEmpty() ? ":" + chain : ""));
+            }
             String modCheats = dev.peanuts.mods.ModRuntime.cheatsEnv(this, game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: mods beside the game; a code mod's cheats only with its build
             if (modCheats != null && !cheatsMerged) env.add(modCheats);   // PEANUTS: not beside upstream's own DM_CHEATS, which holds the mods' cheats then (cheatsEnv, ModCheats): the later line won, and the panel listed cheats the host did not run
             String resNote = resPresets.isEmpty() ? null   // the choice in force, for the log: which preset (or Advanced), and the window and scene it gave
@@ -1442,6 +1471,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
                 // PEANUTS: "Above 60 fps is experimental" only where something above 60 is offered; the display's limit when it greys a cap or holds a stored one lower
                 String high = FrameRateCaps.above60(Prefs.paceOffered(act, titleId())) ? "Above 60 fps is experimental. " : "";
                 String runs = Prefs.screenRunsNote(act, titleId()), why = Prefs.screenNote(act, titleId());
+                if (fpsVariantMissing) restart = Prefs.FPS_VARIANT_MISSING + " " + restart;   // PEANUTS: the cap's variant is not in the build (Profile.fpsVariant)
                 return restart + (runs != null ? runs + " " : why != null ? why + " " : "") + high + "Switching to or from Game owned applies on the next start.";
             }
         };

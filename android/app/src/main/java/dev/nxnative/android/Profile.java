@@ -118,6 +118,19 @@ final class Profile {
         for (String v : variants.split(",")) { int eq = v.indexOf('='); if (eq > 0 && v.substring(eq + 1).equals(label)) return v.substring(0, eq); }
         return null;
     }
+    // PEANUTS begin: a frame rate that starts another version of the game's code (game.tsv variant row labelled "<rate>fps": Animal Crossing: New Horizons' 60 fps
+    // speed fix, dm/games/01006F8002326000/speedfix60). The frame limit list's cap of that rate starts the pack's <variant>/ modules and its RomFS overlay, display paced
+    /** The variant the frame rate cap of this rate starts (60 for the stored 0 of the frame limit list), or null when the profile has none for it */
+    String fpsVariant(int rate) {
+        for (String v : variants.split(",")) { int eq = v.indexOf('='); if (eq > 0 && v.substring(eq + 1).equals(rate + "fps")) return v.substring(0, eq); }
+        return null;
+    }
+    /** Whether any frame rate starts a variant: its cap then applies at the next start, from Game owned and back (GameActivity.settingsEnv) */
+    boolean hasFpsVariant() {
+        for (String v : variants.split(",")) if (v.matches("[^=]+=[0-9]+fps")) return true;
+        return false;
+    }
+    // PEANUTS end
     boolean dlss;   // game.tsv has dlss_standin rows (build.gradle dlssOf): the game's DLSS runs on the host's GSR2 stand-in, with its Upscaler modes and sliders (Prefs.dlssGame)
     boolean decoupled;   // game.tsv has fps_decouple rows (build.gradle decoupleOf): the game's speed follows its measured frame rate, so it gets a frame limit (Prefs.paced)
     String romfsChecks = "";   // game.tsv romfs_check rows (build.gradle romfsChecksOf): "<path>|<line>|<expected or main>", ';' between them (RomfsCheck)

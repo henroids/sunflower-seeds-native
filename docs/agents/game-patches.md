@@ -113,6 +113,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 
 | Game | Cuts | Gates | Frame-step sites | Function-matched rules | Host rows | Binding |
 |---|---|---|---|---|---|---|
+| [Animal Crossing: New Horizons](#animal-crossing-new-horizons) | 0 | 0 | 0 | 0 | 0 | `build` |
 | [ASTRAL CHAIN](#astral-chain) | 0 | 0 | 112 | 0 | 1 | `build` → `game` ×2 |
 | [Batman: Arkham Knight](#batman-arkham-knight) | 8 | 0 | 0 | 0 | 1 | `build` → `game` ×2 |
 | [DARK SOULS: REMASTERED](#dark-souls-remastered) | 2 | 0 | 0 | 0 | 0 | `build` → `game` |
@@ -162,6 +163,13 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 | [Xenoblade Chronicles X: Definitive Edition](#xenoblade-chronicles-x-definitive-edition) | 0 | 0 | 0 | 1 | 0 | `game` |
 
 ## Games
+
+### Animal Crossing: New Horizons
+
+[Animal Crossing: New Horizons](../../dm/games/01006F8002326000/README.md), `01006F8002326000`, [patches.py](../../dm/games/01006F8002326000/patches.py).
+
+- **`build`**, frame rate, at goal, judgement: Animal Crossing: New Horizons' 60 fps variant (VARIANT_CUTS['60']: tmouh's ACNH 60 FPS + SpeedFix v1.4.5, speedfix60/main.tsv). A third-party mod's patch for one main build, used as its author made it: another main build needs the author's patch for that build
+
 
 ### ASTRAL CHAIN
 
@@ -1093,7 +1101,6 @@ Profile keys (`game.tsv`) whose value changes what the host does, set away from 
 | `fps_modes 20,30,60` | [STAR OCEAN THE SECOND STORY R](../../dm/games/010065301A2E0000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `fps_modes 30,40,45,60` | [NieR:Automata The End of YoRHa Edition (0100B8E016F76000)](../../dm/games/0100B8E016F76000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `fps_modes 30,60,120` | [Xenoblade Chronicles X: Definitive Edition](../../dm/games/0100453019AA8000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
-| `fps_modes 60` | [DRAGON BALL: Sparking! ZERO](../../dm/games/010035F022078000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `fps_steps d00e4f399e411d0613aa8d26b1c02fef 0x37c8410 0x8 0x210 0x214` | [Mario Kart World](../../dm/games/0400C3F00006E000/README.md) | `build` → `engine`, gap | the framework at a fixed global per main build; a fingerprint of its frame function (the step pick from the mode, then the update loop over the count and the present interval set to it) could find it in the game's updates |
 | `game_env DOTNET_GCRegionRange=60000000` | [Absolum](../../dm/games/0100A83022A22000/README.md) | `game`, at goal | measured for the game's regions |
 | `low_ram_app_pool_mb 5632` | [Fire Emblem Fortune's Weave](../../dm/games/04007EF01F8AE000/README.md) | `game`, at goal | the total the game's SDK sizes its cache of freed pages from, measured on the game; the pool and the map limit stay the profile's |
@@ -1116,6 +1123,7 @@ Profile keys (`game.tsv`) whose value changes what the host does, set away from 
 | `fps_decouple sead` | [Donkey Kong Bananza](../../dm/games/040074A01BF12000/README.md), [Splatoon Raiders](../../dm/games/0400380020056000/README.md) | `game`, at goal | whether the game steps its world by the rate sead's controller hands it is the game's own (Ocarina of Time's framework turns it back into a present interval): the rewriter finds the controller in any main (nso_code.py sead_find) but gates it only for a profile with this key |
 | `fps_hold off` | [Hyrule Warriors: Age of Calamity](../../dm/games/01002B00111A2000/README.md), [Paper Mario: The Thousand-Year Door](../../dm/games/0100ECD018EBE000/README.md) | `game`, at goal | the game's pacing |
 | `fps_modes 30,60` | [Hyrule Warriors: Age of Calamity](../../dm/games/01002B00111A2000/README.md), [The Legend of Zelda: Link's Awakening](../../dm/games/01006BB00C6F0000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
+| `fps_modes 60` | [Animal Crossing: New Horizons](../../dm/games/01006F8002326000/README.md), [DRAGON BALL: Sparking! ZERO](../../dm/games/010035F022078000/README.md) | `game`, at goal | restrict the launcher to rates reviewed for this game |
 | `fps_target 30` | [EA SPORTS FC 27](../../dm/games/0100C49025D3E000/README.md), [Fire Emblem Fortune's Weave](../../dm/games/04007EF01F8AE000/README.md) | `game`, at goal | a choice per game |
 | `graphics_scale 2560x1440 1 console` | [Mario Kart World](../../dm/games/0400C3F00006E000/README.md), [Splatoon Raiders](../../dm/games/0400380020056000/README.md) | `game`, at goal | the game sizes its 3D scenes by the graphics scale, not by its window; which crop each scale gives was measured on the game |
 | `graphics_scale original 1 console` | [Mario Tennis Fever](../../dm/games/0400D4201C6EA000/README.md), [The Legend of Zelda: Ocarina of Time](../../dm/games/0400486024DEC000/README.md) | `game`, at goal | the game sizes its 3D scenes by the graphics scale, not by its window; which crop each scale gives was measured on the game |

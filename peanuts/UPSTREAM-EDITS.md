@@ -2667,3 +2667,31 @@ computer keeps nothing). Tests: `peanuts/tests/test_rewrite_forks.py` (`Worker`:
 ### Fire Emblem Engage SDK alignment backport (2026-11-24)
 
 `dm/tools/sdk_patches.py` removes the fixed Engage SDK row so the existing node-area and 2 MiB alignment rules can apply. The SDK matches the same cuts as Banana Native `android`. The edit and the [game note](../dm/games/0100A6301214E000/README.md#memory) carry `PEANUTS` markers. The patch index is generated. Take upstream's matching behavior at the next sync.
+### Animal Crossing: New Horizons at 60 fps, a frame rate that starts a variant (2026-11-24)
+
+The frame limit list's 60 fps cap of Animal Crossing: New Horizons 3.0.3 starts a variant of its code and game data: tmouh's "ACNH 60 FPS + SpeedFix" v1.4.5
+(CC BY-NC 4.0, `dm/games/01006F8002326000/speedfix60/NOTICE.md`), its main IPS converted to `VARIANT_CUTS['60']` rows with the game's original bytes and its four
+changed game files to rows of changed bytes that the pack step applies to the player's own files into `<pack>/60/romfs/`. Game owned (the default) is the game as
+it is. A variant labelled `<rate>fps` is the general form (`dm/games/README.md`): `Profile.fpsVariant` picks it, `Pack.variantReady` checks the pack's `variant`
+row, and `GameActivity` passes `DM_PATCH_VARIANT`, `DM_PRESENT_INTERVAL=display` and the overlay first in `DM_ROMFS_OVERLAY`. A pack without a complete variant
+(another game version) starts Game owned with a line in the log and a note in the in-game panel.
+
+| File | Hunks | Change | Marker |
+|---|---|---|---|
+| `scripts/pack_android.py` | 5 | `rewrite_variants(..., modded)`: a build with code mods whose mod changed a variant's module gets no variant (the cuts assert the game's bytes) instead of a failed build; `variant_cut_builds`, `variant_overlays` (the variant's game data from `variant_romfs` rows, `pack.tsv` `variant` rows for complete variants only); the call and the rows | `# PEANUTS`, `# PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/Profile.java` | 1 | `fpsVariant(rate)`, `hasFpsVariant()` | `// PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/Pack.java` | 2 | `variants` from `pack.tsv` `variant` rows, `variantReady`, `variantRomfs` (never outside the pack) | `// PEANUTS`, `// PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/GameActivity.java` | 5 | `fpsVariantAtStart`, `fpsVariantMissing`; `settingsEnv` starts the variant only when the pack holds it complete, else Game owned; `DM_PATCH_VARIANT` and display pacing for it (over an aspect variant); its overlay first in `DM_ROMFS_OVERLAY`; the panel's note when it was missing | `// PEANUTS`, `// PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/Prefs.java` | 1 | `presentOnly` false for a game with a frame rate variant; `fpsVariant`, `FPS_VARIANT_NOTE`, `FPS_VARIANT_MISSING` | `// PEANUTS`, `// PEANUTS begin`/`end` |
+| `android/app/src/main/java/dev/nxnative/android/GameSettings.java`, `SidePanel.java` | 1 each | the Speed section's and the panel's note for such a game | `// PEANUTS` |
+| `dm/games/01006F8002326000/game.tsv` | 1 | `fps_limit_present 1`, `fps_modes 60`, `variant 60 main 60fps`, `variant_romfs 60 speedfix60/romfs.tsv` | `# PEANUTS` in the block's heading |
+| `dm/games/01006F8002326000/README.md`, `dm/games/README.md`, `README.md`, `android/NOTICE.md` | 1 each | the 60 fps section, the key's row, the credit and the licence paragraph | `PEANUTS` |
+| `dm/games/01006F8002326000/patches.py`, `speedfix60/main.tsv`, `speedfix60/romfs.tsv` | new | `VARIANT_CUTS['60']` with the data files' SHA-256 pinned (a change to either changes the game's rewrite key), the rows | `# PEANUTS` first line |
+| `dm/games/01006F8002326000/speedfix60/NOTICE.md` | new | the CC BY-NC 4.0 notice: author, source, version, what was converted | allow-listed in `peanuts/upstream-unmarked.txt` |
+| `docs/agents/game-patches.md` | generated | `docs_patches.py` after the new `patches.py` | allow-listed already |
+
+New files, no marker needed beyond their first line: `dm/tools/romfs_rows.py`, `dm/tools/ips_rows.py`, `dm/tools/tests/test_pack_android_variants.py`,
+`android/app/src/jvmtest/java/dev/nxnative/android/FpsVariantJvmTest.java`. Peanuts' own: `dev/peanuts/ui/AboutData.java` (the credit in About › Licenses).
+Tests: `test_pack_android_variants.py` (rows applied and refused, the IPS conversion, `variant_overlays`, ACNH's data, notice, credits and wiring, the JVM test),
+`test_android_frame_rate_games.py` (ACNH: Game owned and 60). Upstream candidate: the general mechanism, yes; the data, no (CC BY-NC 4.0 is not GPL-compatible
+for upstream's own tree, which is its decision).
