@@ -626,10 +626,40 @@ def translate(jobs_list, w, tag):
 PS_INPUTS = {}   # pixel shader key → the input locations it reads (for its vertex shaders' padding)
 
 
+# PEANUTS(upstream-candidate) begin: a domain shader's tessellation mode. The translator answers its tessellation queries with a fixed default (triangles, equal spacing,
+# clockwise), but the mode is the domain shader's own control section: +0x738 primitive mode, +0x73c spacing, +0x744 vertex order, as OpenGL enums (nxnative 48dca7a4,
+# dmsh_tess.py). The Witcher 3's terrain domains are quads with fractional_even spacing: built as triangles, every patch was laid out wrong (fans of wedges).
+# finish rewrites the module's execution modes to the section's (an unknown value keeps the translator's)
+TESS_MODES = {}
+GL_TESS_PRIM = {0x0004: 22, 0x0007: 24, 0x8E7A: 25}            # Triangles, Quads, Isolines
+GL_TESS_SPACING = {0x0202: 1, 0x8E7C: 2, 0x8E7B: 3}            # SpacingEqual, SpacingFractionalEven, SpacingFractionalOdd
+GL_TESS_ORDER = {0x0900: 4, 0x0901: 5}                         # VertexOrderCw, VertexOrderCcw
+
+
+def tess_mode_read(key, rec):
+    ci = rec.find(bytes.fromhex('34127698'))
+    if ci < 0 or ci + 0x748 > len(rec): return
+    prim, spacing = struct.unpack_from('<2I', rec, ci + 0x738); order = struct.unpack_from('<I', rec, ci + 0x744)[0]
+    TESS_MODES[key] = (GL_TESS_PRIM.get(prim), GL_TESS_SPACING.get(spacing), GL_TESS_ORDER.get(order))
+
+
+def tess_modes_set(m, modes):
+    """→ how many execution modes of the domain module were changed to the control section's (Triangles/Quads/Isolines, the spacing, the vertex order)"""
+    groups = ({22, 24, 25}, {1, 2, 3}, {4, 5}); n = 0
+    for x in m.ins:
+        if x[0] & 0xffff == 16 and m.entry and x[1] == m.entry[2] and len(x) == 3:   # OpExecutionMode <entry> <mode> (no literals)
+            for g, want in zip(groups, modes):
+                if x[2] in g and want is not None and x[2] != want: x[2] = want; n += 1
+    if n: m.index()
+    return n
+# PEANUTS(upstream-candidate) end
+
+
 def finish(key, w, job, c1):
     stage = job['stage']; sp = os.path.join(w, key + '.spv')
     res = json.load(open(os.path.join(w, key + '.res.json')))
     m = spv.Module(open(sp, 'rb').read())
+    if stage == 'ds' and key in TESS_MODES: tess_modes_set(m, TESS_MODES[key])   # PEANUTS(upstream-candidate): the domain's own mode (above)
     if stage == 'vs':   # inputs used only as integer bits: translated again with uint inputs (dmsh_build.py int_inputs), as the vertex input format's class must match
         extra = {l: t for l, t in spv.integer_only_inputs(m).items() if l not in job['attr']}
         if extra:
@@ -1003,6 +1033,7 @@ def batch_results(batch):
     for key in batch:
         name, k = loc[key]
         jobs[key], c1s[key] = NS['job_for'](key, name, _rec(name, k), bd)
+        if STAGE_OF[key] == 'ds': tess_mode_read(key, _rec(name, k))   # PEANUTS(upstream-candidate): the domain's mode from its control section (finish sets it in the module)
         jobs[key].update(ANSWERS)
         if STAGE_OF[key] == 'ms': jobs[key]['gl_depth_spec'] = VK['SPEC_GL_DEPTH']
     r = translate([jobs[k] for k in batch], bd, batch[0])

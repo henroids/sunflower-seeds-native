@@ -1513,6 +1513,14 @@ Finding, keying and translating shaders (`dm/gfx/tools/shader_split.py`, `dmsh_b
 - **Fix:** `vk_android_build.py type2_sampler` decodes the word (as nxnative's `dmsh_reflect.py decode_ubo_samp_id` does for Metal); the binding's sampler half is `DMSH_VK_KIND_SAMP_UBO` at that uniform slot and byte offset with the new flag `DMSH_VK_BF_SAMP_RAW`, and `vka_bind.c samp_of` takes such a word as the sampler ID itself (low 12 bits, plus the pool's base) instead of a handle's high 12 bits. A Vulkan chain change (`DMSH_VK_CHAIN`, `DMSH_VK_ABI`). Checked on an AYN Thor (Turnip 27.0.0-R2, driver ID 18): The Witcher 3's Kaer Morhen balcony and bedroom before and after, the grid and the blocks gone at 60 fps. `test_vk_android_type2_sampler.py`.
 - **Found on:** The Witcher 3: Wild Hunt — Complete Edition (EU, `01003D100E9C6000`).
 
+### A domain shader built in the translator's default tessellation mode (Vulkan)
+
+<!-- PEANUTS: an entry of this fork; nxnative 48dca7a4 reads the same fields for its Metal replay. -->
+- **Symptom:** (Android) tessellated ground drawn as fans of wedges and flat stripes (The Witcher 3's Kaer Morhen valley); the domain module's disassembly says `Triangles`, `SpacingEqual`, `VertexOrderCw` whatever the game asked for.
+- **Cause:** the translator answers its tessellation queries with a fixed default; the mode is the domain shader's own control section: +0x738 primitive mode, +0x73c spacing, +0x744 vertex order, as OpenGL enums. The Witcher 3's terrain domains are quads with fractional_even spacing.
+- **Fix:** `vk_android_build.py tess_mode_read` reads the three words when it makes the job, and `finish` rewrites the module's execution modes (`tess_modes_set`; a value it does not know keeps the translator's). The tessellation pipelines take a lower-left domain origin (`vka_pso.c`), OpenGL's, which the translated modules assume, so the vertex order is not reversed. A Vulkan chain change. Checked on an AYN Thor (Turnip 27.0.0-R2) with the tessellated draws of a branch that draws them: the valley's terrain whole at 60 fps. `test_vk_android_tess_mode.py`.
+- **Found on:** The Witcher 3: Wild Hunt — Complete Edition (EU, `01003D100E9C6000`).
+
 ### An array of handles from the driver table c2
 
 - **Symptom:** `shaders with a binding whose slot was not decoded 588`; shadow cascades read through `array<texture2d_array<float>, 32> fp_t2das_cb2_0`.
