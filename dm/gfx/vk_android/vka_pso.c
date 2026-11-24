@@ -487,7 +487,7 @@ static int pstate_fill(pstate *P, vka_shader *const sh[VKA_NSTAGE], const vka_la
     // PEANUTS(upstream-candidate): the translated domain shaders take OpenGL's tessellation coordinates (Ryujinx's Vulkan backend draws them with a lower-left domain
     // origin): with Vulkan's default, upper-left, the vertex order the module declares (the control section's, vk_android_build.py tess_modes_set) comes out reversed
     P->tdo = (VkPipelineTessellationDomainOriginStateCreateInfo){VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO, .domainOrigin = VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT};
-    P->ts = (VkPipelineTessellationStateCreateInfo){VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO, .pNext = &P->tdo, .patchControlPoints = 3};
+    P->ts = (VkPipelineTessellationStateCreateInfo){VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO, .pNext = &P->tdo, .patchControlPoints = k->patch_cp ? k->patch_cp : 3};   // PEANUTS(upstream-candidate): the game's patch size (OP_PATCH_SIZE, vka_gkey.patch_cp)
     P->vp = (VkPipelineViewportStateCreateInfo){VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .scissorCount = 1};   // one viewport, as nvn_mtl.m draws
     P->rs = (VkPipelineRasterizationStateCreateInfo){VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, .depthClampEnable = k->depth_clamp && V.depth_clamp,
         .polygonMode = (VkPolygonMode)k->poly_mode, .lineWidth = 1.0f};

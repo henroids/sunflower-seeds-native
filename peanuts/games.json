@@ -75,7 +75,8 @@
     "0100739018020000",
     "010085500130A000",
     "01006F600FFC8000",
-    "0100A7C01B792000"
+    "0100A7C01B792000",
+    "01003D100E9C6000"
   ],
   "games": [
     {
@@ -1389,6 +1390,25 @@
       "contributors": [],
       "profile": "dm/games/0100F2C0115B6000/game.tsv",
       "note": "dm/games/0100F2C0115B6000/README.md"
+    },
+    {
+      "title_id": "01003D100E9C6000",
+      "name": "The Witcher 3: Wild Hunt — Complete Edition",
+      "profile_name": "The Witcher 3: Wild Hunt — Complete Edition",
+      "builds": [
+        {
+          "version": "v458752",
+          "number": 458752,
+          "display": "4.04b"
+        }
+      ],
+      "readme_update": "4.04b",
+      "package": "v458752",
+      "companion": false,
+      "since": "0.1.8",
+      "contributors": [],
+      "profile": "dm/games/01003D100E9C6000/game.tsv",
+      "note": "dm/games/01003D100E9C6000/README.md"
     },
     {
       "title_id": "010051F0207B2000",
