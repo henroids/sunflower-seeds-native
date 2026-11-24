@@ -6,52 +6,176 @@ import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Shader;
-import java.util.HashMap;
+import java.util.Random;
 
 /**
  * Home's background on the test app's scoreboard look (Scoreboard.ON; BananaBackgroundView hands its drawing, ticks and taps here): the whole screen is a
- * board of bulbs, and the seeds (the logo, turned 15 degrees, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard. Each step
- * the trailing column goes out first and the leading column lights LIGHT_MS later. Seeds sit on a lattice (every PER_X bulbs across, every PER_Y down, odd
- * rows half a period over) that repeats every PER_X bulbs, so the march wraps without a seam. A tap on a seed puts it out for RESPAWN_MS.
- * Cheap: the unlit board is one shader-filled rect, a seed is one of two prebaked bitmaps (all lit, or with its trailing column out), and the view redraws
- * only when the state changes, about four times a second
+ * board of bulbs, and seeds (the logo, as lit bulbs) march across it one bulb column at a time, as on a stadium scoreboard. They are scattered at random,
+ * each with its own tilt (one of six patterns) and its own pace: each step its trailing column goes out first and its leading column lights LIGHT_MS later.
+ * A seed that leaves on the right comes back from the left in a new row, with a new tilt and pace. A few bulbs of the board are dead, as on a real one: they
+ * stay dark under a seed. A tap puts a seed out for RESPAWN_MS.
+ * Cheap: the unlit board is one shader-filled rect, a seed is one of two prebaked bitmaps of its pattern (all lit, or its trailing column out), and every
+ * time is a multiple of TICK_MS, so the view redraws at most about 16 times a second, and only when something changed
  */
 public final class BulbBoard {
-    /** The seed as bulbs: # lit, o a stripe (out), . no bulb of the seed's; 15 x 20, turned 15 degrees to the left (as sb_seed.png) */
-    private static final String[] SEED = {
-        ".....#####.....",
-        "...#########...",
-        "..########o##..",
-        "..####o###o###.",
-        ".#o###o#####o##",
-        "###o###o####o##",
-        ".#o####o####o##",
-        "##o####o####o##",
-        "##o####o####o##",
-        "###o####o###o##",
-        ".###o###o###o##",
-        "..##o###o###o#.",
-        "..##o####o##o#.",
-        "...###o##o#o##.",
-        "....##o##o#o##.",
-        ".....##o#o###..",
-        ".....#####o###.",
-        ".......######..",
-        "........####...",
-        ".........###...",
+    /** The seed as bulbs, in six tilts: # lit, o a stripe (out), . not the seed's. Made from the logo's shape (sb_seed.png), each stripe one bulb a row */
+    private static final String[][] PATTERNS = {
+        { // turned 24 degrees to the left
+            ".....####......",
+            "...#########...",
+            "..#######o##...",
+            ".####o###o####.",
+            ".#o##o#####o##.",
+            "##o###o####o##.",
+            "##o###o#####o#.",
+            "##o####o###o##.",
+            "##o####o###o###",
+            "##o#####o###o##",
+            "###o####o###o##",
+            ".###o###o###o##",
+            "..###o###o##o#.",
+            "...###o##o##o##",
+            "....###o##o###.",
+            ".....###o#o####",
+            "......#####o##.",
+            "........######.",
+            ".........####..",
+            "...........##..",
+        },
+        { // turned 14 degrees to the left
+            ".....#####.....",
+            "....########...",
+            "..########o##..",
+            "..#o##o###o###.",
+            ".##o###o####o##",
+            ".##o###o####o##",
+            ".#o####o####o##",
+            "##o####o####o##",
+            "##o#####o###o##",
+            ".##o####o###o##",
+            ".###o###o###o##",
+            "..##o###o###o#.",
+            "..##o###o###o#.",
+            "...###o##o#o##.",
+            "....##o##o#o##.",
+            ".....##o#o###..",
+            ".....####o####.",
+            ".......######..",
+            ".......#####...",
+            ".........###...",
+        },
+        { // turned 4 degrees to the left
+            "....######.....",
+            "...#########...",
+            "..########o##..",
+            ".##o###o###o##.",
+            ".##o###o###o##.",
+            "##o####o####o##",
+            "##o####o####o##",
+            "##o####o####o##",
+            "##o####o####o#.",
+            "###o###o###o##.",
+            ".##o###o###o##.",
+            ".##o###o###o##.",
+            "..##o##o##o##..",
+            "..##o##o##o##..",
+            "...##o#o#o##...",
+            "...##o#o####...",
+            "....###o###....",
+            "....#######....",
+            ".....#####.....",
+            ".......###.....",
+            "........#......",
+        },
+        { // turned 8 degrees to the right
+            "......#####.....",
+            "....########....",
+            "..###o#######...",
+            "..##o###o##o##..",
+            ".##o####o###o##.",
+            ".##o####o###o##.",
+            "###o####o####o##",
+            "##o####o####o##.",
+            ".##o###o####o##.",
+            ".##o###o####o##.",
+            ".##o###o###o##..",
+            "..#o###o###o##..",
+            "..##o##o##o###..",
+            "..##o##o##o##...",
+            "..##o#o##o##....",
+            "...###o#o##.....",
+            "...###o####.....",
+            "...#######......",
+            "....#####.......",
+            ".....###........",
+            "......#.........",
+        },
+        { // turned 15 degrees to the right
+            ".....#####.....",
+            "...#########...",
+            "..##o########..",
+            ".###o###o####..",
+            "##o#####o###o#.",
+            "##o####o###o###",
+            "##o####o####o#.",
+            "##o####o####o##",
+            "##o####o####o##",
+            "##o###o####o###",
+            "##o###o###o###.",
+            ".#o###o###o##..",
+            ".#o##o####o##..",
+            ".##o#o##o###...",
+            ".##o#o##o##....",
+            "..###o#o##.....",
+            ".###o#####.....",
+            "..######.......",
+            "...####........",
+            "...###.........",
+        },
+        { // turned 24 degrees to the right
+            "......####.....",
+            "...#########...",
+            "...##o#######..",
+            ".####o###o####.",
+            ".##o#####o##o#.",
+            ".##o####o###o##",
+            ".#o#####o###o##",
+            ".##o###o####o##",
+            "###o###o####o##",
+            "##o###o#####o##",
+            "##o###o####o###",
+            "##o###o###o###.",
+            ".#o##o###o###..",
+            "##o##o##o###...",
+            ".###o##o###....",
+            "####o#o###.....",
+            ".##o#####......",
+            ".######........",
+            "..####.........",
+            "..##...........",
+        },
     };
-    private static final int SW = 15, SH = SEED.length;
     private static final float PITCH_DP = 5f;
-    private static final int PER_X = 32, PER_Y = 26;                       // the lattice, in bulbs
-    private static final long STEP_MS = 520, LIGHT_MS = 170, RESPAWN_MS = 5000;
-    private static final int LIT = 0xFFE9A93F, LIT_ALPHA = 92, UNLIT = 0xFF141912;
+    private static final long TICK_MS = 60, LIGHT_MS = 180, RESPAWN_MS = 5000;
+    private static final long[] PERIODS = {420, 480, 540, 600, 660, 720};   // a seed's step, ms (multiples of TICK_MS)
+    private static final int LIT = 0xFFE9A93F, LIT_ALPHA = 92, UNLIT = 0xFF141912, DEAD = 0xFF0A0C09;
+    private static final int AREA_PER_SEED = 760;                           // bulbs of board a seed: how many seeds a screen gets
+    private static final float DEAD_SHARE = 0.005f;                         // the board's dead bulbs
+
+    private static final class Seed {
+        int pat, y; long x0, t0, period, out = Long.MIN_VALUE;
+        long x(long ms) { return x0 + Math.max(0, ms - t0) / period; }
+        boolean trailing(long ms) { long e = ms - t0; return e >= period && e % period < LIGHT_MS; }   // (the step's trailing column is out; its position is still the last)
+        int state(long ms) { long e = Math.max(0, ms - t0); return (int) (2 * (e / period) + (trailing(ms) ? 1 : 0)) ^ (out != Long.MIN_VALUE && ms - out < RESPAWN_MS ? 0x40000000 : 0); }
+    }
 
     private final float pitch;
-    private final Bitmap lit, trail;           // the seed with all its bulbs lit; with its trailing (left) column of each row out
-    private final Paint board = new Paint(), seed = new Paint(Paint.FILTER_BITMAP_FLAG);
-    private final HashMap<Long, Long> popped = new HashMap<>();
-    private final long t0 = android.os.SystemClock.uptimeMillis();
-    private long shown = Long.MIN_VALUE;
+    private final Bitmap[] lit = new Bitmap[PATTERNS.length], trail = new Bitmap[PATTERNS.length];
+    private final Paint board = new Paint(), seedPaint = new Paint(Paint.FILTER_BITMAP_FLAG), dead = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Random rnd = new Random();
+    private Seed[] seeds = new Seed[0];
+    private int[] shown = new int[0], deadCells = new int[0];   // dead cells as row * cols + col
+    private int cols, rows;
 
     public BulbBoard(Context c) {
         pitch = Math.max(4f, PITCH_DP * c.getResources().getDisplayMetrics().density);
@@ -60,66 +184,96 @@ public final class BulbBoard {
         Paint b = new Paint(Paint.ANTI_ALIAS_FLAG); b.setColor(UNLIT);
         new Canvas(tile).drawCircle(ps / 2f, ps / 2f, ps * 0.36f, b);
         board.setShader(new BitmapShader(tile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT));
-        lit = seedBitmap(ps, false);
-        trail = seedBitmap(ps, true);
-        seed.setAlpha(LIT_ALPHA);
+        for (int p = 0; p < PATTERNS.length; p++) { lit[p] = seedBitmap(p, ps, false); trail[p] = seedBitmap(p, ps, true); }
+        seedPaint.setAlpha(LIT_ALPHA);
+        dead.setColor(DEAD);
     }
 
-    private static Bitmap seedBitmap(int ps, boolean trailingOut) {
-        Bitmap bm = Bitmap.createBitmap(SW * ps, SH * ps, Bitmap.Config.ARGB_8888);
+    private static Bitmap seedBitmap(int p, int ps, boolean trailingOut) {
+        String[] s = PATTERNS[p];
+        Bitmap bm = Bitmap.createBitmap(s[0].length() * ps, s.length * ps, Bitmap.Config.ARGB_8888);
         Canvas cv = new Canvas(bm); Paint b = new Paint(Paint.ANTI_ALIAS_FLAG); b.setColor(LIT);
-        for (int j = 0; j < SH; j++)
-            for (int i = 0; i < SW; i++)
-                if (on(i, j) && !(trailingOut && !on(i - 1, j))) cv.drawCircle((i + .5f) * ps, (j + .5f) * ps, ps * 0.36f, b);   // trailing: lit with nothing lit to its left
+        for (int j = 0; j < s.length; j++)
+            for (int i = 0; i < s[j].length(); i++)
+                if (on(s, i, j) && !(trailingOut && !on(s, i - 1, j))) cv.drawCircle((i + .5f) * ps, (j + .5f) * ps, ps * 0.36f, b);   // trailing: lit with nothing lit to its left
         return bm;
     }
 
-    private static boolean on(int i, int j) { return i >= 0 && i < SW && j >= 0 && j < SH && SEED[j].charAt(i) == '#'; }
+    private static boolean on(String[] s, int i, int j) { return j >= 0 && j < s.length && i >= 0 && i < s[j].length() && s[j].charAt(i) == '#'; }
+    private static int w(int p) { return PATTERNS[p][0].length(); }
+    private static int h(int p) { return PATTERNS[p].length; }
+    private static long tick(long ms) { return ms - ms % TICK_MS; }
 
-    /** The march at uptime ms: the step (bulb columns moved) times two, plus 1 while the trailing columns are out before the leading ones light */
-    private long state(long ms) { long e = Math.max(0, ms - t0), s = e / STEP_MS; return 2 * s + (e % STEP_MS < LIGHT_MS ? 1 : 0); }
-
-    /** True when a redraw would show something new (a step, a seed back from a tap) */
-    public boolean changed(long ms) {
-        boolean back = !popped.isEmpty() && popped.values().removeIf(at -> ms - at >= RESPAWN_MS);   // a seed coming back is a change too
-        long s = state(ms);
-        if (s == shown && !back) return false;
-        shown = s;
-        return true;
+    /** The board for a view of w x h px: its dead bulbs and its seeds, scattered over the whole width (again only when the size changes) */
+    private void layout(int wpx, int hpx, long ms) {
+        int c = (int) Math.ceil(wpx / pitch), r = (int) Math.ceil(hpx / pitch);
+        if (c == cols && r == rows) return;
+        cols = c; rows = r;
+        deadCells = new int[Math.max(1, Math.round(cols * rows * DEAD_SHARE))];
+        for (int k = 0; k < deadCells.length; k++) deadCells[k] = rnd.nextInt(cols * rows);
+        int n = Math.max(5, Math.min(30, cols * rows / AREA_PER_SEED));
+        seeds = new Seed[n]; shown = new int[n];
+        for (int k = 0; k < n; k++) { seeds[k] = new Seed(); place(seeds[k], k, 0, ms); }   // (scattered over the whole width at first)
     }
 
-    public void draw(Canvas canvas, int w, int h, long ms) {
-        canvas.drawRect(0, 0, w, h, board);
-        long st = state(ms); boolean trailing = (st & 1) == 1; long pos = st / 2 - (trailing ? 1 : 0);   // while the trailing columns are out, the seeds are still at the last step
-        Bitmap b = trailing ? trail : lit;
-        int cols = (int) Math.ceil(w / pitch), rows = (int) Math.ceil(h / pitch);
-        for (int r = -1; r * PER_Y < rows; r++) {
-            int off = (r & 1) != 0 ? PER_X / 2 : 0, y = r * PER_Y + 3;
-            for (long n = Math.floorDiv((long) (-SW - off) - pos, (long) PER_X); n * PER_X + off + pos < cols; n++) {
-                Long at = popped.isEmpty() ? null : popped.get(key(r, n));
-                if (at != null && ms - at < RESPAWN_MS) continue;
-                canvas.drawBitmap(b, (n * PER_X + off + pos) * pitch, y * pitch, seed);
+    /** A new tilt, pace and row for seed k, at column x (or, x < 0, just off the left edge), in the free-est of a few tries */
+    private void place(Seed s, int k, long x, long ms) {
+        s.pat = rnd.nextInt(PATTERNS.length); s.period = PERIODS[rnd.nextInt(PERIODS.length)]; s.t0 = tick(ms) + TICK_MS * rnd.nextInt(8); s.out = Long.MIN_VALUE;
+        int best = Integer.MAX_VALUE; long bx = 0; int by = 0;
+        for (int t = 0; t < 12; t++) {
+            long cx = x >= 0 ? rnd.nextInt(Math.max(1, cols)) - w(s.pat) / 2 : -w(s.pat) - rnd.nextInt(24);
+            int cy = rnd.nextInt(Math.max(1, rows - h(s.pat) / 2)) - h(s.pat) / 3;
+            int overlap = 0;
+            for (int o = 0; o < seeds.length; o++) {
+                Seed q = seeds[o]; if (o == k || q == null || q.period == 0) continue;
+                long qx = q.x(ms); int ox = (int) Math.max(0, Math.min(cx + w(s.pat), qx + w(q.pat)) - Math.max(cx, qx)), oy = Math.max(0, Math.min(cy + h(s.pat), q.y + h(q.pat)) - Math.max(cy, q.y));
+                overlap += ox * oy;
             }
+            if (overlap < best) { best = overlap; bx = cx; by = cy; if (overlap == 0) break; }
         }
+        s.x0 = bx; s.y = by;
     }
 
-    /** A tap at (x, y): puts out the seed it lands on (its bounding box), if any; true when one went out */
+    /** True when a redraw would show something new: a seed stepped, came back from a tap, or left and was placed again */
+    public boolean changed(long ms) {
+        if (cols == 0) return true;
+        long t = tick(ms); boolean any = false;
+        for (int k = 0; k < seeds.length; k++) {
+            Seed s = seeds[k];
+            if (s.x(t) > cols) place(s, k, -1, t);
+            int st = s.state(t);
+            if (st != shown[k]) { shown[k] = st; any = true; }
+        }
+        return any;
+    }
+
+    public void draw(Canvas canvas, int wpx, int hpx, long ms) {
+        long t = tick(ms);
+        layout(wpx, hpx, t);
+        canvas.drawRect(0, 0, wpx, hpx, board);
+        for (Seed s : seeds) {
+            if (s.out != Long.MIN_VALUE && t - s.out < RESPAWN_MS) continue;
+            boolean tr = s.trailing(t);
+            canvas.drawBitmap(tr ? trail[s.pat] : lit[s.pat], (s.x(t) - (tr ? 1 : 0)) * pitch, s.y * pitch, seedPaint);
+        }
+        float r = pitch * 0.36f;
+        for (int d : deadCells) canvas.drawCircle((d % cols + .5f) * pitch, (d / cols + .5f) * pitch, r, dead);   // dead bulbs: dark, lit or not
+    }
+
+    /** A tap at (x, y): puts out the seed it lands on, if any (the top one where two overlap); true when one went out */
     public boolean popAt(float x, float y, long ms) {
-        long st = state(ms), pos = st / 2 - ((st & 1) == 1 ? 1 : 0);
-        int bx = (int) Math.floor(x / pitch), by = (int) Math.floor(y / pitch);
-        int r = Math.floorDiv(by - 3, PER_Y), off = (r & 1) != 0 ? PER_X / 2 : 0;
-        long n = Math.floorDiv((long) (bx - off) - pos, (long) PER_X);
-        int i = (int) (bx - (n * PER_X + off + pos)), j = by - (r * PER_Y + 3);
-        if (i < 0 || i >= SW || j < 0 || j >= SH || SEED[j].charAt(i) == '.') return false;
-        long k = key(r, n);
-        Long at = popped.get(k);
-        if (at != null && ms - at < RESPAWN_MS) return false;
-        popped.put(k, ms);
-        shown = Long.MIN_VALUE;
-        return true;
+        long t = tick(ms); int bx = (int) Math.floor(x / pitch), by = (int) Math.floor(y / pitch);
+        for (int k = seeds.length - 1; k >= 0; k--) {
+            Seed s = seeds[k];
+            if (s.out != Long.MIN_VALUE && t - s.out < RESPAWN_MS) continue;
+            int i = (int) (bx - s.x(t)), j = by - s.y;
+            String[] p = PATTERNS[s.pat];
+            if (j < 0 || j >= p.length || i < 0 || i >= p[j].length() || p[j].charAt(i) == '.') continue;
+            s.out = t;
+            return true;
+        }
+        return false;
     }
 
     public static long respawnMs() { return RESPAWN_MS; }
-
-    private static long key(int r, long n) { return ((long) r << 32) | (n & 0xFFFFFFFFL); }
 }
