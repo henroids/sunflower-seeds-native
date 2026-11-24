@@ -84,6 +84,14 @@ class Wiring(unittest.TestCase):
         self.assertRegex(o, r'if \(corner & VKO_CENTER\) dx = \(ew - bw\) / 2;\s+// PEANUTS')
         self.assertIn('corner == 6', (REPO / 'dm' / 'peanuts' / 'peanuts_graph.c').read_text())
 
+    def test_pill_tag_keeps_the_table_tag(self):
+        # #538 landing: the pill hides the build tag without writing overlay_tag=false for the table (a false set for the pill is taken back)
+        s = (OV / 'HudSettings.java').read_text()
+        self.assertIn('if (pill && !on) p.edit().remove("overlay_tag").commit();', s)
+        self.assertIn('if ("tag".equals(l[0])) tagBox(p, b, want, pill); else b.setChecked(want);', s)
+        self.assertIn('v -> { p.edit().putString(Hud.STYLE, v).apply(); syncTag(c, p, box); }', s)
+        self.assertNotIn('((CheckBox) v).setChecked(Hud.tagOn(c))', s)
+
     def test_pill(self):
         h = (OV / 'Hud.java').read_text()
         self.assertIn('return p.getString(STYLE, "table");', h)
@@ -105,8 +113,11 @@ class Wiring(unittest.TestCase):
         self.assertIn('public static int[] margins(android.view.View view, int h, int l, int t, int r)', h)
         for k in ('icon(d, IconSpan.TEMP, lv)', 'icon(d, IconSpan.BATTERY, lv)', 'icon(d, IconSpan.RAM, lv)', 'GREY = 0xFFA89A8A, ICON = 0xFFE6DCCF, SECONDARY = 0xFFD6CDC2, SEP = 0x73D9A066'):
             self.assertIn(k, h)
-        self.assertIn('{0xFFBDBDBD, 0xFFFFC107, 0xFFF44336}', (OV / 'HistogramSpan.java').read_text())
-        self.assertIn('? 0xBDBDBD :', (REPO / 'dm' / 'peanuts' / 'peanuts_graph.c').read_text())
+        span = (OV / 'HistogramSpan.java').read_text()
+        self.assertIn('{0xFF4CAF50, 0xFFFFC107, 0xFFF44336}', span)   # the table keeps green bars on pace
+        self.assertIn('PLAIN = 0xFFBDBDBD', span)                       # light grey only for the pill
+        self.assertIn('new HistogramSpan(PILL_BARS, true)', (OV / 'Hud.java').read_text())
+        self.assertIn('(atomic_load(&gr_plain) ? 0xBDBDBD : 0x4CAF50)', (REPO / 'dm' / 'peanuts' / 'peanuts_graph.c').read_text())
         s = (OV / 'HudSettings.java').read_text()
         self.assertIn('PILL_MINIMAL = {"fps"}', s)
         self.assertIn('PILL_NORMAL = {"fps", "graph", "soc"}', s)

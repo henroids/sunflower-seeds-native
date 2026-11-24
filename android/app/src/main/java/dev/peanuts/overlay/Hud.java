@@ -301,7 +301,7 @@ public final class Hud {
             if (s.length() > 0) s.append(' ');
             int hs = s.length();
             s.append(FrameStats.placeholder(frames, n - shown, shown, target));
-            s.setSpan(new HistogramSpan(PILL_BARS), hs, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            s.setSpan(new HistogramSpan(PILL_BARS, true), hs, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             s.setSpan(new RelativeSizeSpan(GRAPH_SIZE), hs, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             bars = true;
             float low = FrameStats.onePercentLowFps(frames, n);

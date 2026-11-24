@@ -32,6 +32,7 @@ int main(void) {
     fill_bg();
     memset(at(6, 4), 99, 4);    // the sample pixels (x - 2, each row) are other colours: a background that changes from row to row
     memset(at(6, 5), 55, 4);
+    pn_graph_plain(1);   // the pill's light grey; the table's green is checked below
     pn_graph_draw(px, W * 4, 8, 4, 48, 16, ms, 48);
     check(is(at(10, 0), 10, 20, 30, 200) == 1, "outside the box stays");
     uint8_t s[4] = {99, 99, 99, 99};
@@ -44,6 +45,11 @@ int main(void) {
     check(at(8 + 47, 19)[0] == (uint8_t)((0xF4 * 217 + 127) / 255) && at(8 + 47, 19)[1] == (uint8_t)((0x43 * 217 + 127) / 255), "red newest bar on the right");
     check(at(8 + 47, 4)[3] == 217, "red bar 40 / (2 * 16.7) -> bucket 7: full height");
     check(at(8 + 47 + 1, 19)[3] == 200, "nothing right of the box");
+    pn_graph_plain(0);   // the table (the default): on-pace bars green
+    fill_bg();
+    pn_graph_draw(px, W * 4, 8, 4, 48, 16, ms, 48);
+    check(at(8, 19)[0] == (uint8_t)((0x4C * 217 + 127) / 255) && at(8, 19)[1] == (uint8_t)((0xAF * 217 + 127) / 255) && at(8, 19)[2] == (uint8_t)((0x50 * 217 + 127) / 255), "the table's on-pace bar is green");
+    pn_graph_plain(1);
 
     // a wide box: 96 px would not fit the 64 wide block; use 4 px a column in a 192 px buffer instead
     static uint8_t big[192 * 8 * 4];

@@ -19,6 +19,7 @@ static uint8_t *gr_copy;       // the slot-1 block, w * h * 4 bytes
 static int gr_w, gr_h;
 static int g_rx, g_ry, g_rw, g_rh;   // the bars' box in the launcher's bitmap; g_rw or g_rh 0 = off
 static int gr_shift;                 // the leading transparent rows moved to the bottom of the copy (a bottom corner): the box is that many rows higher
+static _Atomic int gr_plain;   // pn_graph_plain: on-pace bars light grey (the pill) instead of green (the table, the default)
 static _Atomic int gr_bars = PN_GRAPH_BARS;   // the columns the box is split into (pn_graph_bars: the table 48, the pill fewer)
 static _Atomic int gr_corner = 1;    // the stats block's place, vka_ovl.h: 0 top left, 1 top right, 2 bottom left, 3 bottom right, 4 top centre, 6 bottom centre
 
@@ -60,7 +61,7 @@ void pn_graph_draw(uint8_t *px, int stride, int x, int y, int w, int h, const fl
         if (target > 0 && f > 0) { bucket = (int)(f / (target * 2.0f) * 8); if (bucket > 7) bucket = 7; }
         int bh = h * (bucket + 1) / 8;
         if (bh < 1) bh = 1;
-        uint32_t rgb = f <= target * 1.15f ? 0xBDBDBD : f >= target * 2.0f ? 0xF44336 : 0xFFC107;   // on pace light grey (the overlay is plain), slow yellow, very slow red
+        uint32_t rgb = f <= target * 1.15f ? (atomic_load(&gr_plain) ? 0xBDBDBD : 0x4CAF50) : f >= target * 2.0f ? 0xF44336 : 0xFFC107;   // on pace green (the pill: light grey, pn_graph_plain), slow yellow, very slow red
         for (int r = h - bh; r < h; r++) {
             uint8_t *row = px + (size_t)(y + r) * stride + (size_t)x * 4;
             for (int c = x0; c < x1; c++) put(row + c * 4, rgb, 217);
@@ -119,6 +120,7 @@ VIS void peanuts_ovl_block(int slot, void *px, int w, int h, int stride) {
     pthread_mutex_unlock(&gr_mu);
 }
 
+void pn_graph_plain(int on) { atomic_store(&gr_plain, on ? 1 : 0); }
 void pn_graph_bars(int n) { atomic_store(&gr_bars, n >= 1 && n <= PN_GRAPH_BARS ? n : PN_GRAPH_BARS); }
 
 void pn_graph_corner(int corner) { atomic_store(&gr_corner, (corner >= 0 && corner <= 4) || corner == 6 ? corner : 1); }
@@ -154,6 +156,10 @@ void pn_graph_frame(void) {
 JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_graphRect(JNIEnv *env, jclass cls, jint x, jint y, jint w, jint h) {
     (void)env; (void)cls;
     pn_graph_rect(x, y, w, h);
+}
+JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_graphPlain(JNIEnv *env, jclass cls, jboolean on) {
+    (void)env; (void)cls;
+    pn_graph_plain(on);
 }
 JNIEXPORT void JNICALL Java_dev_peanuts_Bridge_graphBars(JNIEnv *env, jclass cls, jint n) {
     (void)env; (void)cls;

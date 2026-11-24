@@ -414,7 +414,7 @@ The script fetches, rebases `peanuts` onto the target, then checks that every `P
 - 2026-11-24 (the overlay's pill): Overlay › Style is Table (the default), Pill or Classic. The pill (`Hud.pill`) is one line, plain: white values, grey units,
   warm light icons (`IconSpan`, drawn in code) on its own background (`PillBg`: a dark peanut brown with a top sheen, a thin
   rim in the shell's #D9A066 and a soft inner glow); yellow and red only mark a problem (the fps number in the frame time's colour, TEMP, BAT and RAM
-  by their levels), and the bars on pace are light grey for every style (`HistogramSpan`, `peanuts_graph.c`). Its histogram is 6 chars of the newest 20 frames (the
+  by their levels), and the pill's bars on pace are light grey (`HistogramSpan(chars, true)`, the host's `pn_graph_plain` through `Bridge.graphPlain`; the table keeps green, igawa6 landing #538). Its histogram is 6 chars of the newest 20 frames (the
   host splits the box into as many columns, `Bridge.graphBars` / `pn_graph_bars`; the table keeps 48). Its 100 % is 1.5 times the overlay's 8 sp (`PILL_BASE`; Table and Classic keep 8 sp). A pill wider than 75 % of the game's window is made
   smaller from the next tick (`Hud.fitTo`, from the width the view laid out against the GameActivity window's; a `[overlay] pill fit` log line when it changes):
   no cut at the edge, room for the build tag. Everything is one size; the fps number is bold, and a thin line (`IconSpan.SEP`)

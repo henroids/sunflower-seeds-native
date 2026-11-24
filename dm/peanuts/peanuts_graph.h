@@ -17,6 +17,8 @@ void peanuts_ovl_block(int slot, void *px, int w, int h, int stride);
 void pn_graph_frame(void);
 // The columns of the bars, 1..PN_GRAPH_BARS (anything else: PN_GRAPH_BARS): the table's 48, the pill's fewer and wider; Bridge.graphBars calls it
 void pn_graph_bars(int n);
+// On-pace bars light grey (1: the pill) or green (0: the table, the default); Bridge.graphPlain calls it
+void pn_graph_plain(int on);
 // The bars' box in the slot-1 block, in its pixels (w or h 0 = none); Bridge.graphRect calls it
 void pn_graph_rect(int x, int y, int w, int h);
 // The place of the stats block (slot 1), as the host's vka_ovl.h: 0 top left, 1 top right (the default), 2 bottom left, 3 bottom right, 4 top centre, 6 bottom centre;

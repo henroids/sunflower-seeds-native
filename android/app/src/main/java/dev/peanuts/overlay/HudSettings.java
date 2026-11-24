@@ -77,9 +77,9 @@ public final class HudSettings {
         SharedPreferences p = prefs(c);
         final Runnable[] sync = new Runnable[1];
         choice(c, box, "Preset", new String[] {"Minimal", "Normal", "Full", "Custom"}, new String[] {"minimal", "normal", "full", "custom"}, () -> Hud.preset(p),
-                v -> { p.edit().putString(Hud.PRESET, v).apply(); apply(box, v, "pill".equals(Hud.style(p))); sync[0].run(); });
+                v -> { p.edit().putString(Hud.PRESET, v).apply(); apply(p, box, v, "pill".equals(Hud.style(p))); sync[0].run(); });
         choice(c, box, "Style", new String[] {"Pill", "Table", "Classic"}, new String[] {"pill", "table", "classic"}, () -> Hud.style(p),
-                v -> p.edit().putString(Hud.STYLE, v).apply());
+                v -> { p.edit().putString(Hud.STYLE, v).apply(); syncTag(c, p, box); });
         choice(c, box, "Position", new String[] {"Top center", "Top right", "Top left", "Bottom center", "Bottom right", "Bottom left"},
                 new String[] {"tc", "tr", "tl", "bc", "br", "bl"}, () -> Hud.corner(p),
                 v -> p.edit().putString(Hud.CORNER, v).apply());
@@ -96,12 +96,23 @@ public final class HudSettings {
             }
         };
         sync[0].run();
-        // the Build tag box shows what the game does (Hud.tagOn): unset, it is off under the pill though Overlay.rows ticked it from Prefs.overlayItem's default
+        syncTag(c, p, box);
+    }
+
+    /** The Build tag box shows what the game does (Hud.tagOn): unset, it is off under the pill though Overlay.rows ticked it from Prefs.overlayItem's default */
+    private static void syncTag(Context c, SharedPreferences p, LinearLayout box) {
         for (int i = 0; i < box.getChildCount(); i++) {
             View v = box.getChildAt(i);
-            if (v instanceof CheckBox && "Build tag".equals(String.valueOf(((CheckBox) v).getText())) && ((CheckBox) v).isChecked() != Hud.tagOn(c))
-                ((CheckBox) v).setChecked(Hud.tagOn(c));
+            if (v instanceof CheckBox && "Build tag".equals(String.valueOf(((CheckBox) v).getText()))) tagBox(p, (CheckBox) v, Hud.tagOn(c), "pill".equals(Hud.style(p)));
         }
+    }
+
+    /** PEANUTS (#538 landing): sets the Build tag box without making the pill's hidden tag the table's too. The box's listener writes overlay_tag; a false written
+     *  only because the pill hides the tag is taken back (unset reads off under the pill and on under the table and classic), so a player who tries the pill and
+     *  goes back keeps the tag. A player's own tap still writes what they chose. */
+    private static void tagBox(SharedPreferences p, CheckBox b, boolean on, boolean pill) {
+        if (b.isChecked() != on) b.setChecked(on);
+        if (pill && !on) p.edit().remove("overlay_tag").commit();
     }
 
     private interface Pick { void on(String value); }
@@ -159,7 +170,7 @@ public final class HudSettings {
     }
 
     /** Sets the master switch on and each item's switch in the box to the preset (the boxes' own listeners write the preferences) */
-    private static void apply(LinearLayout box, String preset, boolean pill) {
+    private static void apply(SharedPreferences p, LinearLayout box, String preset, boolean pill) {
         Set<String> on = items(preset);
         if (on == null) return;
         for (int i = 0; i < box.getChildCount(); i++) {
@@ -169,7 +180,10 @@ public final class HudSettings {
             String text = String.valueOf(b.getText());
             if (text.startsWith(MASTER)) { b.setChecked(true); continue; }
             // under the pill, only Full turns the build tag on (Hud.tagOn: off by default there)
-            for (String[] l : LABELS) if (l[1].equals(text)) b.setChecked(on.contains(l[0]) && !(pill && "tag".equals(l[0]) && !"full".equals(preset)));
+            for (String[] l : LABELS) if (l[1].equals(text)) {
+                boolean want = on.contains(l[0]) && !(pill && "tag".equals(l[0]) && !"full".equals(preset));
+                if ("tag".equals(l[0])) tagBox(p, b, want, pill); else b.setChecked(want);
+            }
         }
     }
 }
