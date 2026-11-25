@@ -638,11 +638,11 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
         if (testApp() && Prefs.MLB26.equalsIgnoreCase(id)) env.add("DM_VK_GPUPROF=300");   // PEANUTS TEMPORARY: the GPU time of one frame in 300 by step, for the optimization work (remove when done)
         // PEANUTS TEMPORARY (test app, Retroid Pocket Duo only): skin flickering black and back, and blocks of noise over textures, there and nowhere else (Adreno 722).
-        // Full barriers (0.2.111), no UBWC (0.2.115) and full-precision shaders (0.2.116, nofp16) did not stop it. Next, three at once (split up if it goes): no tiled
-        // (GMEM) rendering and no LRZ early depth (TU_DEBUG=sysmem,nolrz), no uniform buffers promoted into the shader's constants (IR3_SHADER_DEBUG=nouboopt); shader
-        // caches off so no binary compiled the old way is reused (a slower first start while shaders compile)
+        // Full barriers (0.2.111), no UBWC (0.2.115) and full-precision shaders (0.2.116) did not stop it; 0.2.117 did (TU_DEBUG=sysmem,nolrz with
+        // IR3_SHADER_DEBUG=nouboopt). Now one of the three: no uniform buffers promoted into the shader's constants (skinning reads its bone matrices from them).
+        // Shader caches off so no binary compiled the old way is reused (a slower first start while shaders compile)
         if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) {
-            env.add("TU_DEBUG=sysmem,nolrz"); env.add("IR3_SHADER_DEBUG=nouboopt"); env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true");
+            env.add("IR3_SHADER_DEBUG=nouboopt"); env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true");
         }
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
