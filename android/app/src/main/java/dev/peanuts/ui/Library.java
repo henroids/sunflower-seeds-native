@@ -1827,7 +1827,10 @@ public final class Library {
         n.setMaxLines(2);
         n.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(n);
-        CharSequence about = r.title == null ? "" : PUi.joined(r.title.versionText(), r.title.base != null ? r.title.base.publisher : null);
+        // PEANUTS(sunflower): the update as the game names it ("Version 1.0.19", game.tsv), not the Switch's release number ("v19")
+        String shown = r.title == null ? "" : dev.nxnative.android.Versions.shown(r.id(), r.title.version());
+        if (!shown.isEmpty()) shown = Character.toUpperCase(shown.charAt(0)) + shown.substring(1);
+        CharSequence about = r.title == null ? "" : PUi.joined(shown.isEmpty() ? r.title.versionText() : shown, r.title.base != null ? r.title.base.publisher : null);
         if (about.length() > 0) info.addView(PUi.small(a, about));
         String state = st == READY ? "Ready" : st == BUILD ? "Build needed" : a.getString(R.string.not_supported_yet);
         TextView status = PUi.status(a, state, st == READY ? R.color.bn_accent : R.color.bn_danger);
