@@ -638,8 +638,11 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
         if (testApp() && Prefs.MLB26.equalsIgnoreCase(id)) env.add("DM_VK_GPUPROF=300");   // PEANUTS TEMPORARY: the GPU time of one frame in 300 by step, for the optimization work (remove when done)
         // PEANUTS TEMPORARY (test app, Retroid Pocket Duo only): skin flickering black and back, and blocks of noise over textures, there and nowhere else (Adreno 722).
-        // Full barriers (0.2.111) did not stop it. Next: no UBWC compression on the images (DM_VK_UBWC=0), the hint for which this host gives the Adreno 740 only
-        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("DM_VK_UBWC=0");
+        // Full barriers (0.2.111) and no UBWC (0.2.115) did not stop it. Next: the driver's compiler without 16-bit math (IR3_SHADER_DEBUG=nofp16), with both shader
+        // caches off so no binary compiled the old way is reused (a slower first start while shaders compile)
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) {
+            env.add("IR3_SHADER_DEBUG=nofp16"); env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true");
+        }
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
         // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why
