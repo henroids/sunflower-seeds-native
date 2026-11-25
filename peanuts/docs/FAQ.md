@@ -531,7 +531,7 @@ A Turnip driver. Honest details:
 
 - The developer's test device is the AYN Thor (Snapdragon 8 Gen 2, Adreno 740). It is used and tested with a Turnip driver. The one in the developer's logs is **Turnip Adreno Driver T30 (Mr. Purple)**, from the **Mr. Purple Turnip** entry of the app's Download list.
 - A device whose stock driver is older than Vulkan 1.3 must use a custom driver. The one report so far is an Adreno 650 with the same T30 driver: the app's checks passed, but that game still showed a black screen. So older Adreno chips are not known to work yet.
-- For MLB The Show 26 in Sunflower Seeds: the Thor and the Xperia 1 V run Turnip Gen8 V39; the Retroid Pocket Duo (Adreno 722) runs best on Mr. Purple T30 (T23 and T26 do not start there; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more).
+- For MLB The Show 26 in Sunflower Seeds: the Thor and the Xperia 1 V run Turnip Gen8 V39; the Retroid Pocket Duo (Adreno 722) runs best on Mr. Purple T30 (T23 and T26 do not start there; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more). On the Duo the app turns off the driver's tiled rendering for this game (`TU_DEBUG=sysmem`), which stops the skin flicker at no fps cost.
 - Other chips are untested. If the system driver passes the Readiness check and your games look right, you can stay on it.
 
 The app does not mark any driver as recommended in its list. Whichever you use, name it when you report a bug.

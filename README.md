@@ -34,7 +34,7 @@ draws into memory through one texture and reads it through another.
 |---|---|
 | Game | MLB The Show 26, title ID `0100AA7024094000`, **update 1.0.19 (v1245184) only** |
 | Works | Boot, menus, exhibitions, Road to the Show (new and loaded careers), create-a-player with correct skin, faces, hair colour and beards (since 1.0.24) |
-| Known issues | Some hair styles look wrong in the player editor's close-up; flicker on the Retroid Pocket Duo (menus, skin turning black for a moment), depending on the GPU driver; phones slow down as they heat up; the sound can stay off after a phone call comes in during a game; once, real players' skin was black in one session and right in the next (not reproduced). The full list is in the [game's note](dm/games/0100AA7024094000/README.md#open) |
+| Known issues | Some hair styles look wrong in the player editor's close-up; blocks of noise over some screens on the Retroid Pocket Duo (its skin flicker is fixed); phones slow down as they heat up; the sound can stay off after a phone call comes in during a game; once, real players' skin was black in one session and right in the next (not reproduced). The full list is in the [game's note](dm/games/0100AA7024094000/README.md#open) |
 
 ### Tested devices
 
@@ -45,7 +45,7 @@ Frame rates on the field in an exhibition, with **Crowd control** on (below), fr
 |---|---|---|---|---|
 | AYN Thor (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | about 53 fps | about 59 fps (short run) | Steady over long sessions; does not throttle |
 | Sony Xperia 1 V (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | 60 at the start, about 43 after 15 minutes (51.6 on average over 19 minutes) | about 57 fps | Throttles as it heats up; Handheld mode makes less heat |
-| Retroid Pocket Duo (Adreno 722) | Mr. Purple T30 | about 34 fps | about 43 fps | Some flicker; T30 has the least of the drivers tried. T23 and T26 do not start; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more. Its CPU is the limit, not the GPU |
+| Retroid Pocket Duo (Adreno 722) | Mr. Purple T30 | about 34 fps | about 45 fps | Skin flicker fixed (0.2.121: no tiled rendering there, at no fps cost); some noise blocks remain. T30 works best of the drivers tried. T23 and T26 do not start; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more. Its CPU is the limit, not the GPU |
 
 With the crowd drawn, the field runs at about 34 fps on the Thor, 20 on the Xperia and 24 on the Retroid Pocket Duo
 (builds before 1.0.34).
