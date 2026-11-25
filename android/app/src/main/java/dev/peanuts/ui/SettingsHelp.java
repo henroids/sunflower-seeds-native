@@ -80,6 +80,7 @@ public final class SettingsHelp {
         put(m, "Graphics self-test", "Draws a test picture for a few seconds, with no game, and says whether the GPU and its driver passed.", null);
         put(m, "Questions and answers", "Answers to common questions, and what to try when something fails. Opens the browser.", null);
         put(m, "Share log", "Sends the newest log of a game run or of a build, for a bug report.", null);
+        put(m, "Send logs to GitHub", "Sends each game run's log to the project's private log repository on its own, with your GitHub key, so it can be looked at without a cable.", null);   // PEANUTS(sunflower): LogUpload
         // Developer
         put(m, "Advanced", "Every switch the app's host offers, by area, with a search. Each starts at Auto, which writes nothing.", "Auto");
         put(m, "Tester settings", "Shows the rows made for testing in a game's settings: advanced resolution, Upscaler and Dynamic resolution.", "Off");
