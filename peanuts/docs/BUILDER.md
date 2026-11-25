@@ -68,7 +68,7 @@ rem Windows
 peanuts\scripts\peanuts-build.bat "D:\Games\Game folder" --update 131072 --push
 ```
 
-Other inputs: a `.nup` (`... "Game [01006BB00C6F0000][v131072].nup" --push --dest "/sdcard/Peanut Roms/Game"`), a dump folder (`... "Dump folder" --dry-run`), and anything after `--` goes to `pack_android.py` (`... "Game.nup" -- -j 8`).
+Other inputs: a `.nup` (`... "Game [01006BB00C6F0000][v131072].nup" --push --dest "/sdcard/Sunflower Roms/Game"`), a dump folder (`... "Dump folder" --dry-run`), and anything after `--` goes to `pack_android.py` (`... "Game.nup" -- -j 8`).
 
 ### Compressed files (.nsz, .xcz)
 
@@ -92,7 +92,7 @@ Files compressed with nsz go in like `.nsp` and `.xci`, mixed with them as you l
 - A pack that stops with `the shader split read no shader` (or `has no shader in its shader_map.tsv`): the game's shaders were not found in its files, so the pack would have an empty shader library and the game could not draw. Either the dump is incomplete or the game keeps its shaders in a form the tools do not read yet (Farming Simulator: Nintendo Switch Edition's provisional profile is the known case). Older builders made the pack anyway.
 - Paths may hold spaces, commas, brackets and letters outside ASCII (a game such as `Yoru, Tomosu [0100C2901153C000].nup`). A path cannot hold the ASCII unit separator (0x1F), which the shader split uses between the paths of a list.
 - `--any-version`: pack an update the game's profile (`dm/games/<titleID>/game.tsv`) has no build row for. Without it that is an error that lists the supported versions.
-- `--push`, `--dest DIR`, `--serial S`. The default folder on the phone is `/sdcard/Peanut Roms`, in `peanuts_build.py` and in `push-pack.py` alike: a `.nup` goes to `/sdcard/Peanut Roms/<the .nup's name without its [tags]>/`, a dump folder to `/sdcard/Peanut Roms/<its name>/`. The Peanuts library must scan that folder (Settings, Library) to show the game; pass `--dest` for another one. `--dest` must be an absolute path without `.` or `..` parts. On the phone the push replaces only the folders it copies (`<TITLE ID>-work/android-pack`, and for a dump `base/exefs`, `updates/<version>`, `dlc`), each through a `.tmp` copy.
+- `--push`, `--dest DIR`, `--serial S`. The default folder on the phone is `/sdcard/Sunflower Roms`, in `peanuts_build.py` and in `push-pack.py` alike: a `.nup` goes to `/sdcard/Sunflower Roms/<the .nup's name without its [tags]>/`, a dump folder to `/sdcard/Sunflower Roms/<its name>/`. The Peanuts library must scan that folder (Settings, Library) to show the game; pass `--dest` for another one. `--dest` must be an absolute path without `.` or `..` parts. On the phone the push replaces only the folders it copies (`<TITLE ID>-work/android-pack`, and for a dump `base/exefs`, `updates/<version>`, `dlc`), each through a `.tmp` copy.
 - `--dry-run`: print the commands. Probing and the importer build still run; nothing is written.
 
 ## Games the builder refuses

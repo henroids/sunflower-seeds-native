@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue">
   <img alt="platform" src="https://img.shields.io/badge/platform-Android%2013%2B-green">
-  <img alt="device" src="https://img.shields.io/badge/tested%20on-AYN%20Thor-orange">
+  <img alt="devices" src="https://img.shields.io/badge/tested%20on-AYN%20Thor%20%C2%B7%20Xperia%201%20V%20%C2%B7%20Retroid%20Pocket%20Duo-orange">
 </p>
 
 > [!NOTE]
@@ -33,14 +33,40 @@ draws into memory through one texture and reads it through another.
 | | |
 |---|---|
 | Game | MLB The Show 26, title ID `0100AA7024094000`, **update 1.0.19 (v1245184) only** |
-| Device | AYN Thor (Snapdragon 8 Gen 2), Turnip driver. Other devices are untested |
 | Works | Boot, menus, exhibitions, Road to the Show (new and loaded careers), create-a-player with correct skin, faces, hair colour and beards (since 1.0.24) |
-| Known issues | Some hair styles look wrong in the player editor's close-up; frame rate is not yet tuned; once, real players' skin was black in one session and right in the next (not reproduced). The full list is in the [game's note](dm/games/0100AA7024094000/README.md#open) |
+| Known issues | Some hair styles look wrong in the player editor's close-up; flicker on the Retroid Pocket Duo (menus, skin turning black for a moment), depending on the GPU driver; phones slow down as they heat up; the sound can stay off after a phone call comes in during a game; once, real players' skin was black in one session and right in the next (not reproduced). The full list is in the [game's note](dm/games/0100AA7024094000/README.md#open) |
+
+### Tested devices
+
+Frame rates on the field in an exhibition, with **Crowd control** on (below), from the logs of the app's builds of
+2026-11-25 (official 1.0.34 and the matching test builds).
+
+| Device | GPU driver | Docked (1080p) | Handheld (720p) | Notes |
+|---|---|---|---|---|
+| AYN Thor (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | about 53 fps | about 59 fps (short run) | Steady over long sessions; does not throttle |
+| Sony Xperia 1 V (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | 60 at the start, about 43 after 15 minutes (51.6 on average over 19 minutes) | about 57 fps | Throttles as it heats up; Handheld mode makes less heat |
+| Retroid Pocket Duo (Adreno 722) | Mr. Purple T30 | about 32 fps (measured before 1.0.34) | not measured | Some flicker; T30 has the least of the drivers tried. T23 and T26 do not start; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more |
+
+With the crowd drawn, the field runs at about 34 fps on the Thor, 20 on the Xperia and 24 on the Retroid Pocket Duo
+(builds before 1.0.34).
+
+### Settings worth knowing
+
+Home's scoreboard row is four buttons:
+
+- **Crowd control**: on hides the crowd in the stands (the game still runs it and plays its sound). It is about a third
+  of the field's draws, and the biggest single gain: on the Thor it took the field from about 34 to 52 fps. Also in the
+  game's page › **Performance** › **Speed**.
+- **Mode**: 720p (Handheld) or 1080p (Docked). Handheld draws a third fewer pixels: more frames and less heat on a phone.
+- **Driver**: the GPU driver page (pick an installed driver, or install one).
+- **App**: checks for an update.
+
+Changes to Crowd control and Mode apply from the next start of the game.
 
 ## What you need
 
-- An Android 13+ handheld with a Snapdragon (Adreno) GPU, Vulkan 1.3 and at least 12 GB of RAM. Developed and tested on
-  the AYN Thor.
+- An Android 13+ handheld with a Snapdragon (Adreno) GPU and Vulkan 1.3. Developed on the AYN Thor; also tested on a
+  Sony Xperia 1 V and a Retroid Pocket Duo (8 GB of RAM). See [Tested devices](#tested-devices).
 - **Your own** dump of MLB The Show 26 from your own Switch: the base game and update 1.0.19, as `.nsp` or `.xci` files.
 - **Your own** `prod.keys` and firmware dump from the same console.
 - A PC to prepare the game (Linux, or Windows with WSL; macOS also works), with a USB cable and `adb` to copy it to the
@@ -66,13 +92,14 @@ Open **Sunflower Seeds**. The first screen, **Set up your games**, has four step
 
 1. **Keys**: pick your `prod.keys`.
 2. **Game folder**: pick the folder the prepared game will go into (the default the PC builder uses is
-   `/sdcard/Peanut Roms`). When **Allow file access** appears, tap **Open settings**, turn on **All files access**, and
+   `/sdcard/Sunflower Roms`). When **Allow file access** appears, tap **Open settings**, turn on **All files access**, and
    go back.
 3. **Updates & DLC**: skip; the update is inside the `.nup` (below).
 4. **Firmware**: pick your firmware folder or `.zip`. The app takes the system fonts from it.
 
-Then **Settings** › **GPU driver**: install and pick **Turnip**. The game was tested with Turnip only. Run **Settings**
-› **Readiness check** afterwards.
+Then **Settings** › **GPU driver**: install and pick the driver for your device from [Tested devices](#tested-devices)
+(Turnip on the Thor and the Xperia, Mr. Purple T30 on the Retroid Pocket Duo). Run **Settings** › **Readiness check**
+afterwards.
 
 ### 3. Make a `.nup` from your NSP or XCI files
 
@@ -121,13 +148,13 @@ PEANUTS_PYTHON=~/peanuts-env/bin/python peanuts/scripts/peanuts-build.sh \
 ```
 
 It takes a while (most of it is the shader translation). The game lands in
-`/sdcard/Peanut Roms/MLB The Show 26/` on the handheld. To use another folder, add `--dest "/sdcard/<folder>"` and pick
+`/sdcard/Sunflower Roms/MLB The Show 26/` on the handheld. To use another folder, add `--dest "/sdcard/<folder>"` and pick
 that folder as the **Game folder** in the app.
 
 ### 5. Play
 
-In the app, **Settings** › **Library** › **Rescan**. MLB The Show 26 appears in the library; tap it to play. Hold its
-cover for its own page (picture, saves, storage).
+In the app, **Settings** › **Library** › **Rescan**. MLB The Show 26 appears on Home as a card: **Play** starts it,
+**Settings** (or **⋯**) opens its own page (picture, speed, saves, storage).
 
 After an app update that changes the shader chain, the release notes say so: run step 4 again with the same `.nup`
 (no need to repeat step 3).
@@ -136,7 +163,12 @@ After an app update that changes the shader chain, the release notes say so: run
 
 The branch `mlb-the-show-26` builds a separate test app (`v0.2.N`) on every push, from the
 [Actions](https://github.com/henroids/sunflower-seeds-native/actions) tab. It installs beside the official app and
-has the diagnostic switches used in the write-up. `main` builds the official app.
+has the diagnostic switches used in the write-up. `main` builds the official app, from test builds that were played
+first.
+
+To send a game run's log without a cable, **Settings** › **Help** › **Send logs to GitHub** takes a GitHub key that
+can write to a log repository of your own (keep that repository private: logs name the device). The in-game panel's
+**Stop and send the log** then sends it at once, and Home sends any finished run it has not sent yet.
 
 ## Documentation
 
@@ -155,7 +187,7 @@ has the diagnostic switches used in the write-up. `main` builds the official app
 This project was made with heavy use of AI, and it is written down here so nobody has to guess:
 
 - **Who did what.** The project's owner, Henry Bradley ([@henroids](https://github.com/henroids)), chose the goal,
-  directed the work, tested every build on his AYN Thor, and sent back logs and screenshots. The code changes, the
+  directed the work, tested the builds on his AYN Thor, Sony Xperia 1 V and Retroid Pocket Duo, and sent back logs and screenshots. The code changes, the
   analysis (logs, the game's disassembly and shaders) and the documentation, this README included, were written by
   **Claude**, an AI model by Anthropic, used through Claude Code (mainly Claude Opus and Claude Fable models). Commits
   it wrote carry a `Co-Authored-By: Claude …` line.
