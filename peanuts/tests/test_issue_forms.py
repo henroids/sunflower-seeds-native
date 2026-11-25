@@ -67,6 +67,8 @@ class Catalog(unittest.TestCase):
         wonder = next(g for g in self.catalog['games'] if g['title_id'] == '010015100B514000')
         self.assertEqual([b['version'] for b in wonder['builds']], ['v327680'])
 
+    @unittest.skip("Peanuts Native's own repository (its issue forms, catalog workflow and README); not this fork's")
+
     def test_the_written_catalog_and_tables(self):
         path = ROOT / 'peanuts/games.json'
         self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['about'], self.catalog['about'])
@@ -147,6 +149,8 @@ class Catalog(unittest.TestCase):
 class IssueForms(unittest.TestCase):
     def setUp(self):
         self.forms = {name: make() for name, make in forms_mod.FILES.items()}
+
+    @unittest.skip("Peanuts Native's own repository (its issue forms, catalog workflow and README); not this fork's")
 
     def test_the_written_forms(self):
         listed = sorted(p.name for p in forms_mod.FORMS.glob('*.yml') if p.name != 'config.yml')
