@@ -3277,7 +3277,9 @@ static void bindless_init_once(void) {
     // table has to hold every pool's span, not just one. 16384 matches the sampler registration arrays' own size (mtl_reg_samp, vka_tex.c: "id >= 4096 * 4"), still capped by
     // the device's own reported limit through HEAD(MIN(...)) below (Fire Emblem: Three Houses: a 3,856-entry scene pool plus a 4,096-entry UI pool overflowed the old 4096 cap at ID 4352)
     g_nsamp_slots = MIN((uint32_t)VKA_ENV("DM_VK_SAMP_SLOTS", 4096 * 4), HEAD(MIN(p12.maxDescriptorSetUpdateAfterBindSamplers, p12.maxPerStageDescriptorUpdateAfterBindSamplers)));   // (DM_VK_SAMP_SLOTS=4096: the one-pool table, for comparison)
-    g_nimg_slots = MIN(1u << 16, HEAD(MIN(p12.maxDescriptorSetUpdateAfterBindStorageImages, p12.maxPerStageDescriptorUpdateAfterBindStorageImages)));
+    // Images share the texture pools' ID space (nvnTexturePoolRegisterImage), so a pool whose base is past 65536 registers images there too: MLB The Show 26 registers one at
+    // ID 65536 ("texture ID 65536 beyond the table" on every device, 2026-11-25), whose compute writes then went nowhere. 1 << 17 covers it at about twice the old table's memory
+    g_nimg_slots = MIN(1u << 17, HEAD(MIN(p12.maxDescriptorSetUpdateAfterBindStorageImages, p12.maxPerStageDescriptorUpdateAfterBindStorageImages)));
 #undef HEAD
 #undef MIN
     VkDescriptorSetLayoutBinding b[4] = {{0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, g_ntex_slots, VK_SHADER_STAGE_ALL, NULL}, {1, VK_DESCRIPTOR_TYPE_SAMPLER, g_nsamp_slots, VK_SHADER_STAGE_ALL, NULL},
