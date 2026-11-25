@@ -637,6 +637,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         env.add(CrtFilter.line(this, id));   // PEANUTS: the CRT filter (Settings › Display, Game settings, the in-game panel; CrtFilter)
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
         if (testApp() && Prefs.MLB26.equalsIgnoreCase(id)) env.add("DM_VK_GPUPROF=300");   // PEANUTS TEMPORARY: the GPU time of one frame in 300 by step, for the optimization work (remove when done)
+        // PEANUTS: MLB The Show 26 on the Retroid Pocket Duo (Adreno 722, Turnip): the driver's tiled (GMEM) rendering flickers player skin black and back. Drawing
+        // straight to memory (TU_DEBUG=sysmem) stops it at no frame rate cost there (44.7 fps in game, 0.2.120). Other drivers ignore the variable
+        if (Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("TU_DEBUG=sysmem");
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
         // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why
