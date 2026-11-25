@@ -66,7 +66,7 @@ class Panel(unittest.TestCase):
         view = read(MAIN / 'BananaBackgroundView.java')
         self.assertIn('private static final long POP_MS = 260, RESPAWN_MS = 5000, GROW_MS = 380;', view)
         self.assertIn('static long addBananaPopped(Context c)', read(MAIN / 'Prefs.java'))
-        self.assertIn('"Peanuts cracked: "', read(MAIN / 'MainActivity.java'))   # upstream's Settings card says what Peanuts' About says (2026-11-24)
+        self.assertIn('"Sunflower Seeds Chewed: "', read(MAIN / 'MainActivity.java'))   # the Settings card says what About says (Sunflower Seeds Chewed, 2026-11-25)
 
 
 if __name__ == '__main__':
