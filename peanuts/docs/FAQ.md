@@ -4,8 +4,10 @@
 > Sunflower Seeds is a fork of Peanuts Native for one game, MLB The Show 26. How to install it, make the game's `.nup`
 > and prepare it on a PC is in the [README](../../README.md#install); what was fixed for the game is in
 > [the skin and hair write-up](../../docs/mlb-the-show-26-skin-and-hair.md). The answers below come from Peanuts Native
-> and describe the app's screens, which are the same here. Bugs go to this repository's
-> [issues](https://github.com/henroids/sunflower-seeds-native/issues).
+> and describe the app's screens, which are mostly the same here (Home differs: a card per game, and a row of four
+> buttons for Crowd control, Mode, Driver and the app's version). The devices MLB The Show 26 was tested on, their
+> drivers and frame rates are in the README's [Tested devices](../../README.md#tested-devices). Bugs go to this
+> repository's [issues](https://github.com/henroids/sunflower-seeds-native/issues).
 
 Written for Peanuts Native 0.1.4. Labels in **bold** are the words the app shows. "Settings" is the gear button on the home screen. "Hold the cover" means a long press on a game's cover (or Y on a controller).
 
@@ -50,11 +52,11 @@ It is not an emulator in the usual sense: it does not emulate the console's hard
 
 ### Which devices does it run on?
 
-It is developed and tested on the AYN Thor (dual screen, Snapdragon 8 Gen 2, 16 GB). The stated needs are Android 13 or later, a 64-bit ARM device and a Snapdragon (Adreno) GPU with a Vulkan 1.3 driver. Other devices are untested. On a single-screen device the game still runs, without the companion.
+It is developed on the AYN Thor (dual screen, Snapdragon 8 Gen 2, 16 GB). Sunflower Seeds also ran MLB The Show 26 on a Sony Xperia 1 V (Snapdragon 8 Gen 2) and a Retroid Pocket Duo (Adreno 722, 8 GB); see the README's [Tested devices](../../README.md#tested-devices). The stated needs are Android 13 or later, a 64-bit ARM device and a Snapdragon (Adreno) GPU with a Vulkan 1.3 driver. On a single-screen device the game still runs, without the companion.
 
 ### How much RAM do I need?
 
-The documented requirement is 12 GB or more. On 8 GB devices, building large games crashed before 0.1.1. Since 0.1.1 the build uses fewer workers on devices with less memory, so it is slower but should finish. Playing on 8 GB is untested and may not work for every game.
+The documented requirement is 12 GB or more. On 8 GB devices, building large games crashed before 0.1.1. Since 0.1.1 the build uses fewer workers on devices with less memory, so it is slower but should finish. MLB The Show 26 plays on the 8 GB Retroid Pocket Duo; other games on 8 GB are untested.
 
 ### How much storage do I need?
 
@@ -529,6 +531,7 @@ A Turnip driver. Honest details:
 
 - The developer's test device is the AYN Thor (Snapdragon 8 Gen 2, Adreno 740). It is used and tested with a Turnip driver. The one in the developer's logs is **Turnip Adreno Driver T30 (Mr. Purple)**, from the **Mr. Purple Turnip** entry of the app's Download list.
 - A device whose stock driver is older than Vulkan 1.3 must use a custom driver. The one report so far is an Adreno 650 with the same T30 driver: the app's checks passed, but that game still showed a black screen. So older Adreno chips are not known to work yet.
+- For MLB The Show 26 in Sunflower Seeds: the Thor and the Xperia 1 V run Turnip Gen8 V39; the Retroid Pocket Duo (Adreno 722) runs best on Mr. Purple T30 (T23 and T26 do not start there; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more).
 - Other chips are untested. If the system driver passes the Readiness check and your games look right, you can stay on it.
 
 The app does not mark any driver as recommended in its list. Whichever you use, name it when you report a bug.
