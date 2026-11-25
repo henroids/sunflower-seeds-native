@@ -109,9 +109,10 @@ static void *nvn_lookup(const char *name) {
     return NULL;
 }
 
+static void nvn_prof_arm(void);   // below: DM_NVN_PROF, armed at the first nvnBootstrapLoader
 // nvnBootstrapLoader is imported by main (defined in sdk); after it is forcibly taken over, the NVN driver in sdk is no longer referenced
 HLE_FORCE("nvnBootstrapLoader", "the NVN graphics API is replaced wholesale with a host null device (Metal behind it); the SDK's NVN driver does not run",
-          void *, h_nvnBootstrapLoader, const char *name) { return nvn_lookup(name); }
+          void *, h_nvnBootstrapLoader, const char *name) { nvn_prof_arm(); return nvn_lookup(name); }
 
 // ---------- Boolean parameters: Switch callers do not extend them, only look at the low 8 bits ----------
 #define B(x) ((x) & 0xff)
@@ -369,6 +370,11 @@ NVN(nvnMemoryPoolBuilderSetDefaults, void, NVNmemoryPoolBuilder *b) { memset(b, 
 NVN(nvnMemoryPoolBuilderSetDevice, void, NVNmemoryPoolBuilder *b, NVNdevice *d) { ((pool_builder_t *)b)->dev = d; }
 NVN(nvnMemoryPoolBuilderSetStorage, void, NVNmemoryPoolBuilder *b, void *m, size_t n) { ((pool_builder_t *)b)->mem = m; ((pool_builder_t *)b)->size = n; }
 NVN(nvnMemoryPoolBuilderSetFlags, void, NVNmemoryPoolBuilder *b, int f) { ((pool_builder_t *)b)->flags = f; }
+// PEANUTS(upstream-candidate): the pool builder's getters (New Pokemon Snap reads the pool and its size back)
+NVN_NOPROTO(nvnMemoryPoolBuilderGetDevice, NVNdevice *, const NVNmemoryPoolBuilder *b) { return ((const pool_builder_t *)b)->dev; }
+NVN_NOPROTO(nvnMemoryPoolBuilderGetMemory, void *, const NVNmemoryPoolBuilder *b) { return ((const pool_builder_t *)b)->mem; }
+NVN_NOPROTO(nvnMemoryPoolBuilderGetSize, size_t, const NVNmemoryPoolBuilder *b) { return ((const pool_builder_t *)b)->size; }
+NVN_NOPROTO(nvnMemoryPoolBuilderGetFlags, int, const NVNmemoryPoolBuilder *b) { return (int)((const pool_builder_t *)b)->flags; }
 static uint8_t *vpool_reserve(pool_t *o); static void vpool_release(pool_t *o);   // sparse virtual pools, see MapVirtual
 // Live pools, for threads that read a texture's pool after the game's call returned (the Vulkan replay). A registered texture keeps its pool's pointer, a guest address: the game
 // may finalize the pool and unmap the memory holding the pool object (and the texture's storage) while the texture ID is still registered and not yet written by the replay
@@ -725,7 +731,10 @@ static void ft_add(const tex_t *t) {
         (t->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET | NVN_TEXTURE_FLAGS_COMPRESSIBLE))) return;
     pthread_mutex_lock(&g_ft_mu);
     if (g_nft == g_cft && !(g_ft = realloc(g_ft, (g_cft = g_cft ? 2 * g_cft : 1024) * sizeof *g_ft))) die("flush_tex allocation failed");
-    uint64_t st = nvn_dirty_now(); if (DM_GAME_TEX_DIRTY_UPLOAD) nvn_dirty_protect(t->mem, t->L.size);   // see nvn_ft_written
+    uint64_t st = nvn_dirty_now();
+#ifndef __ANDROID__   // PEANUTS: Android write-protects a tex_dirty_upload texture at its first use instead (vka_tex.c storage_mode, dirty_first)
+    if (DM_GAME_TEX_DIRTY_UPLOAD) nvn_dirty_protect(t->mem, t->L.size);   // see nvn_ft_written
+#endif
     g_ft[g_nft++] = (flush_tex){t->mem, t->L.size, *t, st, nvn_dirty_span(t->mem, t->L.size)};
     pthread_mutex_unlock(&g_ft_mu);
 }
@@ -764,6 +773,9 @@ int nvn_ft_tracked(uint64_t serial) {   // registered and not resolved yet: its 
 // Checking every texture at every submission cost TOTK 0.4 ms of submit CPU per frame on the Mac; this way a texture is picked up a few submissions later at most
 enum { FT_POLL_BYTES = 128 << 20 };
 void nvn_ft_poll(void) {
+#ifdef __ANDROID__   // PEANUTS: nothing protected at registration on Android, so nothing to poll
+    return;   // Android tracks tex_dirty_upload from first use in vka_tex.c (avoids pre-fill SIGSEGV faults and redundant re-uploads)
+#else
     if (!DM_GAME_TEX_DIRTY_UPLOAD) return;
     static uint64_t gen; static size_t cur, left;
     static tex_t *hit; static size_t chit; size_t nhit = 0;
@@ -780,6 +792,7 @@ void nvn_ft_poll(void) {
     }
     pthread_mutex_unlock(&g_ft_mu);
     for (size_t i = 0; i < nhit; i++) if (!mtl_tex_gpu_owned(hit[i].serial)) mtl_tex_cpu_written(&hit[i]);   // outside g_ft_mu: the ownership check takes the replay's serial table lock
+#endif   // PEANUTS
 }
 static void ft_flush(const uint8_t *a, uint64_t n) {
     if (!DM_GAME_TEX_FLUSH_UPLOAD || !a || !n) return;
@@ -857,7 +870,7 @@ NVN(nvnTextureInitialize, NVNboolean, NVNtexture *t, const NVNtextureBuilder *b)
     }
     o->serial = nvn_new_serial(); mtl_tex_init(o);
     if (o->mem) pc_use(o->pool, 't', o->off, o->L.size);
-    if (o->mem && shp_use(SHK_TEX, (uint64_t)(uintptr_t)o->mem, o->L.size, NULL, NULL) == 2 && !g_shp_place) mtl_pool_need(o->mem, o->L.size, "a texture in a shader-code pool");   // (Shader-code pools: a texture is a data use)
+    if (o->mem && shp_use(SHK_TEX, (uint64_t)(uintptr_t)o->mem, o->L.size, NULL, NULL) == 2 && !g_shp_place) mtl_pool_place(o->mem, o->L.size, "a texture in a shader-code pool");   // (Shader-code pools: a texture is a data use) PEANUTS(upstream-candidate): placed, never joined (vka_mem.c mtl_pool_place)
     if (o->mem && o->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) mtl_pool_need(o->mem, o->L.size, "a linear texture");   // its GPU content is copied back into the storage (vka_tex_writeback)
     static int tbuf_place = -1; if (tbuf_place < 0) { const char *e = getenv("DM_VK_TBUF"); tbuf_place = !(e && e[0] == '0'); }   // (DM_VK_TBUF=0: buffer textures unbound, as before)
     if (o->mem && o->d.target == NVN_TEXTURE_TARGET_BUFFER && tbuf_place) {   // the GPU reads and writes a buffer texture's storage itself (vka_tbuf.c: a texel buffer view over it, or rows copied from it)
@@ -982,6 +995,10 @@ NVN(nvnSamplerBuilderGetLodClamp, void, const NVNsamplerBuilder *b, float *lo, f
     const samp_par *o = &((const samp_builder_t *)b)->p; *lo = o->lod_min; *hi = o->lod_max;
 }
 NVN(nvnSamplerInitialize, NVNboolean, NVNsampler *s, const NVNsamplerBuilder *b) {
+    // Older NVN headers (SDK <= 10, NVN 53) declare NVNsampler as 0x60 bytes and agl hashes bytes 0x08..0x5f to deduplicate sampler pool entries;
+    // newer SDKs (NVN 55+) shrank NVNsampler to 0x30 bytes. Zero the full object for this SDK so trailing bytes never hold stack garbage.
+    int m = dm_sdk_major();
+    memset(s, 0, m > 0 && m <= 10 && !dm_sdk_ounce() ? 0x60 : sizeof(NVNsampler));
     samp_t *o = (samp_t *)s; o->magic = MAGIC('S', 'M', 'P', 0); o->p = ((const samp_builder_t *)b)->p; return 1;
 }
 NVN(nvnSamplerFinalize, void, NVNsampler *s) { ((samp_t *)s)->magic = 0; }
@@ -1051,6 +1068,9 @@ static int keys_hash(const NVNshaderData *sd, int mapped, uint8_t out[8]) {
 // PEANUTS: the Android replay notes what a shader's control section says it captures by transform feedback (vka_tf.c), where the shader's key is made: the section
 // is only guaranteed valid during SetShaders
 __attribute__((weak)) void nvn_tf_ctl_note(const uint8_t key[8], const void *control) { (void)key; (void)control; }
+// PEANUTS: whether nvnProgramSetShaders made the stage's key (prog_key would otherwise hash the stage's code now, which is not known to be readable or
+// written yet at that time: the reason the key is left to the first draw). For the Android replay's program list (vka_shader.c mtl_prog_prefetch)
+int prog_key_ready(const prog_t *p, unsigned st) { if (st >= p->nstage) return 0; prog_keys_t *k = pk_get(p, 0); return k && (k->ok >> st & 1); }
 int prog_key(const prog_t *p, unsigned st, uint8_t key[8]) {
     if (st >= p->nstage) return 0;
     prog_keys_t *k = pk_get(p, 1);
@@ -1319,9 +1339,35 @@ NVN(nvnCommandBufferEndRecording, NVNcommandHandle, NVNcommandBuffer *c) {
     return (NVNcommandHandle)o->begin;
 }
 NVN(nvnCommandBufferIsRecording, NVNboolean, const NVNcommandBuffer *c) { return ((const cmd_t *)c)->recording != 0; }
+// PEANUTS begin: CopyCommands copies, as in NVN. The game may record over the source's command memory as soon as the copy is made; a CALL into it, read a frame
+// later by the Android replay worker, found other records there (Unicorn Overlord: a record size of pixel data, then a jump into unmapped memory). Inline replay
+// read the CALL at submit time, before the game reused the memory. The source's records are copied into this buffer up to its END, across its JUMPs.
+// The largest record the host records: an uniform update of the NVN limit (64 KiB) and its header. A larger size is stale memory, never a record
+enum { CMD_COPY_REC_MAX = (64 << 10) + 64 };
+static void cmd_copy_list(cmd_t *o, const uint8_t *s) {
+    for (unsigned n = 0; s && n < (1u << 22); n++) {
+        if (dm_guest_unmapped((uintptr_t)s, 16)) {   // a jump (or a stale handle) into a page the guest has not mapped: reading it would fault
+            static int once; if (!once++) LOG("[RED] CopyCommands: record %u of the source list at %p is in memory the guest has not mapped: the copy stops there", n, (const void *)s);
+            return;
+        }
+        op_hdr h; memcpy(&h, s, sizeof h);
+        if (h.op == OP_END) return;
+        if (h.op == OP_JUMP && h.size >= 16) { memcpy(&s, s + 8, 8); continue; }
+        if (h.size < 8 || (h.size & 7) || h.op >= OP_COUNT_ || h.size > CMD_COPY_REC_MAX || dm_guest_unmapped((uintptr_t)s, h.size)) {
+            static int once; if (!once++) LOG("[RED] CopyCommands: record %u of the source list at %p is not a record (op %u, size %u): the copy stops there", n, (const void *)s, h.op, h.size);
+            return;
+        }
+        memcpy(cmd_alloc(o, h.size), s, h.size);
+        s += h.size;
+    }
+}
 NVN(nvnCommandBufferCopyCommands, void, NVNcommandBuffer *c, int n, const NVNcommandHandle *h) {
+    for (int i = 0; i < n; i++) cmd_copy_list(CB(c), (const uint8_t *)(uintptr_t)h[i]);
+}
+static void cmd_call_lists(NVNcommandBuffer *c, int n, const NVNcommandHandle *h) {   // CallCommands: the source stays the game's until the GPU is done with it
     for (int i = 0; i < n; i++) { uint8_t *p = cmd_alloc(CB(c), 16); put_hdr(p, OP_CALL, 16); memcpy(p + 8, &h[i], 8); }
 }
+// PEANUTS end
 NVN(nvnCommandBufferSignalEvent, void, NVNcommandBuffer *c, const NVNevent *e, NVNeventSignalMode m, NVNeventSignalLocation loc, int flags, uint32_t v) {
     (void)loc; (void)flags;
     uint8_t *p = cmd_alloc(CB(c), 24); put_hdr(p, OP_SIGNAL_EVENT, 24);
@@ -1433,8 +1479,10 @@ NVN(nvnCommandBufferSetViewports, void, NVNcommandBuffer *c, int first, int n, c
     p_viewports *r = REC(c, OP_VIEWPORTS, p_viewports); r->first = first; r->n = n;
     for (int i = 0; i < n; i++) memcpy(r->v[i], v + 4 * i, 16);
 }
-NVN(nvnCommandBufferSetScissor, void, NVNcommandBuffer *c, int x, int y, int w, int h) { *REC(c, OP_SCISSOR, p_scissor) = (p_scissor){x, y, w, h}; }
-NVN(nvnCommandBufferSetDepthRange, void, NVNcommandBuffer *c, float n, float f) { *REC(c, OP_DEPTH_RANGE, p_depth_range) = (p_depth_range){n, f}; }
+NVN(nvnCommandBufferSetScissor, void, NVNcommandBuffer *c, int x, int y, int w, int h) {
+    *REC(c, OP_SCISSOR, p_scissor) = (p_scissor){x, y, w, h}; }
+NVN(nvnCommandBufferSetDepthRange, void, NVNcommandBuffer *c, float n, float f) {
+    *REC(c, OP_DEPTH_RANGE, p_depth_range) = (p_depth_range){n, f}; }
 NVN(nvnCommandBufferBindProgram, void, NVNcommandBuffer *c, const NVNprogram *p, int stages) {
     *REC(c, OP_BIND_PROGRAM, p_bind_program) = (p_bind_program){(const prog_t *)p, stages};
 }
@@ -1545,14 +1593,38 @@ NVN(nvnCommandBufferBarrier, void, NVNcommandBuffer *c, int bits) { *(int32_t *)
 NVN(nvnCommandBufferSetTexturePool, void, NVNcommandBuffer *c, const NVNtexturePool *p) { REC(c, OP_SET_TEX_POOL, p_set_pool)->pool = (const dpool_t *)p; CB(c)->tex_base = dpool_base(&g_tpt, p); }
 NVN(nvnCommandBufferSetSamplerPool, void, NVNcommandBuffer *c, const NVNsamplerPool *p) { REC(c, OP_SET_SAMP_POOL, p_set_pool)->pool = (const dpool_t *)p; CB(c)->samp_base = dpool_base(&g_spt, p); }
 
+// PEANUTS begin: the bytes a buffer ↔ texture copy reads or writes in its buffer, as the replay computes them (vka_exec.c copy_bt): rows SetCopyRowStride apart (tightly packed
+// without it), layers or slices SetCopyImageStride apart. The copy used to name its address with no length, which a shader-code pool reads as the rest of the pool:
+// LEGO CITY UNDERCOVER's 1 MiB texture uploads from its 2 GiB pool asked for 272 MiB across 13 parts, more than one join takes (DM_VK_PLACE_JOIN_MB), so every copy that
+// crossed two parts failed ("buffer → texture copy source … is not in placed guest RAM") and the game drew black. 0 when the format is not known (the rest of the pool, as before)
+static uint64_t copy_span(const NVNcommandBuffer *c, const NVNtexture *t, const NVNcopyRegion *r) {
+    int bw, bh, bpb = t ? nvn_fmt_bpb(((const tex_t *)t)->d.format, &bw, &bh) : 0;
+    if (bpb <= 0 || !r || r->width <= 0 || r->height <= 0) return 0;
+    uint64_t wb = (uint64_t)((r->width + bw - 1) / bw) * (uint64_t)bpb, rows = (uint64_t)((r->height + bh - 1) / bh), nz = r->depth > 0 ? (uint64_t)r->depth : 1;
+    uint64_t row = CB(c)->copy_row > 0 ? (uint64_t)CB(c)->copy_row : wb, img = CB(c)->copy_img > 0 ? (uint64_t)CB(c)->copy_img : row * rows;
+    return img * (nz - 1) + row * (rows - 1) + wb;
+}
+// PEANUTS end
+// PEANUTS(upstream-candidate): LEGO CITY UNDERCOVER moves texture storage with GPU buffer copies, so a buffer -> texture copy is mirrored into the texture's storage on the GPU (vka_tex.c
+// vka_tex_b2t_mirror, DM_VK_B2T_MIRROR). A lazily placed pool (vka_mem.c) places only what a command names, and the copy names its source buffer alone: the destination's storage is asked for
+// here, in one piece (mtl_pool_need joins parts), so the replay finds it placed. Only for what the mirror takes (block-linear, 2D-like, CPU-accessible pool); a no-op on the Metal host
+static void b2t_need(const tex_t *o) {
+    static int on = -1;
+    if (on < 0) { const char *e = getenv("DM_VK_B2T_MIRROR"); on = e && *e ? atoi(e) != 0 : 1; }
+    if (!on || !o || !o->mem || !o->pool || !o->L.size || o->d.samples > 1 || (o->pool->flags & (NVN_MEMORY_POOL_FLAGS_CPU_NO_ACCESS | NVN_MEMORY_POOL_FLAGS_VIRTUAL))
+        || (o->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET | NVN_TEXTURE_FLAGS_SPARSE | NVN_TEXTURE_FLAGS_COMPRESSIBLE | NVN_TEXTURE_FLAGS_IMAGE))
+        || (o->d.target != NVN_TEXTURE_TARGET_2D && o->d.target != NVN_TEXTURE_TARGET_2D_ARRAY && o->d.target != NVN_TEXTURE_TARGET_CUBEMAP && o->d.target != NVN_TEXTURE_TARGET_CUBEMAP_ARRAY)) return;
+    mtl_pool_need(o->mem, o->L.size, "the storage of a buffer -> texture copy's destination");
+}
 NVN(nvnCommandBufferCopyBufferToTexture, void, NVNcommandBuffer *c, NVNbufferAddress src, const NVNtexture *t, const NVNtextureView *v,
     const NVNcopyRegion *r, int flags) {
-    shp_bind(SHK_COPY, src, 0);
+    shp_bind(SHK_COPY, src, copy_span(c, t, r));   // PEANUTS: the bytes it reads (copy_span)
+    b2t_need(CTX(t));   // PEANUTS(upstream-candidate): the destination's storage placed for the mirror (b2t_need)
     p_copy_b2t *o = REC_SNAP(c, OP_COPY_B2T, p_copy_b2t, 1); o->src = src; o->tex = tex_snap(o, SNAP_OFF(p_copy_b2t), 0, t, (uint64_t)__builtin_return_address(0)); copy_view(&o->view, &o->has_view, v); o->r = *r; o->flags = flags;
 }
 NVN(nvnCommandBufferCopyTextureToBuffer, void, NVNcommandBuffer *c, const NVNtexture *t, const NVNtextureView *v, const NVNcopyRegion *r,
     NVNbufferAddress dst, int flags) {
-    shp_bind(SHK_COPY, dst, 0);
+    shp_bind(SHK_COPY, dst, copy_span(c, t, r));   // PEANUTS: the bytes it writes (copy_span)
     p_copy_b2t *o = REC_SNAP(c, OP_COPY_T2B, p_copy_b2t, 1); o->src = dst; o->tex = tex_snap(o, SNAP_OFF(p_copy_b2t), 0, t, (uint64_t)__builtin_return_address(0)); copy_view(&o->view, &o->has_view, v); o->r = *r; o->flags = flags;
 }
 // Clear a texture region with the given value (float / unsigned integer versions; mask = channel write mask)
@@ -1575,8 +1647,8 @@ NVN(nvnCommandBufferDrawTexture, void, NVNcommandBuffer *c, NVNtextureHandle h, 
     if (sid) sid += (uint64_t)CB(c)->samp_base;
     *REC(c, OP_DRAW_TEX, p_draw_tex) = (p_draw_tex){tid | sid << 20, *d, *s};
 }
-NVN(nvnCommandBufferSetCopyRowStride, void, NVNcommandBuffer *c, ptrdiff_t st) { p_copy_stride *o = REC(c, OP_COPY_STRIDE, p_copy_stride); o->stride = st; o->image = 0; }
-NVN(nvnCommandBufferSetCopyImageStride, void, NVNcommandBuffer *c, ptrdiff_t st) { p_copy_stride *o = REC(c, OP_COPY_STRIDE, p_copy_stride); o->stride = st; o->image = 1; }   // Link's Awakening
+NVN(nvnCommandBufferSetCopyRowStride, void, NVNcommandBuffer *c, ptrdiff_t st) { p_copy_stride *o = REC(c, OP_COPY_STRIDE, p_copy_stride); o->stride = st; o->image = 0; CB(c)->copy_row = st; }   // PEANUTS: copy_row
+NVN(nvnCommandBufferSetCopyImageStride, void, NVNcommandBuffer *c, ptrdiff_t st) { p_copy_stride *o = REC(c, OP_COPY_STRIDE, p_copy_stride); o->stride = st; o->image = 1; CB(c)->copy_img = st; }   // Link's Awakening; PEANUTS: copy_img   // Link's Awakening
 NVN(nvnCommandBufferSetBlendColor, void, NVNcommandBuffer *c, const float *v) { memcpy(REC(c, OP_BLEND_COLOR, p_blend_color)->rgba, v, 16); }
 
 // ---------- State objects: packed in place (nvn_obj.h) ----------
@@ -1719,8 +1791,7 @@ NVN(nvnQueueSubmitCommands, void, NVNqueue *q, int n, const NVNcommandHandle *h)
 // Commands that only affect GPU state / only execute on the GPU: the null device only counts them (the thunk has already counted)
 static void nvn_nop(void) {}
 static const char *const g_nops[] = {
-    "nvnCommandBufferSetPatchSize",
-    "nvnCommandBufferSetDepthBounds",
+    "nvnCommandBufferSetDepthBounds",   // PEANUTS(upstream-candidate): SetPatchSize is recorded (OP_PATCH_SIZE, beside SetPrimitiveRestart)
     "nvnCommandBufferSetShaderScratchMemory",
     "nvnCommandBufferPushDebugGroupDynamic",
     "nvnCommandBufferPopDebugGroup",
@@ -1737,6 +1808,18 @@ static const char *const g_nops[] = {
     "nvnCommandBufferShadingRateImagePalette",
     "nvnWindowFinalize",
 };
+// DM_NVN_PROF=1: implemented functions (except unimplemented stubs and present: present includes the display-link wait and is counted separately) get a timing wrapper,
+// used to break down the time spent in the "translation layer recording phase". Armed at the game's first nvnBootstrapLoader, not in the constructor below: on Android the
+// host library is loaded before the launcher sets the game's environment, so a constructor never sees DM_NVN_PROF (the game calls NVN through the slots, so wrapping them later is safe)
+static int g_nvn_prof;
+static void nvn_prof_arm(void) {
+    static int done; if (done) return; done = 1;
+    if (!getenv("DM_NVN_PROF")) return;
+    for (unsigned i = 0; i < NVN_NFUNC; i++)
+        if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && strcmp(nvn_names[i], "nvnQueuePresentTexture")) { nvn_real[i] = nvn_slot[i].fn; nvn_slot[i].fn = (void *)nvn_prof_entry; }
+    g_nvn_prof = 1;
+    LOG("[nvn] DM_NVN_PROF: NVN calls timed (the translation layer top 5 every 300 frames)");
+}
 __attribute__((constructor)) static void nvn_nops_register(void) {
     // Empty implementations overwrite the unimplemented stubs after the slot table is initialized; a misspelled name (not in main's name table) reports a failure and aborts at startup
     nvn_init_slots();
@@ -1754,10 +1837,6 @@ __attribute__((constructor)) static void nvn_nops_register(void) {
         if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && nvn_slot[i].fn != (void *)nvn_nop && strncmp(nvn_names[i], "nvnCommandBuffer", 16)) {
             nvn_big_real[i] = nvn_slot[i].fn; nvn_slot[i].fn = (void *)nvn_big_entry; nbig++;
         }
-    // DM_NVN_PROF=1: implemented functions (except unimplemented stubs and present: present includes the display-link wait and is counted separately) get a timing wrapper, used to break down the time spent in the "translation layer recording phase"
-    if (getenv("DM_NVN_PROF"))
-        for (unsigned i = 0; i < NVN_NFUNC; i++)
-            if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && strcmp(nvn_names[i], "nvnQueuePresentTexture")) { nvn_real[i] = nvn_slot[i].fn; nvn_slot[i].fn = (void *)nvn_prof_entry; }
     LOG("[nvn] null device: %u names, %u implemented (%u semantic + %u empty, %u of them on the large host stack), the other %u go to the red-reporting stub",
         NVN_NFUNC, g_nsem + nnop, g_nsem, nnop, nbig, NVN_NFUNC - g_nsem - nnop);
 }
@@ -2184,7 +2263,8 @@ static int thermal_capped(void) {
 }
 __attribute__((weak)) int dm_fps_limit_step(void) { return 0; }   // hle_fpslock.c; graphics unit tests have no host
 static int fps_step_cap(void) {
-    if (!dm_fps_state) return 0;
+    // PEANUTS: Elapsed-time hooks pace independently of whole steps.
+    if (!dm_fps_state || dm_fps_elapsed_step()) return 0;
     uint32_t b = __atomic_load_n((uint32_t *)dm_fps_state, __ATOMIC_RELAXED); float t; memcpy(&t, &b, sizeof t);
     if (t <= 0) return 0;
     // Movies and a 30 fps target still need thermal samples: heat must reset the
@@ -2441,7 +2521,7 @@ NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
             }
         }
     }
-    if (nvn_real[0] || nvn_real[1]) {   // DM_NVN_PROF: record phase = time of all implemented functions except submit; submit phase = QueueSubmitCommands
+    if (g_nvn_prof) {   // DM_NVN_PROF: record phase = time of all implemented functions except submit; submit phase = QueueSubmitCommands
         static unsigned isub = ~0u; static plat_timebase_t tb; if (!tb.denom) plat_timebase(&tb);
         if (isub == ~0u) for (isub = 0; isub < NVN_NFUNC && strcmp(nvn_names[isub], "nvnQueueSubmitCommands"); isub++) {}
         uint64_t rec = 0, sub = 0;
@@ -2782,6 +2862,19 @@ NVN(nvnSamplerGetCompare, void, const NVNsampler *s, NVNcompareMode *m, NVNcompa
 NVN(nvnSamplerGetBorderColor, void, const NVNsampler *s, float *c) { memcpy(c, SP(s)->border, 16); }
 NVN(nvnSamplerGetMaxAnisotropy, float, const NVNsampler *s) { return SP(s)->aniso; }
 NVN(nvnSamplerGetReductionFilter, NVNsamplerReduction, const NVNsampler *s) { return (NVNsamplerReduction)SP(s)->reduction; }
+// PEANUTS begin(upstream-candidate): the builder's getters for the rest of its parameters. Digimon Story Time Stranger reads the whole builder back (about 6,100 calls before its
+// first scene) and used the unset outputs: CRASH addr=0 at main+0xbc13f0. The integer border colours return what SetBorderColori / ui stored (as numbers, see there)
+NVN(nvnSamplerBuilderGetLodBias, float, const NVNsamplerBuilder *b) { return ((const samp_builder_t *)b)->p.lod_bias; }
+NVN(nvnSamplerBuilderGetCompare, void, const NVNsamplerBuilder *b, NVNcompareMode *m, NVNcompareFunc *f) {
+    const samp_par *o = &((const samp_builder_t *)b)->p; *m = (NVNcompareMode)o->cmp_mode; *f = (NVNcompareFunc)o->cmp_func;
+}
+NVN(nvnSamplerBuilderGetBorderColor, void, const NVNsamplerBuilder *b, float *c) { memcpy(c, ((const samp_builder_t *)b)->p.border, 16); }
+NVN(nvnSamplerBuilderGetBorderColori, void, const NVNsamplerBuilder *b, int *c) { for (int i = 0; i < 4; i++) c[i] = (int)((const samp_builder_t *)b)->p.border[i]; }
+NVN(nvnSamplerBuilderGetBorderColorui, void, const NVNsamplerBuilder *b, uint32_t *c) { for (int i = 0; i < 4; i++) c[i] = (uint32_t)((const samp_builder_t *)b)->p.border[i]; }
+NVN(nvnSamplerBuilderGetMaxAnisotropy, float, const NVNsamplerBuilder *b) { return ((const samp_builder_t *)b)->p.aniso; }
+NVN(nvnSamplerBuilderGetReductionFilter, NVNsamplerReduction, const NVNsamplerBuilder *b) { return (NVNsamplerReduction)((const samp_builder_t *)b)->p.reduction; }
+NVN(nvnSamplerBuilderGetLodSnap, float, const NVNsamplerBuilder *b) { (void)b; return 0.f; }   // SetLodSnap is ignored (no Metal or Vulkan equivalent), so the default, 0
+// PEANUTS end
 // whether two samplers have the same state (games use it to deduplicate sampler pool entries)
 NVN(nvnSamplerCompare, NVNboolean, const NVNsampler *a, const NVNsampler *b) {
     const samp_par *x = SP(a), *y = SP(b);
@@ -2888,6 +2981,7 @@ NVN(nvnTextureBuilderGetHeight, int, const NVNtextureBuilder *b) { return (int)(
 NVN(nvnTextureBuilderGetDepth, int, const NVNtextureBuilder *b) { return (int)((const tex_builder_t *)b)->d.depth; }
 NVN(nvnTextureBuilderGetLevels, int, const NVNtextureBuilder *b) { return (int)((const tex_builder_t *)b)->d.levels; }
 NVN(nvnTextureBuilderGetFormat, NVNformat, const NVNtextureBuilder *b) { return (NVNformat)((const tex_builder_t *)b)->d.format; }
+NVN(nvnTextureBuilderGetDepthStencilMode, NVNtextureDepthStencilMode, const NVNtextureBuilder *b) { return ((const tex_builder_t *)b)->stencil ? NVN_TEXTURE_DEPTH_STENCIL_MODE_STENCIL : NVN_TEXTURE_DEPTH_STENCIL_MODE_DEPTH; }   // PEANUTS: tapionallanaire, PR #164
 NVN(nvnTextureBuilderGetSamples, int, const NVNtextureBuilder *b) { return ((const tex_builder_t *)b)->d.samples; }
 NVN(nvnTextureBuilderGetStride, ptrdiff_t, const NVNtextureBuilder *b) { return (ptrdiff_t)((const tex_builder_t *)b)->d.stride; }
 NVN(nvnTextureViewGetFormat, NVNboolean, const NVNtextureView *v, NVNformat *f) { const view_t *w = (const view_t *)v; if (f) *f = (NVNformat)w->format; return w->set_format; }
@@ -3123,7 +3217,7 @@ NVN_NOPROTO(nvnProgramSetSampleShading, NVNboolean, NVNprogram *p, int mode) { (
 // Singular / combined forms → plural / separate forms; state the replay layer does not have yet (conditional render, depth bounds, ...) is logged once and drawing continues (better to over-draw than to drop).
 #include "../tex/nvn_deswizzle.h"
 
-NVN(nvnCommandBufferCallCommands, void, NVNcommandBuffer *c, int n, const NVNcommandHandle *h) { h_nvnCommandBufferCopyCommands(c, n, h); }   // the replay layer treats CALL and COPY alike
+NVN(nvnCommandBufferCallCommands, void, NVNcommandBuffer *c, int n, const NVNcommandHandle *h) { cmd_call_lists(c, n, h); }   // PEANUTS: a CALL; CopyCommands copies (cmd_copy_list)
 // Combined texture handle (texture id | sampler id << 20) is recorded into the texture slot as is: the replay layer takes the texture from the low 20 bits and the sampler from the high bits (nvn_mtl.m NVN_RB_SAMPT)
 // One combined handle: recorded as the hardware lays the command out, the handle 16 bytes in, where Luigi's Mansion 3 patches it after recording (nvn_obj.h p_bind_tex1)
 NVN(nvnCommandBufferBindTexture, void, NVNcommandBuffer *c, NVNshaderStage st, int i, NVNtextureHandle h) {
@@ -3202,6 +3296,30 @@ static struct vpool *vpool_at(const void *pool, uint64_t a) {   // caller holds 
 }
 int nvn_sparse_pool(const void *pool) { return pool && ((const pool_t *)pool)->vp; }   // no lock: set at Initialize, cleared at the first mapping (an aliased pool) or Finalize; called per texture lookup
 uint64_t nvn_sparse_gen(void) { return atomic_load(&g_vp_gen); }
+// PEANUTS: Resolve one contiguous physical range for a Vulkan buffer binding. A hole or a different
+// physical run ends the binding, since one VkBuffer cannot span both.
+uint64_t nvn_sparse_run(uint64_t a, uint64_t n, uint64_t *physical) {
+    pthread_mutex_lock(&g_vp_mu);
+    struct vpool *v = vpool_at(NULL, a);
+    uint64_t run = 0;
+    if (v) {
+        uint64_t offset = a - (uint64_t)(uintptr_t)v->base;
+        uint64_t limit = v->size - offset;
+        if (n > limit) n = limit;
+        while (run < n) {
+            uint64_t page_off = (offset + run) & 0xfff;
+            const vpte *entry = vpt_get(v, offset + run);
+            if (!entry || !entry->phys) break;
+            uint64_t ptr = (uint64_t)(uintptr_t)entry->phys + page_off;
+            if (!run) *physical = ptr;
+            else if (ptr != *physical + run) break;
+            uint64_t bytes = 0x1000 - page_off;
+            run += bytes < n - run ? bytes : n - run;
+        }
+    }
+    pthread_mutex_unlock(&g_vp_mu);
+    return run;
+}
 uint64_t nvn_sparse_copy(const void *pool, void *dst, uint64_t a, uint64_t n) {
     pthread_mutex_lock(&g_vp_mu); struct vpool *v = vpool_at(pool, a); uint64_t miss = 0;
     if (!v) { pthread_mutex_unlock(&g_vp_mu); memset(dst, 0, n); return n; }
@@ -3299,6 +3417,7 @@ NVN(nvnCommandBufferSetViewportSwizzles, void, NVNcommandBuffer *c, int first, i
 NVN(nvnCommandBufferSetAlphaRef, void, NVNcommandBuffer *c, float r) { REC(c, OP_ALPHA_REF, p_alpha_ref)->ref = r; }
 NVN(nvnCommandBufferSetLineWidth, void, NVNcommandBuffer *c, float w) { (void)c; if (w != 1.0f) ONCE_LOG("SetLineWidth %.2f: Metal has only 1-pixel lines", w); }
 NVN(nvnCommandBufferSetPointSize, void, NVNcommandBuffer *c, float s) { (void)c; (void)s; ONCE_LOG("SetPointSize: the point size comes from the shader"); }
+NVN(nvnCommandBufferSetPatchSize, void, NVNcommandBuffer *c, int n) { REC(c, OP_PATCH_SIZE, p_patch_size)->size = n; }   // PEANUTS(upstream-candidate): Vulkan's tessellated draws (vka_draw.c)
 NVN(nvnCommandBufferSetPrimitiveRestart, void, NVNcommandBuffer *c, uint32_t en, int idx) { *REC(c, OP_PRIM_RESTART, p_prim_restart) = (p_prim_restart){(en & 0xff) != 0, (uint32_t)idx}; }
 // Rasterizer discard: draws run their vertex stage only (with transform feedback, the capture); recorded, and at replay such a draw rasterizes nothing (nvn_mtl.m)
 NVN(nvnCommandBufferSetRasterizerDiscard, void, NVNcommandBuffer *c, uint32_t en) { REC(c, OP_RAST_DISCARD, p_rast_discard)->on = (en & 0xff) != 0; }
@@ -3331,11 +3450,23 @@ NVN(nvnCommandBufferDownsampleTextureView, void, NVNcommandBuffer *c, const NVNt
 // previously every call decoded, patched and re-encoded the whole level, and after a few minutes the main thread spent whole frames there (frames stopped from 175 s). Returns −1 when the region is out of range or the format unsupported, falling back to the whole-level path
 static int write_region_bl(const tex_t *t, unsigned level, unsigned layer, const NVNcopyRegion *r, const uint8_t *src, size_t row, int bw, int bh, int bpb) {
     uint32_t row_bytes, rows, slices, gbpb; uint64_t base; unsigned th, td;
-    if (nvn_deswizzle_geom(&t->d, level, layer, &row_bytes, &rows, &slices, &base, &th, &td, &gbpb) || (int)gbpb != bpb || r->xoffset < 0 || r->yoffset < 0) return -1;
+    if (nvn_deswizzle_geom(&t->d, level, layer, &row_bytes, &rows, &slices, &base, &th, &td, &gbpb) || (int)gbpb != bpb || r->xoffset < 0 || r->yoffset < 0 || r->width < 0 || r->height < 0) return -1;
     uint32_t x0 = (uint32_t)(r->xoffset / bw) * (uint32_t)bpb, y0 = (uint32_t)(r->yoffset / bh);
     size_t wb = (size_t)((r->width + bw - 1) / bw) * (size_t)bpb, hb = (size_t)((r->height + bh - 1) / bh);
     if (x0 + wb > row_bytes || y0 + hb > rows) return -1;
+    if (!wb || !hb) return 0;
     uint32_t lb = nvn_tex_level_gobs(&t->d, level) * 64; if (lb < row_bytes) lb = row_bytes;   // the row as laid out (padded in a sparse texture's tiled levels)
+    uint64_t off_lo = nvn_bl_offset(x0, y0, 0, lb, rows, th, td);
+    if (hb == 1 && (x0 >> 4) == ((x0 + (uint32_t)wb - 1) >> 4)) {
+        // PEANUTS: single 16-byte GOB segment (all 1x1 texel writes): prepare and copy just those bytes
+        if (base + off_lo + wb > t->L.size) return -1;
+        dm_guest_write_prepare(t->mem + base + off_lo, wb);
+        memcpy(t->mem + base + off_lo, src, wb);
+        return 0;
+    }
+    uint64_t off_hi = nvn_bl_offset(x0 + (uint32_t)wb - 1, y0 + (uint32_t)hb - 1, 0, lb, rows, th, td) + 1;
+    if (off_hi < off_lo || base + off_hi > t->L.size) return -1;
+    dm_guest_write_prepare(t->mem + base + off_lo, (size_t)(off_hi - off_lo));
     for (size_t y = 0; y < hb; y++)
         for (size_t x = 0; x < wb;) {   // 16-byte runs are contiguous within a GOB
             uint32_t bx = x0 + (uint32_t)x; size_t n = 16 - bx % 16; if (n > wb - x) n = wb - x;
@@ -3351,15 +3482,12 @@ static void write_texels(const tex_t *t, const view_t *v, const NVNcopyRegion *r
     int is3d = t->d.target == NVN_TEXTURE_TARGET_3D, nz = r->depth ? r->depth : 1;
     if (!is3d) {
         size_t wb0 = (size_t)((r->width + bw - 1) / bw) * bpb, row0 = row ? row : wb0, img0 = img ? img : row0 * (size_t)((r->height + bh - 1) / bh);
-        uint64_t lo = nvn_tex_level_offset(&t->d, level), hi = level + 1 < t->d.levels ? nvn_tex_level_offset(&t->d, level + 1) : t->L.layer_size;
-        for (int z = 0; z < nz; z++) {
-            unsigned ly = layer0 + (unsigned)(r->zoffset + z);
-            if (hi > lo && (uint64_t)ly * t->L.layer_size + hi <= t->L.size)
-                dm_guest_write_prepare(t->mem + (uint64_t)ly * t->L.layer_size + lo, hi - lo);
-            else { dm_guest_write_prepare(t->mem, t->L.size); break; }   // a range not worked out: prepare all of it, as before
-        }
+        // PEANUTS(upstream-candidate): write_region_bl prepares only the touched block-linear byte span per layer
         int ok = 1;
-        for (int z = 0; z < nz && ok; z++) ok = !write_region_bl(t, level, layer0 + (unsigned)(r->zoffset + z), r, src + (size_t)z * img0, row0, bw, bh, bpb);
+        for (int z = 0; z < nz && ok; z++) {
+            if (r->zoffset + z < 0) { ok = 0; break; }
+            ok = !write_region_bl(t, level, layer0 + (unsigned)(r->zoffset + z), r, src + (size_t)z * img0, row0, bw, bh, bpb);
+        }
         if (ok) { mtl_tex_write_region(t, level, layer0, r, src, row0, img0); return; }
     }
     uint32_t lw = t->d.width >> level ? t->d.width >> level : 1, lh = t->d.height >> level ? t->d.height >> level : 1, lz = is3d ? (t->d.depth >> level ? t->d.depth >> level : 1) : 1;
@@ -3392,26 +3520,21 @@ NVN(nvnTextureWriteTexelsStrided, void, const NVNtexture *t, const NVNtextureVie
 // RHIAsyncReallocateTexture2D: nvnCommandBufferCopyTextureToTexture, a level at a time) and writes the new, finer levels from the CPU; uploaded from the storage, the copied levels held
 // what the pool had there before (another texture's data, zeros), and the Yoshis' felt sampled speckles from the moment a level streamed in. −1 when the copy cannot be mirrored (3D,
 // a format mismatch, a region out of range): the GPU copy alone then stands until the next upload
-static int mirror_prepare(const tex_t *t, unsigned level, unsigned layer) {   // unprotect (and mark written) the storage of one level of one layer
-    uint64_t lo = nvn_tex_level_offset(&t->d, level), hi = level + 1 < t->d.levels ? nvn_tex_level_offset(&t->d, level + 1) : t->L.layer_size;
-    if (hi <= lo || hi > t->L.layer_size || (uint64_t)layer * t->L.layer_size + hi > t->L.size) return -1;
-    dm_guest_write_prepare(t->mem + (uint64_t)layer * t->L.layer_size + lo, hi - lo);
-    return 0;
-}
+// PEANUTS(upstream-candidate): write_region_bl prepares the touched block-linear byte span directly, replacing mirror_prepare
 int nvn_tex_mirror_b2t(const tex_t *t, unsigned level, unsigned layer0, const NVNcopyRegion *r, const uint8_t *src, size_t row, size_t img) {
     int bw, bh, bpb = nvn_fmt_bpb(t->d.format, &bw, &bh);
-    if (!t->mem || !bpb || t->d.target == NVN_TEXTURE_TARGET_3D || level >= t->d.levels) return -1;
+    if (!t->mem || !bpb || t->d.target == NVN_TEXTURE_TARGET_3D || level >= t->d.levels || r->zoffset < 0) return -1;
     int nz = r->depth ? r->depth : 1;
     for (int z = 0; z < nz; z++) {
         unsigned layer = layer0 + (unsigned)(r->zoffset + z);
-        if (mirror_prepare(t, level, layer) || write_region_bl(t, level, layer, r, src + (size_t)z * img, row, bw, bh, bpb)) return -1;
+        if (write_region_bl(t, level, layer, r, src + (size_t)z * img, row, bw, bh, bpb)) return -1;
     }
     return 0;
 }
 int nvn_tex_mirror_t2t(const tex_t *s, unsigned sl, unsigned ss, const NVNcopyRegion *sr, const tex_t *d, unsigned dl, unsigned ds, const NVNcopyRegion *dr) {
     int bw, bh, bpb = nvn_fmt_bpb(s->d.format, &bw, &bh), dbw, dbh, dbpb = nvn_fmt_bpb(d->d.format, &dbw, &dbh);
     if (!s->mem || !d->mem || !bpb || bpb != dbpb || bw != dbw || bh != dbh || s->d.target == NVN_TEXTURE_TARGET_3D || d->d.target == NVN_TEXTURE_TARGET_3D) return -1;
-    if (sl >= s->d.levels || dl >= d->d.levels || sr->width != dr->width || sr->height != dr->height || sr->xoffset < 0 || sr->yoffset < 0) return -1;
+    if (sl >= s->d.levels || dl >= d->d.levels || sr->width != dr->width || sr->height != dr->height || sr->xoffset < 0 || sr->yoffset < 0 || sr->zoffset < 0 || dr->zoffset < 0 || sr->width < 0 || sr->height < 0) return -1;
     uint32_t lw = s->d.width >> sl ? s->d.width >> sl : 1, lh = s->d.height >> sl ? s->d.height >> sl : 1;
     size_t lp = (size_t)((lw + bw - 1) / bw) * bpb, lr = (lh + bh - 1) / bh, x0 = (size_t)(sr->xoffset / bw) * bpb, y0 = (size_t)(sr->yoffset / bh);
     if (x0 + (size_t)((sr->width + bw - 1) / bw) * bpb > lp || y0 + (size_t)((sr->height + bh - 1) / bh) > lr) return -1;
@@ -3419,7 +3542,7 @@ int nvn_tex_mirror_t2t(const tex_t *s, unsigned sl, unsigned ss, const NVNcopyRe
     int nz = sr->depth ? sr->depth : 1, ok = 1;
     for (int z = 0; z < nz && ok; z++) {
         unsigned layer = ds + (unsigned)(dr->zoffset + z);
-        ok = !nvn_deswizzle(&s->d, sl, ss + (unsigned)(sr->zoffset + z), s->mem, lin, lp) && !mirror_prepare(d, dl, layer) && !write_region_bl(d, dl, layer, dr, lin + y0 * lp + x0, lp, bw, bh, bpb);
+        ok = !nvn_deswizzle(&s->d, sl, ss + (unsigned)(sr->zoffset + z), s->mem, lin, lp) && !write_region_bl(d, dl, layer, dr, lin + y0 * lp + x0, lp, bw, bh, bpb);   // PEANUTS(upstream-candidate)
     }
     free(lin);
     return ok ? 0 : -1;

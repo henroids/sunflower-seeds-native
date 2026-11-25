@@ -368,6 +368,8 @@ static aaudio_data_callback_result_t aa_render(AAudioStream *s, void *ctx, void 
 }
 static void aa_error(AAudioStream *s, void *ctx, aaudio_result_t err) {
     (void)s;
+    static _Atomic int nlog;   // PEANUTS: why a stream was lost (the Xperia's outputs, lost every 2 s after an audio focus interruption, 2026-11-25)
+    if (atomic_fetch_add(&nlog, 1) < 12) LOG("[RED] audio #%d: AAudio error callback: %s (%d)", ((struct aa_out *)ctx)->a->id, AAudio_convertResultToText(err), (int)err);
     if (err == AAUDIO_ERROR_DISCONNECTED || err == AAUDIO_ERROR_TIMEOUT || err < 0)
         atomic_store(&((struct aa_out *)ctx)->lost, 1);
 }   // no stream call here: the next start reopens

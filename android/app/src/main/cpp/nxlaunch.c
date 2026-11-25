@@ -33,6 +33,9 @@ int nxhost_main(int argc, char **argv);
 void nxhost_env_changed(void);
 #pragma weak nxhost_set_window
 #pragma weak nxhost_vk_selftest
+#pragma weak nxhost_prewarm_progress   // PEANUTS: optional startup shader progress
+#pragma weak nxhost_prewarm_skip       // PEANUTS: Play anyway on the Preparing shaders screen
+void nxhost_prewarm_skip(void);
 #pragma weak nxhost_input_device_added
 #pragma weak nxhost_input_device_removed
 #pragma weak nxhost_input_key
@@ -600,6 +603,28 @@ JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_pinThreads(JNIEnv *env, 
     closedir(d);
     return placed;
 }
+// PEANUTS: the placement undone (Native.unpinThreads): the threads pinThreads places get every core of the device again. GameActivity places them only while Android
+// has the game out of its top-app group (a tap on another app's window on the other screen); back in top-app the scheduler places them again. Android's move between
+// cpusets did not reset them (seen on the AYN Thor, 2026-11-24: the game's threads stayed on 3-6 as the top app). Returns the number given all cores
+JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_unpinThreads(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls;
+    cpu_set_t all; CPU_ZERO(&all);
+    int n = (int)sysconf(_SC_NPROCESSORS_CONF); if (n > CPU_SETSIZE) n = CPU_SETSIZE;
+    for (int c = 0; c < n; c++) CPU_SET(c, &all);
+    DIR *d = opendir("/proc/self/task"); if (!d) return 0;
+    int freed = 0; struct dirent *e;
+    while ((e = readdir(d))) {
+        int tid = atoi(e->d_name); if (tid <= 0) continue;
+        char path[64], name[32] = ""; snprintf(path, sizeof path, "/proc/self/task/%d/comm", tid);
+        FILE *f = fopen(path, "r"); if (!f) continue;
+        if (!fgets(name, sizeof name, f)) name[0] = 0; fclose(f);
+        name[strcspn(name, "\n")] = 0;
+        if (strcmp(name, "vk-replay") && strcmp(name, "vk-enc") && strncmp(name, "0x", 2)) continue;
+        if (!sched_setaffinity(tid, sizeof all, &all)) freed++;   // the kernel keeps them to the cpuset's cores
+    }
+    closedir(d);
+    return freed;
+}
 JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_fpsLimitSet(JNIEnv *env, jclass cls, jint fps) { (void)env; (void)cls; if (nxhost_fps_limit_set) nxhost_fps_limit_set(fps); }
 // Full game speed at low frame rates, live from the in-game panel (Native.decoupleSet)
 JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_decoupleSet(JNIEnv *env, jclass cls, jboolean on) { (void)env; (void)cls; if (nxhost_fps_decouple_set) nxhost_fps_decouple_set(on ? 1 : 0); }
@@ -612,6 +637,21 @@ JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_cheatSet(JNIEnv *env, jc
     (void)cls; if (!nxhost_cheat_set) return -2;
     char *k = jstr(env, key); int r = k ? nxhost_cheat_set(k, on ? 1 : 0) : -1; free(k); return r;
 }
+// PEANUTS begin: every cheat's state for the in-game panel (Native.cheatStatus, as UTF-8 bytes: a cheat's name may hold a character outside the BMP) and a reload of the
+// merged cheat file while the game runs (Native.cheatsReload): dm/peanuts/peanuts_cheats.inc. A host without them: no bytes, -2
+#pragma weak nxhost_cheat_status
+size_t nxhost_cheat_status(char *out, size_t cap);
+#pragma weak nxhost_cheats_reload
+int nxhost_cheats_reload(void);
+JNIEXPORT jbyteArray JNICALL Java_dev_nxnative_android_Native_cheatStatusUtf8(JNIEnv *env, jclass cls) {
+    (void)cls; if (!nxhost_cheat_status) return jbytes(env, "");
+    size_t cap = 16384; char *b = malloc(cap); if (!b) return jbytes(env, "");
+    size_t n = nxhost_cheat_status(b, cap);
+    if (n + 1 > cap) { char *g = realloc(b, n + 1); if (g) { b = g; nxhost_cheat_status(b, n + 1); } }
+    jbyteArray a = jbytes(env, b); free(b); return a;
+}
+JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_cheatsReload(JNIEnv *env, jclass cls) { (void)env; (void)cls; return nxhost_cheats_reload ? nxhost_cheats_reload() : -2; }
+// PEANUTS end
 // Game resolution of a game that sizes its scenes by the graphics scale, live from the in-game panel (Native.graphicsModeSet): the host changes the scale and operation mode
 // and posts the console's notifications (300, 30 / 31), which the game answers by querying them again
 #pragma weak nxhost_graphics_mode_set
@@ -642,6 +682,12 @@ JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_drsSet(JNIEnv *env, jcla
 #pragma weak nxhost_ndsr_status
 int nxhost_ndsr_status(void);   // vka_draw.c
 JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_ndsrStatus(JNIEnv *env, jclass cls) { (void)env; (void)cls; return nxhost_ndsr_status ? nxhost_ndsr_status() : -1; }
+// PEANUTS: startup shader progress
+JNIEXPORT void JNICALL Java_dev_nxnative_android_Native_prewarmSkip(JNIEnv *env, jclass cls) { (void)env; (void)cls; if (nxhost_prewarm_skip) nxhost_prewarm_skip(); }   // PEANUTS
+JNIEXPORT jlong JNICALL Java_dev_nxnative_android_Native_prewarmProgress(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls;
+    return nxhost_prewarm_progress ? nxhost_prewarm_progress() : 0;
+}
 // The skipped-work notice (SkipNotice): "<percent> <causes>" once the replay's warning fired (DM_VK_SKIP_WARN), else ""
 #pragma weak nxhost_skip_status
 void nxhost_skip_status(char *buf, size_t n);   // vka_exec.c
@@ -650,3 +696,7 @@ JNIEXPORT jstring JNICALL Java_dev_nxnative_android_Native_skipStatus(JNIEnv *en
     if (nxhost_skip_status) nxhost_skip_status(buf, sizeof buf);
     return (*env)->NewStringUTF(env, buf);
 }
+// PEANUTS: the "Preparing graphics" notice (dev.peanuts.ui.WarmNotice): pipelines still waiting while draws are skipped for them, 0 = none, -1 = this host cannot say
+#pragma weak nxhost_warm_status
+int nxhost_warm_status(void);   // vka_exec.c
+JNIEXPORT jint JNICALL Java_dev_nxnative_android_Native_warmStatus(JNIEnv *env, jclass cls) { (void)env; (void)cls; return nxhost_warm_status ? nxhost_warm_status() : -1; }

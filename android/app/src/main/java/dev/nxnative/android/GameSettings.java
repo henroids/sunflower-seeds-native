@@ -46,6 +46,8 @@ final class GameSettings {
         a.gameSettings(g);
     }
 
+    static void openOn(MainActivity a, Game g, String t) { tab = t; GamePagePort.at(t); a.gameSettings(g); }   // PEANUTS: at a tab: a user's save in Settings › Users opens its game's Saves tab (UserSaves.open); the page in areas opens at Saves
+
     /**
      * An optional shader update (Pack.shaderUpdateAvailable): this app version makes its games' shaders in a newer way; the game plays with the ones it has until the player
      * updates them. Shown on every tab of the game's page, under the tabs, with the button and no time promised (a game's whole shader set is made again on the phone)
@@ -63,6 +65,8 @@ final class GameSettings {
 
     /** A controller's L1 / R1: the next (+1) or previous (-1) tab of the game's page, round; false when there is nothing to switch to */
     static boolean stepTab(Game g, int delta) {
+        if (dev.peanuts.mods.CheatsPage.stepTab(g.titleId, delta)) return true;   // PEANUTS: on Mods & Cheats, L1 / R1 switch Cheats and Mods
+        { Boolean s = GamePagePort.step(g, delta); if (s != null) return s; }   // PEANUTS: the page in areas: L1 / R1 step its areas (dev.peanuts.ui.GamePage)
         String[] keys = Profile.missing(g.titleId, g.name) == null ? new String[] {PERFORMANCE, GAME, SAVES, STORAGE} : new String[] {SAVES, STORAGE};
         int cur = Math.max(0, Arrays.asList(keys).indexOf(tab));
         int next = PadPanel.tab(cur, delta, keys.length);
@@ -87,9 +91,11 @@ final class GameSettings {
 
     /** Builds the page into content (Ui.page's column); again builds it once more after a choice (keeping the place), close returns to Home */
     static void build(MainActivity a, LinearLayout content, Game g, Runnable again, Runnable close) {
+        if (GamePagePort.build(a, content, g, again, close)) return;   // PEANUTS: the page in areas: the game at the left, its areas at the right (dev.peanuts.ui.GamePage)
+        if (dev.peanuts.mods.CheatsPage.build(a, content, g.titleId, g.name, g.gameDir, g.packDir, again, close)) return;   // PEANUTS: Mods & Cheats open: its page here (Back returns)
         String id = g.titleId;
         if (!id.equals(customFor)) { customFor = id; custom = false; }
-        boolean wide = a.getResources().getConfiguration().screenWidthDp >= 600;
+        boolean wide = a.getResources().getConfiguration().screenWidthDp >= 600 && !GamePagePort.harvesting();   // PEANUTS: its rows taken for the page in areas: the column with every section
         String missing = Profile.missing(id, g.name);
         content.addView(header(a, g, missing == null, wide, close));
         String[] keys = missing == null ? new String[] {PERFORMANCE, GAME, SAVES, STORAGE} : new String[] {SAVES, STORAGE};
@@ -191,13 +197,15 @@ final class GameSettings {
             if (GameUpscaler.mode(a, id) == GameUpscaler.MODE_FSR)   // only with FSR 1 chosen
                 picture.add(new Ui.Setting(a, "✨", "FSR sharpness", v -> sharpness(a, g, again)).value(dflt(GameUpscaler.ownSharp(a, id), GameUpscaler.sharpName(a, id))).chevron(a).sub());
         }
-        picture.add(new Ui.Setting(a, "📺", "Display", v -> display(a, g, again)).value(Prefs.DISPLAY_NAMES[Prefs.stretch(a, id) ? 1 : 0]).chevron(a));
+        picture.add(new Ui.Setting(a, "📺", "Display", v -> display(a, g, again)).value(displayLabel(a, id)).chevron(a));   // PEANUTS: displayLabel (Fill)
+        picture.add(new Ui.Setting(a, "📼", "CRT filter", v -> crt(a, g, again)).value(CrtFilter.label(CrtFilter.mode(a, id))).chevron(a));   // PEANUTS: CrtFilter
         if (!aspects(prof).isEmpty())   // a profile with a native aspect mod (game.tsv variant rows labelled w:h)
             picture.add(new Ui.Setting(a, "🔳", "Aspect ratio", v -> aspect(a, g, again)).value(aspectLabel(a, id)).chevron(a));
 
         // ---- Speed ----
         Ui.Setting cap = speed.add(track(recRows, Recommend.FPS_CAP, new Ui.Setting(a, "⏱️", "Frame rate cap", v -> cap(a, g, again)).value(capLabel(a, id)).chevron(a)));
         if (Prefs.limited(id) && Prefs.presentOnly(id)) { cap.badge("Experimental"); speed.info += " " + Prefs.PRESENT_ONLY_NOTE; }
+        if (Prefs.limited(id) && Prefs.fpsVariant(id)) speed.info += " " + Prefs.FPS_VARIANT_NOTE;   // PEANUTS: the cap starts another version of the game (Profile.fpsVariant)
         if (Prefs.steps(id)) {   // a framework of whole steps a frame (fps_steps): Hold 60 fps keeps one step at the cap of 60. The in-game panel changes it live
             Ui.Setting hold = new Ui.Setting(a, "🎯", "Hold 60 fps", null).toggle(a, Prefs.hold60(a, id), (b, on) -> { Prefs.hold60(a, id, on); refresh[0].run(); });
             hold.says("Never drops to 30; less even under 60", "Drops to 30 when 60 does not hold");
@@ -210,7 +218,12 @@ final class GameSettings {
         }
         if (Prefs.drsGame(id) && !simple)   // the host's dynamic resolution slider: testers only for a game with Resolution presets (Quality is the game's own dynamic resolution)
             speed.add(track(recRows, Recommend.DRS, new Ui.Setting(a, "📏", "Dynamic resolution", v -> drs(a, g, again)).value(drsValue(Prefs.drs(a, id))).chevron(a)));
-        speed.add(track(recRows, Recommend.DRIVER, new Ui.Setting(a, "🎮", "GPU driver", v -> driver(a, g, again)).value(driverShort(a, id)).chevron(a)));
+        if (Prefs.crowdGame(id)) {   // a game whose profile names its crowd's shaders (game.tsv crowd): with the speed settings, where a player looks for it
+            Ui.Setting crowd = new Ui.Setting(a, "👥", "Crowd control", null).toggle(a, Prefs.hideCrowd(a, id), (b, on) -> { Prefs.hideCrowd(a, id, on); refresh[0].run(); });
+            crowd.says("The crowd is hidden, less GPU work", "The crowd is drawn");
+            speed.add(crowd);
+        }
+        speed.add(track(recRows, Recommend.DRIVER, new Ui.Setting(a, "🎮", "GPU driver", v -> dev.peanuts.ui.DriverActivity.openForGame(a, g.titleId, g.name)).value(driverShort(a, id)).chevron(a)));   // PEANUTS: the full GPU driver page, scoped to this game
 
         // ---- Game options: the profile's own switches ----
         if (prof != null && prof.vegetationDetail) {
@@ -269,7 +282,7 @@ final class GameSettings {
             updateRows.run();
         }
 
-        if (Prefs.cheatsGame(id)) CheatsUi.rows(a, g, options::add, again);   // a profile with cheat files (game.tsv cheats): the switch, off by default, and the files
+        // PEANUTS: was "if (Prefs.cheatsGame(id)) CheatsUi.rows(a, g, options::add, again);": every game's cheats are on Mods & Cheats (the row below, dev.peanuts.mods.CheatsPage)
         if (LinkPlay.has(id))
             options.add(new Ui.Setting(a, "🔗", "Link Play", v -> LinkPlay.dialog(a, g, again)).value(LinkPlay.label(a, id)).chevron(a));
         options.add(new Ui.Setting(a, "🌐", "Game language", v -> language(a, g, again)).value(GameLanguage.label(Prefs.gameLang(a, id), phoneTag())).chevron(a));   // not a tester's knob: with the game's options, never folded
@@ -307,9 +320,9 @@ final class GameSettings {
         advanced.add(new Ui.Setting(a, "📝", "Extra environment", v -> env(a, g, again))
                 .value(envLines == 0 ? "None" : envLines + (envLines == 1 ? " line: " : " lines: ") + env.replace('\n', ' ')).chevron(a));
 
-        options.rows.addView(dev.peanuts.settings.ModsSection.view(a, id, g.name, g.gameDir, g.packDir));   // PEANUTS: the Mods section, above Companion (install, on/off, delete; a code mod's build with mods)
+        options.rows.addView(dev.peanuts.mods.CheatsPage.entry(a, id, g.name, g.gameDir, g.packDir, again));   // PEANUTS: Mods & Cheats, above Companion: its page has the cheats and the Mods section (install, on/off, delete; a code mod's build with mods)
         options.rows.addView(dev.peanuts.settings.CompanionSection.view(a, id, dev.peanuts.settings.CompanionSection.root(g.packDir)));   // PEANUTS: the Companion section (install/update/remove, second screen)
-        Section[] all = perf ? new Section[] {picture, speed, advanced} : new Section[] {options, controls};   // Performance: what changes speed and picture; Game: the game's own options, language and controls
+        Section[] all = GamePagePort.harvesting() ? new Section[] {picture, speed, options, controls, advanced} : perf ? new Section[] {picture, speed, advanced} : new Section[] {options, controls};   // Performance: what changes speed and picture; Game: the game's own options, language and controls   // PEANUTS: the page in areas takes every section's rows from one build
         View reset = recLine != null ? null : Ui.button(a, "Reset to defaults", Ui.Kind.SOFT, v -> new PadFocus.Builder(a).setTitle("Reset to defaults · " + g.name)
                 .setMessage("The game will follow global settings. Extra environment lines are kept.")
                 .setPositiveButton("Reset", (x, w) -> { Prefs.resetGame(a, id); again.run(); }).setNegativeButton("Cancel", null).show());
@@ -506,8 +519,14 @@ final class GameSettings {
 
     static String capLabel(MainActivity a, String id) {
         if (!Prefs.limited(id) && Prefs.ownRate(a, id)) return "Game owned";
-        String l = Prefs.limited(id) ? Prefs.paceLabel(Prefs.paceCap(a, id)) : MainActivity.capLabel(Prefs.fpsCap(a, id));
-        return l;
+        if (Prefs.limited(id)) {   // PEANUTS: a stored 90 or 120 the display cannot show is kept, the game runs at the display's highest rate (fps cap audit B5)
+            int v = Prefs.paceCap(a, id), hz = Prefs.displayMaxHz(a);
+            return Prefs.paceLabel(v) + (FrameRateCaps.onScreen(v, hz) != v ? ", runs at " + FrameRateCaps.limitRate(v, hz) + " fps on this screen" : "");
+        }
+        int v = Prefs.fpsCap(a, id);
+        Profile p = Profile.of(id);
+        if (v < 0 && p != null && p.fpsTarget > 0) return p.fpsTarget + " fps";   // PEANUTS: the profile's own target, which the game starts at (fps cap audit B3)
+        return MainActivity.capLabel(v);
     }
 
     /** Registers a row of a recommended setting: refresh gives it its tag and its "Recommended: …" line */
@@ -716,9 +735,26 @@ final class GameSettings {
     }
 
     /** Display: Fit keeps the game's 16:9 picture with bars on a screen of another shape; Stretch fills the screen (DM_VK_STRETCH), the touch mapping with it */
+    // PEANUTS begin: Display › Fill. A game whose view follows the picture's shape (aspect or aspect_plan rows) draws for the screen's own shape, so the picture
+    // fills the screen with nothing stretched and no bars. It is Aspect ratio's Screen shape under another name (the same stored choice, ScreenShape.CHOICE), read at the
+    // game's start; Fit and Stretch leave that choice, and a fixed Aspect ratio shape stays what it was.
+    static final String FILL_NAME = "Fill the screen (the game draws for this screen's shape; from the next start)";
+    static boolean fillable(Profile p) { return p != null && (!p.cameraAspects.isEmpty() || !p.aspectPlan.isEmpty()); }
+    static boolean filling(android.content.Context a, String id) { return fillable(Profile.of(id)) && ScreenShape.CHOICE.equals(Prefs.aspect(a, id)); }
+    static String displayLabel(android.content.Context a, String id) { return filling(a, id) ? "Fill the screen" : Prefs.DISPLAY_NAMES[Prefs.stretch(a, id) ? 1 : 0]; }
+    /** Display's choice w: 0 Fit, 1 Stretch, 2 Fill (a fillable game only). The dialog below and the adb control's set display (dev.peanuts.ctl.Up) both store it here */
+    static void setDisplay(android.content.Context a, String id, int w) {
+        Prefs.stretch(a, id, w == 1);
+        if (w == 2) Prefs.aspect(a, id, ScreenShape.CHOICE);   // Fill
+        else if (filling(a, id)) Prefs.aspect(a, id, null);   // Fit or Stretch after Fill: the game as shipped again
+    }
+    // PEANUTS end
     private static void display(MainActivity a, Game g, Runnable done) {
-        new PadFocus.Builder(a).setTitle("Display · " + g.name).setSingleChoiceItems(Prefs.DISPLAY_NAMES, Prefs.stretch(a, g.titleId) ? 1 : 0, (x, w) -> {
-            Prefs.stretch(a, g.titleId, w == 1);
+        boolean fill = fillable(Profile.of(g.titleId));   // PEANUTS: a third choice for a game that can fill
+        boolean guess = fill && Profile.of(g.titleId).aspectUntested;   // PEANUTS: rows nobody has seen on a device (game.tsv aspect_plan_untested)
+        String[] names = fill ? new String[] {Prefs.DISPLAY_NAMES[0], Prefs.DISPLAY_NAMES[1], FILL_NAME + (guess ? ". Untested on this game: it may look wrong or not start; pick Fit to go back" : "")} : Prefs.DISPLAY_NAMES;   // PEANUTS
+        new PadFocus.Builder(a).setTitle("Display · " + g.name).setSingleChoiceItems(names, filling(a, g.titleId) ? 2 : Prefs.stretch(a, g.titleId) ? 1 : 0, (x, w) -> {   // PEANUTS: names, Fill
+            setDisplay(a, g.titleId, w);   // PEANUTS: setDisplay (Fill)
             x.dismiss();
             done.run();
         }).setNegativeButton("Cancel", null).show();
@@ -753,9 +789,20 @@ final class GameSettings {
             String[] labels = new String[choices.length + 1];
             int pl = Prefs.profileLimit(g.titleId);   // the profile's own default (fps_limit), else the main screen's
             Integer rc = Prefs.recCap(a, g.titleId);
-            labels[0] = rc != null ? "Recommended (" + Prefs.paceLabel(rc) + ")" : pl > 0 ? "Default (this game's: " + Prefs.paceLabel(Prefs.paceOf(pl)) + ")" : "Default (Settings: " + Prefs.paceLabel(Prefs.paceOf(Prefs.fpsCap(a))) + ")";
-            int checked = 0, cur = Prefs.paceCap(a, g.titleId);
-            for (int k = 0; k < choices.length; k++) { enabled[k + 1] = FrameRateCaps.contains(allowed, choices[k]); labels[k + 1] = Prefs.paceLabel(choices[k]) + (enabled[k + 1] ? "" : " · unavailable for this game"); if (Prefs.ownFpsCap(a, g.titleId) && choices[k] == cur) checked = k + 1; }
+            // PEANUTS: Describe the game-owned default for an optional presentation cap.
+            Profile p = Profile.of(g.titleId);
+            if (rc != null) labels[0] = "Recommended (" + Prefs.paceLabel(rc) + ")";
+            else if (p != null && (p.optInPresentRate() || p.ownedByDefault)) labels[0] = "Default (Game owned)";   // PEANUTS: fps_owned_default too
+            else if (pl > 0) labels[0] = "Default (this game's: " + Prefs.paceLabel(Prefs.paceOf(pl)) + ")";
+            else labels[0] = "Default (Settings: " + Prefs.paceLabel(Prefs.paceOf(Prefs.fpsCap(a))) + ")";
+            int checked = 0, cur = Prefs.paceCap(a, g.titleId), hz = Prefs.displayMaxHz(a);
+            // PEANUTS: a rate the game has but this display cannot show is greyed with the reason; a stored one stays checked (it runs at the display's rate: capLabel)
+            for (int k = 0; k < choices.length; k++) {
+                boolean has = FrameRateCaps.contains(allowed, choices[k]);
+                enabled[k + 1] = has && FrameRateCaps.contains(FrameRateCaps.onScreen(allowed, hz), choices[k]);
+                labels[k + 1] = Prefs.paceLabel(choices[k]) + (enabled[k + 1] ? "" : has ? ", this screen shows up to " + FrameRateCaps.screenMax(hz) + " fps" : ", unavailable for this game");   // PEANUTS: a comma, not a middle dot (build-text-style.md)
+                if (Prefs.ownFpsCap(a, g.titleId) && choices[k] == cur) checked = k + 1;
+            }
             new PadFocus.Builder(a).setTitle("Frame rate cap · " + g.name).setSingleChoiceItems(capItems(a, labels, enabled), checked, (x, w) -> {
                 if (!enabled[w]) return;
                 Prefs.fpsCap(a, g.titleId, w == 0 ? null : choices[w - 1]);
@@ -763,12 +810,15 @@ final class GameSettings {
             }).setNegativeButton("Cancel", null).show();
             return;
         }
-        int[] choices = {0, 120, 90, 60, 45, 40, 30, 20, 15};
+        int[] choices = FrameRateCaps.targetMenu(), offered = Prefs.offeredCaps(a, g.titleId);   // PEANUTS: 40 and 45 where the game's engine rows hold them (Prefs.offeredCaps)
         int n = choices.length;
         boolean[] enabled = new boolean[n + 2]; enabled[0] = enabled[1] = true;
         String[] labels = new String[n + 2];
         Integer rc = Prefs.recCap(a, g.titleId);
-        labels[0] = firstLabel(rc != null ? MainActivity.capLabel(rc) : null, MainActivity.capLabel(Prefs.fpsCap(a)));
+        Profile tp = Profile.of(g.titleId);
+        int dflt = FrameRateCaps.targetDefault(tp, Prefs.of(a).contains("fps_cap") ? Prefs.fpsCap(a) : null);
+        // PEANUTS: the profile's own target when the main screen's cap was never set (fps cap audit B3: EA SPORTS FC 27 starts at its 30)
+        labels[0] = rc != null || dflt >= 0 || tp == null ? firstLabel(rc != null ? MainActivity.capLabel(rc) : null, MainActivity.capLabel(Prefs.fpsCap(a))) : "Default (this game's: " + tp.fpsTarget + " fps)";
         labels[1] = MainActivity.capLabel(-1);
         int checked = 0;
         boolean own = Prefs.ownFpsCap(a, g.titleId);
@@ -776,33 +826,13 @@ final class GameSettings {
         if (own && cur < 0) checked = 1;
         for (int k = 0; k < n; k++) {
             labels[k + 2] = (choices[k] == 0 ? "Game owned" : MainActivity.capLabel(choices[k]));
-            enabled[k + 2] = choices[k] == 0 || !Prefs.ownRate(a, g.titleId) && FrameRateCaps.contains(Prefs.FPS_CAPS, choices[k]);
-            if (!enabled[k + 2]) labels[k + 2] += " · unavailable for this game";
+            enabled[k + 2] = FrameRateCaps.contains(offered, choices[k]);
+            if (!enabled[k + 2]) labels[k + 2] += ", unavailable for this game";
             if (own && choices[k] == cur) checked = k + 2;
         }
         new PadFocus.Builder(a).setTitle("Frame rate cap · " + g.name).setSingleChoiceItems(capItems(a, labels, enabled), checked, (x, w) -> {
             if (!enabled[w]) return;
             Prefs.fpsCap(a, g.titleId, w == 0 ? null : w == 1 ? -1 : choices[w - 2]);
-            x.dismiss();
-            done.run();
-        }).setNegativeButton("Cancel", null).show();
-    }
-
-    static void driver(MainActivity a, Game g, Runnable done) {   // PEANUTS: also opened by the system-driver launch warning
-        List<GpuDriver.Info> inst = GpuDriver.installed(a);
-        GpuDriver.Info def = GpuDriver.selected(a);
-        List<String> labels = new ArrayList<>();
-        String rd = Prefs.recommendedDriver(a, g.titleId);   // the first choice is this phone's recommended driver when there is one (Prefs.recommendedDriver)
-        labels.add(rd != null ? "Recommended (" + Prefs.recName(a, g.titleId, Recommend.DRIVER, Recommend.SYSTEM.equals(rd) ? "system" : rd) + ")" : "Default (the main screen's: " + (def == null ? "System" : def.label()) + ")");
-        labels.add("System (the phone's own driver)");
-        String c = GpuDriver.choice(a, g.titleId);
-        int checked = c == null ? 0 : c.equals(GpuDriver.SYSTEM) ? 1 : 0;
-        for (int k = 0; k < inst.size(); k++) {
-            labels.add(inst.get(k).label());
-            if (c != null && inst.get(k).dir.getName().equals(c)) checked = k + 2;
-        }
-        new PadFocus.Builder(a).setTitle("GPU driver · " + g.name).setSingleChoiceItems(labels.toArray(new String[0]), checked, (x, w) -> {
-            GpuDriver.choice(a, g.titleId, w == 0 ? null : w == 1 ? GpuDriver.SYSTEM : inst.get(w - 2).dir.getName());
             x.dismiss();
             done.run();
         }).setNegativeButton("Cancel", null).show();
@@ -847,6 +877,11 @@ final class GameSettings {
     private static void sharpness(MainActivity a, Game g, Runnable done) {   // FSR's RCAS sharpening (GameUpscaler, DM_VK_NDSR_SHARP)
         choose(a, "FSR sharpness · " + g.name, GameUpscaler.SHARP_NAMES, firstLabel(null, GameUpscaler.sharpName(GameUpscaler.sharp(a))), GameUpscaler.ownSharp(a, g.titleId),
                GameUpscaler.sharpIndex(GameUpscaler.sharp(a, g.titleId)), v -> GameUpscaler.sharp(a, g.titleId, v == null ? null : GameUpscaler.SHARPS[v]), done);
+    }
+
+    private static void crt(MainActivity a, Game g, Runnable done) {   // PEANUTS: the CRT filter (CrtFilter, DM_VK_CRT); the in-game panel changes it live
+        choose(a, "CRT filter · " + g.name, CrtFilter.MODES, firstLabel(null, CrtFilter.label(CrtFilter.mode(a))), CrtFilter.ownMode(a, g.titleId), CrtFilter.mode(a, g.titleId),
+               v -> CrtFilter.mode(a, g.titleId, v), done);
     }
 
     private static void dlssMode(MainActivity a, Game g, Runnable done) {   // the DLSS stand-in's mode (GameUpscaler.dlssMode, DM_VK_DLSS); the in-game panel changes it live

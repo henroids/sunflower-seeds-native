@@ -145,6 +145,8 @@ HLE_FORCE("_ZN2nn3nsd24GetEnvironmentIdentifierEPNS0_21EnvironmentIdentifierE", 
 // which asks the nsd:a / nsd:u service itself, which the host does not serve, and aborts when it cannot connect (MLB The Show 26, SDK 19.3.11: Result 0xe8d at
 // sdk+0x3f4cfc as its opening video starts). The game imports the oe name, so that is the one to take over
 HLE_FORCE("_ZN2nn2oe24GetServerEnvironmentTypeEv", "server environment type: retail (0), as lp1", int, h_oe_SrvEnv, void) { return 0; }
+// PEANUTS(upstream-candidate): the SDK's application environment query returns the retail enum (Lp = 1) for the same environment.
+HLE_FORCE("_ZN2nn3nsd35GetApplicationServerEnvironmentTypeEv", "server environment type: retail lp", uint32_t, h_nsd_EnvType, void) { return 1; }
 
 // ---------- friends: newer SDK overloads ----------
 HLE_FORCE("_ZN2nn7friends12SetAllocatorEPFPvmEPFvS1_mE", "friends library allocator; no session is created, ignored", void, h_fr_SetAlloc, void *a, void *f) { (void)a; (void)f; }

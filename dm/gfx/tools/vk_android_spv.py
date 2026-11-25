@@ -720,15 +720,101 @@ def buffer_textures_split(m):
     return len(si)
 
 
+# PEANUTS begin
+DEC_NON_UNIFORM, CAP_SHADER_NON_UNIFORM, CAP_SAMPLED_IMAGE_ARRAY_NU, CAP_STORAGE_IMAGE_ARRAY_NU = 5300, 5301, 5307, 5309
+
+
+def nonuniform_arrays(m):
+    """A texture, image or sampler taken from a descriptor array at an index that is not a constant is marked NonUniform (the access chain, its load and what the load becomes:
+    OpCopyObject, OpImage, OpSampledImage), with the capabilities and, before SPIR-V 1.5, SPV_EXT_descriptor_indexing. The translator marks them only when its host says it
+    indexes non-uniformly (Ryujinx MarkNonUniform, QueryHostSupportsShaderNonUniformIndexing), which Program.cs leaves at the Metal default, no. Vulkan reads an unmarked index
+    as the same in every invocation of a subgroup: an Adreno fragment wave covers 8x8 pixels and takes one invocation's descriptor for all of them, so a per-pixel index (Unreal's
+    forward lighting choosing a light's shadow map, a material table indexed by the primitive) drew whole 8x8 blocks from another texture. → the number of values marked"""
+    descs = (OP_TYPE_IMAGE, OP_TYPE_SAMPLER, OP_TYPE_SAMPLED_IMAGE)
+    arrays, storage = set(), False
+    for vid, (ptr, sc) in m.vars.items():
+        if sc != SC_UNIFORM_CONSTANT: continue
+        t = m.pointee(ptr)[1]
+        el, _ = m.strip_arrays(t)
+        if m.op(t) in (OP_TYPE_ARRAY, OP_TYPE_RUNTIME_ARRAY) and m.op(el) in descs: arrays.add(vid)
+    marked = set()
+    for x in m.ins:
+        op = x[0] & 0xffff
+        if op in (OP_ACCESS_CHAIN, OP_IN_BOUNDS_ACCESS_CHAIN) and x[3] in arrays and any(i not in m.consts for i in x[4:]):
+            marked.add(x[2])
+            el, _ = m.strip_arrays(m.pointee(m.vars[x[3]][0])[1])
+            storage = storage or m.op(el) == OP_TYPE_IMAGE and m.types[el][7] == 2
+        elif op in (OP_LOAD, OP_COPY_OBJECT, OP_IMAGE) and x[3] in marked: marked.add(x[2])
+        elif op == OP_SAMPLED_IMAGE and (x[3] in marked or x[4] in marked): marked.add(x[2])
+    marked = {i for i in marked if DEC_NON_UNIFORM not in m.decos.get(i, {})}
+    if not marked: return 0
+    caps = [c for c in (CAP_SHADER_NON_UNIFORM, CAP_SAMPLED_IMAGE_ARRAY_NU) + ((CAP_STORAGE_IMAGE_ARRAY_NU,) if storage else ()) if c not in m.caps]
+    k = max(i for i, y in enumerate(m.ins) if y[0] & 0xffff == OP_CAPABILITY) + 1
+    m.ins[k:k] = [[2 << 16 | OP_CAPABILITY, c] for c in caps]
+    if m.header[1] < 0x10500 and 'SPV_EXT_descriptor_indexing' not in m.exts:
+        e = lit_string('SPV_EXT_descriptor_indexing'); m.ins.insert(k + len(caps), [(1 + len(e)) << 16 | OP_EXTENSION, *e])
+    d = max(i for i, y in enumerate(m.ins) if y[0] & 0xffff in (OP_DECORATE, OP_MEMBER_DECORATE, OP_NAME, 6, 7, 3, 4, OP_EXTENSION, OP_CAPABILITY, OP_EXT_INST_IMPORT, 14, OP_ENTRY_POINT, OP_EXECUTION_MODE)) + 1   # (6 OpMemberName, 7 OpString, 3 OpSource, 4 OpSourceExtension, 14 OpMemoryModel)
+    m.ins[d:d] = [[3 << 16 | OP_DECORATE, i, DEC_NON_UNIFORM] for i in sorted(marked)]
+    m.index()
+    return len(marked)
+# PEANUTS end
+
+
 def dual_source(m):
     """Dual-source blending (dmsh_build.py fs_dual): NVN's SRC1 factors read output 1 as target 0's second source; Vulkan reads it only from Location 0 Index 1. For a shader
-    writing exactly colours 0 and 1: output 1 moved to Location 0, Index 1. → True when rewritten"""
+    writing exactly colours 0 and 1: output 1 moved to Location 0, Index 1. The phone's driver (Qualcomm 512.676 on an Adreno 740) refuses the pipeline when that output is
+    written per component — the translator's OpAccessChain + OpStore of one float, four times — vkCreateGraphicsPipelines returns VK_ERROR_INITIALIZATION_FAILED, while the
+    same shader written with one whole-vector store is accepted, and so is per-component writing to a non-dual output (measured on FINAL FANTASY XII THE ZODIAC AGE's
+    target-ring pipelines; Turnip accepts both). So a float vec4 output 1 is also made whole: it becomes a Private variable, written by every store the shader already has,
+    and a new Output variable (Location 0, Index 1) is written with one whole-vector load/store before every return of the entry function. → True when rewritten"""
+    # PEANUTS(upstream-candidate): output 1 written with one whole-vector store (Qualcomm 512.676 refuses the per-component form)
     outs = m.io(SC_OUTPUT)
     if sorted(outs) != [0, 1]: return False
-    var = outs[1][0]
+    var, t = outs[1]
+    fv = _float_vec(m, t)
+    if not fv or fv[0] != 4:   # not a float vec4: today's move only (only a float vec4 output 1 was measured; others keep the move only)
+        for k, x in enumerate(m.ins):
+            if x[0] & 0xffff == OP_DECORATE and x[1] == var and x[2] == DEC_LOCATION:
+                x[3] = 0; m.ins.insert(k + 1, [4 << 16 | OP_DECORATE, var, DEC_INDEX, 1]); break
+        m.index()
+        return True
+    chains, in_fn = [], False   # access chains on the variable; any other use in a function body than a load, a store or a chain is not the shape this rewrite knows
+    for x in m.ins:
+        op = x[0] & 0xffff
+        in_fn = (in_fn or op == OP_FUNCTION) and op != OP_FUNCTION_END
+        if op in (OP_ACCESS_CHAIN, OP_IN_BOUNDS_ACCESS_CHAIN) and x[3] == var:
+            chains.append(x)
+        elif in_fn and var in maybe_ids(x) and op not in (OP_LOAD, OP_STORE):
+            return False
+    pptr = m.add_type(OP_TYPE_POINTER, SC_PRIVATE, t)
+    twins, bases = {}, {var}   # a chain's Output pointer type → its Private twin; the chains read a base settled before them (m.ins order)
+    for x in chains:
+        if x[3] in bases:
+            p = m.pointee(x[1])[1]
+            if p not in twins: twins[p] = m.add_type(OP_TYPE_POINTER, SC_PRIVATE, p)
+            x[1] = twins[p]
+            bases.add(x[2])
+    nv = m.new_id(); nptr = m.add_type(OP_TYPE_POINTER, SC_OUTPUT, t)
+    a, e = m.function_range(m.entry_function())
+    out = []
     for k, x in enumerate(m.ins):
-        if x[0] & 0xffff == OP_DECORATE and x[1] == var and x[2] == DEC_LOCATION:
-            x[3] = 0; m.ins.insert(k + 1, [4 << 16 | OP_DECORATE, var, DEC_INDEX, 1]); break
+        op = x[0] & 0xffff
+        if op == OP_DECORATE and x[1] == var: continue   # Location, Index: the variable leaves the interface
+        if op == OP_VARIABLE and x[2] == var: continue   # declared again below, as a Private of the same type
+        if op == OP_ENTRY_POINT:   # the new output joins the interface; up to SPIR-V 1.3 (the translator's) it lists Input / Output only, so the Private copy leaves: from 1.4 every global is listed and it stays
+            _, j = string_at(x, 3)
+            rest = [v for v in x[j:] if v != var] if m.header[1] < 0x10400 else x[j:]
+            x = x[:j] + rest + [nv]; x[0] = len(x) << 16 | OP_ENTRY_POINT
+        if a < k < e and op == OP_RETURN:   # output 1, written whole before the fragment leaves
+            tmp = m.new_id()
+            out += [[4 << 16 | OP_LOAD, t, tmp, var], [3 << 16 | OP_STORE, nv, tmp]]
+        out.append(x)
+    m.ins = out
+    at = next(k for k, y in enumerate(m.ins) if y[0] & 0xffff == OP_DECORATE)
+    m.ins.insert(at, [4 << 16 | OP_DECORATE, nv, DEC_LOCATION, 0])
+    m.ins.insert(at, [4 << 16 | OP_DECORATE, nv, DEC_INDEX, 1])
+    m._insert_decl([4 << 16 | OP_VARIABLE, pptr, var, SC_PRIVATE])
+    m._insert_decl([4 << 16 | OP_VARIABLE, nptr, nv, SC_OUTPUT])
     m.index()
     return True
 

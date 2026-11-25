@@ -30,6 +30,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+// PEANUTS: (the startup shader progress has its own view now, dev.peanuts.ui.PrepareCover: no ProgressBar here)
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -87,11 +88,19 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private volatile AudioDeviceCallback route;
     private boolean routeReady;
 
+    private dev.peanuts.ui.GameControls.Host controlsHost;   // PEANUTS: this screen's controls (GameControls.clear)
+    private android.content.BroadcastReceiver peanutsCtl;   // PEANUTS: the adb control's live game commands (dev.peanuts.ctl.GameLink)
+
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        dev.peanuts.ui.GameControls.host(controlsHost = peanutsControls());   // PEANUTS: the stats page's console mode and frame rate cap pop-ups
+        peanutsCtl = dev.peanuts.ctl.GameLink.register(this);   // PEANUTS: the same controls for the adb control's game command, from the launcher's process
         fitOrientation();
-        setShowWhenLocked(true);
-        setTurnScreenOn(true);
+        // PEANUTS: the game stays behind the lock screen (GitHub issue #198: after the lid closed it was drawn over the lock screen, which then had no way to the PIN
+        // prompt). Only a control command asks for it (--ez show_when_locked true, as Ondevice's), for test runs on a phone that locks
+        boolean onLock = getIntent().getBooleanExtra("show_when_locked", false);
+        setShowWhenLocked(onLock);
+        setTurnScreenOn(onLock);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         // This game's own host (libnxhost_<title ID>.so, with its profile compiled in): a game this APK has no profile for gets a sentence, not a crash
         String id = String.valueOf(getIntent().getStringExtra("title_id"));
@@ -119,7 +128,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         tag = overlayText(Gravity.TOP | Gravity.START, 1f);
         tag.setText(Prefs.buildTag(this));
         tag.setTypeface(Typeface.DEFAULT_BOLD);
-        tag.setVisibility(overlayOn() && Prefs.overlayItem(this, "tag") ? View.VISIBLE : View.GONE);
+        tag.setVisibility(overlayOn() && dev.peanuts.overlay.Hud.tagOn(this) ? View.VISIBLE : View.GONE);   // PEANUTS: Hud.tagOn (off by default under the pill)
         root.addView(tag, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
         // The log block may grow at most up to the tag's bottom edge (its top margin), so a long log never runs under the tag
         tag.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
@@ -183,6 +192,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         dev.peanuts.build.ShaderCapture.cover(this, root);   // PEANUTS: internal shader preparation stays behind a progress screen
         root.setOnApplyWindowInsetsListener((v, in) -> { insetOverlay(in); return in; });   // again whenever the insets change (a turn, a fold)
         setContentView(root);
+        dev.peanuts.TvPicture.fit(this);   // PEANUTS: on a TV or monitor, a picture of at most 1080 lines and the TV's game mode (#358)
         immersive();
         if (!dev.peanuts.build.ShaderCapture.active(this)) {   // PEANUTS: preparation is not a play session
             dev.peanuts.Companion.start(this, getIntent().getStringExtra("name"));   // PEANUTS: the companion on the second display
@@ -249,18 +259,112 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         v.requestLayout();
     }
 
+    // PEANUTS begin: show the cold pipeline build while the native host waits to start the game.
+    private final Runnable prewarmPoll = this::prewarmTick;
+    private dev.peanuts.ui.PrepareCover prewarmCover;   // PEANUTS: the home screen's background, the game's cover, a peanut cracking open, the count (dev.peanuts.ui.PrepareCover)
+
+    private void prewarmTick() {
+        ui.removeCallbacks(prewarmPoll);
+        long progress = Native.prewarmProgress();
+        dev.peanuts.Companion.preparing(progress != 0);   // PEANUTS: the second screen's start page stays up meanwhile
+        if (progress == 0) {
+            if (prewarmCover != null) {
+                rootView.removeView(prewarmCover);
+                prewarmCover = null;
+            }
+            return;
+        }
+        if (progress > 0) {
+            int total = (int) (progress >>> 32), done = (int) progress;
+            if (prewarmCover == null) {
+                GpuDriver.Info drv = GpuDriver.selected(this, titleId());
+                prewarmCover = new dev.peanuts.ui.PrepareCover(this, titleId(), getIntent().getStringExtra("name"), drv == null ? null : drv.label(),
+                        Native::prewarmSkip, this::end);
+                rootView.addView(prewarmCover, rootView.indexOfChild(pausedView), new FrameLayout.LayoutParams(-1, -1));
+            }
+            prewarmCover.set(done, total);
+        }
+        ui.postDelayed(prewarmPoll, 150);
+    }
+    // PEANUTS end
+
     private boolean overlayOn() { return overlayEnv != null ? overlayEnv : Prefs.overlay(this); }
 
-    /** Thread placement (Native.pinThreads): every 5 s, for threads the game and the replay start later; stops when the phone reports no clocks */
+    /**
+     * Thread placement (Native.pinThreads): every 5 s, for threads the game and the replay start later; stops when the phone reports no clocks. Use fast cores
+     * (Game settings) keeps it on for the whole run. Without it, it runs while Android has the game's process out of its top-app group: a tap on another app's
+     * window on the other screen (the AYN Thor's launcher on Screen-2) makes that app the top one, the game's process goes to foreground (GameHold keeps it
+     * there), and the Thor's scheduler kept the game's threads on the small cores, 94-97 % of their running time against 42 % as the top app; with the threads
+     * placed, about half ran on the middle cores and the game needed 55 % of a core where it had needed 81 % (DAVE THE DIVER, 30 fps, 2026-11-24). Back in
+     * top-app the placement is undone (Native.unpinThreads): Android's move between cpusets left the threads where they were placed
+     */
     private final Runnable pinRun = this::pinTick;
+    private boolean topResumed = true, pinnedAway;
     private void pinTick() {
-        if (Native.pinThreads() < 0) return;
-        ui.postDelayed(pinRun, 5000);
+        boolean asked = Prefs.pinThreads(this, titleId());
+        String group = asked ? null : cpuGroup();
+        boolean demoted = group != null && !group.equals("top-app");
+        if (!asked && demoted != pinnedAway) {
+            pinnedAway = demoted;
+            if (!demoted) { try { Native.unpinThreads(); } catch (UnsatisfiedLinkError ignored) {} }   // Android's move back did not give them all cores (Thor, 2026-11-24)
+            android.util.Log.i("peanuts", demoted ? "not Android's top app (cpu group " + group + "): the game's threads go to the fast cores while it lasts" : "Android's top app again: thread placement ends");
+        }
+        if (!asked && !demoted && topResumed) return;   // the top app, and Android placed the threads back itself: the loop ends (losing the top activity starts it again)
+        if ((asked || demoted) && Native.pinThreads() < 0) return;
+        ui.postDelayed(pinRun, asked ? 5000 : 1000);   // not the top activity: looked at each second (the group follows a moment after)
     }
     /** At the start and when a recreated screen attaches to the running game (attach: the old screen's loops were stopped); one loop, never two */
     private void pinStart() {
         ui.removeCallbacks(pinRun);
-        if (Prefs.pinThreads(this, titleId())) ui.postDelayed(pinRun, 2000);
+        if (Prefs.pinThreads(this, titleId()) || !topResumed) ui.postDelayed(pinRun, 2000);
+    }
+    /** This process's cgroup for the CPU ("top-app", "foreground", "background", ...) from /proc/self/cgroup; null when it cannot be read */
+    static String cpuGroup() {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/self/cgroup"))) {
+            for (String l; (l = r.readLine()) != null; ) { int i = l.indexOf(":cpu:/"); if (i >= 0) return l.substring(i + 6).trim(); }
+        } catch (java.io.IOException | RuntimeException ignored) {}
+        return null;
+    }
+
+    /**
+     * A four-finger tap on the game's screen hides or shows the companion or Peanuts' page on the second display (dev.peanuts.Companion.toggleScreen): four
+     * fingers down within FOUR_DOWN_MS of the first, lifted within FOUR_UP_MS, none moving more than FOUR_SLOP_DP. From the fourth finger on the game gets a cancel
+     * for every touch and nothing more until the last finger is up, so the gesture never reaches it as fingers (a game's own four-finger touch has to start slower)
+     */
+    private static final long FOUR_DOWN_MS = 350, FOUR_UP_MS = 600;
+    private static final float FOUR_SLOP_DP = 40;
+    private long fourFirst, fourAt;
+    private boolean fourHeld, fourSpoiled;
+    private final float[] fourX = new float[4], fourY = new float[4];
+    @Override public boolean dispatchTouchEvent(MotionEvent e) {
+        int act = e.getActionMasked();
+        if (act == MotionEvent.ACTION_DOWN) { fourFirst = e.getEventTime(); fourHeld = false; fourSpoiled = false; }
+        if (!fourHeld && act == MotionEvent.ACTION_POINTER_DOWN && e.getPointerCount() == 4 && e.getEventTime() - fourFirst <= FOUR_DOWN_MS) {
+            fourHeld = true; fourAt = e.getEventTime();
+            for (int i = 0; i < 4; i++) { fourX[i] = e.getX(i); fourY[i] = e.getY(i); }
+            MotionEvent cancel = MotionEvent.obtain(e);
+            cancel.setAction(MotionEvent.ACTION_CANCEL);
+            super.dispatchTouchEvent(cancel);   // the game lets go of the three fingers it had
+            cancel.recycle();
+            return true;
+        }
+        if (!fourHeld) return super.dispatchTouchEvent(e);
+        float slop = FOUR_SLOP_DP * getResources().getDisplayMetrics().density;
+        if (act == MotionEvent.ACTION_POINTER_DOWN) fourSpoiled = true;   // a fifth finger
+        if (act == MotionEvent.ACTION_MOVE)
+            for (int i = 0; i < Math.min(4, e.getPointerCount()); i++) if (Math.hypot(e.getX(i) - fourX[i], e.getY(i) - fourY[i]) > slop) fourSpoiled = true;
+        if (act == MotionEvent.ACTION_CANCEL) { fourHeld = false; return true; }
+        if (act == MotionEvent.ACTION_UP) {
+            fourHeld = false;
+            if (!fourSpoiled && e.getEventTime() - fourAt <= FOUR_UP_MS) fourFingerTap();
+        }
+        return true;
+    }
+    private void fourFingerTap() {
+        Boolean shown = dev.peanuts.Companion.toggleScreen(this);
+        if (shown == null) return;
+        if (rootView != null) rootView.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM);
+        Toast.makeText(this, shown ? "Second screen back. Four-finger tap to hide it." : "Second screen hidden. Four-finger tap to show it.", Toast.LENGTH_SHORT).show();
     }
 
     /**
@@ -281,6 +385,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     }
     private void skipStart() {
         ui.removeCallbacks(skipRun);
+        warmStart();   // PEANUTS: the "Preparing graphics" notice, started and stopped with this one
         if (!skipShown) ui.postDelayed(skipRun, 30000);
     }
     private void skipShow(int pct) {
@@ -308,6 +413,43 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         h.postDelayed(gone, 20000);
     }
 
+    // PEANUTS begin: the "Preparing graphics" notice (dev.peanuts.ui.WarmNotice; vka_warmnote.h). Every second, ask the host how many pipelines its background threads
+    // still make while draws are skipped for them (Native.warmStatus): shown, small, at the top, while that is above 0, with the count; gone when it is 0. A host without
+    // the entry point (-1) is not asked again. Without it a first run looked broken: EA SPORTS FC 27's pitch was black for a minute with no word why on screen
+    private TextView warmView;
+    private final Runnable warmRun = this::warmTick;
+    private void warmStart() { ui.removeCallbacks(warmRun); ui.postDelayed(warmRun, 1000); }
+    private void warmTick() {
+        if (rootView == null) return;
+        int n = stopped || paused ? 0 : Native.warmStatus();
+        if (dev.peanuts.ui.WarmNotice.shown(n)) {
+            if (warmView == null) {
+                warmView = new TextView(this);
+                warmView.setTextColor(Color.WHITE);
+                warmView.setTextSize(13);
+                float dp = getResources().getDisplayMetrics().density;
+                int p = Math.round(8 * dp);
+                warmView.setPadding(p, p, p, p);
+                android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+                bg.setColor(0xCC000000);
+                bg.setCornerRadius(10 * dp);
+                warmView.setBackground(bg);
+                warmView.setMaxWidth(Math.round(460 * dp));
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+                lp.topMargin = Math.round(16 * dp);
+                rootView.addView(warmView, panel != null ? rootView.indexOfChild(panel) : rootView.getChildCount(), lp);
+                Native.note("preparing graphics: notice shown (" + n + " pipelines waiting)");
+            }
+            warmView.setText(dev.peanuts.ui.WarmNotice.text(n));
+        } else if (warmView != null) {
+            rootView.removeView(warmView);
+            warmView = null;
+            Native.note("preparing graphics: notice hidden");
+        }
+        if (dev.peanuts.ui.WarmNotice.poll(n)) ui.postDelayed(warmRun, 1000);
+    }
+    // PEANUTS end
+
     // PEANUTS begin: the active display reports the compositor's required buffer-queue lead, independent of nominal refresh.
     private void presentationDeadlineUpdate() {
         android.view.Display display = getDisplay();
@@ -321,13 +463,15 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
      * views show them only while the present does not (not yet drawn, DM_VK_OVERLAY=0, a failure), the top-right one set again only when its text changed
      */
     private void fpsTick() {
+        dev.peanuts.launch.PlayTime.tick(this, titleId(), started && resumedNow && !stopped && !paused && prewarmCover == null);   // PEANUTS: total play time (only while the game runs, not behind "Preparing shaders")
         // PEANUTS: Stable 30 uses a window-local 60 Hz mode; requested FG and the running cap are authoritative.
         if (started && resumedNow && !stopped && !paused) runningDisplayMode.update(this, Native.fpsCapStatus(), Native.frameGenEnabled());
         else runningDisplayMode.clear(this);
         if (stopped || paused) { ui.postDelayed(this::fpsTick, 2000); return; }   // nothing to show: no readings (thermal, battery, the host's counters) while suspended
         if (started && resumedNow) presentationDeadlineUpdate();   // PEANUTS: reuse the active 500 ms tick, after the mode request
-        boolean on = overlayOn();
-        CharSequence t = on ? stats.tick() : null, g = on && Prefs.overlayItem(this, "tag") ? tag.getText() : null;
+        boolean on = overlayOn() && !dev.peanuts.ui.GameScreen.hidesOverlay(this);   // PEANUTS: && !GameScreen.hidesOverlay (the second screen's stats page is up)
+        CharSequence t = on ? stats.tick() : null, g = on && dev.peanuts.overlay.Hud.tagOn(this) ? tag.getText() : null;   // PEANUTS: Hud.tagOn (off by default under the pill)
+        dev.peanuts.ui.GameScreen.buildTag(tag.getText());   // PEANUTS: the stats page always names the build (whatever the overlay's own tag switch says)
         boolean host = tagBlock.host(g) & fpsBlock.host(t);   // both every time: a block that is off empties its corner
         fps.setVisibility(!host && t != null ? View.VISIBLE : View.GONE);
         tag.setVisibility(!host && g != null ? View.VISIBLE : View.GONE);
@@ -357,6 +501,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         holdLock(dir);
         try {
             if (SaveStore.recoverLocked(dir)) saveNote = "a save restore or swap that was stopped was finished first";
+            { String users = UserSaveDirs.recoverUsers(dir); if (users != null) saveNote = users; }   // PEANUTS: each user's save (UserSaveDirs; one that cannot be finished stops no start)
         } catch (IOException e) {
             throw new IOException("The save folder has an unfinished restore that cannot be finished: " + e.getMessage());
         }
@@ -450,17 +595,11 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private int capDisplayHz(int maximum) {
-        android.view.Display d = getDisplay();
-        int hz = displayHz();
-        if (d != null) {
-            android.view.Display.Mode current = d.getMode();
-            for (android.view.Display.Mode m : d.getSupportedModes()) {
-                if (m.getPhysicalWidth() == current.getPhysicalWidth() && m.getPhysicalHeight() == current.getPhysicalHeight())
-                    hz = Math.max(hz, Math.round(m.getRefreshRate()));
-            }
-        }
-        return Math.max(60, Math.min(maximum, hz));
+        return Math.max(60, Math.min(maximum, Math.max(displayHz(), Prefs.displayMaxHz(getDisplay()))));   // PEANUTS: the menus' display rule (Prefs.displayMaxHz)
     }
+    /** PEANUTS: the frame limit a stored one runs at on this game's display: a 90 or 120 above the display's highest refresh rate is kept and runs at that rate (fps cap audit B5) */
+    private int onScreen(int stored) { return FrameRateCaps.onScreen(stored, Prefs.displayMaxHz(getDisplay())); }
+    private int limitRate(int stored) { return FrameRateCaps.limitRate(stored, Prefs.displayMaxHz(getDisplay())); }
 
     private Profile.Render startRender;   // the render setting this run started with (settingsEnv), null for a game without a render_cfg row
     Profile.Render startRender() { return startRender; }
@@ -469,11 +608,14 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private static boolean gameOwnedAtStart;
     boolean gameOwnedAtStart() { return gameOwnedAtStart; }
     private static int fpsModeAtStart;
+    // PEANUTS: the variant this run started (Profile.fpsVariant), null for none; whether the cap asked for one the pack does not hold complete (the panel says so)
+    private static String fpsVariantAtStart;
+    private static boolean fpsVariantMissing;
     boolean fpsRestartRequired(int selected) {
         Profile p = Profile.of(titleId());
-        return p != null ? p.fpsRestart(fpsModeAtStart, selected) : (selected == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart;
+        return p != null ? p.fpsRestart(fpsModeAtStart, onScreen(selected)) : (selected == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart;
     }
-    private String settingsEnv(String id, List<String> env) {
+    private String settingsEnv(String id, Pack pack, List<String> env) {   // PEANUTS: pass the pack build for FPSLocker selection
         // Game resolution: the game's own setting, else the main screen's: the window size the host gives the game (window_fn), or the graphics scale and operation
         // mode that give that size (graphics_scale rows), as its profile says (Profile.resolutionEnv); nothing for a game with neither
         Profile prof = Profile.of(id);
@@ -492,11 +634,29 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (prof != null) env.addAll(prof.optionsEnv(optEnv -> Prefs.gameOption(this, id, optEnv)));
         Lsfg.env(this, env);   // frame generation: the user's Lossless.dll and the settings
         GameUpscaler.env(this, id, env);   // the Upscaler (Game settings, the in-game panel): the game's own upscaler and the present's scaling
+        env.add(CrtFilter.line(this, id));   // PEANUTS: the CRT filter (Settings › Display, Game settings, the in-game panel; CrtFilter)
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
-        fpsModeAtStart = Prefs.paceCap(this, id);
-        gameOwnedAtStart = Prefs.limited(id) && Prefs.paceCap(this, id) == FrameRateCaps.GAME_OWNED;
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id)) env.add("DM_VK_GPUPROF=300");   // PEANUTS TEMPORARY: the GPU time of one frame in 300 by step, for the optimization work (remove when done)
+        fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
+        // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
+        // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why
+        fpsVariantAtStart = null; fpsVariantMissing = false;
+        if (prof != null && prof.hasFpsVariant() && Prefs.limited(id) && fpsModeAtStart != FrameRateCaps.GAME_OWNED) {
+            String fv = prof.fpsVariant(FrameRateCaps.limitRate(fpsModeAtStart, Prefs.displayMaxHz(getDisplay())));
+            if (fv != null && pack != null && pack.variantReady(fv)) fpsVariantAtStart = fv;
+            else {
+                fpsVariantMissing = true;
+                fpsModeAtStart = FrameRateCaps.GAME_OWNED;
+                String note = "[nxlaunch] frame rate: the build has no complete " + fv + " variant (pack.tsv variant row and " + fv + "/main.patched.bin): started Game owned";
+                if (!unknownNotes.contains(note)) unknownNotes.add(note);   // settingsEnv runs for the readiness check too
+            }
+        }
+        // PEANUTS end
+        // PEANUTS: a supported update may lack this game's reviewed FPSLocker plan.
+        boolean hasFpsPlan = prof == null || prof.fpsLockerPlanMatches(BuildCheck.builds(pack).get("main"));
+        gameOwnedAtStart = !hasFpsPlan || Prefs.limited(id) && fpsModeAtStart == FrameRateCaps.GAME_OWNED;
         if (prof != null && prof.fpsPlan120.isEmpty() && (!prof.fpsLocker.isEmpty() || !prof.fpsLockerPlan.isEmpty()) && !gameOwnedAtStart) env.add("DM_FPSLOCKER_INTERVAL=1");
-        if (prof != null && !prof.fpsLockerPlan.isEmpty()) env.add("DM_FPSLOCKER_PLAN=" + prof.fpsLockerPlan);
+        if (prof != null && hasFpsPlan && !prof.fpsLockerPlan.isEmpty()) env.add("DM_FPSLOCKER_PLAN=" + prof.fpsLockerPlan);   // PEANUTS: only pass a plan the loader can apply
         if (prof != null && prof.fpsPlan120.isEmpty() && !prof.fpsLocker.isEmpty() && !gameOwnedAtStart) env.add("DM_FPSLOCKER=" + prof.fpsLocker);
         int cap = Prefs.fpsCap(this, id);   // the game's own frame rate cap (its in-game panel, its Game settings), else the main screen's (unset: the profile's fps_target)
         if (gameOwnedAtStart) {
@@ -506,15 +666,19 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             env.addAll(prof.fpsModeEnv(fpsModeAtStart));
         } else if (Prefs.paced(id)) {   // speed follows the measured rate: presents on the host's own tick at the display's refresh rate, no interval locking, and a frame limit (Prefs.PACE_CAPS)
             int pace = Prefs.paceCap(this, id);
-            env.add("DM_PRESENT_INTERVAL=display"); env.add("DM_PRESENT_HZ=" + displayHz()); env.add("DM_FPS_TARGET=0"); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60));
+            env.add("DM_PRESENT_INTERVAL=display"); env.add("DM_PRESENT_HZ=" + displayHz()); env.add("DM_FPS_TARGET=0"); env.add("DM_FPS_LIMIT=" + limitRate(pace));
             if (!Prefs.decouple(this, id)) env.add("DM_FPS_DECOUPLE=0");   // Full game speed at low frame rates off (the in-game panel changes it live)
         } else if (Prefs.limited(id)) {   // a profile's default frame limit (fps_limit), which the host applies itself: only the player's own choice is passed (60 fps = none: the game's own interval)
+            if (prof != null && prof.usesFpsModeTarget()) env.add("DM_FPS_TARGET=" + prof.fpsModeTarget(fpsModeAtStart));   // PEANUTS: select the native engine mode on launch
             int maximum = Prefs.paceMax(id);
-            if (maximum > 60) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes
+            if (maximum > 60 || prof != null && prof.optInPresentRate()) {   // keep presentation and the guest's vsync event on the same high tick for live cap changes; PEANUTS: opt-in present pacing up to 60 too (display-paced, as its profiles were measured: Star Ocean The Second Story R README)
                 int hz = capDisplayHz(maximum);
-                env.add("DM_PRESENT_HZ=" + hz); env.add("DM_VSYNC_HZ=" + hz); env.add("DM_FPS_TARGET=0");
+                env.add("DM_PRESENT_HZ=" + hz); env.add("DM_VSYNC_HZ=" + hz);
+                // PEANUTS: Keep the elapsed-time target while changing display cadence.
+                if (prof == null || !prof.elapsedFrameStep) env.add("DM_FPS_TARGET=0");
+                if (prof != null && (prof.optInPresentRate() || prof.elapsedFrameStep)) env.add("DM_PRESENT_INTERVAL=display");
             }
-            if (Prefs.chosenFpsCap(this, id)) { int pace = Prefs.paceCap(this, id); env.add("DM_FPS_LIMIT=" + (pace > 0 ? pace : 60)); }
+            if (Prefs.chosenFpsCap(this, id)) { int pace = Prefs.paceCap(this, id); env.add("DM_FPS_LIMIT=" + limitRate(pace)); }   // PEANUTS: limitRate, at most the display's highest rate
         } else if (cap >= 0) env.add("DM_FPS_TARGET=" + cap);
         if (Prefs.steps(id) && Prefs.hold60(this, id)) env.add("DM_FPS_HOLD60=1");   // Hold 60 fps: one step a frame at the cap of 60 (the in-game panel changes it live)
         String gpuNote = GpuDriver.env(this, id, env);   // the game's GPU driver, else the main screen's (DM_VK_DRIVER)
@@ -526,7 +690,8 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (xb == 2) env.add("DM_PAD_LABELLED=2");
         if (Prefs.instancedDraws(this, id)) env.add("DM_VK_INSTANCE=1");   // Game settings › Instanced draws
         if (Prefs.classicPasses(this, id)) env.add("DM_VK_CLASSIC_RP=1");   // Game settings › Classic render passes
-        if (Prefs.skipLayersGame(id) && Prefs.skipLayers(this, id)) env.add("DM_VK_SKIP_FS=" + Prefs.skipLayersKeys(id));   // Game settings › Speedhack: Turn off hidden layers
+        if (Prefs.skipLayersGame(id) && Prefs.skipLayers(this, id)) env.add("DM_VK_SKIP_FS=" + Prefs.skipLayersKeys(id));
+        if (Prefs.crowdGame(id) && Prefs.hideCrowd(this, id)) env.add("DM_VK_SKIP_VS=" + Prefs.crowdKeys(id));   // Game settings › Crowd control   // Game settings › Speedhack: Turn off hidden layers
         env.add("DM_VK_PSO_ASYNC=" + (Prefs.psoAsync(this, id) ? 2 : 0));   // Game settings › Background pipelines (an env.txt line of the player's comes later and wins)
         if (Prefs.ramSaver(this, id)) { env.add("DM_MEM_FILEBACK=1"); env.add("DM_MEM_FILEBACK_KINDS=shader,texture"); }   // Game settings › RAM saver: texture pools in a file in TMPDIR, the cache folder (vka_mem.c "File-backed pools"); lines of env.txt or the game's own come later and win
         String padMap = Prefs.padMap(this, id);   // Button mapping (Game settings, Settings): wins over the label swap's A/B for the buttons it names
@@ -534,12 +699,24 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         env.add("DM_MOTION_SENS=" + Prefs.motionFactor(this, id));   // Game settings › Controls › Motion sensitivity (the phone's gyro, 50 % unless the player chose; env.txt lines come later and win)
         if (Prefs.stretch(this, id)) env.add("DM_VK_STRETCH=1");   // Game settings › Display › Stretch to screen (or the in-game panel's Picture rows)
         String aspect = Prefs.aspect(this, id), variant = aspect == null || Profile.of(id) == null ? null : Profile.of(id).aspectVariant(aspect);
+        // PEANUTS: aspect_plan rows (aspect_plan.h) are exact-build: pass them, and a shape, only for a main build they name
+        boolean aspectPlanOk = prof == null || prof.aspectPlanMatches(BuildCheck.builds(pack).get("main"));
+        if (prof != null && aspectPlanOk && !prof.aspectPlan.isEmpty()) env.add("DM_ASPECT_PLAN=" + prof.aspectPlan);
+        runFill = aspectPlanOk && variant == null && ScreenShape.CHOICE.equals(aspect) && GameSettings.fillable(Profile.of(id));   // PEANUTS: Display > Fill at this start
+        if (fpsVariantAtStart != null) {   // PEANUTS: the frame rate's variant (its code; its RomFS overlay goes in with the start's other overlays) wins over an aspect variant: one main a run
+            env.add("DM_PATCH_VARIANT=" + fpsVariantAtStart);
+            env.add("DM_PRESENT_INTERVAL=display");   // the variant is made for one frame a display tick (Animal Crossing: New Horizons' mod sets the swap interval to 1)
+            if (variant != null) shapeNote = "[nxlaunch] aspect ratio: the " + variant + " variant is not started with the frame rate's " + fpsVariantAtStart + " variant";
+            variant = null;
+        }
         if (variant != null) {   // Game settings › Aspect ratio: the pack's native-aspect modules (<pack>/<variant>/, loader.c) and the picture shown at that aspect
             env.add("DM_PATCH_VARIANT=" + variant);
             env.add("DM_VK_PICTURE_ASPECT=" + aspect);
+        } else if (!aspectPlanOk) {   // PEANUTS: aspect_plan rows that do not cover this pack's main build: the game as shipped, not a squeezed picture
+            shapeNote = "[nxlaunch] aspect ratio: the profile's aspect rows are for another game version; 16:9 kept";
         } else if (aspect != null && Profile.of(id) != null && Arrays.asList(Profile.of(id).cameraAspects.split(",")).contains(aspect)) {   // a shape the host's camera patch follows (game.tsv aspect rows): the picture at that shape, no variant
             env.add("DM_VK_PICTURE_ASPECT=" + aspect);
-        } else if (ScreenShape.CHOICE.equals(aspect) && Profile.of(id) != null && !Profile.of(id).cameraAspects.isEmpty()) {   // Screen shape: the window's own shape (ScreenShape), read now, once; a 16:9-ish window passes nothing
+        } else if (ScreenShape.CHOICE.equals(aspect) && GameSettings.fillable(Profile.of(id))) {   // PEANUTS: fillable, so aspect_plan rows alone do (Display › Fill)   // Screen shape: the window's own shape (ScreenShape), read now, once; a 16:9-ish window passes nothing
             android.graphics.Rect b = getWindowManager().getCurrentWindowMetrics().getBounds();
             String shape = ScreenShape.ratio(b.width(), b.height(), orientationFixed());
             if (shape != null) env.add("DM_VK_PICTURE_ASPECT=" + shape);
@@ -549,21 +726,21 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (picSize < PictureFit.SIZE_MAX) env.add("DM_VK_PICTURE_SIZE=" + picSize);
         String lang = GameLanguage.env(Prefs.gameLang(this, id), GameSettings.phoneTag());   // Game settings › Game language: the phone's by default (a DM_LANG line of the user's wins)
         if (lang != null) env.add(lang);
-        env.addAll(Users.env(this));   // Settings › Users: the users the game's account calls list and its user selector offers (hle_account.c), and the one it starts with
+        env.addAll(Users.env(Users.list(this), dev.peanuts.users.WhoPlaysActivity.startUser(this, getIntent(), Users.defaultUid(this))));   // PEANUTS: Settings › Users: the users the game's account calls list and its user selector offers (hle_account.c), and the one it starts with: the one Who's playing? picked
         return gpuNote;
     }
     private String readinessLine;
     private static final long READINESS_WAIT_MS = 8000;
 
     /** true: the start waits for the check (it calls start() again when the player may go on) */
-    private boolean readinessHold(String id) {
+    private boolean readinessHold(String id, Pack pack) {   // PEANUTS: pass the pack build for FPSLocker selection
         if (readinessDone) return false;
         File files = getExternalFilesDir(null);
         Prefs.pinDriver(this, id);   // a recommended driver stays the one this check probes for the whole start (Prefs.pinDriver)
         // the game's environment as start() will set it (the launcher's settings, then the user's lines, which win), less the paths start() sets: the check makes the
         // process's first Vulkan device, and a driver reads some variables only then (FD_DEV_FEATURES, TU_DEBUG: GitHub #40)
         List<String> genv = new ArrayList<>();
-        settingsEnv(id, genv);
+        settingsEnv(id, pack, genv);   // PEANUTS: pass the pack build for FPSLocker selection
         genv.addAll(AdvancedSettings.lines(this, id, PROTECTED));   // Advanced rows come before env.txt's lines
         genv.addAll(quietEnv(new File(files, "env.txt")));
         genv.addAll(envLines(Prefs.gameEnv(this, id)));
@@ -627,7 +804,8 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             for (Readiness.Check c : fails) placed |= "ext.VK_KHR_map_memory2".equals(c.fact) || "ext.VK_EXT_map_memory_placed".equals(c.fact) || "feature.memoryMapPlaced".equals(c.fact);
             GpuDriver.Info drv = GpuDriver.selected(this, id);
             boolean custom = Readiness.customDriversFit(f);   // the custom drivers are Adreno drivers: no help on another GPU (its reported vendor ID)
-            if (placed && drv == null && !custom) m.append(".\n\nThis GPU's own driver has no placed memory maps, so nothing is drawn: the screen stays black while the game runs. "
+            if (placed && dev.peanuts.ui.MaliDriver.arm(f)) m.append(dev.peanuts.ui.MaliDriver.advice(drv == null ? null : drv.label(), f));   // PEANUTS: on Mali a PanVK build with placed maps, never System (#262)
+            else if (placed && drv == null && !custom) m.append(".\n\nThis GPU's own driver has no placed memory maps, so nothing is drawn: the screen stays black while the game runs. "
                     + "The custom drivers the app can install are for Adreno GPUs only, so this phone cannot draw the game yet.");
             else if (placed) m.append(".\n\nWith this GPU driver (").append(drv == null ? "System" : drv.label()).append(") nothing is drawn: the screen stays black while the game runs. ")
                     .append(drv == null ? "Pick a custom driver that has placed memory maps" : "Pick System (the phone's own driver)")
@@ -697,7 +875,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private void noteOwnRate() {
         try {
             String[] f = Native.fpsCapStatus().split(" ");
-            if (Integer.parseInt(f[0]) >= 0 && Integer.parseInt(f[2]) > 0) Prefs.ownRate(this, titleId(), Integer.parseInt(f[1]) == 0);   // presenting: main is loaded
+            if (Integer.parseInt(f[0]) >= 0 && Integer.parseInt(f[2]) > 0) { Prefs.ownRate(this, titleId(), Integer.parseInt(f[1]) == 0); Prefs.hostRates(this, titleId(), Integer.parseInt(f[1])); }   // presenting: main is loaded; PEANUTS: the rates too, for the launcher (Prefs.offeredCaps)
         } catch (RuntimeException e) { /* no answer: left as it was */ }
     }
 
@@ -743,7 +921,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             Pack pack = Pack.read(packDir);
             String romfs = pack.romfsPath(game);   // a folder's RomFS folder, or <file>.nup:<selector>/romfs (NUP.md)
             if (romfs == null) throw new IOException(Nup.isNup(game) ? game.getName() + " has no " + pack.romfsSelector() + " with a RomFS" : "no RomFS in " + game);
-            if (readinessHold(id)) return;   // after the pack's own checks (a missing pack says so first), before the save is locked or anything is written
+            if (readinessHold(id, pack)) return;   // after the pack's own checks (a missing pack says so first), before the save is locked or anything is written (PEANUTS: pack build)
             // A .nup used where it is (PickedNup): the host gets a descriptor of it, fd:<n>/<name>, wherever it would get the file's path (DM_ROMFS, the add-on links);
             // it stays open for this process's life, and the host duplicates it for each image it opens (nup_image.h)
             int nupFd = PickedNup.is(this, game.getPath()) ? PickedNup.detachedFd(this, game) : -1;
@@ -791,7 +969,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
                 GameFonts.place(new File(getFilesDir(), "fonts"), GameFonts.EXT, fin.readAllBytes());
             } catch (java.io.FileNotFoundException e) {   // an APK built without fontTools: the host's [YELLOW] line says so
             } catch (IOException e) { unknownNotes.add("[nxlaunch] the button-icon font is not placed (" + e.getMessage() + "): button icons in game text draw as '?'"); }
-            String gpuNote = settingsEnv(id, env);
+            String gpuNote = settingsEnv(id, pack, env);   // PEANUTS: pass the pack build for FPSLocker selection
             cheatsMerged = false;   // PEANUTS: decided anew at each start (this screen's object may start a game again)
             cheatMods = dev.peanuts.mods.ModRuntime.cheatsDirs(game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: for cheatsEnv (ModCheats)
             cheatsEnv(id, pack, packDir, env);
@@ -824,6 +1002,12 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             // (hle_cheats.c reads a single flat folder by build ID); a "code" mod's exefs/exefs_patches never reach this process at all.
             String modOverlay = dev.peanuts.mods.ModRuntime.romfsOverlayEnv(this, game.isDirectory() ? game : game.getParentFile(), id, sceneOverlay, packDir);   // PEANUTS: mods beside the game; packDir: a code mod's files only with its build
             if (modOverlay != null) env.add(modOverlay);
+            File fpsRomfs = fpsVariantAtStart == null ? null : pack.variantRomfs(fpsVariantAtStart);   // PEANUTS: the frame rate variant's game data (made by the pack step from the player's own files), first: its code needs it
+            if (fpsRomfs != null) {
+                String chain = null;
+                for (String kv : env) if (kv.startsWith(SceneRes.ENV + "=")) chain = kv.substring(SceneRes.ENV.length() + 1);   // the line in force so far (the mods' or the scene's): kept after it
+                env.add(SceneRes.ENV + "=" + fpsRomfs.getPath() + (chain != null && !chain.isEmpty() ? ":" + chain : ""));
+            }
             String modCheats = dev.peanuts.mods.ModRuntime.cheatsEnv(this, game.isDirectory() ? game : game.getParentFile(), id, packDir);   // PEANUTS: mods beside the game; a code mod's cheats only with its build
             if (modCheats != null && !cheatsMerged) env.add(modCheats);   // PEANUTS: not beside upstream's own DM_CHEATS, which holds the mods' cheats then (cheatsEnv, ModCheats): the later line won, and the panel listed cheats the host did not run
             String resNote = resPresets.isEmpty() ? null   // the choice in force, for the log: which preset (or Advanced), and the window and scene it gave
@@ -865,8 +1049,10 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             // Read once the game has run a while (the host finds the game's limiter after it starts); the in-game panel updates it too
             ui.postDelayed(this::noteOwnRate, 30000);
             hostRunning = true;
+            prewarmTick();   // PEANUTS: startup shader progress
             if ("java".equals(testCrash)) { Native.note("[RED] DM_TEST_CRASH=java: an exception on the main thread in 10 s"); ExitWatch.testCrash(ui); }   // =native: nxlaunch.c
             if (readinessLine != null) Native.note(readinessLine + (triedAnyway ? "; the player chose Try anyway" : ""));   // the readiness check (readinessHold)
+            Native.note("[nxlaunch] use fast cores: " + (Prefs.pinThreads(this, titleId()) ? "on" : "off"));   // PEANUTS: so a log says whether threads were placed (Native.pinThreads)
             Native.note("[nxlaunch] game: " + game + (nupFd >= 0 ? " (.nup used where it is, descriptor " + nupFd + ")" : Nup.isNup(game) ? " (.nup)" : " (folder)") + ", DM_ROMFS " + romfs
                     + ", pack " + packDir);
             Native.note("[nxlaunch] save: " + save + " (" + saveHow + ")" + (saveNote != null ? "; " + saveNote : ""));
@@ -920,6 +1106,8 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     /** Whether the running game takes live switches (DM_CTL): the in-game panel says "applies at the next start" otherwise */
     boolean live() { return hostRunning && runCtl != null; }
     boolean runStretch() { return runStretch; }
+    private static boolean runFill;   // PEANUTS: this run started with Display > Fill (the screen's own shape asked of the game), for the in-game panel's restart line
+    boolean runFill() { return runFill; }   // PEANUTS
     int runPictureSize() { return runPictureSize; }
 
     /**
@@ -985,6 +1173,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         started = true;
         controls.setPicture(runStretch, runPictureSize);
         hostSetup();
+        prewarmTick();   // PEANUTS: restore the progress cover after recreation
         // The host is still stopped (the screen that went sent onStop; nothing runs before onStart). It stays paused when it was (the in-game panel's Pause, or a return
         // not yet continued), and is paused when pause-on-return is on, as a return from the background is: the overlay shows whenever the host is paused, a tap continues
         int hostPaused = Native.paused();
@@ -1026,8 +1215,12 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
      * The game itself is left as it is: onStop has suspended it
      */
     @Override protected void onDestroy() {
+        dev.peanuts.ui.GameControls.clear(controlsHost);   // PEANUTS: no game, no controls on the stats page (unless a newer screen of the game set its own)
+        dev.peanuts.ctl.GameLink.unregister(this, peanutsCtl);   // PEANUTS
+        peanutsCtl = null;
         runningDisplayMode.clear(this);   // PEANUTS: release this game window's display request
         dev.peanuts.Companion.stop();   // PEANUTS
+        dev.peanuts.launch.PlayTime.flush(this);   // PEANUTS: total play time, what is still in memory
         TextInput.gone(this);
         UserPicker.gone(this);
         CtrlScreen.gone(this);
@@ -1211,6 +1404,83 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private boolean paused, stopped;
     private TextView pausedView;
 
+    // PEANUTS begin: the second screen's stats page sets the console mode and the frame rate cap (dev.peanuts.ui.GameControls), with the same calls as
+    // SidePanel's Console mode and Frame rate cap rows
+    /** PEANUTS: the rates the host holds now (Native.fpsCapStatus' second), as SidePanel.refresh takes them: none in a build without a cap, -1 (not known: the last run's,
+     *  or the profile's) until the game presents (its main is not known before) */
+    static int liveRates() {
+        try {
+            String[] f = Native.fpsCapStatus().split(" ");
+            return Integer.parseInt(f[0]) < 0 ? 0 : Integer.parseInt(f[2]) > 0 ? Integer.parseInt(f[1]) : -1;
+        } catch (RuntimeException e) { return -1; }
+    }
+    private dev.peanuts.ui.GameControls.Host peanutsControls() {
+        GameActivity act = this;
+        return new dev.peanuts.ui.GameControls.Host() {
+            @Override public int consoleMode() { return ScreenMode.fixed(titleId()) != null ? -1 : ScreenMode.mode(act, titleId()); }
+            @Override public boolean consoleMode(int m) {
+                if (ScreenMode.fixed(titleId()) != null) return false;
+                ScreenMode.set(act, titleId(), m);
+                if (Native.graphicsModeSet(-1, 1 - m)) return true;
+                Native.note("Console mode: this host cannot change it while the game runs; it applies at the next start");
+                return false;
+            }
+            @Override public int[] caps() { return Prefs.limited(titleId()) ? FrameRateCaps.menu() : FrameRateCaps.targetMenu(); }
+            @Override public String capLabel(int v) {   // short, for a button: paceLabel without its "(experimental)", which capNote says once
+                if (Prefs.limited(titleId())) return v == FrameRateCaps.GAME_OWNED ? "Game owned" : (v <= 0 ? 60 : v) + " fps";
+                return v == 0 ? "Game owned" : v + " fps";
+            }
+            // PEANUTS: the caps the in-game panel enables (Prefs.offeredCaps: the frame limits this display shows, else the rates the host holds now): every cap was
+            // offered here before, 90 and 120 refused by the host and 45 and 40 read back as 30 (fps cap audit, 2026-11-24)
+            @Override public boolean capOffered(int v) { return FrameRateCaps.contains(Prefs.offeredCaps(act, titleId(), liveRates()), v); }
+            @Override public String capWhy(int v) {   // PEANUTS: why a cap the game has is greyed here (adb's answer)
+                return Prefs.limited(titleId()) && FrameRateCaps.contains(Prefs.paceCaps(titleId()), v) && !capOffered(v) ? Prefs.screenNote(act, titleId()) : null;
+            }
+            @Override public int cap() {
+                if (Prefs.limited(titleId())) return Prefs.paceCap(act, titleId());
+                if (Prefs.ownRate(act, titleId())) return 0;
+                int live = Integer.parseInt(Native.fpsCapStatus().split(" ")[0]);
+                int cur = live >= 0 ? live : Prefs.fpsCap(act, titleId());
+                return cur < 0 ? 0 : cur;
+            }
+            @Override public void cap(int v) {
+                Prefs.fpsCap(act, titleId(), v);
+                if (!Prefs.limited(titleId())) { Native.fpsCapSet(v); return; }
+                if (v != FrameRateCaps.GAME_OWNED && !gameOwnedAtStart() && !fpsRestartRequired(v)) {
+                    Native.fpsLimitSet(limitRate(v));   // PEANUTS: at most the display's highest rate
+                    Profile p = Profile.of(titleId());
+                    if (p != null && p.usesFpsModeTarget()) Native.fpsCapSet(p.fpsModeTarget(onScreen(v)));
+                }
+            }
+            @Override public int capRunning() {   // SidePanel.refresh's restart test: a pick that needs a restart leaves the start's cap running
+                int v = cap();
+                if (!Prefs.limited(titleId())) return v;
+                boolean pending = fpsRestartRequired(v) || (v == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart();
+                if (!pending) return onScreen(v);   // PEANUTS: a stored 120 on a 60 Hz display runs at 60
+                // the limit the host holds now (fpsCapStatus' fourth: a pick applied live since the start), else the start's
+                String[] f = Native.fpsCapStatus().split(" ");
+                int held = f.length > 3 ? Integer.parseInt(f[3]) : 0;
+                return held > 0 ? held : fpsModeAtStart;
+            }
+            @Override public int capRate(int v) {
+                if (Prefs.limited(titleId())) return v == FrameRateCaps.GAME_OWNED ? 0 : v <= 0 ? 60 : v;
+                return Math.max(v, 0);
+            }
+            @Override public String capNote() {
+                if (!Prefs.limited(titleId())) return null;
+                int v = cap();
+                boolean pending = fpsRestartRequired(v) || (v == FrameRateCaps.GAME_OWNED) != gameOwnedAtStart();
+                String restart = pending ? "Restart the game to apply " + Prefs.paceLabel(v) + ". " : "";
+                // PEANUTS: "Above 60 fps is experimental" only where something above 60 is offered; the display's limit when it greys a cap or holds a stored one lower
+                String high = FrameRateCaps.above60(Prefs.paceOffered(act, titleId())) ? "Above 60 fps is experimental. " : "";
+                String runs = Prefs.screenRunsNote(act, titleId()), why = Prefs.screenNote(act, titleId());
+                if (fpsVariantMissing) restart = Prefs.FPS_VARIANT_MISSING + " " + restart;   // PEANUTS: the cap's variant is not in the build (Profile.fpsVariant)
+                return restart + (runs != null ? runs + " " : why != null ? why + " " : "") + high + "Switching to or from Game owned applies on the next start.";
+            }
+        };
+    }
+    // PEANUTS end
+
     private String titleId() { return String.valueOf(getIntent().getStringExtra("title_id")); }
 
     /**
@@ -1314,6 +1584,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (hasFocus) getWindow().getDecorView().requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK);
     }
 
+    @Override public void onTopResumedActivityChanged(boolean top) { super.onTopResumedActivityChanged(top); topResumed = top; if (top) dev.peanuts.Companion.gameOnTop(this); else if (started) pinStart(); }   // PEANUTS: back in front (Recents may have moved it to another display): the game goes back to its display, the companion where it belongs (#183)
     @Override protected void onStart() {
         super.onStart();
         if (!started) return;
@@ -1355,6 +1626,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     @Override public void onConfigurationChanged(Configuration c) {
         super.onConfigurationChanged(c);
         fitOrientation();   // a fold or an unfold changes the display: the other screen may want the other answer
+        dev.peanuts.TvPicture.fit(this);   // PEANUTS: the game moved to a TV or back to the device's screen (#358)
         if (started) Native.motionRotation(getDisplay().getRotation());
     }
 
@@ -1421,6 +1693,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
         if (dev.peanuts.build.ShaderCapture.active(this) && gamepad(e.getSource())) return true;   // PEANUTS: no gameplay input during preparation
+        if (prewarmCover != null && gamepad(e.getSource())) return super.dispatchKeyEvent(e);   // PEANUTS: Preparing shaders: the pad moves over its buttons; nothing goes to the game or the panel under it
         if (panel == null) return super.dispatchKeyEvent(e);   // no host for this game (onCreate): only the message is shown
         // A controller opens and closes the in-game panel (PadPanel.Combo: Home, or − and + held; Settings › Controller: in-game panel); while it is open the pad moves
         // through it and the game gets no pad keys. A key the panel took a press of stays the panel's until it comes up
@@ -1492,7 +1765,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     /** Back (the phone's button or its edge swipe) opens and closes the in-game panel, which has Stop; while the controller applet's join screen shows, it cancels that */
     @SuppressWarnings("deprecation")
-    @Override public void onBackPressed() { if (dev.peanuts.build.ShaderCapture.active(this)) { dev.peanuts.build.ShaderCapture.cancel(this); return; } /* PEANUTS: Back cancels preparation */ if (panel != null && !panel.isOpen() && CtrlScreen.back()) return; if (panel != null) panel.toggle(); else end(); }
+    @Override public void onBackPressed() { if (prewarmCover != null) return; /* PEANUTS: Preparing shaders has its own Close; the panel is under it */ if (dev.peanuts.build.ShaderCapture.active(this)) { dev.peanuts.build.ShaderCapture.cancel(this); return; } /* PEANUTS: Back cancels preparation */ if (panel != null && !panel.isOpen() && CtrlScreen.back()) return; if (panel != null) panel.toggle(); else end(); }
 
     // For CtrlScreen: the view tree it goes into (under the in-game panel), and whether a gamepad is connected (then the on-screen controls are hidden and cannot join)
     FrameLayout rootView() { return rootView; }

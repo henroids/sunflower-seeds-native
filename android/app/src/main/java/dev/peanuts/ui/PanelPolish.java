@@ -26,14 +26,40 @@ public final class PanelPolish {
     private PanelPolish() {}
 
     private static final String DONE = "pn_polish";
-    private static final int ACCENT = 0xFFFFD54F;   // SidePanel.FOCUS, the selected tab's colour
-    private static final int OUTLINE = 0xFF555555;
+    private static final int ACCENT = Scoreboard.ON ? Scoreboard.MINT : 0xFFFFD54F;   // SidePanel.FOCUS, the selected tab's colour (the scoreboard's mint)
+    private static final int OUTLINE = Scoreboard.ON ? Scoreboard.LINE : 0xFF555555;
 
     public static void apply(View root) {
         if (root == null) return;
         float dp = root.getResources().getDisplayMetrics().density, sp = root.getResources().getDisplayMetrics().scaledDensity;
         walk(root, dp, sp);
+        if (Scoreboard.ON) board(root);
     }
+
+    /** The scoreboard look over the whole tab, after the restyle above (it sets absolute values, so a second call changes nothing): Space Grotesk for text, pale green
+     *  on the board, mint check boxes, switches and sliders; the headings stay in the pixel font text() gave them */
+    private static void board(View v) {
+        if (v instanceof CompoundButton) {
+            CompoundButton c = (CompoundButton) v;
+            c.setButtonTintList(ColorStateList.valueOf(Scoreboard.MINT));
+            if (!(DONE.equals(c.getParent() instanceof View ? ((View) c.getParent()).getTag() : null))) c.setTextColor(Scoreboard.TEXT);   // (a segmented choice keeps its checked colours)
+            face(c, 400);
+            if (v instanceof android.widget.Switch) { ((android.widget.Switch) v).setThumbTintList(ColorStateList.valueOf(Scoreboard.MINT)); ((android.widget.Switch) v).setTrackTintList(ColorStateList.valueOf(Scoreboard.LINE)); }
+        } else if (v instanceof android.widget.SeekBar) {
+            android.widget.SeekBar s = (android.widget.SeekBar) v;
+            s.setProgressTintList(ColorStateList.valueOf(Scoreboard.MINT)); s.setThumbTintList(ColorStateList.valueOf(Scoreboard.MINT)); s.setProgressBackgroundTintList(ColorStateList.valueOf(Scoreboard.LINE));
+        } else if (v instanceof Button) {
+            if (DONE.equals(v.getTag())) ((Button) v).setTextColor(Scoreboard.TEXT);
+            face((Button) v, 500);
+        } else if (v instanceof TextView) {
+            TextView t = (TextView) v;
+            if (t.getTypeface() != Scoreboard.pixelFace()) face(t, 400);   // (a heading keeps the pixel font)
+            if (t.getCurrentTextColor() == 0xFFE8EAED || t.getCurrentTextColor() == Color.WHITE || t.getCurrentTextColor() == Color.BLACK) t.setTextColor(Scoreboard.TEXT);
+        }
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) board(((ViewGroup) v).getChildAt(i));
+    }
+
+    private static void face(TextView t, int w) { Typeface f = Scoreboard.face(w); if (f != null) t.setTypeface(f); }
 
     private static void walk(View v, float dp, float sp) {
         if (DONE.equals(v.getTag())) return;
@@ -61,7 +87,7 @@ public final class PanelPolish {
             b.setGravity(Gravity.CENTER);
             b.setSingleLine(true);
             b.setPadding(Math.round(6 * dp), 0, Math.round(6 * dp), 0);
-            b.setTextColor(new ColorStateList(new int[][] {{android.R.attr.state_checked}, {}}, new int[] {0xFF000000, 0xFFE8EAED}));
+            b.setTextColor(new ColorStateList(new int[][] {{android.R.attr.state_checked}, {}}, new int[] {0xFF000000, Scoreboard.ON ? Scoreboard.TEXT : 0xFFE8EAED}));
             StateListDrawable bg = new StateListDrawable();
             bg.addState(new int[] {android.R.attr.state_checked}, pill(ACCENT, 0, dp));
             bg.addState(new int[] {}, pill(Color.TRANSPARENT, OUTLINE, dp));
@@ -75,7 +101,7 @@ public final class PanelPolish {
     private static GradientDrawable pill(int fill, int stroke, float dp) {
         GradientDrawable d = new GradientDrawable();
         d.setColor(fill);
-        d.setCornerRadius(8 * dp);
+        d.setCornerRadius(Scoreboard.radius(8 * dp));
         if (stroke != 0) d.setStroke(Math.round(dp), stroke);
         return d;
     }
@@ -93,12 +119,13 @@ public final class PanelPolish {
             t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
             t.setTextSize(TypedValue.COMPLEX_UNIT_PX, 13 * sp * scale);
             t.setTextColor(0xFFC8C8C8);
+            if (Scoreboard.ON) { Scoreboard.pixel(t, 11 * scale); t.setTextColor(Scoreboard.LABEL); }   // the scoreboard's pixel labels, as on its settings pages
             t.setPadding(0, Math.round(20 * dp), 0, 0);
         } else if (!bold && t.getCurrentTextColor() == Color.LTGRAY && size <= 13 * sp) {
             float scale = size / (12 * sp);
             t.setTag(DONE);
             t.setTextSize(TypedValue.COMPLEX_UNIT_PX, 12 * sp * scale);
-            t.setTextColor(0xFF8A8A8A);
+            t.setTextColor(Scoreboard.ON ? Scoreboard.LABEL : 0xFF8A8A8A);
             t.setLineSpacing(0, 1.15f);
         }
     }
@@ -124,6 +151,6 @@ public final class PanelPolish {
         b.setTag(DONE);
         b.setAllCaps(false);
         b.setStateListAnimator(null);
-        b.setBackground(pill(fill, 0, dp));
+        b.setBackground(Scoreboard.ON ? pill(Scoreboard.CELL, Scoreboard.LINE, dp * 2) : pill(fill, 0, dp));   // the scoreboard's square cells
     }
 }

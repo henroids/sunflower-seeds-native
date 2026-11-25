@@ -104,6 +104,10 @@ final class Folders {
     /** PackFind over this game's candidates, with PackCheck.blocking as the judge of the code */
     static PackFind.Found find(Context a, File picked, File game, String id) {
         List<File> c = PackFind.candidates(picked, AppStorage.pack(a, id), game, id, PackFind.volumeRoot(game));
+        for (File dir : dev.peanuts.PeanutsPrefs.buildGameDirs(a, id)) {   // PEANUTS: look for existing packs in all configured Build folders
+            File pack = new File(dir, "pack");
+            if (!c.contains(pack) && new File(pack, "pack.tsv").isFile()) c.add(pack);
+        }
         return PackFind.best(c, id, Pack.isDump(game), p -> PackCheck.blocking(a, p, game));
     }
 
@@ -242,7 +246,9 @@ final class Folders {
         pickedPack(a, p.titleId, dir.getPath());
         setPack(a, p.titleId, dir);
         String lp = Pack.libraryProblem(dir, p.titleId);
-        new PadFocus.Builder(a).setTitle("Pack folder set").setMessage(dir + "\n\n" + (lp == null ? "It has this app's shader library (" + BuildConfig.NX_DMSH_VK_CHAIN + "): ready to play." : lp))
+        // PEANUTS: plain words first (build-text-style.md); the folder and the technical sentence behind Details
+        Ui.explain(a, "Build folder set", lp == null ? "It has this app version's shaders. The game is ready to play." : Pack.libraryText(dir, p.titleId),
+                "Build folder: " + dir + (lp == null ? "\nShaders: v-" + BuildConfig.NX_DMSH_VK_CHAIN : "\n" + lp))
                 .setPositiveButton("OK", (x, w) -> { if (g != null) dialog(a, g); }).show();
     }
 

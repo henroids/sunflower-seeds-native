@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Context;
 
 import dev.peanuts.PeanutsPrefs;
-import dev.peanuts.build.BuildPipeline;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -91,7 +90,7 @@ public final class CtlPort {
         LibraryScanner.Title t = lib.title(titleId);
         if (t == null) return new String[] {"unknown_title", titleId + " is not in the library (scan first)."};
         if (t.status == LibraryScanner.Status.NO_PROFILE) return new String[] {"not_in_app", String.valueOf(Upstream.profileMissing(t.titleId, t.name))};
-        if (BuildPipeline.running() != 0 || lib.building(titleId)) return new String[] {"busy", "A build is running now. Wait for it to finish."};
+        if (lib.building(titleId)) return new String[] {"busy", t.name + " is being built now. Wait for it to finish."};   // another game that builds: this one goes into the build queue (issue #348)
         // a built game is not built again from here, except to go on with its own stopped build (the build card's Resume, Retry and Try anyway)
         Library.Build stopped = Library.buildNow();
         boolean goesOn = stopped != null && stopped.failed && stopped.titleId.equalsIgnoreCase(titleId);
@@ -101,8 +100,8 @@ public final class CtlPort {
         LibraryScanner.Source up = GameSheet.storedUpdate(a, t);
         if (up != null && !up.file.exists()) return new String[] {"file_missing", "The update file is no longer where the app found it: " + up.file.getName()};
         if (t.home == null) return new String[] {"no_game_dir", "Set the game folder first (Settings › Library)."};
-        if (!PeanutsPrefs.hasKeys(a)) return new String[] {"no_keys", "Add your keys first (Settings › Library), then build."};
-        if (!PeanutsPrefs.hasFonts(a)) return new String[] {"no_firmware", "Add your firmware first (Settings › Library), then build."};
+        if (!PeanutsPrefs.hasKeys(a)) return new String[] {"no_keys", "Add your keys first (Settings › Console), then build."};
+        if (!PeanutsPrefs.hasFonts(a)) return new String[] {"no_firmware", "Add your firmware first (Settings › Console), then build."};
         if (!anyway && GameSheet.wouldAsk(a, t))
             return new String[] {"wrong_version", "This version is not one of this app's versions of " + t.name + ": the sheet asks \"Build anyway?\" first. The job command's try_anyway with this title_id gives that answer."};
         GameSheet.State s = GameSheet.resumeState(a, t, CompanionPort.forTitle(Library.catalogNow(), t.titleId));
@@ -124,10 +123,10 @@ public final class CtlPort {
         LibraryScanner.Title t = lib.title(titleId);
         if (t == null) return new String[] {"unknown_title", titleId + " is not in the library (scan first)."};
         if (t.status == LibraryScanner.Status.NO_PROFILE) return new String[] {"not_in_app", String.valueOf(Upstream.profileMissing(t.titleId, t.name))};
-        if (BuildPipeline.running() != 0 || lib.building(titleId)) return new String[] {"busy", "A build is running now. Wait for it to finish."};
+        if (lib.building(titleId)) return new String[] {"busy", t.name + " is being built now. Wait for it to finish."};   // another game that builds: this one goes into the build queue (issue #348)
         if (t.base == null || !t.base.isNup()) return new String[] {"not_a_nup", "Import again makes a game's .nup anew: " + t.name + " has none (" + (t.base == null ? "no base game found" : t.base.file.getName()) + ")."};
-        if (!PeanutsPrefs.hasKeys(a)) return new String[] {"no_keys", "Add your keys first (Settings › Library), then import."};
-        if (!PeanutsPrefs.hasFonts(a)) return new String[] {"no_firmware", "Add your firmware first (Settings › Library), then import."};
+        if (!PeanutsPrefs.hasKeys(a)) return new String[] {"no_keys", "Add your keys first (Settings › Console), then import."};
+        if (!PeanutsPrefs.hasFonts(a)) return new String[] {"no_firmware", "Add your firmware first (Settings › Console), then import."};
         dev.peanuts.build.Reimport.Plan p = GameSheet.plan(a, t);
         data.put("nup", p.nup.getPath());
         data.put("old_bytes", p.oldBytes);
@@ -148,6 +147,25 @@ public final class CtlPort {
                 : dev.peanuts.build.Reimport.confirm(p, t.name)) + " Add -e confirm true."};
         String why = GameSheet.reimport(a, lib, t, CompanionPort.forTitle(Library.catalogNow(), t.titleId), p, first);
         return why == null ? null : new String[] {"refused", why};
+    }
+
+    /**
+     * The sheet's Import pack… with a path instead of the picker (the control interface's import_pack): {code, sentence} when it cannot start, else null, and
+     * answer gets {null, what "Pack imported" says} or {"refused", the sentence} once the import ended (both dialogs show, as from the sheet; PackImportUi.start
+     * checks once more on the main thread, and a refusal there comes with its code). It never
+     * replaces a pack (peanuts/docs/CONTROL.md, "Not offered"): a game whose pack folder holds one already is refused with pack_there
+     */
+    public static String[] importPack(Activity a, String titleId, String path, java.util.function.Consumer<String[]> answer) {
+        Library lib = Library.of(a);
+        LibraryScanner.Title t = lib == null ? null : lib.title(titleId);
+        String[] no = PackImportUi.refusal(a, lib, t, titleId);
+        if (no != null) return no;
+        File source = new File(path);
+        if (!source.isFile() && !source.isDirectory()) return new String[] {"no_file", path + " is neither a file nor a folder."};
+        dev.peanuts.pack.FirstImport.Game g = PackImportUi.game(a, t, GameSheet.storedUpdate(a, t));
+        if (new File(g.target, "pack.tsv").isFile()) return new String[] {"pack_there", g.target + " holds a pack already, and this command replaces none. Import the pack on the game's sheet."};
+        PackImportUi.start(a, g, source, answer::accept);
+        return null;
     }
 
     /** Whether the library's build of this title runs now */

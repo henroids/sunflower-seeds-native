@@ -88,7 +88,7 @@ public final class ModBuildService extends Service {
             startForeground(NOTE, note(0, "Starting"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
         } catch (RuntimeException e) {
             Log.w(TAG, "startForeground refused (modded): " + e);
-            ModBuildPipeline.finish(id, false, "Android did not let the modded build start in the background: open the app and try again.", BuildListener.OTHER);
+            ModBuildPipeline.finish(id, false, "Android did not let the build with mods start in the background. Open the app and try again.", BuildListener.OTHER);
             stopSelf(startId);
             return START_NOT_STICKY;
         }
@@ -101,6 +101,11 @@ public final class ModBuildService extends Service {
         boolean ok = false;
         String message;
         String code = BuildListener.OTHER;
+        long started = System.currentTimeMillis();
+        // the game's build log (BuildLog, Share build log): a build with mods is a run of its own there, its job in its own work folder
+        BuildLogShare.line(this, r.titleId, BuildLog.START + "build of " + name + " (" + r.titleId + ") with mods, variant " + r.variantId + ", " + Upstream.buildTag(this)
+                + ", engine " + dev.nxnative.android.BuildConfig.NX_PACK_ENGINE + "\ngame file: " + r.dump + "\nwork folder: " + r.workDir + "\npack: " + r.packDir);
+        BuildLogShare.remember(this, r.titleId, r.workDir);
         try {
             File normalShaders = ModdedBuild.normalShadersDir(r.normalPack);
             Prepare p = new Prepare(this);
@@ -113,16 +118,20 @@ public final class ModBuildService extends Service {
             }
             ok = true;
             ModdedBuild.markVariant(pack, r.variantId);   // known as a variant wherever it lies: never taken for the game's own pack (ModdedBuild.isVariantPack)
-            message = name + " is ready to play with mods (" + pack.getName() + ").";
+            message = name + " is ready to play with mods.";
+            BuildLogShare.line(this, r.titleId, "mods: the build is " + pack);
             progress(100, message);
         } catch (IOException e) {
             message = e.getMessage() == null ? e.toString() : e.getMessage();
             if (e instanceof BuildListener.Failure) code = ((BuildListener.Failure) e).code;
             Log.w(TAG, "modded build " + name + ": " + message);
         } catch (RuntimeException e) {
-            message = "Building with mods failed: " + e;
+            message = "The build with mods stopped because of a problem in the app. Try again from the game's Mods section. If it stops again, share the build log with a bug report.\n" + e;
             Log.e(TAG, "modded build " + name, e);
         }
+        long took = (System.currentTimeMillis() - started) / 1000;
+        BuildLogShare.line(this, r.titleId, BuildLog.END + (ok ? "ready" : BuildListener.CANCELLED.equals(code) ? "stopped (" + code + ")" : "failed (" + code + ")") + ": "
+                + String.valueOf(message).replace('\n', ' ') + " (after " + took / 60 + " min " + took % 60 + " s)");
         final boolean fok = ok;
         final String fmsg = message;
         final String fcode = code;
@@ -152,8 +161,8 @@ public final class ModBuildService extends Service {
 
     private Notification done(boolean ok, String message) {
         Notification.Builder b = new Notification.Builder(this, BuildPipeline.endChannel(nm, CHANNEL, !ok && cancelled)).setSmallIcon(ok ? android.R.drawable.stat_sys_download_done : android.R.drawable.stat_notify_error)
-                .setContentTitle(ok ? name + " is ready to play with mods" : "Building " + name + " with mods stopped").setContentText(message)
-                .setStyle(new Notification.BigTextStyle().bigText(message)).setAutoCancel(true);
+                .setContentTitle(ok ? name + " is ready to play with mods" : "Building " + name + " with mods stopped").setContentText(message.split("\n")[0])
+                .setStyle(new Notification.BigTextStyle().bigText(message.split("\n")[0])).setAutoCancel(true);
         Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
         if (open != null) b.setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
         return b.build();
