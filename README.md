@@ -47,6 +47,9 @@ Frame rates on the field in an exhibition, with **Crowd control** on (below), fr
 | Sony Xperia 1 V (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | 60 at the start, about 43 after 15 minutes (51.6 on average over 19 minutes) | about 57 fps | Throttles as it heats up; Handheld mode makes less heat |
 | Retroid Pocket Duo (Adreno 722) | Mr. Purple T30 | about 34 fps | about 45 fps | Menu and skin flicker fixed (0.2.105 and 0.2.121); small noise blocks over player photos remain. T30 works best of the drivers tried: T23 and T26 do not start, Turnip Gen8 V39 and Turnip Duo v5.1 flickered more (tried before the fixes). Its CPU is the limit, not the GPU |
 
+Versions 0.2.N are [test builds](#test-builds). The Retroid Pocket Duo's menu and skin flicker fixes (0.2.105 and 0.2.121)
+are in the official app too, since its update of 2026-11-26.
+
 With the crowd drawn, the field runs at about 34 fps on the Thor, 20 on the Xperia and 24 on the Retroid Pocket Duo
 (builds before 1.0.34).
 
