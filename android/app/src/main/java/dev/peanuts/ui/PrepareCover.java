@@ -26,10 +26,11 @@ import java.util.Locale;
 /**
  * The screen over the game while its shaders are prepared before it starts (GameActivity.prewarmTick: the startup prewarm's pipelines, then the shader
  * parts of the game's programs, vka_pso.c pp_prepare; minutes for a large game, once per GPU driver). The home screen's drifting background, the game's
- * cover with a peanut that cracks open as the count goes up, the game's name, the app's progress strip with the count, and a line saying it happens once.
+ * cover with a peanut that cracks open as the count goes up (on the scoreboard look, a bulb sunflower seed that lights up), the game's name, the app's progress strip with the count, and a line saying it happens once.
  */
 public final class PrepareCover extends FrameLayout {
-    private final Peanut peanut;
+    private final Peanut peanut;   // null on the scoreboard look (seedFill instead)
+    private android.graphics.drawable.ClipDrawable seedFill;
     private final ProgressBar bar;
     private final TextView count;
     private final BananaBackgroundView back;
@@ -67,11 +68,26 @@ public final class PrepareCover extends FrameLayout {
             ip.rightMargin = out; ip.bottomMargin = out * 2 / 3;
             art.addView(img, ip);
         }
-        peanut = new Peanut(a);
-        // on a round card of its own, so it reads on any cover
-        peanut.setBackground(PUi.round(PUi.col(a, R.color.bn_card), nut / 2f, PUi.col(a, R.color.bn_banana_deep), PUi.dp(a, 3)));
-        peanut.setElevation(PUi.dp(a, 10));
-        art.addView(peanut, new LayoutParams(nut, nut, icon != null ? Gravity.BOTTOM | Gravity.END : Gravity.CENTER));
+        android.graphics.drawable.Drawable seed = Scoreboard.seed(a);
+        if (seed != null) {   // PEANUTS(sunflower): the bulb sunflower seed, lighting up from the bottom as the count goes up, instead of the cracking peanut
+            peanut = null;
+            FrameLayout box = new FrameLayout(a);
+            box.setBackground(PUi.round(PUi.col(a, R.color.bn_card), 0, PUi.col(a, R.color.bn_accent), PUi.dp(a, 3)));
+            box.setElevation(PUi.dp(a, 10));
+            int inset = nut / 8;
+            box.setPadding(inset, inset, inset, inset);
+            ImageView dim = new ImageView(a); dim.setImageDrawable(seed.getConstantState().newDrawable().mutate()); dim.setImageAlpha(60);
+            seedFill = new android.graphics.drawable.ClipDrawable(seed.getConstantState().newDrawable().mutate(), Gravity.BOTTOM, android.graphics.drawable.ClipDrawable.VERTICAL);
+            ImageView lit = new ImageView(a); lit.setImageDrawable(seedFill);
+            box.addView(dim, new LayoutParams(-1, -1)); box.addView(lit, new LayoutParams(-1, -1));
+            art.addView(box, new LayoutParams(nut, nut, icon != null ? Gravity.BOTTOM | Gravity.END : Gravity.CENTER));
+        } else {
+            peanut = new Peanut(a);
+            // on a round card of its own, so it reads on any cover
+            peanut.setBackground(PUi.round(PUi.col(a, R.color.bn_card), nut / 2f, PUi.col(a, R.color.bn_banana_deep), PUi.dp(a, 3)));
+            peanut.setElevation(PUi.dp(a, 10));
+            art.addView(peanut, new LayoutParams(nut, nut, icon != null ? Gravity.BOTTOM | Gravity.END : Gravity.CENTER));
+        }
         col.addView(art, new LinearLayout.LayoutParams(-2, -2));
 
         if (name != null && !name.isEmpty() && !"null".equals(name)) {
@@ -132,7 +148,8 @@ public final class PrepareCover extends FrameLayout {
         bar.setMax(total);
         bar.setProgress(done);
         count.setText(PUi.joined("Preparing shaders", String.format(Locale.US, "%,d of %,d", done, total), (int) (100L * done / total) + "%"));
-        peanut.open(done / (float) total);
+        if (peanut != null) peanut.open(done / (float) total);
+        else if (seedFill != null) seedFill.setLevel((int) (10000L * done / total));
     }
 
     @Override protected void onDetachedFromWindow() { back.setRunning(false); super.onDetachedFromWindow(); }
