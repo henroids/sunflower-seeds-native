@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -785,6 +786,21 @@ static int storage_mode(const tex_t *t, const uint8_t *c, const vka_fmt *f, int 
     return want;
 }
 static uint64_t mem_hash(const uint8_t *p, uint64_t n) { uint64_t h = 1469598103934665603ull, v; uint64_t i = 0; for (; i + 8 <= n; i += 8) { memcpy(&v, p + i, 8); h = (h ^ v) * 1099511628211ull; } for (; i < n; i++) h = (h ^ p[i]) * 1099511628211ull; return h; }
+// PEANUTS TEMPORARY: DM_VK_TEXLOG=1, a line for each upload of guest memory into an image of 64x64 or more (MLB The Show 26's noise blocks on the Retroid Pocket Duo: which
+// textures, filled how, and whether their storage was still changing). up to 20000 lines. Fields: seconds, why, serial, size, format, levels x layers, mode, the part of the
+// storage uploaded, its hash and the share of its sampled 8-byte words that are not zero
+static int texlog_on(void) { static int on = -1; if (on < 0) { const char *e = getenv("DM_VK_TEXLOG"); on = e && atoi(e) > 0; } return on; }
+static void texlog(const char *why, const vka_img *im, const nvn_texdesc *d, const uint8_t *mem, uint64_t lo, uint64_t hi) {
+    static _Atomic unsigned n; static double t0;
+    if (!texlog_on() || !im || im->w < 64 || im->h < 64 || atomic_fetch_add(&n, 1) >= 20000) return;
+    struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); double now = ts.tv_sec + ts.tv_nsec * 1e-9; if (!t0) t0 = now;
+    uint64_t h = 0, nz = 0, k = 0;
+    if (mem && hi > lo) { uint64_t len = hi - lo; h = mem_hash(mem + lo, len < (16u << 20) ? len : (16u << 20));
+        for (uint64_t o = lo; o + 8 <= hi; o += 256, k++) { uint64_t v; memcpy(&v, mem + o, 8); nz += v != 0; } }
+    VLOG("texlog %.3f %s serial %llu %ux%u format %#x flags %#x %ux%u mode %u bytes %#llx-%#llx of %#llx hash %016llx nonzero %llu%%", now - t0, why, (unsigned long long)im->serial,
+         im->w, im->h, d ? d->format : 0, d ? d->flags : 0, im->levels, im->layers, (unsigned)im->mode, (unsigned long long)lo, (unsigned long long)hi,
+         (unsigned long long)im->L.size, (unsigned long long)h, (unsigned long long)(k ? nz * 100 / k : 0));
+}
 // GPU writes into guest memory. On the Switch a texture is its storage, so a copy, fill or inline update into that memory (or a shader's store into a storage buffer over it)
 // changes what the texture reads from then on, in GPU order. Here a texture is an image of its own, which the CPU uploads from the storage when the replay records its first use
 // (or again after a CPU write the dirty tracker saw). A GPU write is not a CPU write: it does not fault, and the CPU sees its bytes only when the submission holding it completes.
@@ -1127,6 +1143,7 @@ static int img_edges_clean(vka_img *im) {
     return 1;
 }
 static void upload_tracked(vka_img *im, const tex_t *t, VkCommandBuffer cb) {   // stamp, protect, then read (nvn_mtl.m pkg_upload): a write during the copy is seen at the next check
+    texlog(im->stamp ? "again" : "first", im, &t->d, t->mem, 0, t->L.size);   // PEANUTS TEMPORARY (texlog)
     im->stamp = nvn_dirty_now(); nvn_dirty_protect(t->mem, t->L.size);
     img_edges_take(im);
     if (vka_nan_on()) im->hash = mem_hash(t->mem, t->L.size);
@@ -1137,6 +1154,7 @@ static void upload_tracked(vka_img *im, const tex_t *t, VkCommandBuffer cb) {   
         if (!im->snap) im->snap = malloc(256); if (im->snap) memcpy(im->snap, t->mem, t->L.size < 256 ? t->L.size : 256); }
 }
 static void upload_fill(vka_img *im, const tex_t *t, VkCommandBuffer cb) {   // the same without tracking (ST_FILL)
+    texlog(im->mode == ST_ZERO ? "zero-fill" : "fill", im, &t->d, t->mem, 0, t->L.size);   // PEANUTS TEMPORARY (texlog)
     uint8_t *c = im->vpool ? NULL : gw_content(t->mem, t->L.size, &im->gw_seen);
     if (!c && !im->vpool) c = unmapped_content(t);
     if (c) { tex_t tc = *t; tc.mem = c; upload(im, &tc, cb); free(c); g_gw_over++; } else upload(im, t, cb);
@@ -1806,7 +1824,7 @@ static void img_first_use(vka_img *im, const tex_t *t, VkCommandBuffer cb, int m
     g_st_up[ST_ZERO]++;
     VkImageSubresourceRange rg = {im->aspect, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
     if (im->f.kind >= 3) { VkClearDepthStencilValue z = {0, 0}; vk.vkCmdClearDepthStencilImage(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, &z, 1, &rg); }
-    else if (!compressed(&im->f)) { VkClearColorValue z = {{0}}; vk.vkCmdClearColorImage(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, &z, 1, &rg); }
+    else if (!compressed(&im->f)) { VkClearColorValue z = {{0}}; vk.vkCmdClearColorImage(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, &z, 1, &rg); texlog("cleared", im, &t->d, t->mem, 0, t->mem ? t->L.size : 0); }   // PEANUTS TEMPORARY (texlog)
     else if (t->mem) { im->from_mem = 1; upload_fill(im, t, cb); cb = vka_up_cur(cb); }   // a compressed texture with no data yet: its storage (zeros) is a valid block pattern; Vulkan cannot clear it
     if (cb) vka_barrier(cb);
 }
@@ -2709,6 +2727,7 @@ static int tiled_wb_record(VkCommandBuffer cb, vka_img *im, uint32_t levels) {
 // alone, as before). sbuf / soff: the copy's source in the placed memory, row: its row stride in bytes, span: the bytes it reads
 int vka_tex_b2t_mirror(VkCommandBuffer cb, const vka_img *im, const tex_t *t, unsigned level, unsigned layer, const NVNcopyRegion *r, VkBuffer sbuf, VkDeviceSize soff, size_t row, size_t span) {
     static _Atomic int partial_log, skip_log;
+    if (im && t) { char w[48]; snprintf(w, sizeof w, "gpu-copy-l%u-x%dy%d-%dx%d", level, r ? r->xoffset : 0, r ? r->yoffset : 0, r ? r->width : 0, r ? r->height : 0); texlog(w, im, &t->d, t->mem, 0, t->mem ? t->L.size : 0); }   // PEANUTS TEMPORARY (texlog)
     if (!VKA_ENV("DM_VK_B2T_MIRROR", 1)) return 0;
     // PEANUTS(upstream-candidate): why a copy was not mirrored: the first 16 skips, each with its reason and the values it was decided on (LEGO CITY UNDERCOVER: textures still black after the mirror)
     #define B2T_SKIP(why, ...) do { if (atomic_fetch_add(&skip_log, 1) < 16) VLOG("buffer -> texture copy into serial %llu %ux%u format %#x level %u layer %u: not mirrored into its storage: " why, \
@@ -4295,6 +4314,7 @@ void vka_tex_prepare(VkCommandBuffer cb, uint64_t fence) {   // PEANUTS: image r
             if (wbf) { uint64_t k = ++g_wbf_up; if (k <= 4 || !(k & (k - 1))) VLOG("texture serial %llu %ux%u format %#x: the CPU wrote it after its copy-back, its written part uploaded (%llu so far; %llu scans waited for a copy-back; DM_VK_WB_FOLLOW=0 turns this off)",
                                                                          (unsigned long long)im->serial, im->w, im->h, im->d.format, (unsigned long long)k, (unsigned long long)g_wbf_waits); }
             int rows = VKA_ENV("DM_VK_ROWS", 1);
+            texlog("changed", im, &t.d, t.mem, lo, hi);   // PEANUTS TEMPORARY (texlog): the part of the storage written since the last upload
             if (rows && upload_rows_tracked(im, &t, cb, lo, hi)) continue;
             if (upload_bands_tracked(im, &t, cb, lo, hi, im->stamp)) { if (g_reup++ < 8) VLOG("texture serial %llu %ux%u format %#x: the bands of its storage that changed re-uploaded", (unsigned long long)im->serial, im->w, im->h, im->d.format); continue; }
             upload_tracked(im, &t, cb);
