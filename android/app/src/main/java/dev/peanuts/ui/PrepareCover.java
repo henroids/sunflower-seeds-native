@@ -74,8 +74,8 @@ public final class PrepareCover extends FrameLayout {
             FrameLayout box = new FrameLayout(a);
             box.setBackground(PUi.round(PUi.col(a, R.color.bn_card), 0, PUi.col(a, R.color.bn_accent), PUi.dp(a, 3)));
             box.setElevation(PUi.dp(a, 10));
-            int pad = nut / 8;
-            box.setPadding(pad, pad, pad, pad);
+            int inset = nut / 8;
+            box.setPadding(inset, inset, inset, inset);
             ImageView dim = new ImageView(a); dim.setImageDrawable(seed.getConstantState().newDrawable().mutate()); dim.setImageAlpha(60);
             seedFill = new android.graphics.drawable.ClipDrawable(seed.getConstantState().newDrawable().mutate(), Gravity.BOTTOM, android.graphics.drawable.ClipDrawable.VERTICAL);
             ImageView lit = new ImageView(a); lit.setImageDrawable(seedFill);
