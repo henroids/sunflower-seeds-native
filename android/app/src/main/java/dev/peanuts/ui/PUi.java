@@ -524,7 +524,7 @@ public final class PUi {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setColor(0xFF1E5B3A);
-        android.graphics.drawable.Drawable sb = Scoreboard.seed(c);   // the scoreboard's bulb seed on the board's slate square
+        android.graphics.drawable.Drawable sb = Scoreboard.seed(c);   // the scoreboard's bulb seed on this view's slate square
         if (sb != null) { v.setImageDrawable(sb); g.setShape(GradientDrawable.RECTANGLE); g.setColor(0xFF151A1D); }
         v.setBackground(g);
         v.setScaleType(ImageView.ScaleType.FIT_CENTER);
