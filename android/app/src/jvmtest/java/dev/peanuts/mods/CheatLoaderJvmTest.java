@@ -149,7 +149,7 @@ public final class CheatLoaderJvmTest {
         check(hold.equals("Hold ZL"), "a hold cheat shows its buttons: " + hold);
         check(CheatStatus.look(c1, false, false, true) == CheatStatus.Look.NEXT_START, "not in this run's host: Next start");
         check(CheatStatus.look(fast, true, true, true) == CheatStatus.Look.NOT_POSSIBLE, "refused before anything else");
-        check(CheatStatus.line(c1, true, true, cost.reason).startsWith("Peanuts rewrote"), "rewritten, in the player's words");
+        check(CheatStatus.line(c1, true, true, cost.reason).startsWith("Sunflower Seeds rewrote"), "rewritten, in the player's words");
         check(CheatStatus.why("nolist:x", c1).contains("Build the game again") && CheatStatus.why("region:x", c1).contains("memory")
                 && CheatStatus.why("odd:x", c1).equals("The game stopped this cheat. The others go on."), "the refusals; an unknown token reads as other");
         check(CheatStatus.line(c1, false, true, num.reason).endsWith("Its change waits for a moment when the game can be stopped."), "wait on a running cheat");

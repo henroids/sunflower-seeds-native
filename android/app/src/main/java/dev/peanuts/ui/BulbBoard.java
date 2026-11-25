@@ -162,7 +162,7 @@ public final class BulbBoard {
     private static final int LIT = 0xFFE9A93F, LIT_ALPHA = 92, UNLIT = 0xFF141912, DEAD = 0xFF0A0C09;
     private static final int AREA_PER_SEED = 2000;                          // bulbs of board a seed: how many seeds a screen gets
     private static final int MIN_APART = 30;                                // bulbs between two seeds' centres at least (the first board's lattice spacing), where there is room
-    private static final float DEAD_SHARE = 0.005f;                         // the board's dead bulbs
+    private static final float DEAD_SHARE = 0.005f;                         // this view's dead bulbs
     private static final int LEAD = 20;                                     // columns a seed starts off the left edge (wider than any pattern)
 
     /** One seed on its loop: it starts at column x0, steps a column every period, and on leaving on the right comes back from the left span columns later.
@@ -232,7 +232,7 @@ public final class BulbBoard {
     }
 
     /** Seed k's first tilt, pace and spot, scattered over the board in the spot farthest from the seeds placed so far (or the first at least MIN_APART
-     *  from all of them), and its loop: the board's width, the widest pattern and a gap of its own, so the seeds come round at different times */
+     *  from all of them), and its loop: this view's width, the widest pattern and a gap of its own, so the seeds come round at different times */
     private void place(Seed s, int k, long ms) {
         s.id = k; s.pat0 = rnd.nextInt(PATTERNS.length); s.period = PERIODS[rnd.nextInt(PERIODS.length)]; s.t0 = tick(ms) + TICK_MS * rnd.nextInt(8);
         s.span = cols + LEAD + rnd.nextInt(MIN_APART);

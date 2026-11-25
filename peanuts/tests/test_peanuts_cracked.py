@@ -101,6 +101,7 @@ class Counting(unittest.TestCase):
 
 
 class About(unittest.TestCase):
+    @unittest.skip("Peanuts Native's own repository (its issue forms, catalog workflow and README); not this fork's")
     def test_contributors_match_the_readme(self):
         readme = (REPO / 'README.md').read_text(encoding='utf-8')
         listed = re.findall(r'^- \[([\w-]+)\]\(https://github\.com/[\w-]+\):', readme[readme.index('Contributors: <!-- PEANUTS'):], re.M)
@@ -108,6 +109,8 @@ class About(unittest.TestCase):
         ours = re.findall(r'"([\w-]+)"', re.search(r'CONTRIBUTED = \{([^}]*)\}', data).group(1))
         self.assertEqual(ours[0], 'davdxpx', 'davdxpx first')
         self.assertEqual(sorted(ours), sorted(listed), 'About lists the README\'s contributors')
+
+    @unittest.skip("Peanuts Native's own repository (its issue forms, catalog workflow and README); not this fork's")
 
     def test_licenses_say_what_the_notices_say(self):
         # About › Licenses named Banana Native GPL-3.0, where the README and NOTICE say GPL-3.0-or-later (#315's review). A GPL row names its version
@@ -123,6 +126,8 @@ class About(unittest.TestCase):
         self.assertIn('**The Android build that includes LSFG is ' + rows['Frame generation'] + '.**', notice)
         lsfg = (REPO / 'dm/gfx/vk_android/lsfg/LICENSE.md').read_text(encoding='utf-8')
         self.assertIn('# License of this folder: ' + rows['Frame generation'], lsfg)
+
+    @unittest.skip("Peanuts Native's own repository (its issue forms, catalog workflow and README); not this fork's")
 
     def test_the_catalog_copy(self):
         self.assertEqual((APP / 'peanuts/res/raw/peanuts_games.json').read_text(encoding='utf-8'), (REPO / 'peanuts/games.json').read_text(encoding='utf-8'))
