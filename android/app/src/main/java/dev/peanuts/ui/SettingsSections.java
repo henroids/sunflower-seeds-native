@@ -82,7 +82,7 @@ public final class SettingsSections {
                     new Group("Updates", r("Check for updates", "download"))),
             new Section("help", "Help", "info", "Checks for this device, the log, and answers to common questions.",
                     new Group("Checks", r("Readiness check", "check"), r("Graphics self-test", "play")),
-                    new Group("Questions and logs", r("Questions and answers", "info"), r("Share log", "share"))),
+                    new Group("Questions and logs", r("Questions and answers", "info"), r("Share log", "share"), r("Send logs to GitHub", "share"))),   // PEANUTS(sunflower): Send logs to GitHub (LogUpload)
             new Section("developer", "Developer", "build", "For testing and for adb. Leave these as they are unless you were asked to change one.",
                     new Group("Testing", r("Advanced", "settings"), r("Tester settings", "build"), r("ADB control (debug)", "build"))),
             new Section("about", "About", "info", "The app, the games in it and the people who made it.")));

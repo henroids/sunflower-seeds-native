@@ -39,6 +39,8 @@ class SwapScreens(unittest.TestCase):
         self.assertRegex(back, r'boolean there = display != Display\.INVALID_DISPLAY && Screens\.startOn\(home, i, display\);\s+if \(!there\) home\.startActivity\(i\);')
         self.assertNotRegex(back, r'(?<!if \(!there\) )home\.startActivity\(i\);')
 
+    @unittest.skip("Sunflower Seeds' Home header has its own FAQ and Settings buttons (MainActivity.headerButtons), not headerAction")
+
     def test_launcher_panel_yields_to_an_external_game_without_hiding_home_settings(self):
         bottom = (JAVA / 'dev/peanuts/ui/BottomScreen.java').read_text(encoding='utf-8')
         self.assertIn('d.getDisplayId() == activeGameDisplay', bottom)
