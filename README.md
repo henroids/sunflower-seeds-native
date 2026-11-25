@@ -45,7 +45,7 @@ Frame rates on the field in an exhibition, with **Crowd control** on (below), fr
 |---|---|---|---|---|
 | AYN Thor (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | about 53 fps | about 59 fps (short run) | Steady over long sessions; does not throttle |
 | Sony Xperia 1 V (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | 60 at the start, about 43 after 15 minutes (51.6 on average over 19 minutes) | about 57 fps | Throttles as it heats up; Handheld mode makes less heat |
-| Retroid Pocket Duo (Adreno 722) | Mr. Purple T30 | about 32 fps (measured before 1.0.34) | not measured | Some flicker; T30 has the least of the drivers tried. T23 and T26 do not start; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more |
+| Retroid Pocket Duo (Adreno 722) | Mr. Purple T30 | about 34 fps | about 43 fps | Some flicker; T30 has the least of the drivers tried. T23 and T26 do not start; Turnip Gen8 V39 and Turnip Duo v5.1 flicker more. Its CPU is the limit, not the GPU |
 
 With the crowd drawn, the field runs at about 34 fps on the Thor, 20 on the Xperia and 24 on the Retroid Pocket Duo
 (builds before 1.0.34).
