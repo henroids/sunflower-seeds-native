@@ -792,7 +792,7 @@ static uint64_t mem_hash(const uint8_t *p, uint64_t n) { uint64_t h = 1469598103
 static int texlog_on(void) { static int on = -1; if (on < 0) { const char *e = getenv("DM_VK_TEXLOG"); on = e && atoi(e) > 0; } return on; }
 static void texlog(const char *why, const vka_img *im, const nvn_texdesc *d, const uint8_t *mem, uint64_t lo, uint64_t hi) {
     static _Atomic unsigned n; static double t0;
-    if (!texlog_on() || !im || im->w < 64 || im->h < 64 || atomic_fetch_add(&n, 1) >= 20000) return;
+    if (!texlog_on() || !im || im->w < 64 || im->h < 64 || (im->d.flags & NVN_TEXTURE_FLAGS_LINEAR) || atomic_fetch_add(&n, 1) >= 20000) return;   // (not the linear movie planes: they filled the cap)
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); double now = ts.tv_sec + ts.tv_nsec * 1e-9; if (!t0) t0 = now;
     uint64_t h = 0, nz = 0, k = 0;
     if (mem && hi > lo) { uint64_t len = hi - lo; h = mem_hash(mem + lo, len < (16u << 20) ? len : (16u << 20));
@@ -1142,6 +1142,11 @@ static int img_edges_clean(vka_img *im) {
                                   (unsigned long long)im->serial, im->w, im->h, im->d.format, (unsigned long long)g_edge_skips);
     return 1;
 }
+// PEANUTS TEMPORARY: DM_VK_TEX_AUDIT=1 checks the storage of tracked block-compressed and other non-linear textures in the background (a share of them at every prepare,
+// four times a second) against the hash of what was last uploaded; a difference the dirty-page tracking did not see is logged ("texlog ... audit-miss"), and with
+// DM_VK_TEX_AUDIT=2 uploaded. For MLB The Show 26's noise blocks on the Retroid Pocket Duo: streamed BC7 portraits first uploaded 70 % filled, the rest never seen written
+static int audit_on(void) { static int on = -1; if (on < 0) { const char *e = getenv("DM_VK_TEX_AUDIT"); on = e ? atoi(e) : 0; } return on; }
+static void audit_stamp(vka_img *im, const uint8_t *mem) { if (audit_on() && mem) im->audit_hash = mem_hash(mem, im->L.size) | 1; }
 static void upload_tracked(vka_img *im, const tex_t *t, VkCommandBuffer cb) {   // stamp, protect, then read (nvn_mtl.m pkg_upload): a write during the copy is seen at the next check
     texlog(im->stamp ? "again" : "first", im, &t->d, t->mem, 0, t->L.size);   // PEANUTS TEMPORARY (texlog)
     im->stamp = nvn_dirty_now(); nvn_dirty_protect(t->mem, t->L.size);
@@ -1150,6 +1155,7 @@ static void upload_tracked(vka_img *im, const tex_t *t, VkCommandBuffer cb) {   
     uint8_t *c = im->vpool ? NULL : gw_content(t->mem, t->L.size, &im->gw_seen);   // (a sparse pool's storage is read through its page table: upload_)
     if (!c && !im->vpool) c = unmapped_content(t);
     if (c) { tex_t tc = *t; tc.mem = c; upload(im, &tc, cb); free(c); g_gw_over++; } else upload(im, t, cb);
+    audit_stamp(im, t->mem);   // PEANUTS TEMPORARY (DM_VK_TEX_AUDIT)
     if (vka_nan_on()) { im->head = mem_hash(t->mem, t->L.size < 64 ? t->L.size : 64); im->up_fence = vka_fence_last() + 1;
         if (!im->snap) im->snap = malloc(256); if (im->snap) memcpy(im->snap, t->mem, t->L.size < 256 ? t->L.size : 256); }
 }
@@ -4313,25 +4319,33 @@ void vka_tex_prepare(VkCommandBuffer cb, uint64_t fence) {   // PEANUTS: image r
             tex_t t = {0}; t.serial = im->serial; t.d = im->d; t.L = im->L; t.mem = (uint8_t *)im->mem;
             if (wbf) { uint64_t k = ++g_wbf_up; if (k <= 4 || !(k & (k - 1))) VLOG("texture serial %llu %ux%u format %#x: the CPU wrote it after its copy-back, its written part uploaded (%llu so far; %llu scans waited for a copy-back; DM_VK_WB_FOLLOW=0 turns this off)",
                                                                          (unsigned long long)im->serial, im->w, im->h, im->d.format, (unsigned long long)k, (unsigned long long)g_wbf_waits); }
-            // PEANUTS: a linear texture of one level the CPU writes frame by frame (MLB The Show 26's Bink movies: Y, Cr and Cb planes, two sets, decoded by the game on
-            // the CPU into the set the GPU read a frame or two earlier) waits until a scan finds no new write since the last one, its pages protected again in between, and
-            // is uploaded then: read while the game was still decoding into it, a plane held parts of two frames, and the movie showed blocks of colour noise (the stadium's
-            // video board, the batter's portrait, the uniform screen's player, worst on the slower Retroid Pocket Duo). At most DM_VK_TEX_SETTLE scans (default 3, 0 off)
-            { static int smax = -1; if (smax < 0) { const char *e = getenv("DM_VK_TEX_SETTLE"); smax = e && *e ? atoi(e) : 3; }
-              if (smax > 0 && (im->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) && im->levels == 1 && im->layers == 1 && !wbf) {
-                  if ((!im->settle || nvn_dirty_since_span(im->span, im->mem, size, im->settle)) && im->settle_n < smax) {
-                      im->settle_n++; im->settle = nvn_dirty_now(); nvn_dirty_protect(im->mem, size); g_wbf_wait = 1;   // (scanned again at the next prepare even with no new write)
-                      texlog("settling", im, &t.d, t.mem, lo, hi);   // PEANUTS TEMPORARY (texlog)
-                      continue;
-                  }
-                  im->settle = 0; im->settle_n = 0;
-              } }
             int rows = VKA_ENV("DM_VK_ROWS", 1);
             texlog("changed", im, &t.d, t.mem, lo, hi);   // PEANUTS TEMPORARY (texlog): the part of the storage written since the last upload
-            if (rows && upload_rows_tracked(im, &t, cb, lo, hi)) continue;
-            if (upload_bands_tracked(im, &t, cb, lo, hi, im->stamp)) { if (g_reup++ < 8) VLOG("texture serial %llu %ux%u format %#x: the bands of its storage that changed re-uploaded", (unsigned long long)im->serial, im->w, im->h, im->d.format); continue; }
+            if (rows && upload_rows_tracked(im, &t, cb, lo, hi)) { audit_stamp(im, t.mem); continue; }
+            if (upload_bands_tracked(im, &t, cb, lo, hi, im->stamp) && (audit_stamp(im, t.mem), 1)) { if (g_reup++ < 8) VLOG("texture serial %llu %ux%u format %#x: the bands of its storage that changed re-uploaded", (unsigned long long)im->serial, im->w, im->h, im->d.format); continue; }
             upload_tracked(im, &t, cb);
             if (g_reup++ < 8) VLOG("texture serial %llu %ux%u format %#x flags %#x target %d: its storage changed, re-uploaded", (unsigned long long)im->serial, im->w, im->h, im->d.format, im->d.flags, im->d.target);
+        }
+    }
+    if (audit_on() && cb) {   // PEANUTS TEMPORARY (DM_VK_TEX_AUDIT, above)
+        static int cur; static double last; static uint64_t misses;
+        struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); double now = ts.tv_sec + ts.tv_nsec * 1e-9;
+        if (now - last >= 0.25) {
+            last = now; uint64_t budget = 32u << 20;
+            for (int k = 0; k < g_nlive && budget; k++) {
+                if (cur >= g_nlive) cur = 0;
+                vka_img *im = g_live[cur++];
+                if (!im->track || !im->mem || im->gpu_owned || !im->audit_hash || im->w < 64 || im->h < 64 || (im->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET))) continue;
+                uint64_t size = im->L.size; budget = budget > size ? budget - size : 0;
+                if ((mem_hash(im->mem, size) | 1) == im->audit_hash) continue;
+                if (!im->span) im->span = nvn_dirty_span(im->mem, size);
+                if (nvn_dirty_since_span(im->span, im->mem, size, im->stamp)) continue;   // seen: the scan above uploads it
+                tex_t t = {0}; t.serial = im->serial; t.d = im->d; t.L = im->L; t.mem = (uint8_t *)im->mem;
+                misses++; texlog("audit-miss", im, &t.d, t.mem, 0, size);
+                if (misses <= 16 || !(misses & (misses - 1))) VLOG("texture serial %llu %ux%u format %#x: its storage changed with no write seen (%llu so far)%s", (unsigned long long)im->serial,
+                                                                   im->w, im->h, im->d.format, (unsigned long long)misses, audit_on() >= 2 ? ": uploaded" : "");
+                if (audit_on() >= 2) upload_tracked(im, &t, cb);
+            }
         }
     }
     nvn_pool_use(0);   // (write_tex takes it again for each ID, after letting g_tmu go: never twice on one thread)
