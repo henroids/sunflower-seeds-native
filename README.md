@@ -50,6 +50,39 @@ Frame rates on the field in an exhibition, with **Crowd control** on (below), fr
 With the crowd drawn, the field runs at about 34 fps on the Thor, 20 on the Xperia and 24 on the Retroid Pocket Duo
 (builds before 1.0.34).
 
+### Recommended setup
+
+From the test runs of 2026-11-25 and 26 (every log is summed up in the [game's note](dm/games/0100AA7024094000/README.md#performance)):
+
+| | AYN Thor | Sony Xperia 1 V | Retroid Pocket Duo |
+|---|---|---|---|
+| GPU driver | Turnip Gen8 V39 | Turnip Gen8 V39 | Mr. Purple T30 |
+| Crowd control | On | On | On |
+| Mode | Either; Docked holds about 53 fps | Handheld (Docked throttles as the phone heats up) | Handheld (Docked is about 34 fps) |
+| Use fast cores | Either (no difference measured) | On (18 → 20.6 fps before Crowd control) | On |
+| Everything else | Defaults | Defaults | Defaults |
+
+The rest (Upscaler, Frame rate cap 60, Frame generation off) stays at the defaults on all three. **Use fast cores** is
+in **Settings** › **Graphics** › **Speed**; Crowd control and Mode are on Home's scoreboard row.
+
+Drivers tried on the Retroid Pocket Duo: Mr. Purple T23 and T26 do not start the game; Turnip Gen8 V39 and Turnip Duo
+v5.1 start but flicker far more than T30. On the Duo the app also turns off the driver's tiled rendering for this game
+(since 0.2.121), which stopped the player skin flickering black at no fps cost (44.7 fps in game, handheld).
+
+### What the tests found
+
+- **What helped:** hiding the crowd (about a third of the field's draws; 34 → 52 fps on the Thor, 20 → 50 on the
+  Xperia, 24 → 34 on the Duo docked); Handheld mode on the phones; the merge with upstream Peanuts Native (0.2.104).
+- **What fixed glitches:** the larger image table (0.2.105) fixed the menu flicker and a texture error on the Duo; no
+  tiled rendering on the Duo (0.2.121) fixed the skin flicker.
+- **What did not help** (tried and taken out): giving the fastest core to the game's main thread (the Thor got slower);
+  full GPU barriers, no image compression (UBWC), full-precision shaders, no early depth (LRZ) and no uniform-buffer
+  promotion on the Duo (none stopped the flicker).
+- **The limit now** is the game's own main thread on the CPU (about 16 ms a frame on the Thor, more on the Duo), not the
+  GPU. Heat is the Xperia's limit.
+- **Still open:** blocks of noise over some screens on the Duo (the uniform screen's player and background); the sound
+  can stay off after a phone call comes in during a game.
+
 ### Settings worth knowing
 
 Home's scoreboard row is four buttons:
