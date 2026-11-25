@@ -800,6 +800,12 @@ static void texlog(const char *why, const vka_img *im, const nvn_texdesc *d, con
     VLOG("texlog %.3f %s serial %llu %ux%u format %#x flags %#x %ux%u mode %u bytes %#llx-%#llx of %#llx hash %016llx nonzero %llu%%", now - t0, why, (unsigned long long)im->serial,
          im->w, im->h, d ? d->format : 0, d ? d->flags : 0, im->levels, im->layers, (unsigned)im->mode, (unsigned long long)lo, (unsigned long long)hi,
          (unsigned long long)im->L.size, (unsigned long long)h, (unsigned long long)(k ? nz * 100 / k : 0));
+    // a large block-compressed picture's whole upload: a hash for each 64 KiB of its storage, to compare the same picture between devices (which parts differ)
+    if (mem && lo == 0 && hi == im->L.size && hi >= (1u << 20) && d && d->format >= 0x41 && d->format <= 0x4f) {
+        char b[2048]; size_t o = 0;
+        for (uint64_t c = 0; c < hi && o + 10 < sizeof b; c += 65536) o += (size_t)snprintf(b + o, sizeof b - o, " %08x", (unsigned)mem_hash(mem + c, hi - c < 65536 ? hi - c : 65536));
+        VLOG("texlog chunks serial %llu:%s", (unsigned long long)im->serial, b);
+    }
 }
 // GPU writes into guest memory. On the Switch a texture is its storage, so a copy, fill or inline update into that memory (or a shader's store into a storage buffer over it)
 // changes what the texture reads from then on, in GPU order. Here a texture is an image of its own, which the CPU uploads from the storage when the replay records its first use
