@@ -640,9 +640,10 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         // PEANUTS: MLB The Show 26 on the Retroid Pocket Duo (Adreno 722, Turnip): the driver's tiled (GMEM) rendering flickers player skin black and back. Drawing
         // straight to memory (TU_DEBUG=sysmem) stops it at no frame rate cost there (44.7 fps in game, 0.2.120). Other drivers ignore the variable
         if (Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("TU_DEBUG=sysmem");
-        // PEANUTS TEMPORARY (test app, Retroid Pocket Duo): the game's GPU-encoded pictures (BC7 / BC1 written as RGBA32UI / RG32UI) copied into their compressed images through
-        // a buffer instead of vkCmdCopyImage (vka_tex.c bc_copy), to test whether that copy makes the noise blocks there; the pictures loaded from files are the same bytes as the Thor's
-        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("DM_VK_BC_VIA_BUFFER=1");
+        // PEANUTS TEMPORARY (test app, Retroid Pocket Duo): the noise blocks are in the pictures the game makes on the GPU (rendered, then encoded to BC7 / BC1 by its compute
+        // shaders). Mr. Purple T30 there lets every stage pin 64-lane subgroups, Turnip on the Thor only fragment and compute; here only fragment pins and every other stage,
+        // compute too, runs one-lane subgroups (DM_VK_SUBGROUP_PIN=0x10, vka_shader.c sg_plan), to test whether a pinned subgroup stage makes the noise
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("DM_VK_SUBGROUP_PIN=0x10");
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
         // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why

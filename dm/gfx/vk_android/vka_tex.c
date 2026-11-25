@@ -2526,33 +2526,6 @@ static int img_wb_kind(const vka_img *im) { return (im->d.flags & (NVN_TEXTURE_F
 // the cube a generated face is lit by stayed zero, the face black, its specular left). A sampled texture now takes the newest GPU write through an uncompressed image over the
 // same storage of its texel (or block) size and its extent in texels (or blocks) and layers, written after its own last write, by a copy between size-compatible formats
 // (vkCmdCopyImage copies the bits), each time that image is written again. DM_VK_BC_TAKE=0 turns it off. Caller holds g_tmu
-// PEANUTS: an uncompressed image's texels (one per block) into a block-compressed image, through a buffer: a copy out of the source into scratch, then into the
-// destination as an upload is (vkCmdCopyBufferToImage). On the Retroid Pocket Duo (Adreno 722, Turnip) vkCmdCopyImage between the two left blocks of noise in whole
-// tiles of MLB The Show 26's GPU-encoded pictures (the uniform screen's player, the portraits); the same bytes uploaded from a buffer drew right. DM_VK_BC_VIA_BUFFER=1
-// copies this way (the app sets it on that device), 0 with vkCmdCopyImage; on a scratch failure the direct copy is made. Regions as vkCmdCopyImage's, extents in source texels
-static int bc_via_buffer(void) { static int on = -1; if (on < 0) { const char *e = getenv("DM_VK_BC_VIA_BUFFER"); on = e && atoi(e) > 0; } return on; }
-static void bc_copy(VkCommandBuffer cb, const vka_img *src, const vka_img *dst, uint32_t n, const VkImageCopy *rc) {
-    if (bc_via_buffer() && n <= 16) {
-        VkBufferImageCopy o[16], i[16]; VkDeviceSize total = 0, off[16];
-        for (uint32_t k = 0; k < n; k++) { off[k] = total; total += ((VkDeviceSize)rc[k].extent.width * rc[k].extent.height * rc[k].extent.depth * rc[k].srcSubresource.layerCount * src->f.bpb + 15) & ~(VkDeviceSize)15; }
-        vka_span sp;
-        if (total && vka_scratch(total, 16, &sp)) {
-            for (uint32_t k = 0; k < n; k++) {
-                uint32_t dl = rc[k].dstSubresource.mipLevel, dw = dst->w >> dl ? dst->w >> dl : 1, dh = dst->h >> dl ? dst->h >> dl : 1;
-                o[k] = (VkBufferImageCopy){sp.off + off[k], 0, 0, rc[k].srcSubresource, rc[k].srcOffset, rc[k].extent};
-                i[k] = (VkBufferImageCopy){sp.off + off[k], rc[k].extent.width * dst->f.bw, rc[k].extent.height * dst->f.bh, rc[k].dstSubresource, {0, 0, 0},
-                                           {dw < rc[k].extent.width * dst->f.bw ? dw : rc[k].extent.width * dst->f.bw, dh < rc[k].extent.height * dst->f.bh ? dh : rc[k].extent.height * dst->f.bh, rc[k].extent.depth}};
-            }
-            vk.vkCmdCopyImageToBuffer(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, sp.buf, n, o);
-            vka_barrier(cb);
-            vk.vkCmdCopyBufferToImage(cb, sp.buf, dst->img, VK_IMAGE_LAYOUT_GENERAL, n, i);
-            static _Atomic int nl; if (atomic_fetch_add(&nl, 1) < 8) VLOG("block copy through a buffer: serial %llu %ux%u format %#x into serial %llu %ux%u format %#x, %u levels",
-                (unsigned long long)src->serial, src->w, src->h, src->d.format, (unsigned long long)dst->serial, dst->w, dst->h, dst->d.format, n);
-            return;
-        }
-    }
-    vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, n, rc);
-}
 static uint64_t g_wgen;
 static vka_img *take_src(const vka_img *im) {
     if (!im->mem || im->par || im->samples > 1 || im->f.kind >= 3 || !VKA_ENV("DM_VK_BC_TAKE", 1)) return NULL;
@@ -2586,7 +2559,7 @@ void vka_tex_id_take(int id, VkCommandBuffer cb) {
         (unsigned long long)im->serial, im->w, im->h, im->layers, im->d.target, im->d.format, n, (unsigned long long)src->serial, src->w, src->h, src->d.target, src->d.format);
     im->take_logged = 1;   // (each texture's first take logged, 96 at most)
     if (n && im->m.z) img_own(im, cb);   // (a zero-shared image gets memory of its own before a write)
-    if (n) { vka_barrier(cb); if (compressed(&im->f)) bc_copy(cb, src, im, n, rc); else vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, im->img, VK_IMAGE_LAYOUT_GENERAL, n, rc); vka_barrier(cb); }
+    if (n) { vka_barrier(cb); vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, im->img, VK_IMAGE_LAYOUT_GENERAL, n, rc); vka_barrier(cb); }
     else im->wgen = src->wgen;   // (no level fits: not asked again until the source is written again)
     pthread_mutex_unlock(&g_tmu);
     if (n) vka_img_written(im);   // (its wgen past the source's: taken again only after the next write through it)
@@ -4164,7 +4137,7 @@ void vka_tex_prepare(VkCommandBuffer cb, uint64_t fence) {   // PEANUTS: image r
                         if (sw != (dw + dst->f.bw - 1) / dst->f.bw || sh != (dh + dst->f.bh - 1) / dst->f.bh) break;   // the block grid stops lining up: copy no further level
                         reg[nreg++] = (VkImageCopy){ {src->aspect, l, 0, src->layers}, {0, 0, 0}, {dst->aspect, l, 0, dst->layers}, {0, 0, 0}, {sw, sh, 1} };
                     }
-                    if (nreg) bc_copy(cb, src, dst, nreg, reg);   // PEANUTS: through a buffer where vkCmdCopyImage garbles (bc_copy)
+                    if (nreg) vk.vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, nreg, reg);
                     dst->gpu_owned = 1;
                     static _Atomic int n_bc;
                     if (atomic_fetch_add(&n_bc, 1) < 8)
