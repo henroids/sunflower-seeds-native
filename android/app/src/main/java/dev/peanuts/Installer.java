@@ -215,7 +215,7 @@ public final class Installer {
     }
 
     private static void refuseIfGameRunning(Context ctx) throws IOException {
-        if (gameRunning(ctx)) throw new IOException("close the game first - its companion can't be switched or removed while it is running");
+        if (gameRunning(ctx)) throw new IOException("close the game first. Its companion cannot be changed while the game runs.");
     }
 
     // ---- Compatibility: refuse a package this runtime cannot load, warn when it may not support the running game's build ----
@@ -236,7 +236,7 @@ public final class Installer {
     /** Refuses before anything is touched (pkgDir is still just a staging/archived folder, safe to abandon) when the package needs a newer runtime than this app has */
     private static void refuseIfIncompatible(File pkgDir) throws IOException {
         int min = minRuntimeOf(pkgDir);
-        if (min > RUNTIME_VERSION) throw new IOException("needs runtime " + min + ", this app's companion runtime is " + RUNTIME_VERSION + " - update the app before installing this version");
+        if (min > RUNTIME_VERSION) throw new IOException("this version needs a newer app (companion runtime " + min + ", this app has " + RUNTIME_VERSION + "). Update the app first.");
     }
 
     /** Null when ok, unknown (knownBuildId null), or the package declares no native module (asset-only, nothing to check); else a warning the caller should
@@ -327,7 +327,7 @@ public final class Installer {
         if (!fresh.mkdirs()) throw new IOException("cannot create " + fresh);
         try {
             extract(zip, fresh, progress);
-            if (!new File(fresh, "package.json").isFile() || !new File(fresh, "dualscreen/manifest.json").isFile()) throw new IOException("not a companion package (no package.json + dualscreen/manifest.json)");
+            if (!new File(fresh, "package.json").isFile() || !new File(fresh, "dualscreen/manifest.json").isFile()) throw new IOException("this file is not a dual-screen companion (no package.json and dualscreen/manifest.json)");
             String manifest = new String(Files.readAllBytes(new File(fresh, "dualscreen/manifest.json").toPath()), StandardCharsets.UTF_8);
             String title = new JSONObject(manifest).optString("title_id", "").toUpperCase(Locale.ROOT);
             if (!title.isEmpty() && !title.equals(titleId)) throw new IOException("package is for title " + title + ", not " + titleId);

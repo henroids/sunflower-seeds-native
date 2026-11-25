@@ -93,8 +93,27 @@ def child_env(**kw):
 def peanuts_env(step):
     """step 'split': DM_SPLIT_DIRECT=1 (the targeted split reads a file's recorded containers only); 'shaders': DMSH_VK_ZSTD_LEVEL=6 (the phone's level)"""
     kw = dict(DM_SPLIT_DIRECT='1') if step == 'split' else dict(DMSH_VK_ZSTD_LEVEL='6')
+    # PEANUTS: a desktop checkout can build the locked translator. The phone has its own native one.
+    helper = REPO / 'peanuts/scripts'
+    if step == 'shaders' and 'XLATE' not in os.environ and (helper / 'prepare_pc_translator.py').is_file():
+        sys.path.insert(0, str(helper))
+        import prepare_pc_translator
+        try:
+            kw['XLATE'] = str(prepare_pc_translator.resolve())
+        except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+            raise Error(f'desktop translator: {error}') from error
     return {k: v for k, v in kw.items() if k not in os.environ}
 # PEANUTS end
+
+
+def windows_shader_workers(py, J):
+    """PEANUTS(upstream-candidate): on Windows, vk_android_build.py's worker processes (DMSH_VK_WORKER, DMSH_VK_WORKERS = J) run through vk_android_win.py, which puts
+    the Windows adaptations into each worker. vk_android_build.py's threads share one interpreter, and the Python half of each shader holds its GIL: Minecraft
+    Dungeons II's 15,826 shaders took 41 minutes there with the CPU at 25-50 % for J=8. Its other ways off the GIL do not run on Windows (DMSH_VK_PROCS needs the
+    translator as a .so). The library is byte-identical to the threads' build (split_pool.PipePool: the parent still writes it). A value in the environment wins"""
+    if not WINDOWS or 'DMSH_VK_WORKER' in os.environ or J < 2: return {}
+    q = lambda p: '"' + str(p).replace('\\', '/') + '"'   # shlex.split (vk_android_build.py) keeps neither backslashes nor unquoted spaces
+    return {'DMSH_VK_WORKER': f'{q(py)} {q(VK_BUILD_WIN)} --pool-worker', 'DMSH_VK_WORKERS': os.environ.get('DMSH_VK_WORKERS', str(J))}
 
 
 def windows_job():
@@ -274,7 +293,7 @@ def collect_nros(exe, romfs, work, in_process=False):
         shutil.rmtree(work / 'android-nro.partial', ignore_errors=True)   # left by a version that renamed the folder into place
         if coll.exists(): shutil.rmtree(coll)
         coll.mkdir()
-        stage(f'finding the NROs {len(nrrs)} NRR file{"s" if len(nrrs) != 1 else ""} register{"" if len(nrrs) != 1 else "s"}')
+        stage('finding the rest of the game\'s code')
         args, log = [str(romfs), str(coll), '--exefs', str(exe)], work / 'nro_collect.log'
         if in_process: rc = run_in_process(REPO / 'dm/tools/nro_collect.py', args, {'DM_NRO_COLLECT_J': '1'}, log)
         else:
@@ -365,9 +384,9 @@ def other_version_keys(g, ver):
     return keys
 
 
-def may_lack(g, ver=None):
-    """The keys a dump of version ver may lack: shader_optional.tsv's, and the other listed versions' own (other_version_keys)"""
-    return optional_keys(g) | other_version_keys(g, ver)
+def may_lack(g, ver=None, other=None):
+    """The keys a dump of version ver may lack: shader_optional.tsv's, and the other listed versions' own (other_version_keys, or the caller's already read set)"""
+    return optional_keys(g) | (other_version_keys(g, ver) if other is None else other)
 # PEANUTS end
 
 
@@ -509,10 +528,21 @@ class ProgressTee:
 def run_in_process(script, args, env, log, progress=None):
     """script run as `python3 script args` would run it, in this process: its sys.argv, env added to os.environ, stdout and stderr to the file log;
     everything put back after it (the modules it imported from outside the standard library are dropped, so the next run starts afresh). → its exit code.
-    progress: (base, width) to pass the tool's progress lines on to this script's output (ProgressTee)"""
+    progress: (base, width) to pass the tool's progress lines on to this script's output (ProgressTee)
+    PEANUTS: the tool sees DM_IN_PROCESS=1. One that would run itself again with more variables (patch_nso.py's DM_PATCH_FRONT, an os.execve the app's process does not allow)
+    ends with sys.exit({'rerun_env': {...}}) instead; it is run again with them, after the first run is undone (its memory freed), its output appended to the same log"""
+    extra = {}
+    for attempt in range(3):
+        code, rerun = _run_in_process_once(script, args, {**env, **extra, 'DM_IN_PROCESS': '1'}, log, progress, 'a' if attempt else 'w')
+        if not rerun or rerun.items() <= extra.items(): return code if not rerun else 1
+        extra.update(rerun)
+    return 1
+
+
+def _run_in_process_once(script, args, env, log, progress, mode):   # PEANUTS: run_in_process's single run → (exit code, the rerun variables the tool asked for or None)
     saved = (sys.argv, list(sys.path), dict(os.environ), set(sys.modules), sys.stdout, sys.stderr, os.getcwd())
-    code = 0
-    with open(log, 'w', buffering=1, encoding='utf-8', errors='backslashreplace') as f:
+    code, rerun = 0, None
+    with open(log, mode, buffering=1, encoding='utf-8', errors='backslashreplace') as f:
         sys.stdout = sys.stderr = ProgressTee(f, saved[4], *progress) if progress else f
         try:
             os.environ.update(env); sys.argv = [str(script)] + [str(a) for a in args]; sys.path.insert(0, str(Path(script).parent))
@@ -520,6 +550,8 @@ def run_in_process(script, args, env, log, progress=None):
         except SystemExit as e:
             if e.code is None: code = 0
             elif isinstance(e.code, int): code = e.code
+            elif isinstance(e.code, dict) and isinstance(e.code.get('rerun_env'), dict):   # PEANUTS: the rerun the tool asks for
+                rerun = {str(k): str(v) for k, v in e.code['rerun_env'].items()}
             else: print(e.code, file=f); code = 1
         except BaseException:
             import traceback; traceback.print_exc(); code = 1
@@ -530,7 +562,83 @@ def run_in_process(script, args, env, log, progress=None):
             std = os.path.realpath(sys.base_prefix) + os.sep
             for m in set(sys.modules) - mods:
                 if not os.path.realpath(getattr(sys.modules.get(m), '__file__', None) or '').startswith(std): sys.modules.pop(m, None)
-    return code
+    return code, rerun   # PEANUTS
+
+
+# PEANUTS begin: the phone's rewrite on its fast cores (issue #120, peanuts/docs/INCREMENTAL-BUILD.md "The rewrite on the fast cores")
+REWRITE_RERUN = 75                 # the worker's exit when its tool asked to be run again: the variables are on its last line, after RERUN_LINE
+RERUN_LINE = 'pn-rewrite-rerun '   # (a tool's own exit 75, or such a line alone, is not a rerun)
+REWRITE_BOOT = ('import json, runpy, sys\n'
+                'sys.argv = sys.argv[1:]; sys.path.insert(0, sys.argv[0].rsplit("/", 1)[0])\n'
+                'try: runpy.run_path(sys.argv[0], run_name="__main__")\n'
+                'except SystemExit as e:\n'
+                '    r = e.code.get("rerun_env") if isinstance(e.code, dict) else None\n'
+                '    if not isinstance(r, dict): raise\n'
+                '    sys.stderr.flush()\n'
+                '    print(%r + json.dumps({str(k): str(v) for k, v in r.items()}), flush=True)\n'
+                '    sys.exit(%d)\n') % (RERUN_LINE, REWRITE_RERUN)
+
+
+def pn_rewrite_worker(script, args, env, log, progress=None):
+    """script (patch_nso.py) as `python3 script args`, in a worker process of its own (DM_SPLIT_WORKER: nxpack_worker, a Python without the app's threads, as the
+    split's workers), with DM_REWRITE_J = PN_REWRITE_J: its x18 and spin phases fork that many workers there (patch_nso.py in_forks; the phone's Python has no
+    _multiprocessing, and the app's own process must not fork). The same output as run_in_process: the file log, its progress lines passed on (ProgressTee).
+    → its exit code; None with no worker command or PN_REWRITE_J below 2 (run_in_process then, one core). A stop (this process interrupted) ends the worker
+    and its forks (their own process group)
+    The tool sees DM_IN_PROCESS=1, as in run_in_process: the worker cannot exec either (Android refuses an exec of a file in the app's data), so a tool that
+    would run itself again with more variables (patch_nso.py's DM_PATCH_FRONT, #177) asks with sys.exit({'rerun_env': {...}}); REWRITE_BOOT passes that on
+    (RERUN_LINE, REWRITE_RERUN) and it is run again with them in a new worker, its output appended to the same log. One that asks again for the same fails.
+    (Found in review: without it the worker took the os.execve path, and DAVE THE DIVER stopped at "Rewriting the game's code" again)"""
+    cmd = os.environ.get('DM_SPLIT_WORKER', '').split()
+    try: j = int(os.environ.get('PN_REWRITE_J') or 1)
+    except ValueError: j = 1
+    if not cmd or j < 2: return None
+    extra = {}
+    for attempt in range(3):
+        code, rerun = _rewrite_worker_once(cmd, script, args, {**env, **extra, 'DM_REWRITE_J': str(j), 'DM_IN_PROCESS': '1'}, log, progress,
+                                           'a' if attempt else 'w')
+        if not rerun or rerun.items() <= extra.items(): return code if not rerun else 1
+        extra.update(rerun)
+    return 1
+
+
+def _rewrite_worker_once(cmd, script, args, env, log, progress, mode):   # pn_rewrite_worker's single run → (exit code, the rerun variables the tool asked for or None)
+    import json
+    with open(log, mode, buffering=1, encoding='utf-8', errors='backslashreplace') as f:
+        tee = ProgressTee(f, sys.stdout, *progress) if progress else f
+        p = subprocess.Popen(cmd + ['-c', REWRITE_BOOT, str(script)] + [str(a) for a in args], env={**os.environ, **env},
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='backslashreplace',
+                             start_new_session=True)
+        # the pipe is read in a thread: a stop (an exception the packer raises in this thread, at its next bytecode) reached a read of it only with the
+        # worker's next line, and in_forks' parent prints one only as each child is done (ACNH's spin phase on two workers: about 30 s), past the 20 s
+        # after which PackService ends the process (found in review); a read that fails (the log's storage full) ends the worker here as before
+        import threading
+        failed, last = [], ['']
+
+        def pump():
+            try:
+                for line in p.stdout: tee.write(line); last[0] = line
+            except BaseException as e: failed.append(e)
+        reader = threading.Thread(target=pump, name='pn-rewrite-log', daemon=True)
+        try:
+            reader.start()
+            while reader.is_alive(): reader.join(0.5)
+            if failed: raise failed[0]
+            code = p.wait()
+            if code != REWRITE_RERUN or not last[0].startswith(RERUN_LINE): return code, None
+            try: rerun = json.loads(last[0][len(RERUN_LINE):])
+            except ValueError: return 1, None
+            return (0, {str(k): str(v) for k, v in rerun.items()}) if isinstance(rerun, dict) and rerun else (1, None)
+        except BaseException:
+            try: os.killpg(p.pid, signal.SIGKILL)
+            except OSError: pass
+            p.wait()
+            reader.join(5)
+            raise
+        finally:
+            try: p.stdout.close()
+            except OSError: pass
+# PEANUTS end
 
 
 def staging(out, m):   # where a module is rewritten before it goes into the pack (inside it: same file system, so the swap is renames)
@@ -576,6 +684,12 @@ def write_orig(src, out, m):   # PEANUTS
     return len(buf)
 
 
+def pn_reuse():   # PEANUTS: dm/peanuts/reuse/rewrite_reuse.py (issue #120)
+    sys.path.insert(0, str(REPO / 'dm/peanuts/reuse'))
+    import rewrite_reuse
+    return rewrite_reuse
+
+
 def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
     """patch_nso.py --target android on each module into out (each its own <module>.* files); a module whose key file matches is kept. Each module is
     rewritten into a staging folder and swapped in when it is complete (swap_in), so a run stopped part way never leaves new code with old tables.
@@ -598,6 +712,7 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
             if ok:
                 if have != key: tmp = out / f'{m}.android.key.tmp'; write_lf(tmp, key + '\n'); os.replace(tmp, kf)   # the same rewrite: its key as rewrite_key's (upgrade_keys)
                 print(f'  {m}: unchanged, kept'); continue
+        if m not in xmod and (pn_reuse().keep(m, src, out, g, key, REWRITER) or pn_reuse().restore(m, src, out, g, key, REWRITER)): continue   # PEANUTS: the key moved, the module's part of it did not; or the pack has none and the app's copy of its last rewrite is it (issue #120, dm/peanuts/reuse/rewrite_reuse.py)
         todo[m] = (src, key)
     for m in todo: (out / f'{m}.android.key').unlink(missing_ok=True)   # every module to rewrite is unfinished from here on: no mix of old and new modules passes
     if in_process:
@@ -613,11 +728,12 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
         for n, (m, (src, key)) in enumerate(todo.items(), 1):
             kf = out / f'{m}.android.key'; kf.unlink(missing_ok=True)
             shutil.rmtree(staging(out, m), ignore_errors=True)
-            stage(f'rewriting {m} ({n} of {len(todo)})')
+            stage(f'part {n} of {len(todo)}')
             print(f'  {m}: rewriting {src} (in process)', flush=True)
             t0 = time.monotonic()
             width = 1000 * size[m] // total
-            rc = run_in_process(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id, 'DM_REWRITE_J': '1'}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: xargs
+            rc = pn_rewrite_worker(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: on the fast cores (issue #120)
+            if rc is None: rc = run_in_process(REPO / 'dm/tools/patch_nso.py', [str(files[m]), staging(out, m), m, '--target', 'android', *xargs(m)], {'DM_GAME': g.id, 'DM_REWRITE_J': '1'}, out / f'rewrite_{m}.log', (base, width))   # PEANUTS: xargs; pn_rewrite_worker
             if rc:
                 tail = (out / f'rewrite_{m}.log').read_text(errors='replace').splitlines()[-20:]
                 raise Error(f'patch_nso.py exit code {rc} on {m}:\n' + '\n'.join(tail))
@@ -626,6 +742,11 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
             print(f'  {m}: done ({time.monotonic() - t0:.1f} s)', flush=True)
         if todo: print('progress 1000 1000 code', flush=True)
         return
+    # PEANUTS(upstream-candidate): each module's rewrite workers by its share of the code to rewrite, not the threads split evenly: main is most of a game's code
+    # (LEGO 2K Drive: 98 of 106 MB), and an even split gave it 2 of 8 threads while sdk and subsdk0, done in seconds, held the rest
+    files = {m: rewriter_src(todo[m][0], out, m) for m in todo}
+    sizes = {m: max(1, os.path.getsize(files[m])) for m in todo}
+    share = {m: max(1, round((os.cpu_count() or 4) * sizes[m] / max(1, sum(sizes.values())))) for m in todo}
     procs = {}
     try:
         pending = list(todo)
@@ -634,7 +755,7 @@ def rewrite(py, srcs, out, jobs, g, in_process=False, xmod=None):
                 m = pending.pop(0); kf = out / f'{m}.android.key'; kf.unlink(missing_ok=True); shutil.rmtree(staging(out, m), ignore_errors=True)
                 print(f'  {m}: rewriting {todo[m][0]}', flush=True)
                 log = open(out / f'rewrite_{m}.log', 'w')
-                procs[m] = (subprocess.Popen([py, str(REPO / 'dm/tools/patch_nso.py'), str(rewriter_src(todo[m][0], out, m)), str(staging(out, m)), m, '--target', 'android', *xargs(m)], env=env, stdout=log, stderr=subprocess.STDOUT), log)   # PEANUTS: xargs
+                procs[m] = (subprocess.Popen([py, str(REPO / 'dm/tools/patch_nso.py'), str(files[m]), str(staging(out, m)), m, '--target', 'android', *xargs(m)], env=dict(env, DM_REWRITE_J=str(share[m])), stdout=log, stderr=subprocess.STDOUT), log)   # PEANUTS: xargs
             for m in list(procs):
                 p, log = procs[m]
                 if p.poll() is None: continue
@@ -656,7 +777,7 @@ def variants(g):
     return [(v[0], (v[1] if len(v) > 1 and v[1] else 'main').replace(',', ' ').split()) for v in g.values('variant') if v and v[0]]
 
 
-def rewrite_variants(py, srcs, out, g, in_process=False):
+def rewrite_variants(py, srcs, out, g, in_process=False, modded=()):   # PEANUTS: modded
     """Each variant row's modules rewritten again with DM_PATCH_VARIANT=<name> (patch_nso.py VARIANT_CUTS: a game's native 4:3 mod) into out/<name>/,
     keyed '<the module's rewrite_key> variant=<name>' (the launcher's PackCheck checks it the same way); a module whose key matches is kept. Both versions
     stay in the pack, so the launcher's Game settings › Aspect ratio switches between them without another Prepare: the host loads a module from
@@ -677,6 +798,10 @@ def rewrite_variants(py, srcs, out, g, in_process=False):
             else:
                 with open(log, 'w') as f:
                     rc = subprocess.call([py, str(REPO / 'dm/tools/patch_nso.py'), *args], env=child_env(DM_GAME=g.id, DM_PATCH_VARIANT=v), stdout=f, stderr=subprocess.STDOUT)
+            if rc and m in modded:   # PEANUTS: a build with code mods: the variant's cuts assert the game's own bytes, which a mod changed (Animal Crossing: New Horizons'
+                # 60 fps speed fix imported as a mod beside its built-in variant). That build has no variant of its own; the pack is made all the same
+                print(f'  variant {v}: not made, a mod changes {m} (patch_nso.py exit code {rc}: {" / ".join(log.read_text(errors="replace").splitlines()[-2:])})', flush=True)
+                shutil.rmtree(vout, ignore_errors=True); break
             if rc:
                 tail = log.read_text(errors='replace').splitlines()[-20:]
                 raise Error(f'patch_nso.py exit code {rc} on {m} (variant {v}):\n' + '\n'.join(tail))
@@ -756,7 +881,7 @@ def ooz_split_checked(ooz, g, tmp, ver=None):
     check there is. So the split in <tmp> counts only when its keys are exactly the profile's, but for the keys shader_optional.tsv gives to another build; one
     key missing or one key more stops the pack, and nothing of that split is used. (vk_android_build.py then hashes every record against its key again.)"""
     want, have = map_keys(g.dir / 'shader_map.tsv'), map_keys(tmp / 'shader_map.tsv')
-    lost, more = sorted(k for k in want - have if k not in may_lack(g, ver)), sorted(have - want)
+    lost, more = sorted((want - have) - may_lack(g, ver)), sorted(have - want)   # PEANUTS: load the optional-key tables once per split
     if lost or more:
         eg = lambda ks: f' (e.g. {", ".join(ks[:3])})' if ks else ''
         raise Error(f'the shaders decoded with the ooz Oodle decoder ({ooz}, DM_OODLE_OOZ) are not the profile\'s: {len(lost)} of the {len(want)} keys in its shader_map.tsv '
@@ -866,10 +991,11 @@ def split_shaders(a, g, vdir, pkg, parts=None, aoc=(), nros=None):   # parts: th
     if (g.dir / 'shader_map.tsv').is_file():
         want, have = map_keys(g.dir / 'shader_map.tsv'), map_keys(tmp / 'shader_map.tsv')
         missing = sorted(want - have)
-        if hard := [k for k in missing if k not in may_lack(g, ver)]:   # PEANUTS: may_lack (was optional_keys): the other listed versions' shaders are checked first
+        other = other_version_keys(g, ver)   # PEANUTS: read the profile's version table once, even when thousands of keys differ
+        if hard := sorted(set(missing) - may_lack(g, ver, other)):   # PEANUTS: keys from other listed versions may be absent
             raise Error(lacking_shaders(g, rd, hard, len(want), getattr(a, 'dlc_count', None), tmp, shader_versions(g) != [f'v{ver}']))   # PEANUTS: names DLC that was not imported as a possible reason, only for tables of this one version
         # PEANUTS: the one plain line for a dump of one of the versions the tables are the union of (the phone's: PackService.splitMatchesProfile)
-        if theirs := [k for k in missing if k in other_version_keys(g, ver)]:
+        if theirs := set(missing) & other:   # PEANUTS: reuse the same version table
             print(f'shaders: {len(theirs):,} of {len(want):,} shaders in this app\'s table belong to other versions of the game ({", ".join(other_versions(g, ver))}): not needed for v{ver}', flush=True)
         for f in ('shader_map.tsv', 'shader_facts.tsv', 'shader_pairs.tsv'):
             if (g.dir / f).is_file() and table_lines(g.dir / f) != table_lines(tmp / f):   # the comment lines name the game and the split's wording at the time
@@ -898,7 +1024,7 @@ def pack_shaders(a, g, work, out, vdir, parts=None, aoc=()):
     v = vk_chain(); name = VK_PREFIX + v
     cache = (a.shader_cache or work / 'android-shaders' / 'lib').resolve(); lib = cache / name
     dst = out / 'shaders' / name
-    stage('checking the shader library')
+    stage('checking the saved shaders')
     if not library_current(lib, g):
         if a.in_process: raise Error(f'no current shader library {lib}: --in-process does not build one yet (vk_android_build.py starts the translator and spirv-val as programs); --no-shaders packs without')
         pkg = (a.shader_pkg or work / 'android-shaders' / 'pkg').resolve()
@@ -908,17 +1034,20 @@ def pack_shaders(a, g, work, out, vdir, parts=None, aoc=()):
         swork = shader_work(a, work); swork.mkdir(parents=True, exist_ok=True)   # PEANUTS(upstream-candidate): beside a --shader-cache folder (shader_work)
         env = child_env(DM_GAME=g.id, J=str(a.J), WORK=str(swork))
         env.update(peanuts_env('shaders'))   # PEANUTS: as the phone's shaders step (PackService): zstd 6
+        env.update(windows_shader_workers(py, a.J))   # PEANUTS(upstream-candidate): Windows, the shaders in worker processes
         keys = selected_keys(g.dir)   # a profile with a selected set (shader_seen.tsv): only its shaders, as the phone builds them (PackService, ShaderLibs.selection)
         if keys is not None:
             if not keys: raise Error('the profile\'s shader_seen.tsv names none of the shaders of its shader_map.tsv')   # PEANUTS(upstream-candidate): no substitutions.
             print(f'shaders: the profile selects {len(keys):,} shaders (shader_seen.tsv) and the pixel shaders paired with them, as the phone builds', flush=True)
-        if absent := absent_optional(g, pkg, getattr(a, 'pack_ver', None)):   # a registered build without some of the map's shaders (shader_optional.tsv; PEANUTS: or another listed version's own, may_lack): the library is built without them
-            print(f'shaders: {len(absent)} of the profile\'s shaders are not in this build of the game (shader_optional.tsv); the library leaves them out '
-                  '(the [RED] "not in the package" line below counts them)', flush=True)
-            env['DMSH_VK_REQUIRE_ALL'] = '0'
-            if keys is not None: keys = [k for k in keys if k not in absent]
-        # PEANUTS(upstream-candidate): each child owns its selection file, even with sibling caches and concurrent builds.
+        absent = absent_optional(g, pkg, getattr(a, 'pack_ver', None))
+        # PEANUTS: pass the validated keys to each child, so pair expansion cannot restore them.
         with tempfile.TemporaryDirectory(prefix='selection-', dir=swork) as selection_dir:
+            env.pop('DMSH_VK_ABSENT_FILE', None)
+            if absent:
+                excluded = Path(selection_dir) / 'absent.tsv'
+                write_lf(excluded, ''.join(k + '\n' for k in sorted(absent)))
+                env['DMSH_VK_ABSENT_FILE'] = str(excluded)
+                print(f'shaders: excluding {len(absent):,} validated missing shaders from this build', flush=True)
             args = []
             if keys:   # on Windows a file the wrapper reads (vk_android_win.py "@<file>"): thousands of keys pass a command line's 32,767 characters there
                 if WINDOWS:
@@ -936,7 +1065,7 @@ def pack_shaders(a, g, work, out, vdir, parts=None, aoc=()):
         s_, d_ = lib / f, dst / f
         if d_.is_file() and d_.stat().st_size == s_.stat().st_size and d_.stat().st_mtime_ns == s_.stat().st_mtime_ns: continue
         tmp = d_.with_name(f + '.partial')
-        if f == VK_LIB: copy_counted(s_, tmp, 'copying the shader library into the pack')
+        if f == VK_LIB: copy_counted(s_, tmp, 'copying the shaders into the build')
         else: shutil.copy2(s_, tmp)
         os.replace(tmp, d_)   # replace: Windows' rename does not take an existing name
     others = sorted(o.name for o in (out / 'shaders').iterdir() if o.name != name and o.name.startswith(VK_PREFIX) and o.is_dir())
@@ -952,7 +1081,7 @@ def scene_overlays(g, romfs, out):
     d = out / 'scene_res'
     if not g.values('scene_scale_palette'):
         shutil.rmtree(d, ignore_errors=True); return []
-    stage('writing the scene resolution overlays')
+    stage('saving the resolution settings for each scene')
     sys.path.insert(0, str(REPO / 'dm/tools'))
     import scene_res
     try:
@@ -968,6 +1097,46 @@ def scene_overlays(g, romfs, out):
         print(f'[RED] scene resolution overlays not made: {type(e).__name__}: {e}', flush=True)
         shutil.rmtree(d, ignore_errors=True); return []
     return [(m[0], f'scene_res/{m[0]}') for m in made]
+
+
+# PEANUTS begin: a variant's own game data and the pack.tsv rows of complete variants (Animal Crossing: New Horizons' 60 fps speed fix, dm/games/01006F8002326000/speedfix60)
+def variant_cut_builds(g):
+    """{(variant, build ID)} of the profile's patches.py VARIANT_CUTS (the builds each variant has cuts for: patch_nso.py rewrites any other build without them)"""
+    pp = g.dir / 'patches.py'
+    if not pp.is_file(): return set()
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(f'patches_{g.id}', pp); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)   # pyright: ignore[reportOptionalMemberAccess]
+    return {(v, b) for v, builds in getattr(m, 'VARIANT_CUTS', {}).items() for b in builds}
+
+
+def variant_overlays(g, romfs, out, ids):
+    """The variants the pack holds complete, [(variant, its RomFS overlay folder in the pack or '-')]: each module of the variant row rewritten into out/<variant>/
+    with its key, every one of them a build the variant has cuts for (variant_cut_builds), and its game.tsv variant_romfs rows (dm/tools/romfs_rows.py) applied to
+    this RomFS into out/<variant>/romfs/. Anything else (another game version, a build with code mods, rows that do not apply) is a line in the log and no row: the
+    launcher then does not start the variant (Pack.variantReady). The pack is made all the same"""
+    rows = {r[0]: r[1] for r in g.values('variant_romfs') if len(r) > 1}
+    out_rows = []
+    for v, mods in variants(g):
+        vout = out / v
+        lacking = [m for m in mods if not (vout / f'{m}.patched.bin').is_file() or not (vout / f'{m}.android.key').is_file()]
+        uncut = [m for m in mods if m in ids and (v, ids[m]) not in variant_cut_builds(g)]
+        if lacking or uncut:
+            print(f'[YELLOW] variant {v} not offered: ' + '; '.join(([f'no rewritten {", ".join(lacking)}'] if lacking else [])
+                  + ([f'no cuts for build {", ".join(ids[m] for m in uncut)} of {", ".join(uncut)}'] if uncut else [])), flush=True)
+            shutil.rmtree(vout / 'romfs', ignore_errors=True); continue
+        if v not in rows: out_rows.append((v, '-')); continue
+        label = next((r[2] for r in g.values('variant') if r and r[0] == v and len(r) > 2), v)
+        stage(f'making the {label.replace("fps", " fps")} game data from your game files')
+        sys.path.insert(0, str(REPO / 'dm/tools'))
+        import romfs_rows
+        try: made = romfs_rows.make(g.dir / rows[v], str(romfs), vout / 'romfs')
+        except (romfs_rows.Error, OSError) as e:
+            print(f'[YELLOW] variant {v} not offered: its game data rows do not apply to these game files: {e}', flush=True)
+            shutil.rmtree(vout / 'romfs', ignore_errors=True); continue
+        print(f'  variant {v}: {len(made)} game files made from yours ({", ".join(made)})', flush=True)
+        out_rows.append((v, f'{v}/romfs'))
+    return out_rows
+# PEANUTS end
 
 
 def work_dir(out, app):
@@ -1126,7 +1295,7 @@ def main():
         print(f'{app:016X} {g.get("name", "?")} version {ver}: {vdir}', flush=True)
         for m, known in unregistered(g, ids).items(): print(f'[RED] {m} build {ids[m]} is none of the profile\'s builds ({", ".join(known)}): build-gated cuts do not apply')
         if a.keep_code:
-            stage('checking the rewritten code')
+            stage('checking the converted code')
             # each module needs its rewritten code and, written last by the rewrite, its key: a module without the key is a rewrite that did not finish (or one from before keys)
             gaps = [f'{m} ({" and ".join(f for f in (f"{m}.patched.bin", f"{m}.android.key") if not (out / f).is_file())} missing)'
                     for m in mods if not (out / f'{m}.patched.bin').is_file() or not (out / f'{m}.android.key').is_file()]
@@ -1138,7 +1307,9 @@ def main():
             nros = collect_nros(exe, romfs, work, a.in_process)
             try:
                 rewrite(sys.executable, srcs | nros, out, max(1, a.j), g, a.in_process, xmod_files)   # PEANUTS: xmod_files
-                rewrite_variants(sys.executable, srcs, out, g, a.in_process)   # game.tsv variant rows (a native 4:3 mod) into <pack>/<variant>/
+                for _m, _src in (srcs | nros).items():   # PEANUTS: what each module was made from, for the next build's rewrite_reuse.keep (issue #120)
+                    if _m not in (xmod_files or {}): pn_reuse().record(_m, _src, out, g, REWRITER)
+                rewrite_variants(sys.executable, srcs, out, g, a.in_process, set(mod_exefs) | set(patched))   # game.tsv variant rows (a native 4:3 mod) into <pack>/<variant>/; PEANUTS: none of a mod's modules
             finally: shutil.rmtree(out / '.nup-src', ignore_errors=True)   # the module copies a NUP game's rewrite read (rewriter_src)
             place_nros(work / 'android-nro' if nros else None, out)
         if a.code_only: print(f'done: the modules in {out} (--code-only: pack.tsv and the shaders unchanged)'); return
@@ -1150,6 +1321,7 @@ def main():
         # a program n > 0 splits program 0's RomFS (its conorig) and the add-ons with its own main: its own RomFS holds no shaders (Wonder's program 1: one text file)
         shaders = None if a.no_shaders else pack_shaders(a, g, work, out, vdir, (conorig, exe) if a.program else (romfs, exe), list(dlc.values()) if a.program else ())
         scenes = scene_overlays(g, romfs, out)
+        ready = variant_overlays(g, romfs, out, ids)   # PEANUTS: complete variants and their game data (pack.tsv variant rows)
         top = folder.parent if pack_dump.nup.is_nup(folder) else folder   # a NUP file's paths are `<name>.nup:<package>/...`, relative to its folder
         rel = lambda p: p.relative_to(top).as_posix()
         rows = [('format', str(FORMAT)), ('title_id', f'{app:016X}'), ('name', g.get('name', '')), ('version', str(ver)), ('target', 'android'),
@@ -1159,8 +1331,8 @@ def main():
                 *[('aoc', f'{pack_dump.dlc_index(tid, app)}\t{rel(p)}') for tid, p in sorted(dlc.items())],
                 # program n > 0: which program it is, the application (its save and add-ons), and each program index's RomFS (DM_ROMFS_PROGRAM_<i>: 0 is the game's, "conorig")
                 *([('program', str(a.program)), ('application', f'{app0:016X}'), ('romfs_program', f'0\t{rel(conorig)}'), ('romfs_program', f'{a.program}\t{rel(romfs)}')] if a.program else []),
-                *([('shaders', shaders.relative_to(out).as_posix())] if shaders else []), *[('scene_res', f'{n}\t{p}') for n, p in scenes], ('packer', commit()), *([('made_by', a.made_by)] if a.made_by else [])]
-        stage('writing the pack\'s list of files')
+                *([('shaders', shaders.relative_to(out).as_posix())] if shaders else []), *[('scene_res', f'{n}\t{p}') for n, p in scenes], *[('variant', f'{v}\t{p}') for v, p in ready], ('packer', commit()), *([('made_by', a.made_by)] if a.made_by else [])]   # PEANUTS: variant rows
+        stage('listing the build\'s files')
         tmp = out / 'pack.tsv.partial'
         write_lf(tmp, ''.join(f'{k}\t{v}\n' for k, v in rows)); os.replace(tmp, out / 'pack.tsv')
         size = sum(f.stat().st_size for f in out.rglob('*') if f.is_file())

@@ -20,7 +20,7 @@ import android.widget.TextView;
  * numbers in a dot-matrix font (VT323), text in Space Grotesk, mint for the selection and the main button, amber bulbs for the logo and the icons. Only the
  * Sunflower Seeds apps (applicationId …sunflower, …sunflowertest) have it: its colours, fonts and art come from android/app/src/scoreboard (build.gradle),
  * and every hook asks ON first, so every other build keeps the upstream look. The hooks: Ui / PUi round (no corners), face (the text font), section (pixel
- * labels), header (the strip), badge and the setup cards (the bulb seed), Setting rows (tile: bulb icons), iconButton (button: the gear and the book);
+ * labels), header (the strip; no badge on Home), the setup cards (the bulb seed), Setting rows (tile: bulb icons), iconButton (button: the gear and the book);
  * BananaBackgroundView (BulbBoard: the screen as a bulb board, the seeds marching across it); MainActivity (the status row and the labelled gear on Home).
  * The fonts are OFL-1.1 (assets/fonts/*.txt, android/NOTICE.md)
  */
@@ -28,7 +28,8 @@ public final class Scoreboard {
     private Scoreboard() {}
 
     public static final boolean ON = dev.nxnative.android.BuildConfig.APPLICATION_ID.contains(".sunflower");   // the play app (.sunflower) and the test app (.sunflowertest)
-    private static final int STRIP = 0xFF5A59A6, ON_STRIP = 0xFFF4F2FF, CELL = 0xFF0B0F09, LINE = 0xFF2E3524, LABEL = 0xFF8A937A, MINT = 0xFFBFF2CC, LAVENDER = 0xFFD9D4F5;
+    static final int STRIP = 0xFF5A59A6, ON_STRIP = 0xFFF4F2FF, CELL = 0xFF0B0F09, LINE = 0xFF2E3524, LABEL = 0xFF8A937A, MINT = 0xFFBFF2CC, LAVENDER = 0xFFD9D4F5,
+            BOARD = 0xFF060805, TEXT = 0xFFE6EEC6, ON_MINT = 0xFF060805;
 
     private static AssetManager assets;
     private static Typeface pixel, led;
@@ -110,6 +111,8 @@ public final class Scoreboard {
         }
     }
 
+    static Typeface pixelFace() { return pixel; }
+
     /** A label in the pixel font, upper case (section titles, the strip, the cells' labels) */
     public static void pixel(TextView t, float sp) {
         if (pixel == null) return;
@@ -129,6 +132,15 @@ public final class Scoreboard {
         pixel(title, 20);
     }
 
+    /** The in-game side panel's frame (SidePanel): the board under its rows, the purple strip under its tabs */
+    public static void panelFrame(View sheet, View tabs) { if (!ON) return; sheet.setBackgroundColor(0xF0000000 | (BOARD & 0xFFFFFF)); tabs.setBackgroundColor(STRIP); }
+
+    /** One of the panel's tabs (SidePanel.tabBar): the selected one mint with dark text, the others pale on the strip, all in the pixel font */
+    public static void panelTab(TextView t, boolean on) { if (!ON) return; t.setTextColor(on ? ON_MINT : ON_STRIP); t.setBackgroundColor(on ? MINT : 0); if (pixel != null) { t.setTypeface(pixel); t.setAllCaps(true); t.setLetterSpacing(0.08f); } }
+
+    /** The panel's focus colour (its frame round the focused row, SidePanel.focusMoved): mint on the scoreboard look, else def */
+    public static int focus(int def) { return ON ? MINT : def; }
+
     /** Home's status row: one cell a value, label above, the value in the dot-matrix font (label, value pairs) */
     public static View status(Context c, String... pairs) {
         LinearLayout row = new LinearLayout(c);
@@ -140,7 +152,7 @@ public final class Scoreboard {
             GradientDrawable g = new GradientDrawable(); g.setColor(CELL); g.setStroke(dp(c, 2), LINE);
             cell.setBackground(g);
             cell.setPadding(dp(c, 8), dp(c, 14), dp(c, 8), dp(c, 12));
-            TextView l = new TextView(c); l.setText(pairs[i]); l.setTextColor(LABEL); l.setGravity(Gravity.CENTER); pixel(l, 10);
+            TextView l = new TextView(c); l.setText(pairs[i]); l.setTextColor(LABEL); l.setGravity(Gravity.CENTER); l.setSingleLine(); pixel(l, pairs[i].length() > 9 ? 7 : 10);   // a long label (CROWD CONTROL) smaller, on one line
             TextView v = new TextView(c); v.setText(pairs[i + 1]); v.setTextColor(i / 2 % 2 == 0 ? MINT : LAVENDER); v.setGravity(Gravity.CENTER);
             v.setSingleLine(); v.setEllipsize(TextUtils.TruncateAt.END); v.setTextSize(34); if (led != null) v.setTypeface(led);
             cell.addView(l); cell.addView(v);
@@ -150,6 +162,21 @@ public final class Scoreboard {
             row.addView(cell, lp);
         }
         return row;
+    }
+
+    /** A status cell (index k of status's row) as a button: a tap runs l */
+    public static void tap(View row, int k, View.OnClickListener l) {
+        View cell = ((LinearLayout) row).getChildAt(k);
+        cell.setClickable(true); cell.setFocusable(true); cell.setOnClickListener(l);
+        android.util.TypedValue tv = new android.util.TypedValue();
+        if (row.getContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) cell.setForeground(row.getContext().getDrawable(tv.resourceId));
+    }
+
+    /** A status cell's value (index k of status's row) changed in place */
+    public static void value(View row, int k, String v) {
+        LinearLayout cell = (LinearLayout) ((LinearLayout) row).getChildAt(k);
+        ((TextView) cell.getChildAt(1)).setText(v);
+        cell.setContentDescription(((TextView) cell.getChildAt(0)).getText() + ": " + v);
     }
 
     private static int dp(Context c, float v) { return Math.round(v * c.getResources().getDisplayMetrics().density); }

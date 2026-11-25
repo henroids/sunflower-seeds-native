@@ -118,7 +118,9 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
             if (out) { invalidate(); if (!running()) postInvalidateDelayed(dev.peanuts.ui.BulbBoard.respawnMs()); if (onPop != null) onPop.run(); }
             return out;
         }
-        long k = BananaGrid.hit(x, y, getWidth(), getHeight(), phase * BananaGrid.SPEED_X_DP * density, phase * BananaGrid.SPEED_Y_DP * density, density);
+        double wx = phase * BananaGrid.SPEED_X_DP * density, wy = phase * BananaGrid.SPEED_Y_DP * density;
+        double[] flow = dev.peanuts.ui.BackgroundFlow.drift(this, BananaGrid.GRID_DEG, BananaGrid.SPEED_X_DP, BananaGrid.SPEED_Y_DP); if (flow != null) { wx = flow[0]; wy = flow[1]; }   // PEANUTS: the tap finds the banana where the shared background drew it
+        long k = BananaGrid.hit(x, y, getWidth(), getHeight(), wx, wy, density);
         if (k == BananaGrid.NONE) return false;
         long now = SystemClock.uptimeMillis();
         Long at = popped.get(k);
@@ -132,6 +134,7 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
 
     /** A banana's look at this time since its pop: scale and alpha factor, and how far its flecks have flown (0 = none) */
     private void drawBanana(Canvas canvas, Bitmap b, float half, Long at, long now, boolean odd) {
+        if (at != null && dev.peanuts.ui.Crack.draw(this, canvas, half * 2, now - at, baseAlpha, odd ? 28f : -8f)) return;   // PEANUTS: a tapped peanut cracks open instead of bursting (dev.peanuts.ui.Crack)
         float scale = 1f, alpha = 1f, burst = -1f;
         if (at != null) {
             long age = now - at;
@@ -176,6 +179,7 @@ public final class BananaBackgroundView extends View implements Choreographer.Fr
         // Rows alternate a half step sideways and a mirrored tilt, so the pattern repeats every step across and every two rows down.
         // Each banana has an absolute row and column (BananaGrid), which do not change as the drift wraps: that is how a pop stays on its banana.
         double wx = phase * BananaGrid.SPEED_X_DP * density, wy = phase * BananaGrid.SPEED_Y_DP * density;
+        double[] flow = dev.peanuts.ui.BackgroundFlow.drift(this, BananaGrid.GRID_DEG, BananaGrid.SPEED_X_DP, BananaGrid.SPEED_Y_DP); if (flow != null) { wx = flow[0]; wy = flow[1]; }   // PEANUTS: one background across both screens (dev.peanuts.ui.BackgroundFlow)
         int shiftC = (int) Math.floor(wx / step), shiftR = (int) Math.floor(wy / (2 * row));
         float cx = w / 2f, cy = h / 2f, reach = (float) Math.hypot(w, h) / 2f + step;
         int cols = (int) Math.ceil(reach / step) + 1, rows = 2 * ((int) Math.ceil(reach / row / 2) + 1);

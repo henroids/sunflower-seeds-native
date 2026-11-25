@@ -87,6 +87,9 @@ final class ExitWatch {
     /** The player stopped the game (Stop, Back at a start that cannot go on): no notice */
     static void stopped() { if (owned && recordFile != null) append(recordFile, "state=stopped\n"); }
 
+    /** PEANUTS: the player stopped the game to share its log (the in-game panel's Stop and share the log): the launcher opens the share sheet with it once the game is gone */
+    static void stoppedToShare() { if (owned && recordFile != null) append(recordFile, "state=stopped\nshare=1\n"); }
+
     /** An end the game's screen told the player about itself (a screen restored into a new process): the launcher does not tell it again */
     static void shown(Context c) { append(record(c), "shown=1\n"); }
 
@@ -135,13 +138,17 @@ final class ExitWatch {
         return false;
     }
 
-    /** Android's record of how the process with this pid ended, or null */
-    static ApplicationExitInfo exitInfo(Context c, int pid, long start) {
+    /** PEANUTS: shared by game exit notices and pack retries. A PID can be reused, so take the first matching exit since the saved run. */
+    static ApplicationExitInfo exitInfo(Context c, String process, int pid, long start) {
         ActivityManager am = c.getSystemService(ActivityManager.class);
-        if (am == null || pid <= 0) return null;
+        if (am == null || pid <= 0 || start <= 0) return null;
         try {
-            for (ApplicationExitInfo e : am.getHistoricalProcessExitReasons(c.getPackageName(), pid, 4))
-                if (e.getProcessName() != null && e.getProcessName().endsWith(":game") && e.getTimestamp() >= start) return e;
+            ApplicationExitInfo first = null;
+            for (ApplicationExitInfo e : am.getHistoricalProcessExitReasons(c.getPackageName(), pid, 0)) {
+                if (e.getTimestamp() < start) break;   // Android returns the newest exit first
+                if (process.equals(e.getProcessName())) first = e;
+            }
+            return first;
         } catch (RuntimeException ignored) { /* not available: the record alone */ }
         return null;
     }
@@ -177,7 +184,7 @@ final class ExitWatch {
         if (!ExitNotice.pending(rec)) return null;
         int pid = (int) num(rec.get("pid"));
         if (pid == android.os.Process.myPid() || pid > 0 && alive(c, pid)) return null;
-        ApplicationExitInfo e = exitInfo(c, pid, num(rec.get("start")) - 1000);
+        ApplicationExitInfo e = exitInfo(c, c.getPackageName() + ":game", pid, num(rec.get("start")) - 1000);   // PEANUTS: process-specific lookup
         if (e == null && waitForAndroid && !ExitNotice.selfExplained(rec)) return null;
         boolean bg = e != null && e.getImportance() > ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
         int reason = e == null ? ExitNotice.NONE : e.getReason(), status = e == null ? 0 : e.getStatus();
@@ -252,6 +259,16 @@ final class ExitWatch {
     private static boolean check(MainActivity a) {
         if (showing != null && showing.isShowing() || digesting) return false;
         Map<String, String> rec = read(a);
+        if ("1".equals(rec.get("share")) && !"1".equals(rec.get("shown"))) {   // PEANUTS: Stop and share the log: the share sheet once the game's process is gone
+            int pid = (int) num(rec.get("pid"));
+            if (pid > 0 && alive(a, pid)) return true;
+            shown(a);
+            File log = logOf(a, rec);
+            if (log == null) a.error("No log of that run.");
+            else if (LogUpload.on(a)) LogUpload.sendNow(a, log);   // to the log repository, with a toast
+            else a.shareLog(log);
+            return false;
+        }
         if (!ExitNotice.pending(rec)) return false;
         int pid = (int) num(rec.get("pid"));
         if (pid > 0 && alive(a, pid)) return true;   // still running
@@ -282,7 +299,7 @@ final class ExitWatch {
                 AlertDialog.Builder b = new PadFocus.Builder(a).setTitle(ExitNotice.TITLE).setMessage(ExitNotice.message(rec.get("name"), end.why, likely))
                         .setPositiveButton("OK", null);
                 FixOffer.add(a, b, fix, rec);
-                if (log != null) b.setNeutralButton("Share log", (d, w) -> a.shareLog(log, dg != null && dg.isFile() ? dg : null));
+                if (log != null) b.setNeutralButton("Share log", (d, w) -> dev.peanuts.ui.BuildLogUi.shareLog(a, rec.get("title"), rec.get("name"), log, () -> a.shareLog(log, dg != null && dg.isFile() ? dg : null)));   // PEANUTS: asks between this run and the game's build when it has one (dev.peanuts.ui.BuildLogUi.shareLog)
                 if (v != null && v.rule != null) {
                     b.setNegativeButton("What it means", (d, w) -> {
                         CharSequence msg = ExitNotice.meaningMessage(v.meaning, v.cause);

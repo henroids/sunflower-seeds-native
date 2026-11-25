@@ -13,17 +13,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include "../../gfx/vk_android/vka_texown.h"   // PEANUTS: image retirement covers the recording submission
 
 typedef struct node { struct node *next; } node;   // an image view (vka_view's list)
-typedef struct img { int refs, holds, rw_pend; struct img *zold; node *views; uint64_t linger, last_frame, last_fence; int gpu, pool, key, scaled; } img;
-enum { NSER = 48, NLIVE = 256, LINGER_MAX = 4, LINGER_FRAMES = 2, KEEP = 2, GPUF = 6, NRW = 256, NAFTER = 8192, HOLDER = 1 << 30 };
+typedef struct img { int refs, holds, rw_pend, cpu_dirty; struct img *zold; node *views; uint64_t linger, last_frame, last_fence; int gpu, pool, key, scaled; } img;
+enum { NSER = 48, NLIVE = 256, LINGER_MAX = 4, LINGER_FRAMES = 2, KEEP = 2, GPUF = 6, NRW = 256, NAFTER = 8192, HOLDER = 1 << 30, RW_LIMIT = 4 };
 static img *g_map[NSER]; static struct { int alive, key, pool; } T[NSER];   // serial -> image; the game's texture objects
 static img *g_live[NLIVE]; static int g_nlive;
 static img *g_linger[LINGER_MAX]; static int g_nlinger;
 static uint64_t g_frame = 1, g_last = 1, g_done;                             // the frame, the last fence reserved, the last fence done
+static uint64_t g_recorded;   // PEANUTS: a command buffer can still refer to an image last bound several submissions ago
 static struct { uint64_t f; img *im; } A[NAFTER]; static int nA;             // vka_after(img_destroy)
 static int pool_alive[3] = {1, 1, 1};
 static img *RW[NRW]; static int nRW;                                         // queued region writes
+static img *REDO[NLIVE]; static int nREDO;                                   // non-owning whole-image redos (cleared in unref via redo_forget)
 static int fixed = 1, pool_held = 0;   // pool_held: a pool drop also gives up the images a holder has, as vka_tex_drop_pool did (`t_android_imglife poolheld`)
 
 static void destroy(img *im) {
@@ -39,11 +42,15 @@ static void complete(uint64_t v) {
 }
 static void live_del(img *im) { for (int i = 0; i < g_nlive; i++) if (g_live[i] == im) { g_live[i] = g_live[--g_nlive]; return; } }
 static void map_del_im(img *im) { for (int s = 0; s < NSER; s++) if (g_map[s] == im) g_map[s] = NULL; }
+static void redo_forget(img *im) { for (int i = 0; i < nREDO; i++) if (REDO[i] == im) REDO[i] = NULL; im->cpu_dirty = 0; }
+static void redo_add(img *im) { if (!im || im->gpu || im->cpu_dirty || nREDO >= NLIVE) return; im->cpu_dirty = 1; REDO[nREDO++] = im; }
 static void unref(img *im) {
     if (--im->refs) return;
     if (im->linger) { for (int i = 0; i < g_nlinger; i++) if (g_linger[i] == im) { g_linger[i] = g_linger[--g_nlinger]; break; } im->linger = 0; }
-    map_del_im(im); live_del(im);
-    after(im->last_fence ? im->last_fence : g_last + 1, im);
+    map_del_im(im);
+    if (im->cpu_dirty) redo_forget(im);
+    live_del(im);
+    after(fixed ? vto_retire_fence(im->last_fence, g_recorded) : (im->last_fence ? im->last_fence : g_last + 1), im);   // PEANUTS: image retirement covers the recording submission
 }
 static void unhold(img *im) { if (im->holds > 0) im->holds--; if (!im->holds && im->zold) { after(g_last + 1, im->zold); im->zold = NULL; } }
 static void linger_drop_at(int i) { img *im = g_linger[i]; g_linger[i] = g_linger[--g_nlinger]; im->linger = 0; unref(im); }
@@ -55,12 +62,21 @@ static int linger_keep(img *im) {
     im->linger = g_frame + 1; g_linger[g_nlinger++] = im;
     return 1;
 }
-static void rw_cancel(img *im) { for (int k = 0; k < nRW;) if (RW[k] == im) RW[k] = RW[--nRW]; else k++; im->rw_pend = 0; }
+static void rw_cancel_drop(img *im, int drop_refs) {
+    int dropped = 0;
+    for (int k = 0; k < nRW;) {
+        if (RW[k] == im) { RW[k] = RW[--nRW]; dropped++; }
+        else k++;
+    }
+    im->rw_pend = 0;
+    if (drop_refs) for (int i = 0; i < dropped; i++) unref(im);
+}
+static void rw_cancel(img *im) { rw_cancel_drop(im, 0); }
 static void force(img *im) { map_del_im(im); im->refs = 1; unref(im); }   // img_evict_locked, vka_tex_drop_pool: given up whatever its count
 static void prune(void) {
     if (g_nlive < 6) return;   // (over the limit)
     for (int i = 0; i < g_nlive;) {
-        img *im = g_live[i]; int pending = im->last_fence && g_done < im->last_fence, held = im->holds + (fixed ? im->rw_pend : 0);
+        img *im = g_live[i]; int pending = im->last_fence && g_done < im->last_fence, held = im->holds + (fixed ? im->rw_pend + im->cpu_dirty : 0);
         if (!held && !pending && im->last_frame && g_frame > im->last_frame && g_frame - im->last_frame >= (uint64_t)(im->gpu ? GPUF : KEEP)) force(im); else i++;
     }
 }
@@ -86,13 +102,30 @@ static void swap(img *im, int self, int with_prune) {   // the image made again 
 }
 static void release(int s) { T[s].alive = 0; img *im = g_map[s]; g_map[s] = NULL; if (im && !linger_keep(im)) unref(im); }   // mtl_tex_release
 
+// PEANUTS: WriteTexels holds an image last bound at an already-complete fence. Finalize releases the serial, then
+// prepare records the queued copy and drops its last reference. That copy must finish before destruction.
+static void upload_then_release(int worker) {
+    uint64_t previous = g_last, upload = previous + 1;
+    complete(previous);
+    T[0].alive = 1;
+    img *im = get(0); im->refs++; im->rw_pend++;
+    release(0);
+    if (worker) g_last = upload;   // the worker's job already reserved its fence
+    g_recorded = vto_retire_fence(g_recorded, upload);
+    im->rw_pend--; unref(im);
+    if (nA != 1 || A[0].im != im || A[0].f != upload) { fputs("FAIL: image retired before its region copy\n", stderr); exit(1); }
+    if (!worker) g_last = upload;   // an inline submit reserves only at commit
+    complete(upload);
+    if (nA) { fputs("FAIL: image kept past the final commit\n", stderr); exit(1); }
+}
+
 static void run(unsigned seed, long steps) {
     srand(seed);
     img *held[3] = {0}; int heldn = 0;
     for (long it = 0; it < steps; it++) {
         int op = rand() % 100, s = rand() % NSER;
         if (op < 6) g_frame++;
-        else if (op < 14) g_last++;
+        else if (op < 14) g_recorded = ++g_last;   // PEANUTS: image retirement covers the recording submission
         else if (op < 24) complete(g_done + 1 + (uint64_t)(rand() % 3));
         else if (op < 34) { if (!T[s].alive) { T[s].alive = 1; T[s].key = rand() % 12; T[s].pool = rand() % 3; pool_alive[T[s].pool] = 1; } }
         else if (op < 58) {   // the recording thread uses a texture: a view, a draw into it, a change of scale, a storage binding's hold with its own swap
@@ -114,10 +147,24 @@ static void run(unsigned seed, long steps) {
             for (int i = 0; i < g_nlive;) { img *im = g_live[i]; if (im->pool == p && (!im->holds || pool_held)) { if (fixed) rw_cancel(im); force(im); } else i++; }
             for (int k = 0; k < NSER; k++) if (T[k].alive && T[k].pool == p) release(k);
         }
-        else if (op < 91) { img *im = T[s].alive ? g_map[s] : NULL; if (im && !im->gpu && nRW < NRW) { im->refs++; im->rw_pend++; RW[nRW++] = im; } }   // WriteTexels: a reference, no hold, no use stamp
-        else if (op < 95) { for (int i = 0; i < nRW; i++) { RW[i]->rw_pend--; unref(RW[i]); } nRW = 0; }                                              // the next prepare copies them
+        else if (op < 91) {   // WriteTexels: region writes coalesce to whole-image redo above RW_LIMIT
+            img *im = T[s].alive ? g_map[s] : NULL;
+            if (im && !im->gpu) {
+                if (im->cpu_dirty) { if (im->rw_pend) rw_cancel_drop(im, 1); }
+                else if (im->rw_pend + 1 > RW_LIMIT) { redo_add(im); rw_cancel_drop(im, 1); }
+                else if (nRW < NRW) { im->refs++; im->rw_pend++; RW[nRW++] = im; }
+            }
+        }
+        else if (op < 95) {   // the next prepare drains redos then region copies
+            for (int i = 0; i < nREDO; i++) { img *im = REDO[i]; if (!im || !im->cpu_dirty) continue; im->cpu_dirty = 0; }
+            nREDO = 0;
+            for (int i = 0; i < nRW; i++) { RW[i]->rw_pend--; unref(RW[i]); }
+            nRW = 0;
+        }
         else prune();
     }
+    for (int i = 0; i < nREDO; i++) { img *im = REDO[i]; if (im) im->cpu_dirty = 0; }
+    nREDO = 0;
     for (int i = 0; i < nRW; i++) { RW[i]->rw_pend--; unref(RW[i]); }
     nRW = 0;
     while (heldn) { img *o = held[--heldn]; unhold(o); unref(o); }
@@ -129,6 +176,7 @@ static void run(unsigned seed, long steps) {
 }
 
 int main(int argc, char **argv) {
+    upload_then_release(0); upload_then_release(1);   // PEANUTS: image retirement covers the recording submission
     if (argc > 1 && !strcmp(argv[1], "old")) fixed = 0;
     if (argc > 1 && !strcmp(argv[1], "poolheld")) pool_held = 1;   // the pool drop as it was: the sanitizer stops at the present's drop of a freed image
     for (unsigned seed = 1; seed <= 12; seed++) run(seed, 60000);

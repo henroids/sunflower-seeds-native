@@ -36,6 +36,13 @@ final class Upstream {
         }
     }
 
+    /** A static field of one of upstream's classes (PackService.ACTION_PAUSE) */
+    static Object getStatic(Class<?> k, String field) throws ReflectiveOperationException {
+        Field f = k.getDeclaredField(field);
+        f.setAccessible(true);
+        return f.get(null);
+    }
+
     static Object get(Object self, String field) throws ReflectiveOperationException {
         Field f = self.getClass().getDeclaredField(field);
         f.setAccessible(true);
@@ -151,6 +158,14 @@ final class Upstream {
     /** Job.fix(): what a failed job's card offers (PrepareText.FIX_*: "retry", "anyway", "none", "update") */
     static String jobFix(Object job) throws ReflectiveOperationException { return str(call(job.getClass(), job, "fix", new Class<?>[0])); }
 
+    /** Job.remembered: the job file Home's Prepare card follows, null when none */
+    static File jobRemembered(Context c) throws ReflectiveOperationException {
+        return (File) call(k("Job"), null, "remembered", new Class<?>[] {Context.class}, c);
+    }
+
+    static String jobTitle(Object job) throws ReflectiveOperationException { return str(call(job.getClass(), job, "titleId", new Class<?>[0])); }
+    static long jobUpdated(Object job) throws ReflectiveOperationException { return ((Number) call(job.getClass(), job, "updated", new Class<?>[0])).longValue(); }
+
     static void jobRemember(Context c, File jobFile) throws ReflectiveOperationException {
         call(k("Job"), null, "remember", new Class<?>[] {Context.class, File.class}, c, jobFile);
     }
@@ -179,6 +194,25 @@ final class Upstream {
             if (samePath(str(get(g, "gameDir")), dump.getPath()) && samePath(str(get(g, "packDir")), pack.getPath())) return true;
         }
         return false;
+    }
+
+    /** The launcher's list rows of one title: {name, gameDir, packDir} each (Share build log finds the game's work folders from them) */
+    static List<String[]> listedGames(Context c, String titleId) throws ReflectiveOperationException {
+        List<String[]> out = new java.util.ArrayList<>();
+        Class<?> game = k("Game");
+        for (Object g : (List<?>) call(game, null, "load", new Class<?>[] {Context.class}, c))
+            if (titleId.equalsIgnoreCase(str(get(g, "titleId")))) out.add(new String[] {str(get(g, "name")), str(get(g, "gameDir")), str(get(g, "packDir"))});
+        return out;
+    }
+
+    /** Prefs.buildTag(c): the build tag Home's header and every log's first line show */
+    static String buildTag(Context c) {
+        try { return str(call(k("Prefs"), null, "buildTag", new Class<?>[] {Context.class}, c)); } catch (ReflectiveOperationException | RuntimeException e) { return "?"; }
+    }
+
+    /** CpuCores.shaderWorkers(): the packer's worker count by cores (an APK without the on-device packer: 4) */
+    static int cpuWorkers() {
+        try { return ((Number) call(k("CpuCores"), null, "shaderWorkers", new Class<?>[0])).intValue(); } catch (ReflectiveOperationException | RuntimeException e) { return 4; }
     }
 
     static boolean samePath(String a, String b) {
