@@ -177,7 +177,9 @@ public final class ProfileButton {
         LinearLayout mid = new LinearLayout(a);
         mid.setOrientation(LinearLayout.VERTICAL);
         mid.setGravity(Gravity.CENTER_HORIZONTAL);
-        mid.addView(new dev.peanuts.ui.CrackingPeanut(a), new LinearLayout.LayoutParams(PUi.dp(a, 180), PUi.dp(a, 180)));
+        android.graphics.drawable.Drawable seed = dev.peanuts.ui.Scoreboard.seed(a);   // PEANUTS(sunflower): the bulb seed instead of the cracking peanut
+        if (seed != null) { android.widget.ImageView iv = new android.widget.ImageView(a); iv.setImageDrawable(seed); mid.addView(iv, new LinearLayout.LayoutParams(PUi.dp(a, 140), PUi.dp(a, 140))); }
+        else mid.addView(new dev.peanuts.ui.CrackingPeanut(a), new LinearLayout.LayoutParams(PUi.dp(a, 180), PUi.dp(a, 180)));
         TextView t = PUi.text(a, "Switching to " + u.name, 20, R.color.bn_text, 700);
         t.setPadding(0, PUi.dp(a, 12), 0, 0);
         mid.addView(t, PUi.wrap());
