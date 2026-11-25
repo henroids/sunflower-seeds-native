@@ -4313,6 +4313,19 @@ void vka_tex_prepare(VkCommandBuffer cb, uint64_t fence) {   // PEANUTS: image r
             tex_t t = {0}; t.serial = im->serial; t.d = im->d; t.L = im->L; t.mem = (uint8_t *)im->mem;
             if (wbf) { uint64_t k = ++g_wbf_up; if (k <= 4 || !(k & (k - 1))) VLOG("texture serial %llu %ux%u format %#x: the CPU wrote it after its copy-back, its written part uploaded (%llu so far; %llu scans waited for a copy-back; DM_VK_WB_FOLLOW=0 turns this off)",
                                                                          (unsigned long long)im->serial, im->w, im->h, im->d.format, (unsigned long long)k, (unsigned long long)g_wbf_waits); }
+            // PEANUTS: a linear texture of one level the CPU writes frame by frame (MLB The Show 26's Bink movies: Y, Cr and Cb planes, two sets, decoded by the game on
+            // the CPU into the set the GPU read a frame or two earlier) waits until a scan finds no new write since the last one, its pages protected again in between, and
+            // is uploaded then: read while the game was still decoding into it, a plane held parts of two frames, and the movie showed blocks of colour noise (the stadium's
+            // video board, the batter's portrait, the uniform screen's player, worst on the slower Retroid Pocket Duo). At most DM_VK_TEX_SETTLE scans (default 3, 0 off)
+            { static int smax = -1; if (smax < 0) { const char *e = getenv("DM_VK_TEX_SETTLE"); smax = e && *e ? atoi(e) : 3; }
+              if (smax > 0 && (im->d.flags & (NVN_TEXTURE_FLAGS_LINEAR | NVN_TEXTURE_FLAGS_LINEAR_RENDER_TARGET)) && im->levels == 1 && im->layers == 1 && !wbf) {
+                  if ((!im->settle || nvn_dirty_since_span(im->span, im->mem, size, im->settle)) && im->settle_n < smax) {
+                      im->settle_n++; im->settle = nvn_dirty_now(); nvn_dirty_protect(im->mem, size); g_wbf_wait = 1;   // (scanned again at the next prepare even with no new write)
+                      texlog("settling", im, &t.d, t.mem, lo, hi);   // PEANUTS TEMPORARY (texlog)
+                      continue;
+                  }
+                  im->settle = 0; im->settle_n = 0;
+              } }
             int rows = VKA_ENV("DM_VK_ROWS", 1);
             texlog("changed", im, &t.d, t.mem, lo, hi);   // PEANUTS TEMPORARY (texlog): the part of the storage written since the last upload
             if (rows && upload_rows_tracked(im, &t, cb, lo, hi)) continue;

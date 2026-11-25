@@ -288,6 +288,7 @@ typedef struct vka_img {
     // Content from guest storage (vka_tex.c storage_mode): track = re-uploaded when the CPU writes its pages (write-protected after each upload, nvn_dirty.c),
     // stamp = the dirty-page generation taken before the last upload, span = the tracked pool range that holds the storage
     int track, wb_pending; uint64_t stamp; const void *span;
+    uint64_t settle; uint8_t settle_n;   // PEANUTS: a linear texture the CPU is still writing waits for a quiet scan before its upload (vka_tex.c DM_VK_TEX_SETTLE)
     uint32_t tiled_wb_levels;   // PEANUTS: render-written mips pending block-linear write-back
     uint64_t wb_fence;       // the fence of the submission that holds the last copy of its GPU content back into its storage (vka_tex_writeback; 0: none): vka_wbfollow.h
     int wbf_waiting;         // the prepare's last scan found it waiting for that copy-back; a scan that only runs for waiting images visits just these (wbf_visit)
