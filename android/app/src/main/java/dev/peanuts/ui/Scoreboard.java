@@ -152,8 +152,8 @@ public final class Scoreboard {
             GradientDrawable g = new GradientDrawable(); g.setColor(CELL); g.setStroke(dp(c, 2), LINE);
             cell.setBackground(g);
             cell.setPadding(dp(c, 8), dp(c, 14), dp(c, 8), dp(c, 12));
-            TextView l = new TextView(c); l.setText(pairs[i]); l.setTextColor(LABEL); l.setGravity(Gravity.CENTER); l.setSingleLine(); pixel(l, pairs[i].length() > 9 ? 7 : 10);   // a long label (CROWD CONTROL) smaller, on one line
-            l.setHeight(sp(c, 18));   // every cell the same height: a smaller label (CROWD CONTROL) no longer makes its cell shorter
+            TextView l = new TextView(c); l.setText(pairs[i]); l.setTextColor(LABEL); l.setGravity(Gravity.CENTER); l.setMaxLines(2); pixel(l, 10);   // every label one size; a long one (CROWD CONTROL) wraps to a second line
+            l.setHeight(sp(c, 32));   // room for two label lines in every cell, so all four stay one height
             TextView v = new TextView(c); v.setText(pairs[i + 1]); v.setTextColor(i / 2 % 2 == 0 ? MINT : LAVENDER); v.setGravity(Gravity.CENTER);
             v.setSingleLine(); v.setEllipsize(TextUtils.TruncateAt.END); v.setTextSize(valueSp(pairs[i + 1])); if (led != null) v.setTypeface(led);
             v.setHeight(sp(c, 48));
