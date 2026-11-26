@@ -44,7 +44,7 @@ Frame rates on the field in an exhibition, with **Crowd control** on (below), fr
 | Device | GPU driver | Docked (1080p) | Handheld (720p) | Notes |
 |---|---|---|---|---|
 | AYN Thor (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | about 53 fps | about 59 fps (short run) | Steady over long sessions; does not throttle |
-| Sony Xperia 1 V (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | 60 at the start, about 43 after 15 minutes (51.6 on average over 19 minutes) | about 57 fps | Throttles as it heats up; Handheld mode makes less heat |
+| Sony Xperia 1 V (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | 60 at the start, about 43 after 15 minutes (51.6 on average over 19 minutes) | 54 at the start, about 44 after 30 minutes (48.3 on average over a 39-minute game) | Throttles as it heats up, in both modes |
 | Retroid Pocket Duo (Adreno 722) | Turnip Gen8 V39 | not measured on V39 (about 34 fps on T30) | about 41 fps (first run, shaders compiling; 49 without the glitch fixes) | Clean with V39 and the settings the app sets for it (since 0.2.144). On Mr. Purple T30 (about 45 fps) streamed portraits showed blocks of noise. Its CPU is the limit, not the GPU |
 
 Versions 0.2.N are [test builds](#test-builds); every fix named here is in the official app too.
@@ -60,7 +60,7 @@ From the test runs of 2026-11-25 and 26 (every log is summed up in the [game's n
 |---|---|---|---|
 | GPU driver | Turnip Gen8 V39 | Turnip Gen8 V39 | Turnip Gen8 V39 |
 | Crowd control | On | On | On |
-| Mode | Either; Docked holds about 53 fps | Handheld (Docked throttles as the phone heats up) | Handheld (Docked is about 34 fps) |
+| Mode | Either; Docked holds about 53 fps | Either (both slow to about 44 fps as the phone heats up) | Handheld (Docked is about 34 fps) |
 | Use fast cores | Either (no difference measured) | On (18 → 20.6 fps before Crowd control) | On |
 | Everything else | Defaults | Defaults | Defaults |
 
@@ -109,7 +109,8 @@ Changes to Crowd control and Mode apply from the next start of the game.
 - **Your own** dump of MLB The Show 26 from your own Switch: the base game and update 1.0.19, as `.nsp` or `.xci` files.
 - **Your own** `prod.keys` and firmware dump from the same console.
 - A PC to prepare the game (Linux, or Windows with WSL; macOS also works), with a USB cable and `adb` to copy it to the
-  handheld. The official app does not prepare this game on the phone.
+  handheld. Neither app prepares games on the phone: Rebuild, Import again and Update shaders are hidden, and a prepared
+  game comes in with Import pack.
 
 Nobody from this project will ask you for keys or game files, and none are linked from here. Do not share a `.nup`,
 a pack or anything else made from your game.
