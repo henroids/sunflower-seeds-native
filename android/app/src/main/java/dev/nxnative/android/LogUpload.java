@@ -25,7 +25,7 @@ import java.util.zip.GZIPOutputStream;
  * PEANUTS: session logs sent to the owner's private log repository on GitHub (REPO), so a run can be looked at without a computer. Settings › Help › Send logs to
  * GitHub takes a fine-grained key (on this phone only, in the app's private preferences) that may write that one repository. With a key, every finished run's
  * log goes up by itself (Home's onResume: the logs not written to for AGE_MS that were not sent yet), and the in-game panel's Stop and share the log sends that
- * run's at once (ExitWatch). A log goes up gzipped as logs/<its name>.gz through the contents API; one that fails stays for the next try
+ * run's at once (ExitWatch). A log goes up gzipped as logs/<device model>-<its name>.gz through the contents API; one that fails stays for the next try
  */
 final class LogUpload {
     private LogUpload() {}
@@ -110,8 +110,10 @@ final class LogUpload {
             try (InputStream in = new FileInputStream(log); OutputStream out = new GZIPOutputStream(gz)) {
                 byte[] buf = new byte[1 << 16]; for (int r; (r = in.read(buf)) > 0;) out.write(buf, 0, r);
             }
-            String body = "{\"message\":\"Log " + log.getName() + "\",\"content\":\"" + Base64.encodeToString(gz.toByteArray(), Base64.NO_WRAP) + "\"}";
-            h = (HttpURLConnection) new URL("https://api.github.com/repos/" + REPO + "/contents/logs/" + log.getName() + ".gz").openConnection();
+            // the device's model before the log's name: two devices' logs of the same second had one name, and the second was taken for sent (422) and never went up
+            String name = android.os.Build.MODEL.replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-|-$", "") + "-" + log.getName();
+            String body = "{\"message\":\"Log " + name + "\",\"content\":\"" + Base64.encodeToString(gz.toByteArray(), Base64.NO_WRAP) + "\"}";
+            h = (HttpURLConnection) new URL("https://api.github.com/repos/" + REPO + "/contents/logs/" + name + ".gz").openConnection();
             h.setRequestMethod("PUT");
             h.setConnectTimeout(15_000); h.setReadTimeout(60_000);
             h.setRequestProperty("Authorization", "Bearer " + key);
