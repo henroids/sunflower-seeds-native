@@ -192,6 +192,10 @@ static void pc_open_once(void) {
     else if (e && *e) snprintf(g_pc_path, sizeof g_pc_path, "%s", e);
     else if ((t && *t) || (home && *home)) {   // a custom driver (DM_VK_DRIVER) keeps its own file, so switching drivers leaves the system driver's cache alone
         const char *dt = vka_driver_tag(), *dir = t && *t ? t : home;
+        // PEANUTS: Turnip compiler options (IR3_SHADER_DEBUG, the Retroid Pocket Duo's MLB setup) change the compiled code, so they keep a file of their own: one compiled
+        // without them is never taken from the cache
+        const char *ir3 = getenv("IR3_SHADER_DEBUG"); char tb[160];
+        if (ir3 && *ir3) { snprintf(tb, sizeof tb, "%s-ir3_%s", dt ? dt : "system", ir3); for (char *q = tb; *q; q++) if (*q == ',') *q = '_'; dt = tb; }
         vka_pcache_name(g_pc_path, sizeof g_pc_path, dir, dt, VKA_PCACHE_GEN);
         char old[1024], olds[1100]; vka_pcache_name(old, sizeof old, dir, dt, "");   // the generation before: never read again
         snprintf(olds, sizeof olds, "%s.lib", old);
