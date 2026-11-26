@@ -54,6 +54,7 @@ final class GameSettings {
      */
     private static void shaderUpdateCard(MainActivity a, LinearLayout content, Game g) {
         if (Profile.of(g.titleId) == null || !new File(g.gameDir).exists() || !Pack.shaderUpdateAvailable(new File(g.packDir), g.titleId)) return;
+        if ("fake".equals(BuildConfig.NX_PACK_ENGINE)) return;   // PEANUTS(sunflower): the simulated packer cannot make shaders (GameSheet): a PC makes them
         LinearLayout card = Ui.add(content, Ui.card(a), 12);
         card.setPadding(Ui.dp(a, 14), Ui.dp(a, 12), Ui.dp(a, 14), Ui.dp(a, 12));
         card.addView(Ui.text(a, "Shader update available", 15, R.color.bn_text, 700));
@@ -219,7 +220,7 @@ final class GameSettings {
         if (Prefs.drsGame(id) && !simple)   // the host's dynamic resolution slider: testers only for a game with Resolution presets (Quality is the game's own dynamic resolution)
             speed.add(track(recRows, Recommend.DRS, new Ui.Setting(a, "📏", "Dynamic resolution", v -> drs(a, g, again)).value(drsValue(Prefs.drs(a, id))).chevron(a)));
         if (Prefs.crowdGame(id)) {   // a game whose profile names its crowd's shaders (game.tsv crowd): with the speed settings, where a player looks for it
-            Ui.Setting crowd = new Ui.Setting(a, "👥", "Crowd control", null).toggle(a, Prefs.hideCrowd(a, id), (b, on) -> { Prefs.hideCrowd(a, id, on); refresh[0].run(); });
+            Ui.Setting crowd = new Ui.Setting(a, "👤", "Crowd control", null).toggle(a, Prefs.hideCrowd(a, id), (b, on) -> { Prefs.hideCrowd(a, id, on); refresh[0].run(); });
             crowd.says("The crowd is hidden, less GPU work", "The crowd is drawn");
             speed.add(crowd);
         }
