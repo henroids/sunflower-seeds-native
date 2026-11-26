@@ -11,6 +11,7 @@ import android.util.SparseArray;
 import java.util.HashMap;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -141,10 +142,15 @@ public final class Scoreboard {
     /** The panel's focus colour (its frame round the focused row, SidePanel.focusMoved): mint on the scoreboard look, else def */
     public static int focus(int def) { return ON ? MINT : def; }
 
-    /** Home's status row: one cell a value, label above, the value in the dot-matrix font (label, value pairs) */
+    /** Home's status row: one cell a value, label above, the value in the dot-matrix font (label, value pairs; a label may hold a line break). The cells share the width,
+     *  none narrower than four would be on this screen (up to CELL_CAP): where they do not fit (five on a phone held upright) the row scrolls sideways */
+    private static final int CELL_MIN = 96, CELL_CAP = 120;   // dp
     public static View status(Context c, String... pairs) {
+        android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(c);
+        scroll.setHorizontalScrollBarEnabled(false); scroll.setFillViewport(true);
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
+        scroll.addView(row, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         for (int i = 0; i + 1 < pairs.length; i += 2) {
             LinearLayout cell = new LinearLayout(c);
             cell.setOrientation(LinearLayout.VERTICAL);
@@ -158,17 +164,25 @@ public final class Scoreboard {
             v.setSingleLine(); v.setEllipsize(TextUtils.TruncateAt.END); v.setTextSize(valueSp(pairs[i + 1])); if (led != null) v.setTypeface(led);
             v.setHeight(sp(c, 48));
             cell.addView(l); cell.addView(v);
-            cell.setContentDescription(pairs[i] + ": " + pairs[i + 1]);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+            cell.setContentDescription(pairs[i].replace('\n', ' ') + ": " + pairs[i + 1]);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(c, CELL_MIN), LinearLayout.LayoutParams.MATCH_PARENT);
             if (i > 0) lp.setMarginStart(dp(c, 8));
             row.addView(cell, lp);
         }
-        return row;
+        scroll.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {   // the width known: the cells share it, never under CELL_MIN
+            int n = row.getChildCount(), gap = dp(c, 8), W = r - l;
+            int four = Math.min((W - gap * 3) / 4, dp(c, CELL_CAP)), w = Math.max(Math.max(dp(c, CELL_MIN), four), (W - gap * (n - 1)) / Math.max(n, 1));
+            if (n == 0 || row.getChildAt(0).getLayoutParams().width == w) return;
+            for (int k = 0; k < n; k++) row.getChildAt(k).getLayoutParams().width = w;
+            row.post(row::requestLayout);
+        });
+        return scroll;
     }
+    private static LinearLayout cells(View row) { return (LinearLayout) (row instanceof android.widget.HorizontalScrollView ? ((ViewGroup) row).getChildAt(0) : row); }
 
     /** A status cell (index k of status's row) as a button: a tap runs l */
     public static void tap(View row, int k, View.OnClickListener l) {
-        View cell = ((LinearLayout) row).getChildAt(k);
+        View cell = cells(row).getChildAt(k);
         cell.setClickable(true); cell.setFocusable(true); cell.setOnClickListener(l);
         android.util.TypedValue tv = new android.util.TypedValue();
         if (row.getContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) cell.setForeground(row.getContext().getDrawable(tv.resourceId));
@@ -176,9 +190,9 @@ public final class Scoreboard {
 
     /** A status cell's value (index k of status's row) changed in place */
     public static void value(View row, int k, String v) {
-        LinearLayout cell = (LinearLayout) ((LinearLayout) row).getChildAt(k);
+        LinearLayout cell = (LinearLayout) cells(row).getChildAt(k);
         TextView t = (TextView) cell.getChildAt(1); t.setText(v); t.setTextSize(valueSp(v));
-        cell.setContentDescription(((TextView) cell.getChildAt(0)).getText() + ": " + v);
+        cell.setContentDescription(((TextView) cell.getChildAt(0)).getText().toString().replace('\n', ' ') + ": " + v);
     }
 
     /** A value's size: 34 sp, smaller for one longer than six characters (a test build's 0.2.136 was cut to "0.2.1…") */
