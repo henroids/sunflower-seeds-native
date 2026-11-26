@@ -636,15 +636,12 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         GameUpscaler.env(this, id, env);   // the Upscaler (Game settings, the in-game panel): the game's own upscaler and the present's scaling
         env.add(CrtFilter.line(this, id));   // PEANUTS: the CRT filter (Settings › Display, Game settings, the in-game panel; CrtFilter)
         if (Prefs.drsGame(id)) { int[] drs = Prefs.DRS[Prefs.drs(this, id)]; env.add("DM_DRS=" + drs[0] + "," + drs[1]); }   // dynamic resolution range (Prefs.DRS)
-        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id)) env.add("DM_VK_GPUPROF=300");   // PEANUTS TEMPORARY: the GPU time of one frame in 300 by step, for the optimization work (remove when done)
-        // PEANUTS: MLB The Show 26 on the Retroid Pocket Duo (Adreno 722, Turnip): the driver's tiled (GMEM) rendering flickers player skin black and back. Drawing
-        // straight to memory (TU_DEBUG=sysmem) stops it at no frame rate cost there (44.7 fps in game, 0.2.120). Other drivers ignore the variable
-        if (Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("TU_DEBUG=sysmem");
-        // PEANUTS TEMPORARY (test app, Retroid Pocket Duo): with Turnip Gen8 V39 the noise blocks are gone, and menus flicker unless the compiler runs without its constant and
-        // descriptor preloads (IR3_SHADER_DEBUG=nouboopt,nopreamble,nodescprefetch: no flicker, 0.2.136). One at a time: nodescprefetch (0.2.139) and nouboopt (0.2.140) did not; nopreamble did (0.2.142, 43.3 fps) but vertices spike now and
-        // then. Now nopreamble with nouboopt (0.2.136 had both, with nodescprefetch, and no spike was seen); caches off so it takes effect
-        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) {
-            env.add("IR3_SHADER_DEBUG=nopreamble,nouboopt"); env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true");
+        // PEANUTS: MLB The Show 26 on the Retroid Pocket Duo (Adreno 722; recommended driver Turnip Gen8 V39). The driver's tiled (GMEM) rendering flickers player skin
+        // black and back: drawn straight to memory (TU_DEBUG=sysmem) at no frame rate cost. Its compiler's preambles make menus and the batter's portrait flicker, and without
+        // them alone vertices spike; without preambles and uniform-buffer promotion both are clean (IR3_SHADER_DEBUG=nopreamble,nouboopt, 2026-11-26). The pipeline cache
+        // keeps a file of its own for those options (vka_pso.c); Mesa's own cache is off, so no shader compiled without them comes back from it. Other drivers ignore all three
+        if (Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) {
+            env.add("TU_DEBUG=sysmem"); env.add("IR3_SHADER_DEBUG=nopreamble,nouboopt"); env.add("MESA_SHADER_CACHE_DISABLE=true");
         }
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete

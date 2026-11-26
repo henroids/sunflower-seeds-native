@@ -34,7 +34,7 @@ draws into memory through one texture and reads it through another.
 |---|---|
 | Game | MLB The Show 26, title ID `0100AA7024094000`, **update 1.0.19 (v1245184) only** |
 | Works | Boot, menus, exhibitions, Road to the Show (new and loaded careers), create-a-player with correct skin, faces, hair colour and beards (since 1.0.24) |
-| Known issues | Some hair styles look wrong in the player editor's close-up; small blocks of noise over player photos and the uniform screen on the Retroid Pocket Duo (being traced; its menu and skin flicker are fixed); phones slow down as they heat up; the sound can stay off after a phone call comes in during a game; once, real players' skin was black in one session and right in the next (not reproduced). The full list is in the [game's note](dm/games/0100AA7024094000/README.md#open) |
+| Known issues | Some hair styles look wrong in the player editor's close-up; phones slow down as they heat up; the sound can stay off after a phone call comes in during a game; once, real players' skin was black in one session and right in the next (not reproduced). The full list is in the [game's note](dm/games/0100AA7024094000/README.md#open) |
 
 ### Tested devices
 
@@ -45,10 +45,9 @@ Frame rates on the field in an exhibition, with **Crowd control** on (below), fr
 |---|---|---|---|---|
 | AYN Thor (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | about 53 fps | about 59 fps (short run) | Steady over long sessions; does not throttle |
 | Sony Xperia 1 V (Snapdragon 8 Gen 2) | Turnip Gen8 V39 | 60 at the start, about 43 after 15 minutes (51.6 on average over 19 minutes) | about 57 fps | Throttles as it heats up; Handheld mode makes less heat |
-| Retroid Pocket Duo (Adreno 722) | Mr. Purple T30 | about 34 fps | about 45 fps | Menu and skin flicker fixed (0.2.105 and 0.2.121); small noise blocks over player photos remain. T30 works best of the drivers tried: T23 and T26 do not start, Turnip Gen8 V39 and Turnip Duo v5.1 flickered more (tried before the fixes). Its CPU is the limit, not the GPU |
+| Retroid Pocket Duo (Adreno 722) | Turnip Gen8 V39 | not measured on V39 (about 34 fps on T30) | about 41 fps (first run, shaders compiling; 49 without the glitch fixes) | Clean with V39 and the settings the app sets for it (since 0.2.144). On Mr. Purple T30 (about 45 fps) streamed portraits showed blocks of noise. Its CPU is the limit, not the GPU |
 
-Versions 0.2.N are [test builds](#test-builds). The Retroid Pocket Duo's menu and skin flicker fixes (0.2.105 and 0.2.121)
-are in the official app too, since its update of 2026-11-26.
+Versions 0.2.N are [test builds](#test-builds); every fix named here is in the official app too.
 
 With the crowd drawn, the field runs at about 34 fps on the Thor, 20 on the Xperia and 24 on the Retroid Pocket Duo
 (builds before 1.0.34).
@@ -59,7 +58,7 @@ From the test runs of 2026-11-25 and 26 (every log is summed up in the [game's n
 
 | | AYN Thor | Sony Xperia 1 V | Retroid Pocket Duo |
 |---|---|---|---|
-| GPU driver | Turnip Gen8 V39 | Turnip Gen8 V39 | Mr. Purple T30 |
+| GPU driver | Turnip Gen8 V39 | Turnip Gen8 V39 | Turnip Gen8 V39 |
 | Crowd control | On | On | On |
 | Mode | Either; Docked holds about 53 fps | Handheld (Docked throttles as the phone heats up) | Handheld (Docked is about 34 fps) |
 | Use fast cores | Either (no difference measured) | On (18 → 20.6 fps before Crowd control) | On |
@@ -68,24 +67,27 @@ From the test runs of 2026-11-25 and 26 (every log is summed up in the [game's n
 The rest (Upscaler, Frame rate cap 60, Frame generation off) stays at the defaults on all three. **Use fast cores** is
 in **Settings** › **Graphics** › **Speed**; Crowd control and Mode are on Home's scoreboard row.
 
-Drivers tried on the Retroid Pocket Duo: Mr. Purple T23 and T26 do not start the game; Turnip Gen8 V39 and Turnip Duo
-v5.1 start but flickered far more than T30 (tried before the fixes below). On the Duo the app also turns off the driver's tiled rendering for this game
-(since 0.2.121), which stopped the player skin flickering black at no fps cost (44.7 fps in game, handheld).
+On the Retroid Pocket Duo the app sets three driver options for this game by itself (nothing to turn on): no tiled
+rendering (`TU_DEBUG=sysmem`, against the player skin flickering black; no fps cost) and, for the compiler, no preambles
+and no uniform-buffer promotion (`IR3_SHADER_DEBUG=nopreamble,nouboopt`, against flickering menus and portraits, and
+the spiking vertices that `nopreamble` alone brings). Other drivers ignore them. Drivers tried there: Turnip Gen8 V39 is
+the only one clean with those options; Mr. Purple T30 (the recommendation before 2026-11-26, about 45 fps) draws blocks
+of noise over the portraits the game makes as it plays; T23 and T26 do not start the game; Turnip Duo v5.1 flickered.
 
 ### What the tests found
 
 - **What helped:** hiding the crowd (about a third of the field's draws; 34 → 52 fps on the Thor, 20 → 50 on the
   Xperia, 24 → 34 on the Duo docked); Handheld mode on the phones; the merge with upstream Peanuts Native (0.2.104).
 - **What fixed glitches:** the larger image table (0.2.105) fixed the menu flicker and a texture error on the Duo; no
-  tiled rendering on the Duo (0.2.121) fixed the skin flicker.
+  tiled rendering on the Duo (0.2.121) fixed the skin flicker; Turnip Gen8 V39 with no preambles and no uniform-buffer
+  promotion (0.2.144) fixed the Duo's noise blocks and its menu and portrait flicker.
 - **What did not help** (tried and taken out): giving the fastest core to the game's main thread (the Thor got slower);
-  full GPU barriers, no image compression (UBWC), full-precision shaders, no early depth (LRZ) and no uniform-buffer
-  promotion on the Duo (none stopped the flicker).
+  full GPU barriers, no image compression (UBWC), full-precision shaders and no early depth (LRZ) on the Duo (none
+  stopped the flicker); for the noise blocks on T30, holding video uploads, re-uploading unseen texture changes, copying
+  GPU-made pictures through a buffer, one-lane subgroups, shuffles without workgroup memory and the shader cache off.
 - **The limit now** is the game's own main thread on the CPU (about 16 ms a frame on the Thor, more on the Duo), not the
   GPU. Heat is the Xperia's limit.
-- **Still open:** small blocks of noise on the Duo over pictures the game loads during play (the stadium scoreboard's
-  player photo, the batter's headshot, the uniform screen's player), being traced; the sound can stay off after a phone
-  call comes in during a game.
+- **Still open:** the sound can stay off after a phone call comes in during a game.
 
 ### Settings worth knowing
 
@@ -135,7 +137,7 @@ Open **Sunflower Seeds**. The first screen, **Set up your games**, has four step
 4. **Firmware**: pick your firmware folder or `.zip`. The app takes the system fonts from it.
 
 Then **Settings** › **GPU driver**: install and pick the driver for your device from [Tested devices](#tested-devices)
-(Turnip on the Thor and the Xperia, Mr. Purple T30 on the Retroid Pocket Duo). Run **Settings** › **Readiness check**
+(Turnip Gen8 V39 on all three). Run **Settings** › **Readiness check**
 afterwards.
 
 ### 3. Make a `.nup` from your NSP or XCI files
