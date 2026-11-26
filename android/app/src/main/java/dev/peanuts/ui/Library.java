@@ -1138,7 +1138,8 @@ public final class Library {
         if (setup) PUi.add(box, setupCard(), 0);
         if (bare) { lastCells = 0; hadNote = false; return; }
 
-        // the filter row
+        // the filter row (PEANUTS(sunflower): none on the scoreboard look: one game, and no building on the phone, so every chip but Ready counted 0)
+        if (Scoreboard.ON) filter = ALL;
         LinearLayout top = PUi.row(a);
         HorizontalScrollView chips = new HorizontalScrollView(a);
         chips.setHorizontalScrollBarEnabled(false);
@@ -1186,7 +1187,7 @@ public final class Library {
             LinearLayout.LayoutParams flp = PUi.wrap(); flp.leftMargin = PUi.dp(a, 8);
             top.addView(findB, flp);
         }
-        PUi.add(box, top, setup ? 16 : 2);
+        if (!Scoreboard.ON) PUi.add(box, top, setup ? 16 : 2);
         TextView note = null;   // the scan's line, or the empty library's: it fades in when the last rebuild did not have it
         if (scanning) {
             int n = PeanutsPrefs.roots(a).size();
@@ -1341,6 +1342,7 @@ public final class Library {
     };
 
     private void stepFilter(int d) {
+        if (Scoreboard.ON) return;   // PEANUTS(sunflower): no filters on the scoreboard look (the shoulder buttons have nothing to step through)
         Build b = build;
         boolean pcShows = ondeviceCard != null && !(b != null && b.failed && b.step.equals("prepare"));   // as render(): a build stopped in Prepare shows its own card only
         boolean buildCard = b != null && !(b.step.equals("prepare") && pcShows && !b.failed);
@@ -1825,15 +1827,17 @@ public final class Library {
         n.setMaxLines(2);
         n.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(n);
-        CharSequence about = r.title == null ? "" : PUi.joined(r.title.versionText(), r.title.base != null ? r.title.base.publisher : null);
+        // PEANUTS(sunflower): the update as the game names it ("Version 1.0.19", game.tsv), not the Switch's release number ("v19")
+        String shown = r.title == null ? "" : dev.nxnative.android.Versions.shown(r.id(), r.title.version());
+        if (!shown.isEmpty()) shown = Character.toUpperCase(shown.charAt(0)) + shown.substring(1);
+        CharSequence about = r.title == null ? "" : PUi.joined(shown.isEmpty() ? r.title.versionText() : shown, r.title.base != null ? r.title.base.publisher : null);
         if (about.length() > 0) info.addView(PUi.small(a, about));
         String state = st == READY ? "Ready" : st == BUILD ? "Build needed" : a.getString(R.string.not_supported_yet);
         TextView status = PUi.status(a, state, st == READY ? R.color.bn_accent : R.color.bn_danger);
         status.setPadding(0, PUi.dp(a, 2), 0, 0);
         info.addView(status);
         top.addView(info, PUi.weight());
-        top.addView(PUi.more(a, "Manage " + name, Haptics.on(Haptics.Word.CLICK, v -> manageOrSheet.run())));
-        c.addView(top);
+        c.addView(top);   // PEANUTS(sunflower): no ⋯ (it opened what Settings below opens)
         PUi.add(c, PUi.body(a, plays ? "Ready to play." : st == BUILD ? "Its pack is missing or for another version: make it again on the PC." : "This app has no profile for it."), 12);
         View left = PUi.button(a, "Settings", PUi.Kind.TONAL, Haptics.on(Haptics.Word.CLICK, v -> manageOrSheet.run()));
         PUi.Action play = PUi.action(a, R.drawable.ic_play, "Play", PUi.Kind.PRIMARY, v -> { Haptics.play(v, Haptics.Word.HEAVY); play(r); });
