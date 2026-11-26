@@ -642,9 +642,12 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("TU_DEBUG=sysmem");
         // PEANUTS TEMPORARY (test app, Retroid Pocket Duo): the noise blocks are in the pictures the game makes on the GPU (rendered, then encoded to BC7 / BC1 by its compute
         // shaders); one-lane subgroups (0.2.130) did not change them, a wait on every instruction (0.2.131, IR3_SHADER_DEBUG=fullsync,nopreamble) made them fewer and only
-        // sometimes there. The tests that made them fewer (0.2.117, 0.2.118, 0.2.131) all had the shader caches off; those with them on had the noise every time. Here the
-        // caches off alone (DM_VK_PCACHE=0, MESA_SHADER_CACHE_DISABLE=true), to test whether a cached pipeline is behind it
-        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) { env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true"); }
+        // sometimes there. The caches off alone (0.2.135) did not. What made them fewer each changed how a shader's constants are loaded: no uniform-buffer promotion
+        // (0.2.117, 0.2.118) or no preambles (0.2.131). Here all three of the compiler's constant and descriptor preloads off (IR3_SHADER_DEBUG=nouboopt,nopreamble,
+        // nodescprefetch), caches off so it takes effect, to test whether those preloads race on the Adreno 722
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) {
+            env.add("IR3_SHADER_DEBUG=nouboopt,nopreamble,nodescprefetch"); env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true");
+        }
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
         // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why
