@@ -142,9 +142,9 @@ public final class Scoreboard {
     /** The panel's focus colour (its frame round the focused row, SidePanel.focusMoved): mint on the scoreboard look, else def */
     public static int focus(int def) { return ON ? MINT : def; }
 
-    /** Home's status row: one cell a value, label above, the value in the dot-matrix font (label, value pairs). The cells share the width, none narrower than CELL_MIN:
-     *  where they do not fit (five on a phone held upright) the row scrolls sideways */
-    private static final int CELL_MIN = 96;   // dp: a cell's width as four of them have on a phone held upright
+    /** Home's status row: one cell a value, label above, the value in the dot-matrix font (label, value pairs; a label may hold a line break). The cells share the width,
+     *  none narrower than four would be on this screen (up to CELL_CAP): where they do not fit (five on a phone held upright) the row scrolls sideways */
+    private static final int CELL_MIN = 96, CELL_CAP = 120;   // dp
     public static View status(Context c, String... pairs) {
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(c);
         scroll.setHorizontalScrollBarEnabled(false); scroll.setFillViewport(true);
@@ -164,13 +164,14 @@ public final class Scoreboard {
             v.setSingleLine(); v.setEllipsize(TextUtils.TruncateAt.END); v.setTextSize(valueSp(pairs[i + 1])); if (led != null) v.setTypeface(led);
             v.setHeight(sp(c, 48));
             cell.addView(l); cell.addView(v);
-            cell.setContentDescription(pairs[i] + ": " + pairs[i + 1]);
+            cell.setContentDescription(pairs[i].replace('\n', ' ') + ": " + pairs[i + 1]);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(c, CELL_MIN), LinearLayout.LayoutParams.MATCH_PARENT);
             if (i > 0) lp.setMarginStart(dp(c, 8));
             row.addView(cell, lp);
         }
         scroll.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {   // the width known: the cells share it, never under CELL_MIN
-            int n = row.getChildCount(), gap = dp(c, 8), w = Math.max(dp(c, CELL_MIN), (r - l - gap * (n - 1)) / Math.max(n, 1));
+            int n = row.getChildCount(), gap = dp(c, 8), W = r - l;
+            int four = Math.min((W - gap * 3) / 4, dp(c, CELL_CAP)), w = Math.max(Math.max(dp(c, CELL_MIN), four), (W - gap * (n - 1)) / Math.max(n, 1));
             if (n == 0 || row.getChildAt(0).getLayoutParams().width == w) return;
             for (int k = 0; k < n; k++) row.getChildAt(k).getLayoutParams().width = w;
             row.post(row::requestLayout);
@@ -191,7 +192,7 @@ public final class Scoreboard {
     public static void value(View row, int k, String v) {
         LinearLayout cell = (LinearLayout) cells(row).getChildAt(k);
         TextView t = (TextView) cell.getChildAt(1); t.setText(v); t.setTextSize(valueSp(v));
-        cell.setContentDescription(((TextView) cell.getChildAt(0)).getText() + ": " + v);
+        cell.setContentDescription(((TextView) cell.getChildAt(0)).getText().toString().replace('\n', ' ') + ": " + v);
     }
 
     /** A value's size: 34 sp, smaller for one longer than six characters (a test build's 0.2.136 was cut to "0.2.1…") */

@@ -336,7 +336,7 @@ public final class MainActivity extends Activity {
         String id = Prefs.MLB26;
         // the anti-aliasing cell: the test app only, while its switch is a test (Prefs.skipPost)
         boolean aa = GameActivity.testApp();
-        View row = aa ? dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "ANTI-ALIASING", aaValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME)
+        View row = aa ? dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "ANTI-\nALIASING", aaValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME)
                       : dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME);
         int k = aa ? 1 : 0;
         dev.peanuts.ui.Scoreboard.tap(row, 0, v -> {
