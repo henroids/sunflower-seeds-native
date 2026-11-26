@@ -153,8 +153,10 @@ public final class Scoreboard {
             cell.setBackground(g);
             cell.setPadding(dp(c, 8), dp(c, 14), dp(c, 8), dp(c, 12));
             TextView l = new TextView(c); l.setText(pairs[i]); l.setTextColor(LABEL); l.setGravity(Gravity.CENTER); l.setSingleLine(); pixel(l, pairs[i].length() > 9 ? 7 : 10);   // a long label (CROWD CONTROL) smaller, on one line
+            l.setHeight(sp(c, 18));   // every cell the same height: a smaller label (CROWD CONTROL) no longer makes its cell shorter
             TextView v = new TextView(c); v.setText(pairs[i + 1]); v.setTextColor(i / 2 % 2 == 0 ? MINT : LAVENDER); v.setGravity(Gravity.CENTER);
-            v.setSingleLine(); v.setEllipsize(TextUtils.TruncateAt.END); v.setTextSize(34); if (led != null) v.setTypeface(led);
+            v.setSingleLine(); v.setEllipsize(TextUtils.TruncateAt.END); v.setTextSize(valueSp(pairs[i + 1])); if (led != null) v.setTypeface(led);
+            v.setHeight(sp(c, 48));
             cell.addView(l); cell.addView(v);
             cell.setContentDescription(pairs[i] + ": " + pairs[i + 1]);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
@@ -175,9 +177,12 @@ public final class Scoreboard {
     /** A status cell's value (index k of status's row) changed in place */
     public static void value(View row, int k, String v) {
         LinearLayout cell = (LinearLayout) ((LinearLayout) row).getChildAt(k);
-        ((TextView) cell.getChildAt(1)).setText(v);
+        TextView t = (TextView) cell.getChildAt(1); t.setText(v); t.setTextSize(valueSp(v));
         cell.setContentDescription(((TextView) cell.getChildAt(0)).getText() + ": " + v);
     }
 
+    /** A value's size: 34 sp, smaller for one longer than six characters (a test build's 0.2.136 was cut to "0.2.1…") */
+    private static float valueSp(String v) { return v == null || v.length() <= 6 ? 34 : v.length() == 7 ? 28 : 24; }
+    private static int sp(Context c, float v) { return Math.round(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, v, c.getResources().getDisplayMetrics())); }
     private static int dp(Context c, float v) { return Math.round(v * c.getResources().getDisplayMetrics().density); }
 }
