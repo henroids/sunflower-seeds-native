@@ -697,6 +697,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (Prefs.instancedDraws(this, id)) env.add("DM_VK_INSTANCE=1");   // Game settings › Instanced draws
         if (Prefs.classicPasses(this, id)) env.add("DM_VK_CLASSIC_RP=1");   // Game settings › Classic render passes
         if (Prefs.skipLayersGame(id) && Prefs.skipLayers(this, id)) env.add("DM_VK_SKIP_FS=" + Prefs.skipLayersKeys(id));
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && Prefs.skipPost(this, id)) env.add("DM_VK_SKIP_FS=" + Prefs.POST_FS_KEYS);   // PEANUTS TEMPORARY (Prefs.skipPost)
         if (Prefs.crowdGame(id) && Prefs.hideCrowd(this, id)) env.add("DM_VK_SKIP_VS=" + Prefs.crowdKeys(id));   // Game settings › Crowd control   // Game settings › Speedhack: Turn off hidden layers
         env.add("DM_VK_PSO_ASYNC=" + (Prefs.psoAsync(this, id) ? 2 : 0));   // Game settings › Background pipelines (an env.txt line of the player's comes later and wins)
         if (Prefs.ramSaver(this, id)) { env.add("DM_MEM_FILEBACK=1"); env.add("DM_MEM_FILEBACK_KINDS=shader,texture"); }   // Game settings › RAM saver: texture pools in a file in TMPDIR, the cache folder (vka_mem.c "File-backed pools"); lines of env.txt or the game's own come later and win
