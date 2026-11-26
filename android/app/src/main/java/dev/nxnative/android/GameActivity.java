@@ -642,9 +642,9 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         if (Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("TU_DEBUG=sysmem");
         // PEANUTS TEMPORARY (test app, Retroid Pocket Duo): the noise blocks are in the pictures the game makes on the GPU (rendered, then encoded to BC7 / BC1 by its compute
         // shaders); one-lane subgroups (0.2.130) did not change them, a wait on every instruction (0.2.131, IR3_SHADER_DEBUG=fullsync,nopreamble) made them fewer and only
-        // sometimes there: a race. The compute modules that shuffle through workgroup memory (vka_shader.c shuffle_plan) take a subgroup's lanes as running in step; here the
-        // base modules with the shuffle instruction instead (DM_VK_SHUFFLE_LDS=0), to test whether that is the race on the Adreno 722
-        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("DM_VK_SHUFFLE_LDS=0");
+        // sometimes there. The tests that made them fewer (0.2.117, 0.2.118, 0.2.131) all had the shader caches off; those with them on had the noise every time. Here the
+        // caches off alone (DM_VK_PCACHE=0, MESA_SHADER_CACHE_DISABLE=true), to test whether a cached pipeline is behind it
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) { env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true"); }
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
         // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why
