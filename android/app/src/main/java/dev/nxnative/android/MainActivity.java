@@ -331,23 +331,30 @@ public final class MainActivity extends Activity {
 
     // PEANUTS begin: Home's status row on the scoreboard look, for MLB The Show 26, each cell a button: Crowd control (on / off), the console mode (Docked 1080p /
     // Handheld 720p), the GPU driver (the driver page: pick an installed one, install another) and the app's version (checks for an update)
-    private View statusRow;
+    private View statusRow; private int statusAa;   // statusAa: 1 when the row has the anti-aliasing cell (the cells after it one further on)
     private View scoreboardStatus() {
         String id = Prefs.MLB26;
-        View row = dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME);
+        // the anti-aliasing cell: the test app only, while its switch is a test (Prefs.skipPost)
+        boolean aa = GameActivity.testApp();
+        View row = aa ? dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "ANTI-ALIASING", aaValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME)
+                      : dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME);
+        int k = aa ? 1 : 0;
         dev.peanuts.ui.Scoreboard.tap(row, 0, v -> {
             if (!Prefs.crowdGame(id)) return;
             Prefs.hideCrowd(this, id, !Prefs.hideCrowd(this, id)); dev.peanuts.ui.Scoreboard.value(row, 0, crowdValue(id));
         });
-        dev.peanuts.ui.Scoreboard.tap(row, 1, v -> {
+        if (aa) dev.peanuts.ui.Scoreboard.tap(row, 1, v -> { Prefs.skipPost(this, id, !Prefs.skipPost(this, id)); dev.peanuts.ui.Scoreboard.value(row, 1, aaValue(id)); });
+        dev.peanuts.ui.Scoreboard.tap(row, 1 + k, v -> {
             if (ScreenMode.fixed(id) != null) return;
-            ScreenMode.set(this, id, 1 - ScreenMode.mode(this, id)); dev.peanuts.ui.Scoreboard.value(row, 1, modeValue(id));
+            ScreenMode.set(this, id, 1 - ScreenMode.mode(this, id)); dev.peanuts.ui.Scoreboard.value(row, 1 + k, modeValue(id));
         });
-        dev.peanuts.ui.Scoreboard.tap(row, 2, v -> dev.peanuts.ui.DriverActivity.openForGame(this, id, "MLB The Show 26"));
-        dev.peanuts.ui.Scoreboard.tap(row, 3, v -> Updater.checkNow(this));
+        dev.peanuts.ui.Scoreboard.tap(row, 2 + k, v -> dev.peanuts.ui.DriverActivity.openForGame(this, id, "MLB The Show 26"));
+        dev.peanuts.ui.Scoreboard.tap(row, 3 + k, v -> Updater.checkNow(this));
+        statusAa = k;
         statusRow = row;
         return row;
     }
+    private String aaValue(String id) { return Prefs.skipPost(this, id) ? "OFF" : "ON"; }   // ON: the game's finishing passes drawn
     private String crowdValue(String id) { return !Prefs.crowdGame(id) ? "N/A" : Prefs.hideCrowd(this, id) ? "ON" : "OFF"; }
     private String modeValue(String id) { return ScreenMode.mode(this, id) == 1 ? "720P" : "1080P"; }
     private String driverValue(String id) {
@@ -358,7 +365,9 @@ public final class MainActivity extends Activity {
     private void statusRefresh() {
         if (statusRow == null) return;
         String id = Prefs.MLB26;
-        dev.peanuts.ui.Scoreboard.value(statusRow, 0, crowdValue(id)); dev.peanuts.ui.Scoreboard.value(statusRow, 1, modeValue(id)); dev.peanuts.ui.Scoreboard.value(statusRow, 2, driverValue(id));
+        int k = statusAa;
+        dev.peanuts.ui.Scoreboard.value(statusRow, 0, crowdValue(id)); if (k == 1) dev.peanuts.ui.Scoreboard.value(statusRow, 1, aaValue(id));
+        dev.peanuts.ui.Scoreboard.value(statusRow, 1 + k, modeValue(id)); dev.peanuts.ui.Scoreboard.value(statusRow, 2 + k, driverValue(id));
     }
     // PEANUTS end
 

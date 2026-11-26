@@ -545,7 +545,7 @@ final class Prefs {
     static boolean hideCrowd(Context c, String titleId) { return of(c).getBoolean(gameKey("hide_crowd", titleId), false); }
     static void hideCrowd(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("hide_crowd", titleId), on).commit(); }
     // PEANUTS TEMPORARY (test app, MLB The Show 26): the two full-screen 1280x720 passes near the end of its frame (likely its anti-aliasing, or glow), skipped to measure
-    // what they cost (GameSettings › Speed › Skip post effects; GameActivity puts their fragment keys in DM_VK_SKIP_FS). Remove after the test
+    // what they cost (Home's ANTI-ALIASING cell and GameSettings › Speed › Anti-aliasing, both test app only; GameActivity puts their fragment keys in DM_VK_SKIP_FS). Remove after the test
     static final String POST_FS_KEYS = "55638e2ea45d65b0,3184c79fe6768e49";
     static boolean skipPost(Context c, String titleId) { return of(c).getBoolean(gameKey("skip_post", titleId), false); }
     static void skipPost(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("skip_post", titleId), on).commit(); }
