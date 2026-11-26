@@ -35,6 +35,8 @@ public final class GameHelp {
         m.put("Frame rate cap", "The highest frame rate this game runs at. A lower cap saves battery and keeps the device cooler. It changes at once in a running game.");
         m.put("Hold 60 fps", "Keeps the game at 60 when a frame is late, instead of dropping to 30.");
         m.put("Full game speed", "Keeps the game at its normal speed when the frame rate drops. Off, it slows down with the frame rate, as on the console.");
+        m.put("CRT filter", "Draws the picture as an old TV shows it, with scanlines. Off draws it as the game does.");   // PEANUTS(sunflower)
+        m.put("Crowd control", "Hides the crowd in the stands: about a third of a stadium's draws, so the game runs faster and cooler. Off, the crowd is drawn as on the console. From the next start.");   // PEANUTS(sunflower)
         m.put("Dynamic resolution", "Lets the game draw smaller while a scene is heavy, so its frame rate holds.");
         // Game options
         m.put("Switch 2 Edition", "Which game Play starts: the Switch game or its Switch 2 Edition. Both use one save.");

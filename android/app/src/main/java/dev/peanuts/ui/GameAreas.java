@@ -72,8 +72,9 @@ public final class GameAreas {
         group(GRAPHICS, "Driver", "GPU driver", "driver");
         group(GRAPHICS, "Picture", "Resolution", "resolution", "Window", "window", "3D scene", "scene", "Upscaling quality", "pie", "Graphics quality", "quality",
                 "Console mode", "docked", "Resolution scale", "scale", "Upscaler", "upscale", "Motion clarity", "clarity", "Sharpness", "contrast",
-                "Temporal sharpness", "contrast", "FSR sharpness", "contrast", "Display", "display", "Aspect ratio", "aspect");
-        group(GRAPHICS, "Speed", "Frame rate cap", "gauge", "Hold 60 fps", "lock", "Full game speed", "fast-forward", "Dynamic resolution", "dynamic");
+                "Temporal sharpness", "contrast", "FSR sharpness", "contrast", "Display", "display", "Aspect ratio", "aspect", "CRT filter", "tv");
+        group(GRAPHICS, "Speed", "Frame rate cap", "gauge", "Hold 60 fps", "lock", "Full game speed", "fast-forward", "Dynamic resolution", "dynamic",
+                "Crowd control", "users");   // PEANUTS(sunflower): Game settings › Crowd control (GameSettings)
         group(OPTIONS, "Game options", "Switch 2 Edition", "cartridge", "Full vegetation", "leaf", "Hidden layers off", "layers", "Cheats", "mods",
                 "Cheat files", "folder", "Link Play", "link", "Game language", "language", "Time of day", "sun");
         group(CONTROLS, "Controls", "Rumble", "rumble", "Button mapping", "buttons", "Motion sensitivity", "aim", "Xbox button labels", "labels");
