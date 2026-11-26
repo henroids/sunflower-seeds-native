@@ -640,6 +640,11 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         // PEANUTS: MLB The Show 26 on the Retroid Pocket Duo (Adreno 722, Turnip): the driver's tiled (GMEM) rendering flickers player skin black and back. Drawing
         // straight to memory (TU_DEBUG=sysmem) stops it at no frame rate cost there (44.7 fps in game, 0.2.120). Other drivers ignore the variable
         if (Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) env.add("TU_DEBUG=sysmem");
+        // PEANUTS TEMPORARY (test app, Retroid Pocket Duo): with Turnip Gen8 V39 the noise blocks are gone, and menus flicker unless the compiler runs without its constant and
+        // descriptor preloads (IR3_SHADER_DEBUG=nouboopt,nopreamble,nodescprefetch: no flicker, 0.2.136). One at a time, the cheapest first: nodescprefetch; caches off so it takes effect
+        if (testApp() && Prefs.MLB26.equalsIgnoreCase(id) && android.os.Build.MODEL.contains("Retroid Pocket Duo")) {
+            env.add("IR3_SHADER_DEBUG=nodescprefetch"); env.add("DM_VK_PCACHE=0"); env.add("MESA_SHADER_CACHE_DISABLE=true");
+        }
         fpsModeAtStart = onScreen(Prefs.paceCap(this, id));   // PEANUTS: what runs, a stored 120 on a 60 Hz display runs at 60 (fps_plan_120 then starts its 60 fps mode)
         // PEANUTS begin: a cap that starts a variant (Profile.fpsVariant: Animal Crossing: New Horizons' 60 fps speed fix) runs it only when the pack holds it complete
         // (Pack.variantReady: its code cuts matched this main build and its RomFS rows the player's files); else the game starts as it is, Game owned, and says why
