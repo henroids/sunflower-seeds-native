@@ -223,11 +223,6 @@ final class GameSettings {
             crowd.says("The crowd is hidden, less GPU work", "The crowd is drawn");
             speed.add(crowd);
         }
-        if (GameActivity.testApp() && Prefs.MLB26.equalsIgnoreCase(id)) {   // PEANUTS TEMPORARY (test app): Prefs.skipPost
-            Ui.Setting post = new Ui.Setting(a, "✨", "Anti-aliasing", null).toggle(a, !Prefs.skipPost(a, id), (b, on) -> { Prefs.skipPost(a, id, !on); refresh[0].run(); });
-            post.says("Drawn as the game draws it", "Off: two finishing passes skipped (likely the anti-aliasing), less GPU work; edges may look rougher");
-            speed.add(post);
-        }
         speed.add(track(recRows, Recommend.DRIVER, new Ui.Setting(a, "🎮", "GPU driver", v -> dev.peanuts.ui.DriverActivity.openForGame(a, g.titleId, g.name)).value(driverShort(a, id)).chevron(a)));   // PEANUTS: the full GPU driver page, scoped to this game
 
         // ---- Game options: the profile's own switches ----

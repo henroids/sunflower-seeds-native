@@ -544,11 +544,6 @@ final class Prefs {
     static String crowdKeys(String titleId) { Profile p = Profile.of(titleId); return p == null ? "" : p.crowd; }
     static boolean hideCrowd(Context c, String titleId) { return of(c).getBoolean(gameKey("hide_crowd", titleId), false); }
     static void hideCrowd(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("hide_crowd", titleId), on).commit(); }
-    // PEANUTS TEMPORARY (test app, MLB The Show 26): the two full-screen 1280x720 passes near the end of its frame (likely its anti-aliasing, or glow), skipped to measure
-    // what they cost (Home's ANTI-ALIASING cell and GameSettings › Speed › Anti-aliasing, both test app only; GameActivity puts their fragment keys in DM_VK_SKIP_FS). Remove after the test
-    static final String POST_FS_KEYS = "55638e2ea45d65b0,3184c79fe6768e49";
-    static boolean skipPost(Context c, String titleId) { return of(c).getBoolean(gameKey("skip_post", titleId), false); }
-    static void skipPost(Context c, String titleId, boolean on) { of(c).edit().putBoolean(gameKey("skip_post", titleId), on).commit(); }
     /** Game settings › Cheats (Experimental), for a game whose profile has cheat files (Profile.cheats): off by default; while off the launcher passes no DM_CHEATS and the
      *  in-game panel has no Cheats section (Cheats.env, Cheats.panel). Reset to defaults turns it off; the toggles below stay */
     static boolean cheatsGame(String titleId) { return true; }   // PEANUTS: every game takes cheats (dev.peanuts.mods, Mods & Cheats); was: its profile has cheats rows (Profile.cheats)
