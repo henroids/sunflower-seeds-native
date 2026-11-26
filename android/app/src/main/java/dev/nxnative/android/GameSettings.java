@@ -54,6 +54,7 @@ final class GameSettings {
      */
     private static void shaderUpdateCard(MainActivity a, LinearLayout content, Game g) {
         if (Profile.of(g.titleId) == null || !new File(g.gameDir).exists() || !Pack.shaderUpdateAvailable(new File(g.packDir), g.titleId)) return;
+        if ("fake".equals(BuildConfig.NX_PACK_ENGINE)) return;   // PEANUTS(sunflower): the simulated packer cannot make shaders (GameSheet): a PC makes them
         LinearLayout card = Ui.add(content, Ui.card(a), 12);
         card.setPadding(Ui.dp(a, 14), Ui.dp(a, 12), Ui.dp(a, 14), Ui.dp(a, 12));
         card.addView(Ui.text(a, "Shader update available", 15, R.color.bn_text, 700));

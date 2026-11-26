@@ -127,7 +127,8 @@ public final class GameSheet {
         boolean ready = title.status == LibraryScanner.Status.READY;
         boolean building = lib.building(title.titleId);
         boolean nupBase = title.base != null && title.base.isNup();
-        PUi.add(box, PUi.body(a, ready
+        boolean simulated = "fake".equals(dev.nxnative.android.BuildConfig.NX_PACK_ENGINE);   // PEANUTS(sunflower): no building on the phone (below)
+        if (!simulated) PUi.add(box, PUi.body(a, ready
                 ? "Rebuild makes again the parts of the game's build that no longer fit this app version, and updates the dual-screen companion. It is quick when little changed."
                 + (nupBase ? " It keeps the game's .nup file. Import again makes that file again from your game files, with the update and DLC found now." : "")
                 : "Build makes one .nup file from the files below, builds the game from it and installs the dual-screen companion. It takes about 25 minutes, in the background."), 0);
@@ -219,6 +220,13 @@ public final class GameSheet {
                 else { Haptics.play(v, Haptics.Word.REJECT); rows(); }
             })), 4, PUi.wrap());
         }
+        // PEANUTS(sunflower): an app with the simulated packer (-PnxPackEngine=fake: Sunflower Seeds' test and official apps) cannot build here: its "build" is a
+        // placeholder that never starts, and would take the place of a working game. No Build / Rebuild, build destination or Import again then; Import pack stays
+        if ("fake".equals(dev.nxnative.android.BuildConfig.NX_PACK_ENGINE)) {
+            PUi.add(box, PUi.small(a, "This app does not prepare games on the phone: they are prepared on a PC (see the FAQ). A prepared game comes in with Import pack."), 14);
+            importPack(box, building);
+            return;
+        }
         String chosenFolder = PeanutsPrefs.chosenBuildDir(a, title.titleId);
         String defaultFolder = PeanutsPrefs.buildDir(a);
         PUi.Setting destination = new PUi.Setting(a, "🗂️", "Build destination",
@@ -251,8 +259,11 @@ public final class GameSheet {
             again.setEnabled(!building);
             PUi.add(box, again, 4, PUi.wrap());
         }
-        // Import pack… before the first build (GitHub issue #44): a pack made on a PC or exported from another phone goes where this Build would put its own
-        // (PackImportUi). A built game has it on its page's Storage tab (upstream's PackUi)
+        importPack(box, building);
+    }
+    // Import pack… before the first build (GitHub issue #44): a pack made on a PC or exported from another phone goes where this Build would put its own
+    // (PackImportUi). A built game has it on its page's Storage tab (upstream's PackUi)
+    private void importPack(LinearLayout box, boolean building) {
         if (PackImportUi.offered(title)) {
             View imp = PUi.button(a, "Import pack…", PUi.Kind.QUIET, Haptics.on(Haptics.Word.TICK, v -> PackImportUi.offer(a, lib, title, chosenUpdate)));
             imp.setEnabled(!building);
