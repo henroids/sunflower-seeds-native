@@ -64,7 +64,7 @@ public final class SettingsSections {
                     new Group("Driver", r("GPU driver", "driver")),
                     new Group("Picture", r("Console mode", "game"), r("Resolution", "search"), r("Resolution scale", "search"), r("Upscaler", "search"),
                             r("FSR sharpness", "search"), r("CRT filter", "screen-landscape"), r("Dynamic resolution", "gauge")),
-                    new Group("Speed", r("Frame rate cap", "gauge"), r("Frame generation", "gauge"), r("Use fast cores", "gauge"), r("Overlay", "list"))),
+                    new Group("Speed", r("Frame rate cap", "gauge"), r("Frame generation", "gauge"), r("Use fast cores", "gauge"), r("Crowd control", "user"), r("Overlay", "list"))),
             new Section("controls", "Controls", "controller", DEFAULTS,
                     new Group("Buttons", r("Button mapping", "controller"), r("Xbox button label swap", "controller")),
                     new Group("Touch", r("On-screen controls", "game"), r("Show / hide button", "game")),
