@@ -349,16 +349,30 @@ public final class GamePage {
         File kept = new File(dev.peanuts.PeanutsPrefs.iconsDir(a), f.titleId.toUpperCase(java.util.Locale.ROOT) + ".png");
         new Thread(() -> {
             Bitmap b = kept.isFile() ? BitmapFactory.decodeFile(kept.getPath()) : null;
-            if (b != null) a.runOnUiThread(() -> { if (cover.getDrawable() == null) cover.setImageBitmap(b); });
+            a.runOnUiThread(() -> { if (b != null) icon(cover, b); else if (cover.getDrawable() == null) seed(a, cover); });
         }, "peanuts-game-cover").start();
         if (f.meta == null) return;
         f.meta.accept((icon, v, p) -> a.runOnUiThread(() -> {
-            if (icon != null && cover.getDrawable() == null) cover.setImageBitmap(icon);
+            if (icon != null) icon(cover, icon);
             boolean any = false;
             if (v != null && !v.isEmpty()) { version.setText(v); version.setVisibility(View.VISIBLE); any = true; }
             if (p != null && !p.isEmpty()) { publisher.setText(p); publisher.setVisibility(View.VISIBLE); any = true; }
             facts.setVisibility(any ? View.VISIBLE : View.GONE);
         }));
+    }
+
+    private static final Object SEED = new Object();   // the cover's tag while it shows the seed
+    /** The game's icon on the cover, unless one is there already (the seed gives way) */
+    private static void icon(ImageView cover, Bitmap b) {
+        if (cover.getDrawable() != null && cover.getTag() != SEED) return;
+        cover.setTag(null); cover.setPadding(0, 0, 0, 0); cover.setScaleType(ImageView.ScaleType.CENTER_CROP); cover.setImageBitmap(b);
+    }
+    /** PEANUTS(sunflower): no icon for the game: the app's seed in the cover's square, as on Home (Scoreboard.seed; nothing on the plain look) */
+    private static void seed(Context a, ImageView cover) {
+        android.graphics.drawable.Drawable d = Scoreboard.seed(a);
+        if (d == null) return;
+        int pad = PUi.dp(a, 18);
+        cover.setTag(SEED); cover.setPadding(pad, pad, pad, pad); cover.setScaleType(ImageView.ScaleType.FIT_CENTER); cover.setImageDrawable(d);
     }
 
     @SuppressWarnings("deprecation")   // MainActivity's own Back (onBackPressed): an area to the tiles, the tiles to Home
