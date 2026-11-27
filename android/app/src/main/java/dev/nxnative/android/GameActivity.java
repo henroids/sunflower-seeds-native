@@ -1593,6 +1593,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     @Override public void onTopResumedActivityChanged(boolean top) { super.onTopResumedActivityChanged(top); topResumed = top; if (top) dev.peanuts.Companion.gameOnTop(this); else if (started) pinStart(); }   // PEANUTS: back in front (Recents may have moved it to another display): the game goes back to its display, the companion where it belongs (#183)
     @Override protected void onStart() {
         super.onStart();
+        focusState.shown(true);   // PEANUTS(sunflower): on screen, another app's sound (the other screen) no longer silences the game (AudioFocus)
         if (!started) return;
         // back from the background: stays suspended (4 before 2, so the host never lets it run in between) until the tap
         if (stopped && !paused && Prefs.pauseOnReturn(this, titleId()) && !getIntent().getBooleanExtra("no_pause", false)) {
@@ -1625,6 +1626,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         super.onPause();
     }
     @Override protected void onStop() {
+        focusState.shown(false);
         if (started) { stopped = true; if (!isChangingConfigurations()) hostInBackground = true; Native.lifecycle(1); }
         if (!isChangingConfigurations()) dev.peanuts.Companion.away();   // PEANUTS: Home or another app is in front: the companion's window leaves the second display (a Presentation outlives its activity's stop)
         super.onStop();

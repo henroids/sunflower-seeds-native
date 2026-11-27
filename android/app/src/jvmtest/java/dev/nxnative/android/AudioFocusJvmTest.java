@@ -14,8 +14,13 @@ public final class AudioFocusJvmTest {
         check(!f.changed(AudioFocus.GAIN), "gain ends the interruption");
         check(f.changed(AudioFocus.LOSS_TRANSIENT_CAN_DUCK) && !f.askAgain(), "ducking: interrupted, given back by Android");
         check(!f.changed(AudioFocus.GAIN), "gain after ducking");
+        // Another app plays a video on the other screen while the game shows: lost for good, but the game keeps its sound; asked again on the next return
+        check(!f.changed(AudioFocus.LOSS), "permanent loss on screen keeps the sound");
+        check(f.askAgain(), "permanent loss on screen: ask again on the return");
+        f.requested(true);
         // Another app plays music while the game is minimized: lost for good, asked again on the return
-        check(f.changed(AudioFocus.LOSS), "permanent loss interrupts");
+        f.shown(false);
+        check(f.changed(AudioFocus.LOSS), "permanent loss in the background interrupts");
         check(f.askAgain(), "permanent loss: ask again on the return");
         f.requested(false);
         check(f.askAgain(), "refused: ask again on the next return");
