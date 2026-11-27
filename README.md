@@ -99,11 +99,11 @@ Home's scoreboard row is five buttons (on a phone held upright it scrolls sidewa
 - **Mode**: 720p (Handheld) or 1080p (Docked). Handheld draws a third fewer pixels: more frames and less heat on a phone.
 - **Driver**: the GPU driver page (pick an installed driver, or install one).
 - **App**: checks for an update.
-- **Second screen** (dual-screen devices such as the AYN Thor and the Retroid Pocket Duo): on shows the game's companion
+- **2nd screen** (dual-screen devices such as the AYN Thor and the Retroid Pocket Duo): on shows the game's companion
   page on the second screen; off leaves that screen to Android (a video, a browser) while the game plays. During a game,
   the side panel's **Display** tab has the same switch and changes it at once. A device with one screen shows N/A.
 
-Changes to Crowd control and Mode apply from the next start of the game; Second screen from the next start on Home, at once
+Changes to Crowd control and Mode apply from the next start of the game; 2nd screen from the next start on Home, at once
 in the side panel.
 
 ## What you need
