@@ -28,10 +28,10 @@ final class PadFocus {
         GradientDrawable outer = new GradientDrawable();
         outer.setColor((c.getColor(R.color.bn_accent) & 0x00FFFFFF) | 0x26000000);
         outer.setStroke(Ui.dp(c, 3), 0xFFFFFFFF);
-        outer.setCornerRadius(Ui.dp(c, 14));
+        outer.setCornerRadius(dev.peanuts.ui.Scoreboard.radius(Ui.dp(c, 14)));   // PEANUTS(sunflower): square on the scoreboard look, as every box there
         GradientDrawable inner = new GradientDrawable();
         inner.setStroke(Ui.dp(c, 2), 0xFF1B1208);
-        inner.setCornerRadius(Ui.dp(c, 12));
+        inner.setCornerRadius(dev.peanuts.ui.Scoreboard.radius(Ui.dp(c, 12)));
         android.graphics.drawable.LayerDrawable d = new android.graphics.drawable.LayerDrawable(new Drawable[] {outer, inner});
         d.setLayerInset(1, Ui.dp(c, 3), Ui.dp(c, 3), Ui.dp(c, 3), Ui.dp(c, 3));
         return d;
