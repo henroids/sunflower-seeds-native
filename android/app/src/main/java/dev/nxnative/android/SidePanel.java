@@ -514,6 +514,7 @@ final class SidePanel extends FrameLayout {
     /** Display: the picture (Fit / Stretch, size, position) and the overlay's items */
     private void display() {
         resolutionRow();
+        secondScreenRow();
 
         picture();
 
@@ -523,6 +524,25 @@ final class SidePanel extends FrameLayout {
         head("Overlay");
         Overlay.rows(act, box, null);
         dev.peanuts.overlay.HudSettings.rows(act, box);   // PEANUTS: overlay style and preset
+    }
+
+    /** PEANUTS(sunflower): the second screen on a dual-screen device, on or off: at once where the game can show or hide it now (Companion.toggleScreen), and kept
+     *  for this game (Companion › Second screen, Home's 2ND SCREEN); else from the next start. Nothing on a device with one screen */
+    private void secondScreenRow() {
+        if (!dev.peanuts.Companion.hasSecondDisplay(act)) return;
+        Boolean shown = dev.peanuts.Companion.screenShown(act);
+        boolean on = shown != null ? shown : !dev.peanuts.settings.CompanionSection.secondScreen(act, game()).equals(dev.peanuts.settings.CompanionSection.OFF);
+        android.widget.CheckBox cb = new android.widget.CheckBox(act);
+        cb.setText("Second screen");
+        cb.setChecked(on);
+        cb.setOnCheckedChangeListener((b, want) -> {
+            dev.peanuts.settings.CompanionSection.secondScreen(act, game(), want ? dev.peanuts.settings.CompanionSection.PHYSICAL : dev.peanuts.settings.CompanionSection.OFF);
+            Boolean now = dev.peanuts.Companion.screenShown(act);
+            if (now != null && now != want) dev.peanuts.Companion.toggleScreen(act);
+        });
+        head("Second screen");
+        box.addView(cb);
+        if (shown == null) note("From the next start: the second screen cannot change while this game runs.");
     }
 
     /** Controls: Player 1, the on-screen controls, rumble, the phone's Motion sensitivity and the Button mapping shortcut */

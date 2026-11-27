@@ -91,16 +91,20 @@ of noise over the portraits the game makes as it plays; T23 and T26 do not start
 
 ### Settings worth knowing
 
-Home's scoreboard row is four buttons:
+Home's scoreboard row is five buttons (on a phone held upright it scrolls sideways):
 
 - **Crowd control**: on hides the crowd in the stands (the game still runs it and plays its sound). It is about a third
   of the field's draws, and the biggest single gain: on the Thor it took the field from about 34 to 52 fps. Also in the
-  game's page › **Performance** › **Speed**.
+  game's **Settings** › **Graphics** › **Speed**.
 - **Mode**: 720p (Handheld) or 1080p (Docked). Handheld draws a third fewer pixels: more frames and less heat on a phone.
 - **Driver**: the GPU driver page (pick an installed driver, or install one).
+- **2nd screen** (dual-screen devices such as the AYN Thor and the Retroid Pocket Duo): on shows the game's companion
+  page on the second screen; off leaves that screen to Android (a video, a browser) while the game plays. During a game,
+  the side panel's **Display** tab has the same switch and changes it at once. A device with one screen shows N/A.
 - **App**: checks for an update.
 
-Changes to Crowd control and Mode apply from the next start of the game.
+Changes to Crowd control and Mode apply from the next start of the game; 2nd screen from the next start on Home, at once
+in the side panel.
 
 ## What you need
 
