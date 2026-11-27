@@ -334,7 +334,7 @@ public final class MainActivity extends Activity {
     private View statusRow;
     private View scoreboardStatus() {
         String id = Prefs.MLB26;
-        View row = dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "2ND\nSCREEN", screenValue(id), "APP", BuildConfig.VERSION_NAME);
+        View row = dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "SECOND\nSCREEN", screenValue(id), "APP", BuildConfig.VERSION_NAME);
         dev.peanuts.ui.Scoreboard.tap(row, 0, v -> {
             if (!Prefs.crowdGame(id)) return;
             Prefs.hideCrowd(this, id, !Prefs.hideCrowd(this, id)); dev.peanuts.ui.Scoreboard.value(row, 0, crowdValue(id));

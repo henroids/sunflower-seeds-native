@@ -527,7 +527,7 @@ final class SidePanel extends FrameLayout {
     }
 
     /** PEANUTS(sunflower): the second screen on a dual-screen device, on or off: at once where the game can show or hide it now (Companion.toggleScreen), and kept
-     *  for this game (Companion › Second screen, Home's 2ND SCREEN); else from the next start. Nothing on a device with one screen */
+     *  for this game (Companion › Second screen, Home's SECOND SCREEN); else from the next start. Nothing on a device with one screen */
     private void secondScreenRow() {
         if (!dev.peanuts.Companion.hasSecondDisplay(act)) return;
         Boolean shown = dev.peanuts.Companion.screenShown(act);
