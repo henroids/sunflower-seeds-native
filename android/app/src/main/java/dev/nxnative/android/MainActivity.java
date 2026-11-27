@@ -334,7 +334,7 @@ public final class MainActivity extends Activity {
     private View statusRow;
     private View scoreboardStatus() {
         String id = Prefs.MLB26;
-        View row = dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME);
+        View row = dev.peanuts.ui.Scoreboard.status(this, "CROWD CONTROL", crowdValue(id), "MODE", modeValue(id), "DRIVER", driverValue(id), "APP", BuildConfig.VERSION_NAME, "2ND\nSCREEN", screenValue(id));
         dev.peanuts.ui.Scoreboard.tap(row, 0, v -> {
             if (!Prefs.crowdGame(id)) return;
             Prefs.hideCrowd(this, id, !Prefs.hideCrowd(this, id)); dev.peanuts.ui.Scoreboard.value(row, 0, crowdValue(id));
@@ -344,9 +344,22 @@ public final class MainActivity extends Activity {
             ScreenMode.set(this, id, 1 - ScreenMode.mode(this, id)); dev.peanuts.ui.Scoreboard.value(row, 1, modeValue(id));
         });
         dev.peanuts.ui.Scoreboard.tap(row, 2, v -> dev.peanuts.ui.DriverActivity.openForGame(this, id, "MLB The Show 26"));
+        // the second screen (the companion or Peanuts' page on a dual-screen device's other display; the game's Companion › Second screen, the side panel's
+        // Display tab): tapped, on or off from the next start. A device with one screen shows N/A, dimmed
         dev.peanuts.ui.Scoreboard.tap(row, 3, v -> Updater.checkNow(this));
+        dev.peanuts.ui.Scoreboard.tap(row, 4, v -> {
+            if (!dev.peanuts.Companion.hasSecondDisplay(this)) return;
+            boolean on = dev.peanuts.settings.CompanionSection.secondScreen(this, id).equals(dev.peanuts.settings.CompanionSection.OFF);
+            dev.peanuts.settings.CompanionSection.secondScreen(this, id, on ? dev.peanuts.settings.CompanionSection.PHYSICAL : dev.peanuts.settings.CompanionSection.OFF);
+            dev.peanuts.ui.Scoreboard.value(row, 4, screenValue(id));
+        });
+        dev.peanuts.ui.Scoreboard.dim(row, 4, !dev.peanuts.Companion.hasSecondDisplay(this));
         statusRow = row;
         return row;
+    }
+    private String screenValue(String id) {
+        if (!dev.peanuts.Companion.hasSecondDisplay(this)) return "N/A";
+        return dev.peanuts.settings.CompanionSection.secondScreen(this, id).equals(dev.peanuts.settings.CompanionSection.OFF) ? "OFF" : "ON";
     }
     private String crowdValue(String id) { return !Prefs.crowdGame(id) ? "N/A" : Prefs.hideCrowd(this, id) ? "ON" : "OFF"; }
     private String modeValue(String id) { return ScreenMode.mode(this, id) == 1 ? "720P" : "1080P"; }
@@ -359,6 +372,7 @@ public final class MainActivity extends Activity {
         if (statusRow == null) return;
         String id = Prefs.MLB26;
         dev.peanuts.ui.Scoreboard.value(statusRow, 0, crowdValue(id)); dev.peanuts.ui.Scoreboard.value(statusRow, 1, modeValue(id)); dev.peanuts.ui.Scoreboard.value(statusRow, 2, driverValue(id));
+        dev.peanuts.ui.Scoreboard.value(statusRow, 4, screenValue(id));   // (changed in the game's Companion page or the side panel)
     }
     // PEANUTS end
 

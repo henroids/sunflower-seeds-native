@@ -1218,7 +1218,7 @@ public final class Library {
         int cell = (Math.min(widthDp(), 900) - 40 - PUi.GAP * (cols - 1)) / cols;   // Banana's 20 dp gutters and 12 dp gaps
         List<View> cells = new ArrayList<>();
         playTimes = dev.peanuts.launch.PlayTime.all(a);   // once per render: the bottom screen's card of a focused cover (bottom)
-        if (Scoreboard.ON) { for (Row r : show) cells.add(gameCard(r)); grid(cells, fullColumns(), PUi.GAP); }   // PEANUTS(sunflower): each game a full card (the build card's shape)
+        if (Scoreboard.ON) { for (Row r : show) cells.add(gameCard(r)); grid(cells, Math.max(1, Math.min(fullColumns(), cells.size())), PUi.GAP); }   // PEANUTS(sunflower): each game a full card (the build card's shape), one game the full width as the header
         else { for (Row r : show) cells.add(coverCell(r, cell)); grid(cells, cols, 16); }
         boolean first = lastCells == 0 && !cells.isEmpty();   // the grid shows after an empty one (the first scan ended): it enters as after a filter change
         lastCells = cells.size();

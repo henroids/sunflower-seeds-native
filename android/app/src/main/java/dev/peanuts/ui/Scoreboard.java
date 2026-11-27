@@ -178,6 +178,8 @@ public final class Scoreboard {
         });
         return scroll;
     }
+    /** A cell shown but not to be used (the second screen on a device with one screen): dimmed, no tap */
+    public static void dim(View row, int k, boolean dim) { View cell = cells(row).getChildAt(k); cell.setAlpha(dim ? 0.4f : 1f); cell.setEnabled(!dim); cell.setClickable(!dim); }
     private static LinearLayout cells(View row) { return (LinearLayout) (row instanceof android.widget.HorizontalScrollView ? ((ViewGroup) row).getChildAt(0) : row); }
 
     /** A status cell (index k of status's row) as a button: a tap runs l */

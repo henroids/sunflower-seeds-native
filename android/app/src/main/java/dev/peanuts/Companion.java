@@ -66,7 +66,8 @@ public final class Companion {
         if (!PeanutsPrefs.bottomScreen(game)) return -1;
         String id = titleId(game);
         boolean off = CompanionSection.secondScreen(game, id).equals(CompanionSection.OFF);
-        if (!off && companionInstalled(game, id)) return GameScreen.LOADING;
+        if (off) return -1;   // PEANUTS(sunflower): Second screen Off leaves the display to Android, the game's page too (Home's 2ND SCREEN)
+        if (companionInstalled(game, id)) return GameScreen.LOADING;
         return PeanutsPrefs.bottomScreenInGames(game) ? GameScreen.PLAYING : -1;
     }
 
@@ -96,7 +97,10 @@ public final class Companion {
     public static void preparing(boolean on) { preparing = on; if (on) preparedSeen = true; }   // (seen even when it ends before the limit first looks)
 
     private static void settle(Activity game) {
-        wanted = PeanutsPrefs.bottomScreen(game) && PeanutsPrefs.bottomScreenInGames(game) ? GameScreen.PLAYING : -1;
+        // PEANUTS(sunflower): Second screen Off leaves the display to Android: not the game's page either (a video or a browser there while the game plays).
+        // The side panel's switch or a four-finger tap brings the page for this run (toggleScreen)
+        boolean off = CompanionSection.secondScreen(game, titleId(game)).equals(CompanionSection.OFF);
+        wanted = !off && PeanutsPrefs.bottomScreen(game) && PeanutsPrefs.bottomScreenInGames(game) ? GameScreen.PLAYING : -1;
         if (wanted < 0) GameScreen.close(); else if (!away) openPage(game);
         tellPage(game, "none");
     }

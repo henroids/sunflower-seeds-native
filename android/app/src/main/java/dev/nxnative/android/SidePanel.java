@@ -64,7 +64,7 @@ final class SidePanel extends FrameLayout {
     }
 
     // The ids of the choices a rebuild gives the focus back to (restyle)
-    private static final int ID_SIZE = 5000, ID_TEXT = 5100, ID_FIT = 5200, ID_MAP = 5300, ID_ONE = 5400, ID_RES = 5500, ID_RES_PRESET = 5590, ID_CONSOLE = 5600 /* PEANUTS: the two buttons of Console mode */;
+    private static final int ID_SIZE = 5000, ID_TEXT = 5100, ID_FIT = 5200, ID_MAP = 5300, ID_ONE = 5400, ID_RES = 5500, ID_RES_PRESET = 5590, ID_CONSOLE = 5600 /* PEANUTS: the two buttons of Console mode */, ID_SCREEN = 5700 /* PEANUTS(sunflower): Second screen On / Off */;
 
     SidePanel(Activity a, Rows rows) {
         super(a);
@@ -514,6 +514,7 @@ final class SidePanel extends FrameLayout {
     /** Display: the picture (Fit / Stretch, size, position) and the overlay's items */
     private void display() {
         resolutionRow();
+        secondScreenRow();
 
         picture();
 
@@ -523,6 +524,31 @@ final class SidePanel extends FrameLayout {
         head("Overlay");
         Overlay.rows(act, box, null);
         dev.peanuts.overlay.HudSettings.rows(act, box);   // PEANUTS: overlay style and preset
+    }
+
+    /** PEANUTS(sunflower): the second screen on a dual-screen device, On / Off as two buttons (a segmented choice, as Console mode): at once where the game can show
+     *  or hide it now (Companion.toggleScreen, the four-finger tap), and kept for this game (Home's 2ND SCREEN); else from the next start. Nothing with one screen */
+    private void secondScreenRow() {
+        if (!dev.peanuts.Companion.hasSecondDisplay(act)) return;
+        String id = game();
+        Boolean shown = dev.peanuts.Companion.screenShown(act);
+        boolean on = shown != null ? shown : !dev.peanuts.settings.CompanionSection.secondScreen(act, id).equals(dev.peanuts.settings.CompanionSection.OFF);
+        head("Second screen");
+        RadioGroup g = new RadioGroup(act);
+        g.setOrientation(RadioGroup.HORIZONTAL);
+        String[] names = {"On", "Off"};
+        for (int k = 0; k < 2; k++) { RadioButton b = new RadioButton(act); b.setId(ID_SCREEN + k); b.setText(names[k]); g.addView(b); }
+        g.check(ID_SCREEN + (on ? 0 : 1));
+        g.setOnCheckedChangeListener((gr, checked) -> {
+            boolean want = checked == ID_SCREEN;
+            dev.peanuts.settings.CompanionSection.secondScreen(act, id, want ? dev.peanuts.settings.CompanionSection.PHYSICAL : dev.peanuts.settings.CompanionSection.OFF);
+            Boolean now = dev.peanuts.Companion.screenShown(act);
+            if (now != null && now != want) dev.peanuts.Companion.toggleScreen(act);
+            restyle(checked);
+        });
+        box.addView(g);
+        note(shown != null ? "Off gives the second screen back to Android (YouTube and other apps can use it). Kept for this game."
+                : "Applies at the next start of the game. Kept for this game.");
     }
 
     /** Controls: Player 1, the on-screen controls, rumble, the phone's Motion sensitivity and the Button mapping shortcut */
