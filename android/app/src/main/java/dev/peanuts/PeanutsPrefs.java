@@ -18,7 +18,10 @@ import java.util.Locale;
 public final class PeanutsPrefs {
     private PeanutsPrefs() {}
 
-    static SharedPreferences of(Context c) { return c.getSharedPreferences("peanuts", Context.MODE_PRIVATE); }
+    // PEANUTS(sunflower): MODE_MULTI_PROCESS, as Prefs.open and CompanionSection: the game's process (:game) writes this file too (the side panel's second
+    // screen), and a process holding an old copy wrote it back over the other's changes; this reloads the file when it changed on disk
+    @SuppressWarnings("deprecation")
+    static SharedPreferences of(Context c) { return c.getSharedPreferences("peanuts", Context.MODE_MULTI_PROCESS); }
 
     // ---- Setup ----
 
