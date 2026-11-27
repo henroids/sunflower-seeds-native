@@ -148,10 +148,25 @@ public final class PeanutsPrefs {
     }
     public static void bottomScreenGamesPage(Context c, String page) { of(c).edit().putString("bottom_screen_games_page", page).apply(); }
     /** The stats page's items (dev.peanuts.ui.StatsConfig.format; null: never set, every item) and its burn-in guards (StatsConfig.GUARDS, each on by default), for every game */
-    public static String statsShown(Context c) { return of(c).getString("stats_shown", null); }
-    public static void statsShown(Context c, String items) { of(c).edit().putString("stats_shown", items).apply(); }
-    public static boolean statsGuard(Context c, String guard) { return of(c).getBoolean("stats_guard_" + guard, true); }
-    public static void statsGuard(Context c, String guard, boolean on) { of(c).edit().putBoolean("stats_guard_" + guard, on).apply(); }
+    // PEANUTS(sunflower): the second screen's stats page settings in a file of their own. The page runs in the game's process (:game) and the rest of the
+    // app in its own; both wrote "peanuts", each from its own cached copy, so the app's next write (the play time after a game) put back what the page had
+    // changed: the graph came back at every start. Only the game's process writes "peanuts_stats"; its first read takes over what "peanuts" held
+    private static SharedPreferences stats(Context c) {
+        SharedPreferences s = c.getSharedPreferences("peanuts_stats", Context.MODE_PRIVATE);
+        if (!s.getBoolean("moved", false)) {
+            SharedPreferences old = of(c); SharedPreferences.Editor e = s.edit().putBoolean("moved", true);
+            for (java.util.Map.Entry<String, ?> kv : old.getAll().entrySet()) {
+                if (kv.getKey().equals("stats_shown") && kv.getValue() instanceof String) e.putString(kv.getKey(), (String) kv.getValue());
+                else if (kv.getKey().startsWith("stats_guard_") && kv.getValue() instanceof Boolean) e.putBoolean(kv.getKey(), (Boolean) kv.getValue());
+            }
+            e.commit();
+        }
+        return s;
+    }
+    public static String statsShown(Context c) { return stats(c).getString("stats_shown", null); }
+    public static void statsShown(Context c, String items) { stats(c).edit().putString("stats_shown", items).commit(); }
+    public static boolean statsGuard(Context c, String guard) { return stats(c).getBoolean("stats_guard_" + guard, true); }
+    public static void statsGuard(Context c, String guard, boolean on) { stats(c).edit().putBoolean("stats_guard_" + guard, on).commit(); }
 
     /** Settings > Library > Haptics: false (default) = the launcher's haptics follow the system's touch feedback setting, true = none at all */
     public static boolean hapticsOff(Context c) { return of(c).getBoolean("haptics_off", false); }
