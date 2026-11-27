@@ -527,12 +527,12 @@ final class SidePanel extends FrameLayout {
     }
 
     /** PEANUTS(sunflower): the second screen on a dual-screen device, On / Off as two buttons (a segmented choice, as Console mode): at once where the game can show
-     *  or hide it now (Companion.toggleScreen, the four-finger tap), and kept for this game (Home's 2ND SCREEN); else from the next start. Nothing with one screen */
+     *  or hide it now (Companion.toggleScreen, the four-finger tap), and kept as Settings › Screens › Bottom screen (Home's 2ND SCREEN); else from the next start. Nothing with one screen */
     private void secondScreenRow() {
         if (!dev.peanuts.Companion.hasSecondDisplay(act)) return;
         String id = game();
         Boolean shown = dev.peanuts.Companion.screenShown(act);
-        boolean on = shown != null ? shown : !dev.peanuts.settings.CompanionSection.secondScreen(act, id).equals(dev.peanuts.settings.CompanionSection.OFF);
+        boolean on = shown != null ? shown : dev.peanuts.PeanutsPrefs.bottomScreen(act);
         head("Second screen");
         RadioGroup g = new RadioGroup(act);
         g.setOrientation(RadioGroup.HORIZONTAL);
@@ -541,14 +541,14 @@ final class SidePanel extends FrameLayout {
         g.check(ID_SCREEN + (on ? 0 : 1));
         g.setOnCheckedChangeListener((gr, checked) -> {
             boolean want = checked == ID_SCREEN;
-            dev.peanuts.settings.CompanionSection.secondScreen(act, id, want ? dev.peanuts.settings.CompanionSection.PHYSICAL : dev.peanuts.settings.CompanionSection.OFF);
+            dev.peanuts.ui.BottomScreen.turn(act, id, want);   // Settings › Screens › Bottom screen, the same switch as Home's 2ND SCREEN
             Boolean now = dev.peanuts.Companion.screenShown(act);
             if (now != null && now != want) dev.peanuts.Companion.toggleScreen(act);
             restyle(checked);
         });
         box.addView(g);
-        note(shown != null ? "Off gives the second screen back to Android (YouTube and other apps can use it). Kept for this game."
-                : "Applies at the next start of the game. Kept for this game.");
+        note(shown != null ? "Off gives the second screen back to Android (YouTube and other apps can use it). The same switch as Settings › Screens › Bottom screen."
+                : "Applies at the next start of the game. The same switch as Settings › Screens › Bottom screen.");
     }
 
     /** Controls: Player 1, the on-screen controls, rumble, the phone's Motion sensitivity and the Button mapping shortcut */

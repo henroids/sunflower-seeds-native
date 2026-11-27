@@ -386,6 +386,15 @@ public final class BottomScreen {
 
     private static boolean on(Display d) { return d.getState() != Display.STATE_OFF; }
 
+    /** PEANUTS(sunflower): Settings › Screens › Bottom screen turned on or off from elsewhere (Home's 2ND SCREEN box, the side menu's Display tab). Turned on, a
+     *  game's own Second screen left Off (by earlier builds' 2ND SCREEN) is set back to On, so the one switch decides */
+    public static void turn(android.content.Context c, String titleId, boolean on) {
+        PeanutsPrefs.bottomScreen(c, on);
+        if (on && titleId != null && dev.peanuts.settings.CompanionSection.secondScreen(c, titleId).equals(dev.peanuts.settings.CompanionSection.OFF))
+            dev.peanuts.settings.CompanionSection.secondScreen(c, titleId, dev.peanuts.settings.CompanionSection.PHYSICAL);
+        settingChanged();
+    }
+
     /** Settings › Screens › Bottom screen */
     static void settingChanged() {
         if (owner == null) return;
